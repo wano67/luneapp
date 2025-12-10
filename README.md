@@ -1,36 +1,45 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Lune App
 
-## Getting Started
+Next.js 16 (App Router) + TypeScript + Tailwind v4 + Prisma 7 (PostgreSQL via adapter-pg).  
+Public front: `/`, `/login`, `/register`  
+App interne (protégée) : `/app/**`.
 
-First, run the development server:
+## Dépendances clés
+- Prisma client généré dans `src/generated/prisma`
+- Adapter PostgreSQL `@prisma/adapter-pg`
+- Authentification : JWT (cookie HttpOnly `auth_token`) + bcryptjs
 
+## Variables d’environnement
+- `DATABASE_URL` : URL PostgreSQL (Railway)
+- `AUTH_SECRET` : clé secrète utilisée pour signer les JWT
+
+## Setup
 ```bash
+npm install
+# Générer le client Prisma (utilise prisma.config.ts)
+DATABASE_URL="postgresql://USER:PASSWORD@HOST:PORT/DB" npx prisma generate
+
+# Lancer le projet
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Prisma & migrations
+- Schéma : `prisma/schema.prisma` (datasource alimentée par `prisma.config.ts`)
+- Migrations : `prisma/migrations`
+- Exemple de commande (create-only si la DB n’est pas accessible) :
+```bash
+DATABASE_URL="postgresql://USER:PASSWORD@HOST:PORT/DB" npx prisma migrate dev --name add_auth_fields --create-only
+```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Endpoints principaux
+- `GET /api/health` : ping DB
+- `POST /api/auth/register` : crée un utilisateur, émet le cookie `auth_token`
+- `POST /api/auth/login` : authentifie et émet le cookie
+- `POST /api/auth/logout` : supprime le cookie
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Spéc OpenAPI : `openapi.yaml` (bases health + auth).
 
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Front
+- `/` : landing publique (CTA vers login/register/app)
+- `/login`, `/register` : formulaires publics
+- `/app/**` : app interne (PRO / PERSO / PERFORMANCE) protégée par middleware JWT.
