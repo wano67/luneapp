@@ -35,6 +35,34 @@ enum BusinessInviteStatus {
   EXPIRED
 }
 
+enum LeadSource {
+  UNKNOWN
+  OUTBOUND
+  INBOUND
+  REFERRAL
+  OTHER
+}
+
+enum QualificationLevel {
+  COLD
+  WARM
+  HOT
+}
+
+enum ProspectPipelineStatus {
+  NEW
+  IN_DISCUSSION
+  OFFER_SENT
+  FOLLOW_UP
+  CLOSED
+}
+
+enum ClientStatus {
+  ACTIVE
+  PAUSED
+  FORMER
+}
+
 /**
  * Utilisateur de l'app
  */
@@ -58,14 +86,15 @@ model User {
  * Entreprise (espace PRO)
  */
 model Business {
-  id        BigInt   @id @default(autoincrement())
-  name      String
+  id   BigInt @id @default(autoincrement())
+  name String
 
-  ownerId   BigInt
-  owner     User     @relation("BusinessOwner", fields: [ownerId], references: [id])
+  ownerId BigInt
+  owner   User   @relation("BusinessOwner", fields: [ownerId], references: [id])
 
   memberships BusinessMembership[]
   invites     BusinessInvite[]
+  prospects   Prospect[]
   clients     Client[]
   projects    Project[]
 
@@ -82,10 +111,10 @@ model BusinessMembership {
   userId     BigInt
   role       BusinessRole
 
-  business   Business     @relation(fields: [businessId], references: [id])
-  user       User         @relation(fields: [userId], references: [id])
+  business Business @relation(fields: [businessId], references: [id])
+  user     User     @relation(fields: [userId], references: [id])
 
-  createdAt  DateTime     @default(now())
+  createdAt DateTime @default(now())
 
   @@unique([businessId, userId])
 }
@@ -103,7 +132,31 @@ model BusinessInvite {
   expiresAt  DateTime?
   createdAt  DateTime             @default(now())
 
-  business   Business             @relation(fields: [businessId], references: [id])
+  business Business @relation(fields: [businessId], references: [id])
+}
+
+model Prospect {
+  id         BigInt   @id @default(autoincrement())
+  businessId BigInt
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  name         String
+  contactName  String?
+  contactEmail String?
+  contactPhone String?
+
+  source             LeadSource?
+  interestNote       String?
+  qualificationLevel QualificationLevel?
+
+  projectIdea     String?
+  estimatedBudget Int?
+
+  firstContactAt DateTime?
+  pipelineStatus ProspectPipelineStatus @default(NEW)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 enum ProjectStatus {
@@ -115,18 +168,27 @@ enum ProjectStatus {
 }
 
 model Client {
-  id         BigInt   @id @default(autoincrement())
-  businessId BigInt
-  name       String
-  email      String?
-  phone      String?
-  notes      String?
+  id              BigInt       @id @default(autoincrement())
+  businessId      BigInt
+  name            String
+  companyName     String?
+  mainContactName String?
+  email           String?
+  phone           String?
+  address         String?
+  sector          String?
+  entryDate       DateTime?
+  leadSource      LeadSource?
+  needsType       String?
+  estimatedBudget Int?
+  notes           String?
+  status          ClientStatus @default(ACTIVE)
 
-  business   Business @relation(fields: [businessId], references: [id])
-  projects   Project[]
+  business Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  projects Project[]
 
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([businessId, name])
 }
@@ -140,11 +202,11 @@ model Project {
   startDate  DateTime?
   endDate    DateTime?
 
-  business   Business @relation(fields: [businessId], references: [id])
-  client     Client?  @relation(fields: [clientId], references: [id])
+  business Business @relation(fields: [businessId], references: [id])
+  client   Client?  @relation(fields: [clientId], references: [id])
 
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([businessId, status])
 }
