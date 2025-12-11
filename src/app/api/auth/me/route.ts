@@ -1,66 +1,72 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/server/db/client';
-import { AUTH_COOKIE_NAME } from '@/server/auth/auth.service';
+import { AUTH_COOKIE_NAME, toPublicUser } from '@/server/auth/auth.service';
 import { verifyAuthToken } from '@/server/auth/jwt';
-import { toPublicUser } from '@/server/auth/auth.service';
 
-function unauthorized() {
-  return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+function unauthorized(reason?: string) {
+  return NextResponse.json(
+    { error: 'Unauthorized', reason },
+    { status: 401 }
+  );
 }
 
-function serializeBusiness(b: any) {
-  return {
-    id: b.id.toString(),
-    name: b.name,
-    ownerId: b.ownerId.toString(),
-    createdAt: b.createdAt.toISOString(),
-    updatedAt: b.updatedAt.toISOString(),
-  };
-}
-
-export async function GET(request: NextRequest) {
-  const token = request.cookies.get(AUTH_COOKIE_NAME)?.value;
+async function getUserIdFromRequest(request: NextRequest): Promise<bigint | null> {
+  const cookie = request.cookies.get(AUTH_COOKIE_NAME);
+  const token = cookie?.value;
 
   if (!token) {
-    return unauthorized();
+    console.warn('[auth/me] No auth token cookie found');
+    return null;
   }
 
   try {
     const { payload } = await verifyAuthToken(token);
-    const sub = payload.sub;
 
-    if (!sub) {
-      return unauthorized();
+    if (!payload.sub) {
+      console.warn('[auth/me] Token has no subject (sub)');
+      return null;
     }
 
-    const userId = BigInt(sub);
+    return BigInt(payload.sub);
+  } catch (error) {
+    console.error('[auth/me] Error verifying auth token', error);
+    return null;
+  }
+}
 
+export async function GET(request: NextRequest) {
+  const userId = await getUserIdFromRequest(request);
+
+  if (!userId) {
+    return unauthorized('invalid_or_missing_token');
+  }
+
+  try {
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      include: {
-        businessMemberships: {
-          include: {
-            business: true,
-          },
-        },
-      },
     });
 
-    if (!user || !user.isActive) {
-      return unauthorized();
+    if (!user) {
+      console.warn('[auth/me] User not found for id', userId.toString());
+      return unauthorized('user_not_found');
     }
 
-    const memberships = user.businessMemberships.map((membership) => ({
-      business: serializeBusiness(membership.business),
-      role: membership.role,
-    }));
+    if (!user.isActive) {
+      console.warn('[auth/me] User is not active', userId.toString());
+      return unauthorized('user_inactive');
+    }
 
+    // Pour l’instant, on renvoie un memberships vide.
+    // /api/pro/businesses reste la source de vérité pour les entreprises.
     return NextResponse.json({
       user: toPublicUser(user),
-      memberships,
+      memberships: [],
     });
   } catch (error) {
-    console.error('Error in /api/auth/me', error);
-    return unauthorized();
+    console.error('[auth/me] Error loading user', error);
+    return NextResponse.json(
+      { error: 'Internal Server Error' },
+      { status: 500 }
+    );
   }
 }

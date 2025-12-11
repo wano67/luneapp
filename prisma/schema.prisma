@@ -66,6 +66,8 @@ model Business {
 
   memberships BusinessMembership[]
   invites     BusinessInvite[]
+  clients     Client[]
+  projects    Project[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -102,4 +104,47 @@ model BusinessInvite {
   createdAt  DateTime             @default(now())
 
   business   Business             @relation(fields: [businessId], references: [id])
+}
+
+enum ProjectStatus {
+  PLANNED
+  ACTIVE
+  ON_HOLD
+  COMPLETED
+  CANCELLED
+}
+
+model Client {
+  id         BigInt   @id @default(autoincrement())
+  businessId BigInt
+  name       String
+  email      String?
+  phone      String?
+  notes      String?
+
+  business   Business @relation(fields: [businessId], references: [id])
+  projects   Project[]
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([businessId, name])
+}
+
+model Project {
+  id         BigInt        @id @default(autoincrement())
+  businessId BigInt
+  clientId   BigInt?
+  name       String
+  status     ProjectStatus @default(PLANNED)
+  startDate  DateTime?
+  endDate    DateTime?
+
+  business   Business @relation(fields: [businessId], references: [id])
+  client     Client?  @relation(fields: [clientId], references: [id])
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([businessId, status])
 }
