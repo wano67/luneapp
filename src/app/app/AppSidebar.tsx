@@ -64,7 +64,7 @@ function getProSections(pathname: string, businessId: string | null): NavSection
 }
 
 function getPersoSections(): NavSection[] {
-  const base = '/app/perso';
+  const base = '/app/personal';
   return [
     {
       title: '💾 Données perso',
