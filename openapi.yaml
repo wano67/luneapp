@@ -2,13 +2,18 @@ openapi: 3.1.0
 info:
   title: Lune API
   version: 0.1.0
-  description: API publique (landing) et authentification pour accéder à l'app interne.
+  description: >
+    API publique (landing) et API d'app interne pour gérer les espaces
+    perso et pro (multi-entreprises).
+
 servers:
   - url: http://localhost:3000
+
 paths:
   /api/health:
     get:
       summary: Vérifie la connexion à la base
+      tags: [System]
       responses:
         '200':
           description: Base joignable
@@ -16,9 +21,11 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HealthResponse'
+
   /api/auth/register:
     post:
       summary: Crée un utilisateur et émet un cookie de session
+      tags: [Auth]
       requestBody:
         required: true
         content:
@@ -41,9 +48,11 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+
   /api/auth/login:
     post:
       summary: Authentifie l'utilisateur et émet un cookie de session
+      tags: [Auth]
       requestBody:
         required: true
         content:
@@ -66,12 +75,445 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+
+  /api/auth/logout:
+    post:
+      summary: Déconnecte l'utilisateur (supprime le cookie de session)
+      tags: [Auth]
+      responses:
+        '200':
+          description: Déconnexion réussie
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: logged_out
+
+  /api/auth/me:
+    get:
+      summary: Renvoie l'utilisateur courant et ses entreprises
+      tags: [Auth]
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Utilisateur connecté et ses memberships
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthMeResponse'
+        '401':
+          description: Non authentifié
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/pro/businesses:
+    get:
+      summary: Liste les entreprises auxquelles l'utilisateur appartient
+      tags: [Pro – Business]
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Liste des entreprises de l'utilisateur
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        business:
+                          $ref: '#/components/schemas/Business'
+                        role:
+                          $ref: '#/components/schemas/BusinessRole'
+    post:
+      summary: Crée une nouvelle entreprise
+      description: >
+        Crée une entreprise et attribue le rôle OWNER à l'utilisateur connecté.
+      tags: [Pro – Business]
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BusinessCreateRequest'
+      responses:
+        '201':
+          description: Entreprise créée
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  business:
+                    $ref: '#/components/schemas/Business'
+                  role:
+                    $ref: '#/components/schemas/BusinessRole'
+        '400':
+          description: Données invalides
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/pro/businesses/{businessId}:
+    parameters:
+      - name: businessId
+        in: path
+        required: true
+        description: Identifiant de l'entreprise (BigInt sérialisé)
+        schema:
+          type: string
+    get:
+      summary: Récupère une entreprise si l'utilisateur est membre
+      tags: [Pro – Business]
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Entreprise trouvée
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Business'
+        '403':
+          description: Accès interdit (non membre ou rôle insuffisant)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Entreprise non trouvée
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    patch:
+      summary: Met à jour une entreprise (OWNER/ADMIN uniquement)
+      tags: [Pro – Business]
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BusinessUpdateRequest'
+      responses:
+        '200':
+          description: Entreprise mise à jour
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Business'
+        '403':
+          description: Accès interdit (rôle insuffisant)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Entreprise non trouvée
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/pro/businesses/{businessId}/members:
+    parameters:
+      - name: businessId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      summary: Liste les membres d'une entreprise
+      tags: [Pro – Members]
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Liste des membres
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/BusinessMember'
+        '403':
+          description: Accès interdit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    post:
+      summary: Ajoute un membre existant à une entreprise
+      description: >
+        OWNER/ADMIN uniquement. Ajoute un utilisateur existant par email et
+        lui attribue un rôle.
+      tags: [Pro – Members]
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, role]
+              properties:
+                email:
+                  type: string
+                  format: email
+                role:
+                  $ref: '#/components/schemas/BusinessRole'
+      responses:
+        '201':
+          description: Membre ajouté
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BusinessMember'
+        '400':
+          description: Données invalides
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Utilisateur ou entreprise non trouvés
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Accès interdit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/pro/businesses/{businessId}/members/{userId}:
+    parameters:
+      - name: businessId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: userId
+        in: path
+        required: true
+        schema:
+          type: string
+    patch:
+      summary: Change le rôle d'un membre
+      tags: [Pro – Members]
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [role]
+              properties:
+                role:
+                  $ref: '#/components/schemas/BusinessRole'
+      responses:
+        '200':
+          description: Rôle mis à jour
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BusinessMember'
+        '403':
+          description: Accès interdit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Membre non trouvé
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    delete:
+      summary: Retire un membre d'une entreprise
+      tags: [Pro – Members]
+      security:
+        - cookieAuth: []
+      responses:
+        '204':
+          description: Membre retiré
+        '403':
+          description: Accès interdit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Membre non trouvé
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/pro/businesses/{businessId}/invites:
+    parameters:
+      - name: businessId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      summary: Liste les invitations d'une entreprise
+      tags: [Pro – Invites]
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Liste des invitations
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/BusinessInvite'
+        '403':
+          description: Accès interdit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    post:
+      summary: Crée une invitation pour rejoindre l'entreprise
+      tags: [Pro – Invites]
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BusinessInviteCreateRequest'
+      responses:
+        '201':
+          description: Invitation créée
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BusinessInvite'
+        '400':
+          description: Données invalides
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Accès interdit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/pro/businesses/{businessId}/invites/{inviteId}:
+    parameters:
+      - name: businessId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: inviteId
+        in: path
+        required: true
+        schema:
+          type: string
+    delete:
+      summary: Révoque une invitation
+      tags: [Pro – Invites]
+      security:
+        - cookieAuth: []
+      responses:
+        '204':
+          description: Invitation révoquée
+        '403':
+          description: Accès interdit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Invitation non trouvée
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/pro/businesses/invites/accept:
+    post:
+      summary: Accepte une invitation à rejoindre une entreprise
+      description: >
+        Nécessite un utilisateur connecté et un token d'invitation valide.
+      tags: [Pro – Invites]
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token:
+                  type: string
+                  description: Jeton d'invitation
+      responses:
+        '200':
+          description: Invitation acceptée, membership créé
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BusinessMember'
+        '400':
+          description: Token invalide ou expiré
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Accès interdit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
 components:
   securitySchemes:
     cookieAuth:
       type: apiKey
       in: cookie
       name: auth_token
+
   schemas:
     User:
       type: object
@@ -96,6 +538,7 @@ components:
         updatedAt:
           type: string
           format: date-time
+
     RegisterRequest:
       type: object
       required: [email, password]
@@ -109,6 +552,7 @@ components:
         name:
           type: string
           nullable: true
+
     LoginRequest:
       type: object
       required: [email, password]
@@ -119,12 +563,136 @@ components:
         password:
           type: string
           minLength: 8
+
+    AuthMeResponse:
+      type: object
+      properties:
+        user:
+          $ref: '#/components/schemas/User'
+        memberships:
+          type: array
+          items:
+            type: object
+            properties:
+              business:
+                $ref: '#/components/schemas/Business'
+              role:
+                $ref: '#/components/schemas/BusinessRole'
+
+    BusinessRole:
+      type: string
+      description: Rôle de l'utilisateur dans l'entreprise
+      enum:
+        - OWNER
+        - ADMIN
+        - MEMBER
+        - VIEWER
+
+    Business:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Identifiant interne (BigInt sérialisé)
+        name:
+          type: string
+        ownerId:
+          type: string
+          description: Identifiant du propriétaire (User)
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    BusinessCreateRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          description: Nom de l'entreprise
+        # Tu pourras ajouter plus tard: pays, devise, etc.
+
+    BusinessUpdateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+
+    BusinessMembership:
+      type: object
+      properties:
+        id:
+          type: string
+        businessId:
+          type: string
+        userId:
+          type: string
+        role:
+          $ref: '#/components/schemas/BusinessRole'
+        createdAt:
+          type: string
+          format: date-time
+
+    BusinessMember:
+      type: object
+      properties:
+        userId:
+          type: string
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+          nullable: true
+        role:
+          $ref: '#/components/schemas/BusinessRole'
+
+    BusinessInviteStatus:
+      type: string
+      enum: [PENDING, ACCEPTED, REVOKED, EXPIRED]
+
+    BusinessInvite:
+      type: object
+      properties:
+        id:
+          type: string
+        businessId:
+          type: string
+        email:
+          type: string
+          format: email
+        role:
+          $ref: '#/components/schemas/BusinessRole'
+        status:
+          $ref: '#/components/schemas/BusinessInviteStatus'
+        createdAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    BusinessInviteCreateRequest:
+      type: object
+      required: [email, role]
+      properties:
+        email:
+          type: string
+          format: email
+        role:
+          $ref: '#/components/schemas/BusinessRole'
+
     HealthResponse:
       type: object
       properties:
         status:
           type: string
           example: ok
+
     ErrorResponse:
       type: object
       properties:

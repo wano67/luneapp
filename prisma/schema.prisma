@@ -7,11 +7,37 @@ datasource db {
   provider = "postgresql"
 }
 
+/**
+ * Rôles globaux de l'utilisateur (dans l'app entière)
+ */
 enum UserRole {
   USER
   ADMIN
 }
 
+/**
+ * Rôles au niveau d'une entreprise
+ */
+enum BusinessRole {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+/**
+ * Statut d'une invitation d'entreprise
+ */
+enum BusinessInviteStatus {
+  PENDING
+  ACCEPTED
+  REVOKED
+  EXPIRED
+}
+
+/**
+ * Utilisateur de l'app
+ */
 model User {
   id           BigInt   @id @default(autoincrement())
   email        String   @unique
@@ -21,4 +47,59 @@ model User {
   isActive     Boolean  @default(true)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+
+  // Entreprises que l'utilisateur a créées
+  ownedBusinesses     Business[]           @relation("BusinessOwner")
+  // Entreprises auxquelles il appartient (via membership)
+  businessMemberships BusinessMembership[]
+}
+
+/**
+ * Entreprise (espace PRO)
+ */
+model Business {
+  id        BigInt   @id @default(autoincrement())
+  name      String
+
+  ownerId   BigInt
+  owner     User     @relation("BusinessOwner", fields: [ownerId], references: [id])
+
+  memberships BusinessMembership[]
+  invites     BusinessInvite[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+/**
+ * Lien utilisateur <-> entreprise, avec un rôle
+ */
+model BusinessMembership {
+  id         BigInt       @id @default(autoincrement())
+  businessId BigInt
+  userId     BigInt
+  role       BusinessRole
+
+  business   Business     @relation(fields: [businessId], references: [id])
+  user       User         @relation(fields: [userId], references: [id])
+
+  createdAt  DateTime     @default(now())
+
+  @@unique([businessId, userId])
+}
+
+/**
+ * Invitation pour rejoindre une entreprise
+ */
+model BusinessInvite {
+  id         BigInt               @id @default(autoincrement())
+  businessId BigInt
+  email      String
+  role       BusinessRole
+  status     BusinessInviteStatus @default(PENDING)
+  token      String               @unique
+  expiresAt  DateTime?
+  createdAt  DateTime             @default(now())
+
+  business   Business             @relation(fields: [businessId], references: [id])
 }
