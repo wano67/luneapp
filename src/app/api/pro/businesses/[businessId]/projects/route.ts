@@ -37,13 +37,15 @@ async function requireMembership(businessId: bigint, userId: bigint) {
 // GET /api/pro/businesses/{businessId}/projects
 export async function GET(
   request: NextRequest,
-  context: { params: { businessId: string } }
+  context: { params: Promise<{ businessId: string }> }
 ) {
+  const { businessId } = await context.params;
+
   const userId = await getUserId(request);
   if (!userId) return unauthorized();
 
-  const businessId = BigInt(context.params.businessId);
-  const membership = await requireMembership(businessId, userId);
+  const businessIdBigInt = BigInt(businessId);
+  const membership = await requireMembership(businessIdBigInt, userId);
   if (!membership) return forbidden();
 
   const { searchParams } = new URL(request.url);
@@ -51,7 +53,7 @@ export async function GET(
 
   const projects = await prisma.project.findMany({
     where: {
-      businessId,
+      businessId: businessIdBigInt,
       ...(status ? { status } : {}),
     },
     orderBy: { createdAt: 'desc' },
@@ -79,13 +81,15 @@ export async function GET(
 // POST /api/pro/businesses/{businessId}/projects
 export async function POST(
   request: NextRequest,
-  context: { params: { businessId: string } }
+  context: { params: Promise<{ businessId: string }> }
 ) {
+  const { businessId } = await context.params;
+
   const userId = await getUserId(request);
   if (!userId) return unauthorized();
 
-  const businessId = BigInt(context.params.businessId);
-  const membership = await requireMembership(businessId, userId);
+  const businessIdBigInt = BigInt(businessId);
+  const membership = await requireMembership(businessIdBigInt, userId);
   if (!membership) return forbidden();
 
   const body = await request.json().catch(() => null);
@@ -111,7 +115,7 @@ export async function POST(
 
   const project = await prisma.project.create({
     data: {
-      businessId,
+      businessId: businessIdBigInt,
       clientId,
       name,
       status,

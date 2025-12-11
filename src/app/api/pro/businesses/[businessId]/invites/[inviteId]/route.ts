@@ -40,22 +40,24 @@ async function requireAdminOrOwner(businessId: bigint, userId: bigint) {
 // DELETE /api/pro/businesses/{businessId}/invites/{inviteId}
 export async function DELETE(
   request: NextRequest,
-  context: { params: { businessId: string; inviteId: string } }
+  context: { params: Promise<{ businessId: string; inviteId: string }> }
 ) {
+  const { businessId, inviteId } = await context.params;
+
   const userId = await getUserId(request);
   if (!userId) return unauthorized();
 
-  const businessId = BigInt(context.params.businessId);
-  const inviteId = BigInt(context.params.inviteId);
+  const businessIdBigInt = BigInt(businessId);
+  const inviteIdBigInt = BigInt(inviteId);
 
-  const membership = await requireAdminOrOwner(businessId, userId);
+  const membership = await requireAdminOrOwner(businessIdBigInt, userId);
   if (!membership) return forbidden();
 
   const invite = await prisma.businessInvite.findUnique({
-    where: { id: inviteId },
+    where: { id: inviteIdBigInt },
   });
 
-  if (!invite || invite.businessId !== businessId) {
+  if (!invite || invite.businessId !== businessIdBigInt) {
     return NextResponse.json(
       { error: 'Invitation non trouvée.' },
       { status: 404 }
@@ -63,7 +65,7 @@ export async function DELETE(
   }
 
   await prisma.businessInvite.update({
-    where: { id: inviteId },
+    where: { id: inviteIdBigInt },
     data: { status: 'REVOKED' },
   });
 

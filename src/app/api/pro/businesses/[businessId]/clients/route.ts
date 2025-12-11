@@ -6,9 +6,11 @@ import { verifyAuthToken } from '@/server/auth/jwt';
 function unauthorized() {
   return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 }
+
 function forbidden() {
   return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 }
+
 function badRequest(message: string) {
   return NextResponse.json({ error: message }, { status: 400 });
 }
@@ -36,13 +38,15 @@ async function requireMembership(businessId: bigint, userId: bigint) {
 // GET /api/pro/businesses/{businessId}/clients
 export async function GET(
   request: NextRequest,
-  context: { params: { businessId: string } }
+  context: { params: Promise<{ businessId: string }> }
 ) {
   const userId = await getUserId(request);
   if (!userId) return unauthorized();
 
-  const businessId = BigInt(context.params.businessId);
-  const membership = await requireMembership(businessId, userId);
+  const { businessId } = await context.params;
+  const businessIdBigInt = BigInt(businessId);
+
+  const membership = await requireMembership(businessIdBigInt, userId);
   if (!membership) return forbidden();
 
   const { searchParams } = new URL(request.url);
@@ -50,7 +54,7 @@ export async function GET(
 
   const clients = await prisma.client.findMany({
     where: {
-      businessId,
+      businessId: businessIdBigInt,
       ...(search
         ? {
             name: { contains: search, mode: 'insensitive' },
@@ -77,13 +81,15 @@ export async function GET(
 // POST /api/pro/businesses/{businessId}/clients
 export async function POST(
   request: NextRequest,
-  context: { params: { businessId: string } }
+  context: { params: Promise<{ businessId: string }> }
 ) {
   const userId = await getUserId(request);
   if (!userId) return unauthorized();
 
-  const businessId = BigInt(context.params.businessId);
-  const membership = await requireMembership(businessId, userId);
+  const { businessId } = await context.params;
+  const businessIdBigInt = BigInt(businessId);
+
+  const membership = await requireMembership(businessIdBigInt, userId);
   if (!membership) return forbidden();
 
   const body = await request.json().catch(() => null);
@@ -109,7 +115,7 @@ export async function POST(
 
   const client = await prisma.client.create({
     data: {
-      businessId,
+      businessId: businessIdBigInt,
       name,
       email,
       phone,

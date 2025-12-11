@@ -44,17 +44,22 @@ async function requireAdminOrOwner(businessId: bigint, userId: bigint) {
 }
 
 // GET /api/pro/businesses/{businessId}/invites
-export async function GET(request: NextRequest, context: { params: { businessId: string } }) {
+export async function GET(
+  request: NextRequest,
+  context: { params: Promise<{ businessId: string }> }
+) {
+  const { businessId } = await context.params;
+
   const userId = await getUserId(request);
   if (!userId) return unauthorized();
 
-  const businessId = BigInt(context.params.businessId);
+  const businessIdBigInt = BigInt(businessId);
 
-  const membership = await requireAdminOrOwner(businessId, userId);
+  const membership = await requireAdminOrOwner(businessIdBigInt, userId);
   if (!membership) return forbidden();
 
   const invites = await prisma.businessInvite.findMany({
-    where: { businessId },
+    where: { businessId: businessIdBigInt },
     orderBy: { createdAt: 'desc' },
   });
 
@@ -72,12 +77,17 @@ export async function GET(request: NextRequest, context: { params: { businessId:
 }
 
 // POST /api/pro/businesses/{businessId}/invites
-export async function POST(request: NextRequest, context: { params: { businessId: string } }) {
+export async function POST(
+  request: NextRequest,
+  context: { params: Promise<{ businessId: string }> }
+) {
+  const { businessId } = await context.params;
+
   const userId = await getUserId(request);
   if (!userId) return unauthorized();
 
-  const businessId = BigInt(context.params.businessId);
-  const membership = await requireAdminOrOwner(businessId, userId);
+  const businessIdBigInt = BigInt(businessId);
+  const membership = await requireAdminOrOwner(businessIdBigInt, userId);
   if (!membership) return forbidden();
 
   const body = await request.json().catch(() => null);
@@ -103,7 +113,7 @@ export async function POST(request: NextRequest, context: { params: { businessId
 
   const invite = await prisma.businessInvite.create({
     data: {
-      businessId,
+      businessId: businessIdBigInt,
       email,
       role,
       token,
@@ -123,7 +133,7 @@ export async function POST(request: NextRequest, context: { params: { businessId
       status: invite.status,
       createdAt: invite.createdAt.toISOString(),
       expiresAt: invite.expiresAt ? invite.expiresAt.toISOString() : null,
-      token: invite.token, // à retirer plus tard de la réponse si tu veux
+      token: invite.token, // à retirer plus tard si tu veux
     },
     { status: 201 }
   );
