@@ -11,6 +11,21 @@ function forbidden() {
   return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 }
 
+function badRequest(message: string) {
+  return NextResponse.json({ error: message }, { status: 400 });
+}
+
+function parseId(param: string | undefined) {
+  if (!param || !/^\d+$/.test(param)) {
+    return null;
+  }
+  try {
+    return BigInt(param);
+  } catch {
+    return null;
+  }
+}
+
 async function getUserId(request: NextRequest): Promise<bigint | null> {
   const token = request.cookies.get(AUTH_COOKIE_NAME)?.value;
   if (!token) return null;
@@ -44,11 +59,14 @@ export async function DELETE(
 ) {
   const { businessId, inviteId } = await context.params;
 
+  const businessIdBigInt = parseId(businessId);
+  const inviteIdBigInt = parseId(inviteId);
+  if (!businessIdBigInt || !inviteIdBigInt) {
+    return badRequest('businessId ou inviteId invalide.');
+  }
+
   const userId = await getUserId(request);
   if (!userId) return unauthorized();
-
-  const businessIdBigInt = BigInt(businessId);
-  const inviteIdBigInt = BigInt(inviteId);
 
   const membership = await requireAdminOrOwner(businessIdBigInt, userId);
   if (!membership) return forbidden();

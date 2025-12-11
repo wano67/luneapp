@@ -15,6 +15,17 @@ function badRequest(message: string) {
   return NextResponse.json({ error: message }, { status: 400 });
 }
 
+function parseId(param: string | undefined) {
+  if (!param || !/^\d+$/.test(param)) {
+    return null;
+  }
+  try {
+    return BigInt(param);
+  } catch {
+    return null;
+  }
+}
+
 async function getUserId(request: NextRequest): Promise<bigint | null> {
   const token = request.cookies.get(AUTH_COOKIE_NAME)?.value;
   if (!token) return null;
@@ -44,7 +55,10 @@ export async function GET(
   if (!userId) return unauthorized();
 
   const { businessId } = await context.params;
-  const businessIdBigInt = BigInt(businessId);
+  const businessIdBigInt = parseId(businessId);
+  if (!businessIdBigInt) {
+    return badRequest('businessId invalide.');
+  }
 
   const membership = await requireMembership(businessIdBigInt, userId);
   if (!membership) return forbidden();
@@ -87,7 +101,10 @@ export async function POST(
   if (!userId) return unauthorized();
 
   const { businessId } = await context.params;
-  const businessIdBigInt = BigInt(businessId);
+  const businessIdBigInt = parseId(businessId);
+  if (!businessIdBigInt) {
+    return badRequest('businessId invalide.');
+  }
 
   const membership = await requireMembership(businessIdBigInt, userId);
   if (!membership) return forbidden();
