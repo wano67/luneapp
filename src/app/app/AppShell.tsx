@@ -3,13 +3,22 @@
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/cn';
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import type { ReactNode } from 'react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
+
+type SectionKey = 'personal' | 'pro' | 'performance' | null;
+
+type SidebarItem = {
+  href: string;
+  label: string;
+};
 
 type AppShellProps = {
+  currentSection: SectionKey;
   title?: string;
   description?: string;
+  sidebarItems?: SidebarItem[];
   children: ReactNode;
 };
 
@@ -20,17 +29,21 @@ type MeResponse = {
   };
 };
 
-const navItems = [
-  { href: '/app', label: 'OS' },
-  { href: '/app/pro', label: 'PRO' },
-  { href: '/app/personal', label: 'PERSO' },
-  { href: '/app/performance', label: 'PERFORMANCE' },
+const topNavItems: { key: SectionKey; label: string; href: string }[] = [
+  { key: 'personal', label: 'Personal', href: '/app/personal' },
+  { key: 'pro', label: 'Professional', href: '/app/pro' },
+  { key: 'performance', label: 'Performance', href: '/app/performance' },
 ];
 
-export function AppShell({ title, description, children }: AppShellProps) {
-  const pathname = usePathname();
+export function AppShell({
+  currentSection,
+  title,
+  description,
+  sidebarItems = [],
+  children,
+}: AppShellProps) {
   const router = useRouter();
-  const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [userLabel, setUserLabel] = useState<string | null>(null);
   const [loggingOut, setLoggingOut] = useState(false);
 
   useEffect(() => {
@@ -42,8 +55,9 @@ export function AppShell({ title, description, children }: AppShellProps) {
         if (!res.ok) return;
         const json = (await res.json()) as MeResponse;
         if (!active) return;
-        if (json.user?.email) {
-          setUserEmail(json.user.email);
+
+        if (json.user) {
+          setUserLabel(json.user.name || json.user.email || null);
         }
       } catch (error) {
         console.error('Error loading user in AppShell', error);
@@ -56,16 +70,6 @@ export function AppShell({ title, description, children }: AppShellProps) {
       active = false;
     };
   }, []);
-
-  const activePath = useMemo(() => {
-    if (!pathname) return '';
-    const match = navItems.find((item) => pathname === item.href);
-    if (match) return match.href;
-    if (pathname.startsWith('/app/pro')) return '/app/pro';
-    if (pathname.startsWith('/app/personal')) return '/app/personal';
-    if (pathname.startsWith('/app/performance')) return '/app/performance';
-    return '';
-  }, [pathname]);
 
   async function handleLogout() {
     try {
@@ -84,19 +88,43 @@ export function AppShell({ title, description, children }: AppShellProps) {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-50">
-      <div className="border-b border-slate-800 bg-slate-950/80 backdrop-blur">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
-          <div className="flex items-center gap-3">
+      {/* HEADER */}
+      <header className="border-b border-slate-800 bg-slate-950/80 backdrop-blur">
+        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 md:px-6 md:py-4">
+          {/* Gauche : logo/nom de l'app */}
+          <div className="flex items-center gap-2">
             <span className="text-sm font-semibold uppercase tracking-[0.3em] text-slate-400">
               Lune
             </span>
-            <span className="rounded-full border border-slate-800 px-2 py-1 text-xs text-slate-400">
-              App
-            </span>
           </div>
-          <div className="flex items-center gap-3 text-sm text-slate-400">
-            {userEmail ? (
-              <span className="hidden sm:inline text-slate-300">{userEmail}</span>
+
+          {/* Centre : onglets Personal / Professional / Performance */}
+          <nav className="hidden gap-2 md:flex">
+            {topNavItems.map((item) => {
+              const isActive = item.key === currentSection;
+              return (
+                <Link
+                  key={item.key}
+                  href={item.href}
+                  className={cn(
+                    'rounded-full px-4 py-1.5 text-xs font-semibold uppercase tracking-wide transition',
+                    isActive
+                      ? 'bg-slate-200 text-slate-900'
+                      : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                  )}
+                >
+                  {item.label}
+                </Link>
+              );
+            })}
+          </nav>
+
+          {/* Droite : user + logout */}
+          <div className="flex items-center gap-3 text-xs md:text-sm">
+            {userLabel ? (
+              <span className="hidden text-slate-300 sm:inline">
+                {userLabel}
+              </span>
             ) : null}
             <Button
               variant="outline"
@@ -105,38 +133,76 @@ export function AppShell({ title, description, children }: AppShellProps) {
               onClick={handleLogout}
               disabled={loggingOut}
             >
-              {loggingOut ? 'Déconnexion...' : 'Déconnexion'}
+              {loggingOut ? 'Déconnexion…' : 'Déconnexion'}
             </Button>
           </div>
         </div>
-      </div>
 
-      <div className="mx-auto flex max-w-6xl flex-col gap-6 px-6 py-8 md:flex-row">
-        <aside className="flex flex-row gap-2 overflow-x-auto rounded-2xl border border-slate-800 bg-slate-900/40 p-3 md:h-fit md:w-48 md:flex-col md:gap-2">
-          {navItems.map((item) => {
-            const isActive = activePath === item.href;
+        {/* Tabs visibles sur mobile en dessous du header */}
+        <nav className="flex gap-2 border-t border-slate-800 px-4 pb-3 pt-2 md:hidden">
+          {topNavItems.map((item) => {
+            const isActive = item.key === currentSection;
             return (
               <Link
-                key={item.href}
+                key={item.key}
                 href={item.href}
                 className={cn(
-                  'rounded-lg px-3 py-2 text-sm font-semibold transition hover:bg-slate-800/70',
+                  'flex-1 rounded-full px-3 py-1.5 text-center text-xs font-semibold uppercase tracking-wide transition',
                   isActive
-                    ? 'bg-slate-800 text-white border border-slate-700'
-                    : 'text-slate-300 border border-transparent'
+                    ? 'bg-slate-200 text-slate-900'
+                    : 'text-slate-300 hover:bg-slate-800 hover:text-white'
                 )}
               >
                 {item.label}
               </Link>
             );
           })}
+        </nav>
+      </header>
+
+      {/* BODY : sidebar + contenu */}
+      <div className="mx-auto flex max-w-6xl gap-4 px-4 py-6 md:px-6 md:py-8">
+        {/* Sidebar gauche */}
+        <aside className="hidden w-56 shrink-0 md:block">
+          <div className="sticky top-20 rounded-2xl border border-slate-800 bg-slate-900/40 p-3">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-[0.25em] text-slate-500">
+              {currentSection === 'pro'
+                ? 'Pro'
+                : currentSection === 'personal'
+                  ? 'Perso'
+                  : currentSection === 'performance'
+                    ? 'Performance'
+                    : 'Section'}
+            </p>
+            <ul className="space-y-1">
+              {sidebarItems.length === 0 ? (
+                <li className="text-xs text-slate-600">
+                  Navigation à venir pour cette section.
+                </li>
+              ) : (
+                sidebarItems.map((item) => (
+                  <li key={item.href}>
+                    <Link
+                      href={item.href}
+                      className="block rounded-lg px-3 py-1.5 text-sm text-slate-300 transition hover:bg-slate-800 hover:text-white"
+                    >
+                      {item.label}
+                    </Link>
+                  </li>
+                ))
+              )}
+            </ul>
+          </div>
         </aside>
 
-        <main className="w-full space-y-6 md:max-w-4xl">
+        {/* Contenu */}
+        <main className="w-full space-y-5 md:max-w-3xl">
           {(title || description) && (
-            <header className="space-y-2">
+            <header className="space-y-1">
               {title ? (
-                <h1 className="text-2xl font-semibold text-slate-50">{title}</h1>
+                <h1 className="text-xl font-semibold text-slate-50 md:text-2xl">
+                  {title}
+                </h1>
               ) : null}
               {description ? (
                 <p className="text-sm text-slate-400">{description}</p>

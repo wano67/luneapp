@@ -1,4 +1,3 @@
-// src/app/app/pro/ProHomeClient.tsx
 'use client';
 
 import { useEffect, useState, FormEvent } from 'react';
@@ -45,7 +44,6 @@ export default function ProHomeClient() {
   const [me, setMe] = useState<AuthMeResponse | null>(null);
   const [businesses, setBusinesses] = useState<BusinessesResponse | null>(null);
 
-  // création entreprise
   const [creating, setCreating] = useState(false);
   const [newBusinessName, setNewBusinessName] = useState('');
   const [creationError, setCreationError] = useState<string | null>(null);
@@ -60,6 +58,7 @@ export default function ProHomeClient() {
           fetch('/api/pro/businesses', { credentials: 'include' }),
         ]);
 
+        // Non authentifié → redirection login
         if (meRes.status === 401) {
           if (typeof window !== 'undefined') {
             window.location.href = '/login?from=/app/pro';
@@ -109,7 +108,7 @@ export default function ProHomeClient() {
 
     const name = newBusinessName.trim();
     if (!name) {
-      setCreationError ("Merci d'indiquer un nom d'entreprise.");
+      setCreationError("Merci d'indiquer un nom d'entreprise.");
       return;
     }
 
@@ -123,18 +122,18 @@ export default function ProHomeClient() {
         body: JSON.stringify({ name }),
       });
 
-      const json = await res.json().catch(() => ({}));
+      const json = await res.json().catch(() => ({} as any));
 
       if (!res.ok) {
         setCreationError(
-          typeof json.error === 'string'
-            ? json.error
+          typeof (json as any).error === 'string'
+            ? (json as any).error
             : "Impossible de créer l'entreprise."
         );
         return;
       }
 
-      // on rafraîchit la liste des entreprises
+      // Rafraîchir la liste des entreprises
       const businessesRes = await fetch('/api/pro/businesses', {
         credentials: 'include',
       });
@@ -147,7 +146,7 @@ export default function ProHomeClient() {
       setCreationError(null);
     } catch (err) {
       console.error(err);
-      setCreationError("Une erreur est survenue pendant la création.");
+      setCreationError('Une erreur est survenue pendant la création.');
     } finally {
       setCreating(false);
     }
@@ -176,24 +175,23 @@ export default function ProHomeClient() {
   const items = businesses?.items ?? [];
   const userName = me?.user.name || me?.user.email;
 
-  // Cas 1 : aucune entreprise -> écran "créer ou rejoindre"
+  // Cas 1 : aucune entreprise
   if (items.length === 0) {
     return (
       <div className="space-y-6">
-        <div className="space-y-2">
+        <div className="space-y-1">
           <p className="text-sm text-slate-400">
             Bienvenue {userName}. Tu n&apos;as pas encore d&apos;entreprise configurée.
           </p>
         </div>
 
-        <section className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-4 md:grid-cols-2">
           <Card className="space-y-3 p-5">
             <h2 className="text-lg font-semibold">Créer une entreprise</h2>
             <p className="text-sm text-slate-400">
-              Crée l&apos;espace PRO de ton activité. Tu pourras ensuite inviter
-              des collaborateurs et configurer tes clients, projets et finances.
+              Crée l&apos;espace PRO de ton activité. Tu pourras ensuite inviter des
+              collaborateurs et configurer tes clients, projets et finances.
             </p>
-
             <form onSubmit={handleCreateBusiness} className="space-y-3">
               <Input
                 value={newBusinessName}
@@ -203,7 +201,7 @@ export default function ProHomeClient() {
                 error={creationError}
               />
               <Button type="submit" disabled={creating} className="w-full md:w-auto">
-                {creating ? 'Création...' : 'Créer mon entreprise'}
+                {creating ? 'Création…' : 'Créer mon entreprise'}
               </Button>
             </form>
           </Card>
@@ -211,19 +209,19 @@ export default function ProHomeClient() {
           <Card className="space-y-3 p-5">
             <h2 className="text-lg font-semibold">Rejoindre une entreprise</h2>
             <p className="text-sm text-slate-400">
-              Si quelqu&apos;un t&apos;a invité, tu pourras accepter l&apos;invitation
-              depuis un lien dédié (à venir).
+              Si quelqu&apos;un t&apos;a invité, tu pourras accepter l&apos;invitation depuis
+              un lien dédié (à venir).
             </p>
             <p className="text-xs text-slate-500">
               Cette section sera reliée au système d&apos;invitations (email + rôle).
             </p>
           </Card>
-        </section>
+        </div>
       </div>
     );
   }
 
-  // Cas 2 : au moins une entreprise -> liste + formulaire compact en haut
+  // Cas 2 : au moins une entreprise
   return (
     <div className="space-y-6">
       <Card className="p-5">
@@ -232,7 +230,9 @@ export default function ProHomeClient() {
             <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-400">
               App
             </p>
-            <h2 className="text-xl font-semibold">Espace PRO</h2>
+            <h2 className="text-lg font-semibold text-slate-50">
+              Espace PRO de {userName}
+            </h2>
             <p className="text-sm text-slate-400">
               Choisis une entreprise à piloter ou crée-en une nouvelle.
             </p>
@@ -247,11 +247,11 @@ export default function ProHomeClient() {
               onChange={(e) => setNewBusinessName(e.target.value)}
               placeholder="Nom de la nouvelle entreprise"
               label="Nouvelle entreprise"
-              error={creationError}
               className="md:w-64"
+              error={creationError}
             />
             <Button type="submit" disabled={creating}>
-              {creating ? 'Création...' : 'Nouvelle entreprise'}
+              {creating ? 'Création…' : 'Nouvelle entreprise'}
             </Button>
           </form>
         </div>
@@ -265,9 +265,9 @@ export default function ProHomeClient() {
           >
             <div className="space-y-2">
               <div className="flex items-center justify-between gap-2">
-                <h2 className="text-lg font-semibold text-slate-50">
+                <h3 className="text-lg font-semibold text-slate-50">
                   {business.name}
-                </h2>
+                </h3>
                 <Badge variant="neutral" className="text-[11px]">
                   {role}
                 </Badge>

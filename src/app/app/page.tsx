@@ -1,8 +1,7 @@
-// src/app/app/page.tsx
+import { Badge } from '@/components/ui/badge';
+import { Card } from '@/components/ui/card';
 import Link from 'next/link';
 import { AppShell } from './AppShell';
-import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 
 const spaces = [
   {
@@ -15,14 +14,13 @@ const spaces = [
   {
     href: '/app/personal',
     title: 'Espace perso',
-    description:
-      'Comptes bancaires, budgets, épargne et objectifs personnels.',
+    description: 'Comptes bancaires, budgets, épargne et objectifs personnels.',
     badge: { label: 'PERSO', variant: 'personal' as const },
   },
   {
     href: '/app/performance',
     title: 'Performance',
-    description: 'Analyses croisées PRO ↔ PERSO, rentabilité, runway.',
+    description: 'Analyses croisées PRO ↔ PERSO, runway, alignement global.',
     badge: { label: 'PERF', variant: 'performance' as const },
   },
 ];
@@ -30,8 +28,10 @@ const spaces = [
 export default function AppHomePage() {
   return (
     <AppShell
+      currentSection={null}
       title="OS interne"
       description="Choisis un espace pour piloter ton activité pro, tes finances perso ou ta performance."
+      sidebarItems={[]}
     >
       <section className="grid gap-4 md:grid-cols-3">
         {spaces.map((space) => (
