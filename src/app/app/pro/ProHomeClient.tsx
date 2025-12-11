@@ -1,7 +1,12 @@
+// src/app/app/pro/ProHomeClient.tsx
 'use client';
 
 import { useEffect, useState, FormEvent } from 'react';
 import Link from 'next/link';
+import { Card } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 
 type PublicUser = {
   id: string;
@@ -50,18 +55,14 @@ export default function ProHomeClient() {
 
     async function load() {
       try {
-        setLoading(true);
-        setError(null);
-
         const [meRes, businessesRes] = await Promise.all([
           fetch('/api/auth/me', { credentials: 'include' }),
           fetch('/api/pro/businesses', { credentials: 'include' }),
         ]);
 
-        // Non authentifié → on redirige vers /login
         if (meRes.status === 401) {
           if (typeof window !== 'undefined') {
-            window.location.href = `/login?from=/app/pro`;
+            window.location.href = '/login?from=/app/pro';
           }
           return;
         }
@@ -108,7 +109,7 @@ export default function ProHomeClient() {
 
     const name = newBusinessName.trim();
     if (!name) {
-      setCreationError("Merci d'indiquer un nom d'entreprise.");
+      setCreationError ("Merci d'indiquer un nom d'entreprise.");
       return;
     }
 
@@ -137,7 +138,6 @@ export default function ProHomeClient() {
       const businessesRes = await fetch('/api/pro/businesses', {
         credentials: 'include',
       });
-
       if (businessesRes.ok) {
         const businessesJson = (await businessesRes.json()) as BusinessesResponse;
         setBusinesses(businessesJson);
@@ -147,7 +147,7 @@ export default function ProHomeClient() {
       setCreationError(null);
     } catch (err) {
       console.error(err);
-      setCreationError('Une erreur est survenue pendant la création.');
+      setCreationError("Une erreur est survenue pendant la création.");
     } finally {
       setCreating(false);
     }
@@ -155,27 +155,21 @@ export default function ProHomeClient() {
 
   if (loading) {
     return (
-      <main className="min-h-screen bg-slate-950 text-slate-50 px-6 py-10">
-        <div className="mx-auto max-w-3xl">
-          <p className="text-sm text-slate-400">
-            Chargement de ton espace pro…
-          </p>
-        </div>
-      </main>
+      <Card className="p-5">
+        <p className="text-sm text-slate-400">Chargement de ton espace pro…</p>
+      </Card>
     );
   }
 
   if (error) {
     return (
-      <main className="min-h-screen bg-slate-950 text-slate-50 px-6 py-10">
-        <div className="mx-auto max-w-3xl space-y-4">
-          <h1 className="text-2xl font-semibold">Espace PRO</h1>
-          <p className="text-sm text-rose-400">{error}</p>
-          <p className="text-xs text-slate-500">
-            Tu peux essayer de recharger la page ou de te reconnecter.
-          </p>
-        </div>
-      </main>
+      <Card className="space-y-2 border border-rose-400/40 bg-rose-500/5 p-5">
+        <p className="text-sm font-semibold text-rose-200">Espace PRO</p>
+        <p className="text-sm text-rose-400">{error}</p>
+        <p className="text-xs text-slate-500">
+          Tu peux essayer de recharger la page ou de te reconnecter.
+        </p>
+      </Card>
     );
   }
 
@@ -185,76 +179,60 @@ export default function ProHomeClient() {
   // Cas 1 : aucune entreprise -> écran "créer ou rejoindre"
   if (items.length === 0) {
     return (
-      <main className="min-h-screen bg-slate-950 text-slate-50 px-6 py-10">
-        <div className="mx-auto max-w-3xl space-y-6">
-          <header className="space-y-2">
-            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-400">
-              App
-            </p>
-            <h1 className="text-2xl font-semibold">Espace PRO</h1>
-            <p className="text-sm text-slate-400">
-              Bienvenue {userName}. Tu n&apos;as pas encore d&apos;entreprise
-              configurée.
-            </p>
-          </header>
-
-          <section className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-3 rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
-              <h2 className="text-lg font-semibold">Créer une entreprise</h2>
-              <p className="text-sm text-slate-400">
-                Crée l&apos;espace PRO de ton activité. Tu pourras ensuite
-                inviter des collaborateurs et configurer tes clients, projets et
-                finances.
-              </p>
-
-              <form onSubmit={handleCreateBusiness} className="space-y-2">
-                <input
-                  type="text"
-                  value={newBusinessName}
-                  onChange={(e) => setNewBusinessName(e.target.value)}
-                  placeholder="Nom de l’entreprise"
-                  className="w-full rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-sm text-slate-50 outline-none transition focus:border-blue-500"
-                />
-                {creationError ? (
-                  <p className="text-xs text-rose-400">{creationError}</p>
-                ) : null}
-                <button
-                  type="submit"
-                  disabled={creating}
-                  className="inline-flex items-center justify-center rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-400 disabled:cursor-not-allowed disabled:opacity-70"
-                >
-                  {creating ? 'Création...' : 'Créer mon entreprise'}
-                </button>
-              </form>
-            </div>
-
-            <div className="space-y-3 rounded-2xl border border-slate-800 bg-slate-900/40 p-5">
-              <h2 className="text-lg font-semibold">Rejoindre une entreprise</h2>
-              <p className="text-sm text-slate-400">
-                Si quelqu&apos;un t&apos;a invité dans une entreprise, tu pourras
-                accepter l&apos;invitation depuis un lien dédié (à venir).
-              </p>
-              <p className="text-xs text-slate-500">
-                Cette section sera reliée au système d&apos;invitations (email +
-                rôle).
-              </p>
-            </div>
-          </section>
+      <div className="space-y-6">
+        <div className="space-y-2">
+          <p className="text-sm text-slate-400">
+            Bienvenue {userName}. Tu n&apos;as pas encore d&apos;entreprise configurée.
+          </p>
         </div>
-      </main>
+
+        <section className="grid gap-4 md:grid-cols-2">
+          <Card className="space-y-3 p-5">
+            <h2 className="text-lg font-semibold">Créer une entreprise</h2>
+            <p className="text-sm text-slate-400">
+              Crée l&apos;espace PRO de ton activité. Tu pourras ensuite inviter
+              des collaborateurs et configurer tes clients, projets et finances.
+            </p>
+
+            <form onSubmit={handleCreateBusiness} className="space-y-3">
+              <Input
+                value={newBusinessName}
+                onChange={(e) => setNewBusinessName(e.target.value)}
+                placeholder="Nom de l’entreprise"
+                label="Nom de l’entreprise"
+                error={creationError}
+              />
+              <Button type="submit" disabled={creating} className="w-full md:w-auto">
+                {creating ? 'Création...' : 'Créer mon entreprise'}
+              </Button>
+            </form>
+          </Card>
+
+          <Card className="space-y-3 p-5">
+            <h2 className="text-lg font-semibold">Rejoindre une entreprise</h2>
+            <p className="text-sm text-slate-400">
+              Si quelqu&apos;un t&apos;a invité, tu pourras accepter l&apos;invitation
+              depuis un lien dédié (à venir).
+            </p>
+            <p className="text-xs text-slate-500">
+              Cette section sera reliée au système d&apos;invitations (email + rôle).
+            </p>
+          </Card>
+        </section>
+      </div>
     );
   }
 
   // Cas 2 : au moins une entreprise -> liste + formulaire compact en haut
   return (
-    <main className="min-h-screen bg-slate-950 text-slate-50 px-6 py-10">
-      <div className="mx-auto max-w-5xl space-y-6">
-        <header className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+    <div className="space-y-6">
+      <Card className="p-5">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div className="space-y-1">
             <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-400">
               App
             </p>
-            <h1 className="text-2xl font-semibold">Espace PRO</h1>
+            <h2 className="text-xl font-semibold">Espace PRO</h2>
             <p className="text-sm text-slate-400">
               Choisis une entreprise à piloter ou crée-en une nouvelle.
             </p>
@@ -264,58 +242,52 @@ export default function ProHomeClient() {
             onSubmit={handleCreateBusiness}
             className="flex flex-col gap-2 md:flex-row md:items-center"
           >
-            <input
-              type="text"
+            <Input
               value={newBusinessName}
               onChange={(e) => setNewBusinessName(e.target.value)}
               placeholder="Nom de la nouvelle entreprise"
-              className="w-full rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-sm text-slate-50 outline-none transition focus:border-blue-500 md:w-64"
+              label="Nouvelle entreprise"
+              error={creationError}
+              className="md:w-64"
             />
-            <button
-              type="submit"
-              disabled={creating}
-              className="inline-flex items-center justify-center rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-400 disabled:cursor-not-allowed disabled:opacity-70"
-            >
+            <Button type="submit" disabled={creating}>
               {creating ? 'Création...' : 'Nouvelle entreprise'}
-            </button>
-            {creationError ? (
-              <p className="text-xs text-rose-400 md:ml-2">{creationError}</p>
-            ) : null}
+            </Button>
           </form>
-        </header>
+        </div>
+      </Card>
 
-        <section className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {items.map(({ business, role }) => (
-            <div
-              key={business.id}
-              className="flex flex-col justify-between rounded-2xl border border-slate-800 bg-slate-900/40 p-5 shadow-sm"
-            >
-              <div className="space-y-2">
-                <div className="flex items-center justify-between gap-2">
-                  <h2 className="text-lg font-semibold text-slate-50">
-                    {business.name}
-                  </h2>
-                  <span className="rounded-full border border-slate-700 px-2 py-0.5 text-xs uppercase tracking-wide text-slate-400">
-                    {role}
-                  </span>
-                </div>
-                <p className="text-xs text-slate-500">
-                  Créée le{' '}
-                  {new Date(business.createdAt).toLocaleDateString('fr-FR')}
-                </p>
+      <section className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        {items.map(({ business, role }) => (
+          <Card
+            key={business.id}
+            className="flex h-full flex-col justify-between p-5"
+          >
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <h2 className="text-lg font-semibold text-slate-50">
+                  {business.name}
+                </h2>
+                <Badge variant="neutral" className="text-[11px]">
+                  {role}
+                </Badge>
               </div>
-              <div className="mt-4 flex items-center justify-between">
-                <Link
-                  href={`/app/pro/${business.id}`}
-                  className="text-sm font-semibold text-blue-300 hover:text-blue-200"
-                >
-                  Entrer dans l&apos;espace →
-                </Link>
-              </div>
+              <p className="text-xs text-slate-500">
+                Créée le{' '}
+                {new Date(business.createdAt).toLocaleDateString('fr-FR')}
+              </p>
             </div>
-          ))}
-        </section>
-      </div>
-    </main>
+            <div className="mt-4 flex items-center justify-between">
+              <Link
+                href={`/app/pro/${business.id}`}
+                className="text-sm font-semibold text-blue-300 hover:text-blue-200"
+              >
+                Entrer dans l&apos;espace →
+              </Link>
+            </div>
+          </Card>
+        ))}
+      </section>
+    </div>
   );
 }

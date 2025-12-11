@@ -8,13 +8,77 @@
       href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css"
     />
     <style>
+      :root {
+        color-scheme: dark;
+      }
       body {
         margin: 0;
         background: #020617;
+        color: #e5e7eb;
+        font-family: "Inter", "Geist", -apple-system, BlinkMacSystemFont, sans-serif;
       }
       #swagger-ui {
         max-width: 1200px;
         margin: 0 auto;
+        padding: 2rem 1.5rem 3rem;
+      }
+      a {
+        color: #60a5fa;
+      }
+      .swagger-ui .topbar {
+        display: none;
+      }
+      .swagger-ui .info,
+      .swagger-ui .info h2,
+      .swagger-ui .info p {
+        color: #e5e7eb;
+      }
+      .swagger-ui .scheme-container,
+      .swagger-ui .wrapper {
+        background: transparent;
+        box-shadow: none;
+      }
+      .swagger-ui .scheme-container {
+        border: 1px solid #1f2937;
+        border-radius: 12px;
+        padding: 1rem;
+        background: #0b1224;
+      }
+      .swagger-ui .opblock {
+        background: #0b1224;
+        border-color: #1f2937;
+      }
+      .swagger-ui .opblock .opblock-summary {
+        color: #e5e7eb;
+      }
+      .swagger-ui .opblock-summary-method {
+        background: #1f2937;
+        border-color: #1f2937;
+      }
+      .swagger-ui .opblock-description,
+      .swagger-ui .opblock-section-header h4,
+      .swagger-ui .responses-wrapper,
+      .swagger-ui .response-col_description__inner,
+      .swagger-ui table.model tr.description td {
+        color: #d1d5db;
+      }
+      .swagger-ui .parameters-container,
+      .swagger-ui .responses-inner {
+        background: #0f172a;
+        border: 1px solid #1f2937;
+        border-radius: 10px;
+      }
+      .swagger-ui .model-box {
+        background: #0f172a;
+        border-color: #1f2937;
+      }
+      .swagger-ui .markdown code,
+      .swagger-ui code {
+        background: #111827;
+        color: #e5e7eb;
+      }
+      .swagger-ui .opblock .opblock-section-header {
+        border-color: #1f2937;
       }
     </style>
   </head>

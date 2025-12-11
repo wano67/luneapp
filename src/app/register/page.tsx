@@ -1,8 +1,12 @@
+// src/app/register/page.tsx
 'use client';
 
+import { useState, FormEvent } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { FormEvent, useState } from 'react';
+import { Card } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -41,8 +45,8 @@ export default function RegisterPage() {
       }
 
       router.push('/app');
-    } catch (fetchError) {
-      console.error(fetchError);
+    } catch (err) {
+      console.error(err);
       setError('Une erreur est survenue, merci de réessayer.');
     } finally {
       setSubmitting(false);
@@ -50,10 +54,10 @@ export default function RegisterPage() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-950 text-slate-50 px-6 py-12">
+    <main className="min-h-screen bg-slate-950 text-slate-50 px-6 py-16">
       <div className="mx-auto flex max-w-md flex-col space-y-8">
         <div className="space-y-2 text-center">
-          <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-400">
+          <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-500">
             Public
           </p>
           <h1 className="text-3xl font-semibold">Créer un compte</h1>
@@ -62,76 +66,59 @@ export default function RegisterPage() {
           </p>
         </div>
 
-        <form
-          onSubmit={handleSubmit}
-          className="space-y-4 rounded-2xl border border-slate-800 bg-slate-900/50 p-6 shadow-sm"
-        >
-          <div className="space-y-1">
-            <label htmlFor="email" className="text-sm text-slate-200">
-              Email
-            </label>
-            <input
+        <Card className="border-slate-800/80 bg-slate-900/60 p-6">
+          <form onSubmit={handleSubmit} className="space-y-3">
+            <Input
               id="email"
               type="email"
               autoComplete="email"
+              label="Email"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
-              className="w-full rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-slate-50 outline-none transition focus:border-blue-500"
               required
             />
-          </div>
 
-          <div className="space-y-1">
-            <label htmlFor="name" className="text-sm text-slate-200">
-              Nom (optionnel)
-            </label>
-            <input
+            <Input
               id="name"
               type="text"
               autoComplete="name"
+              label="Nom (optionnel)"
               value={name}
               onChange={(event) => setName(event.target.value)}
-              className="w-full rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-slate-50 outline-none transition focus:border-blue-500"
             />
-          </div>
 
-          <div className="space-y-1">
-            <label htmlFor="password" className="text-sm text-slate-200">
-              Mot de passe
-            </label>
-            <input
+            <Input
               id="password"
               type="password"
               autoComplete="new-password"
+              label="Mot de passe"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
-              className="w-full rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-slate-50 outline-none transition focus:border-blue-500"
               required
               minLength={8}
             />
-          </div>
 
-          {error ? (
-            <p className="text-sm text-rose-400" role="alert">
-              {error}
+            {error ? (
+              <p className="text-sm text-rose-400" role="alert">
+                {error}
+              </p>
+            ) : null}
+
+            <Button type="submit" className="w-full" disabled={submitting}>
+              {submitting ? 'Création en cours...' : 'Créer un compte'}
+            </Button>
+
+            <p className="text-center text-xs text-slate-400">
+              Déjà un compte ?{' '}
+              <Link
+                href="/login"
+                className="text-blue-300 hover:text-blue-200"
+              >
+                Se connecter
+              </Link>
             </p>
-          ) : null}
-
-          <button
-            type="submit"
-            disabled={submitting}
-            className="flex w-full items-center justify-center rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-400 disabled:cursor-not-allowed disabled:opacity-70"
-          >
-            {submitting ? 'Création en cours...' : 'Créer un compte'}
-          </button>
-
-          <p className="text-center text-xs text-slate-400">
-            Déjà un compte ?{' '}
-            <Link href="/login" className="text-blue-300 underline">
-              Se connecter
-            </Link>
-          </p>
-        </form>
+          </form>
+        </Card>
       </div>
     </main>
   );
