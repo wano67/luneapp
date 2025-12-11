@@ -5,7 +5,7 @@ info:
   description: >
     API publique (landing + auth) et API app interne (PRO / PERSO / PERFORMANCE).
     Cette version couvre l'auth, la santé, les entreprises PRO, les invitations,
-    les clients et les projets.
+    les clients, les prospects et les projets.
 
 servers:
   - url: http://localhost:3000
@@ -24,6 +24,8 @@ tags:
     description: Invitations à rejoindre une entreprise PRO
   - name: Pro / Clients
     description: Clients d'une entreprise PRO
+  - name: Pro / Prospects
+    description: Prospects commerciaux et pipeline
   - name: Pro / Projects
     description: Projets liés à une entreprise PRO
 
@@ -448,6 +450,94 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /api/pro/businesses/{businessId}/prospects:
+    get:
+      tags: [Pro / Prospects]
+      summary: Liste les prospects d'une entreprise
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: businessId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Identifiant de l'entreprise (BigInt sérialisé)
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filtre par nom du prospect
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/ProspectPipelineStatus'
+          description: Filtre par statut dans le pipeline
+      responses:
+        '200':
+          description: Liste des prospects
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProspectListResponse'
+        '401':
+          description: Non authentifié
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Non membre de l'entreprise
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    post:
+      tags: [Pro / Prospects]
+      summary: Crée un prospect
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: businessId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Identifiant de l'entreprise (BigInt sérialisé)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProspectCreateRequest'
+      responses:
+        '201':
+          description: Prospect créé
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Prospect'
+        '400':
+          description: Données invalides
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Non authentifié
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Non membre de l'entreprise
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /api/pro/businesses/{businessId}/projects:
     get:
       tags: [Pro / Projects]
@@ -593,7 +683,8 @@ components:
           $ref: '#/components/schemas/User'
         memberships:
           type: array
-          description: Pour l'instant, renvoyé vide (les entreprises viennent de /api/pro/businesses)
+          description: >
+            Pour l'instant, renvoyé vide (les entreprises viennent de /api/pro/businesses).
           items:
             $ref: '#/components/schemas/BusinessMembershipSummary'
 
@@ -757,6 +848,123 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Client'
+
+    # --- Prospects ---
+    Prospect:
+      type: object
+      properties:
+        id:
+          type: string
+        businessId:
+          type: string
+        name:
+          type: string
+        contactName:
+          type: string
+          nullable: true
+        contactEmail:
+          type: string
+          format: email
+          nullable: true
+        contactPhone:
+          type: string
+          nullable: true
+        source:
+          $ref: '#/components/schemas/LeadSource'
+        interestNote:
+          type: string
+          nullable: true
+        qualificationLevel:
+          $ref: '#/components/schemas/QualificationLevel'
+        projectIdea:
+          type: string
+          nullable: true
+        estimatedBudget:
+          type: integer
+          format: int32
+          nullable: true
+        firstContactAt:
+          type: string
+          format: date-time
+          nullable: true
+        pipelineStatus:
+          $ref: '#/components/schemas/ProspectPipelineStatus'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    ProspectCreateRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        contactName:
+          type: string
+          nullable: true
+        contactEmail:
+          type: string
+          format: email
+          nullable: true
+        contactPhone:
+          type: string
+          nullable: true
+        source:
+          $ref: '#/components/schemas/LeadSource'
+        interestNote:
+          type: string
+          nullable: true
+        qualificationLevel:
+          $ref: '#/components/schemas/QualificationLevel'
+        projectIdea:
+          type: string
+          nullable: true
+        estimatedBudget:
+          type: integer
+          format: int32
+          nullable: true
+        firstContactAt:
+          type: string
+          format: date-time
+          nullable: true
+        pipelineStatus:
+          $ref: '#/components/schemas/ProspectPipelineStatus'
+
+    ProspectListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Prospect'
+
+    LeadSource:
+      type: string
+      enum:
+        - UNKNOWN
+        - OUTBOUND
+        - INBOUND
+        - REFERRAL
+        - OTHER
+
+    QualificationLevel:
+      type: string
+      enum:
+        - COLD
+        - WARM
+        - HOT
+
+    ProspectPipelineStatus:
+      type: string
+      enum:
+        - NEW
+        - IN_DISCUSSION
+        - OFFER_SENT
+        - FOLLOW_UP
+        - CLOSED
 
     # --- Projects ---
     ProjectStatus:

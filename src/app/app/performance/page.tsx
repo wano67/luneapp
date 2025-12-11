@@ -1,25 +1,16 @@
-import { Card } from '@/components/ui/card';
-import { AppShell } from '../AppShell';
-
-export default function PerformanceSpacePage() {
-  const sidebarItems = [
-    { href: '/app/performance', label: 'Vue d’ensemble' },
-    // plus tard: Performance Pro, Perso, Alignement, etc.
-  ];
-
+export default function PerformanceHomePage() {
   return (
-    <AppShell
-      currentSection="performance"
-      title="Espace performance"
-      description="Analyses croisées PRO/PERSO, runway et alignement global. Section à enrichir."
-      sidebarItems={sidebarItems}
-    >
-      <Card className="p-5">
-        <p className="text-sm text-slate-400">
-          Ici on mettra les vues de performance globale et l&apos;alignement PRO ↔
-          PERSO.
-        </p>
-      </Card>
-    </AppShell>
+    <div className="space-y-4">
+      <h1 className="text-xl font-semibold text-slate-50">
+        Espace 🟥 PERFORMANCE
+      </h1>
+      <p className="text-sm text-slate-400">
+        Ici, tu analyseras la performance globale Pro + Perso, et leur alignement.
+      </p>
+      <p className="text-xs text-slate-500">
+        Cette page consommera plus tard les données PRO et PERSO pour te donner
+        une vision type “cockpit”.
+      </p>
+    </div>
   );
 }

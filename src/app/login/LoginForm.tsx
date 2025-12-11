@@ -5,7 +5,7 @@ import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { FormEvent, useState } from 'react';
+import { FormEvent, useState, type ChangeEvent } from 'react';
 
 type LoginFormProps = {
   redirectPath?: string;
@@ -71,7 +71,9 @@ export default function LoginForm({ redirectPath = '/app' }: LoginFormProps) {
               autoComplete="email"
               label="Email"
               value={email}
-              onChange={(event) => setEmail(event.target.value)}
+              onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                setEmail(event.target.value)
+              }
               required
             />
 
@@ -81,7 +83,9 @@ export default function LoginForm({ redirectPath = '/app' }: LoginFormProps) {
               autoComplete="current-password"
               label="Mot de passe"
               value={password}
-              onChange={(event) => setPassword(event.target.value)}
+              onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                setPassword(event.target.value)
+              }
               required
               minLength={8}
             />

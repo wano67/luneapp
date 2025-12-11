@@ -1,7 +1,7 @@
 // src/app/register/page.tsx
 'use client';
 
-import { useState, FormEvent } from 'react';
+import { useState, FormEvent, type ChangeEvent } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Card } from '@/components/ui/card';
@@ -74,7 +74,9 @@ export default function RegisterPage() {
               autoComplete="email"
               label="Email"
               value={email}
-              onChange={(event) => setEmail(event.target.value)}
+              onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                setEmail(event.target.value)
+              }
               required
             />
 
@@ -84,7 +86,9 @@ export default function RegisterPage() {
               autoComplete="name"
               label="Nom (optionnel)"
               value={name}
-              onChange={(event) => setName(event.target.value)}
+              onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                setName(event.target.value)
+              }
             />
 
             <Input
@@ -93,7 +97,9 @@ export default function RegisterPage() {
               autoComplete="new-password"
               label="Mot de passe"
               value={password}
-              onChange={(event) => setPassword(event.target.value)}
+              onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                setPassword(event.target.value)
+              }
               required
               minLength={8}
             />

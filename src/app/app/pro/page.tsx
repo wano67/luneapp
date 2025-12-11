@@ -1,20 +1,14 @@
-import { AppShell } from '../AppShell';
-import ProHomeClient from './ProHomeClient';
+// src/app/app/pro/page.tsx
 
 export default function ProHomePage() {
-  const sidebarItems = [
-    { href: '/app/pro', label: 'Vue d’ensemble' },
-    // Tu pourras ajouter ici: /app/pro/clients, /app/pro/projects, etc.
-  ];
-
   return (
-    <AppShell
-      currentSection="pro"
-      title="Espace PRO"
-      description="Crée ou rejoins une entreprise pour piloter tes clients, projets et finances."
-      sidebarItems={sidebarItems}
-    >
-      <ProHomeClient />
-    </AppShell>
+    <div className="space-y-3">
+      <h1 className="text-lg font-semibold text-slate-50">
+        Espace PRO – Entreprise
+      </h1>
+      <p className="text-sm text-slate-400">
+        Sélectionne une entreprise ou crée-en une pour accéder aux dashboards.
+      </p>
+    </div>
   );
 }

@@ -1,218 +1,104 @@
+// src/app/app/AppShell.tsx
 'use client';
 
-import { Button } from '@/components/ui/button';
-import { cn } from '@/lib/cn';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import type { ReactNode } from 'react';
-import { useEffect, useState } from 'react';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import AppSidebar from './AppSidebar';
 
-type SectionKey = 'personal' | 'pro' | 'performance' | null;
+type Space = 'pro' | 'perso' | 'performance' | null;
 
-type SidebarItem = {
-  href: string;
-  label: string;
-};
+function getCurrentSpace(pathname: string): Space {
+  if (pathname.startsWith('/app/pro')) return 'pro';
+  if (pathname.startsWith('/app/personal')) return 'perso';
+  if (pathname.startsWith('/app/performance')) return 'performance';
+  return null;
+}
 
-type AppShellProps = {
-  currentSection: SectionKey;
-  title?: string;
-  description?: string;
-  sidebarItems?: SidebarItem[];
-  children: ReactNode;
-};
+function getBusinessIdFromPathname(pathname: string): string | null {
+  const segments = pathname.split('/').filter(Boolean); // ["app","pro","1","prospects"]
+  if (segments[0] !== 'app') return null;
+  if (segments[1] !== 'pro') return null;
+  const maybeId = segments[2];
+  if (!maybeId) return null;
+  if (!/^\d+$/.test(maybeId)) return null;
+  return maybeId;
+}
 
-type MeResponse = {
-  user?: {
-    email: string;
-    name?: string | null;
-  };
-};
+export default function AppShell({ children }: { children: ReactNode }) {
+  const pathname = usePathname();
+  const space = getCurrentSpace(pathname);
+  const businessId = getBusinessIdFromPathname(pathname);
 
-const topNavItems: { key: SectionKey; label: string; href: string }[] = [
-  { key: 'personal', label: 'Personal', href: '/app/personal' },
-  { key: 'pro', label: 'Professional', href: '/app/pro' },
-  { key: 'performance', label: 'Performance', href: '/app/performance' },
-];
-
-export function AppShell({
-  currentSection,
-  title,
-  description,
-  sidebarItems = [],
-  children,
-}: AppShellProps) {
-  const router = useRouter();
-  const [userLabel, setUserLabel] = useState<string | null>(null);
-  const [loggingOut, setLoggingOut] = useState(false);
-
-  useEffect(() => {
-    let active = true;
-
-    async function loadMe() {
-      try {
-        const res = await fetch('/api/auth/me', { credentials: 'include' });
-        if (!res.ok) return;
-        const json = (await res.json()) as MeResponse;
-        if (!active) return;
-
-        if (json.user) {
-          setUserLabel(json.user.name || json.user.email || null);
-        }
-      } catch (error) {
-        console.error('Error loading user in AppShell', error);
-      }
-    }
-
-    loadMe();
-
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  async function handleLogout() {
-    try {
-      setLoggingOut(true);
-      await fetch('/api/auth/logout', {
-        method: 'POST',
-        credentials: 'include',
-      });
-      router.push('/login');
-    } catch (error) {
-      console.error('Logout error', error);
-    } finally {
-      setLoggingOut(false);
-    }
-  }
+  const topNavItems: {
+    key: Space;
+    label: string;
+    emoji: string;
+    href: string;
+  }[] = [
+    { key: 'pro', label: 'PRO', emoji: '🟦', href: '/app/pro' },
+    { key: 'perso', label: 'PERSO', emoji: '🟩', href: '/app/personal' },
+    {
+      key: 'performance',
+      label: 'PERFORMANCE',
+      emoji: '🟥',
+      href: '/app/performance',
+    },
+  ];
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-50">
-      {/* HEADER */}
-      <header className="border-b border-slate-800 bg-slate-950/80 backdrop-blur">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 md:px-6 md:py-4">
-          {/* Gauche : logo/nom de l'app */}
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-semibold uppercase tracking-[0.3em] text-slate-400">
-              Lune
-            </span>
+      {/* HEADER FIXE */}
+      <header className="fixed inset-x-0 top-0 z-40 flex h-14 items-center justify-between border-b border-slate-800/80 bg-slate-950/95 px-6 backdrop-blur">
+        {/* Logo / titre OS */}
+        <div className="flex items-center gap-3">
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg border border-slate-700 bg-slate-900 text-xs">
+            SF
           </div>
-
-          {/* Centre : onglets Personal / Professional / Performance */}
-          <nav className="hidden gap-2 md:flex">
-            {topNavItems.map((item) => {
-              const isActive = item.key === currentSection;
-              return (
-                <Link
-                  key={item.key}
-                  href={item.href}
-                  className={cn(
-                    'rounded-full px-4 py-1.5 text-xs font-semibold uppercase tracking-wide transition',
-                    isActive
-                      ? 'bg-slate-200 text-slate-900'
-                      : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                  )}
-                >
-                  {item.label}
-                </Link>
-              );
-            })}
-          </nav>
-
-          {/* Droite : user + logout */}
-          <div className="flex items-center gap-3 text-xs md:text-sm">
-            {userLabel ? (
-              <span className="hidden text-slate-300 sm:inline">
-                {userLabel}
-              </span>
-            ) : null}
-            <Button
-              variant="outline"
-              size="sm"
-              type="button"
-              onClick={handleLogout}
-              disabled={loggingOut}
-            >
-              {loggingOut ? 'Déconnexion…' : 'Déconnexion'}
-            </Button>
+          <div className="flex flex-col">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.25em] text-slate-500">
+              StudioFief OS
+            </span>
+            <span className="text-xs text-slate-400">Système interne · /app</span>
           </div>
         </div>
 
-        {/* Tabs visibles sur mobile en dessous du header */}
-        <nav className="flex gap-2 border-t border-slate-800 px-4 pb-3 pt-2 md:hidden">
+        {/* NAV PRO / PERSO / PERFORMANCE */}
+        <nav className="flex items-center gap-2 text-xs">
           {topNavItems.map((item) => {
-            const isActive = item.key === currentSection;
+            const isActive = space === item.key;
             return (
               <Link
                 key={item.key}
                 href={item.href}
-                className={cn(
-                  'flex-1 rounded-full px-3 py-1.5 text-center text-xs font-semibold uppercase tracking-wide transition',
+                className={[
+                  'flex items-center gap-1 rounded-full px-3 py-1.5 transition-colors',
                   isActive
-                    ? 'bg-slate-200 text-slate-900'
-                    : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                )}
+                    ? 'bg-slate-100 text-slate-900'
+                    : 'border border-slate-700/70 text-slate-300 hover:bg-slate-900 hover:text-slate-50',
+                ].join(' ')}
               >
-                {item.label}
+                <span>{item.emoji}</span>
+                <span className="font-medium">{item.label}</span>
               </Link>
             );
           })}
         </nav>
+
+        {/* Slot utilisateur */}
+        <div className="flex items-center gap-3 text-xs text-slate-400">
+          <span className="hidden sm:inline">Compte</span>
+          <div className="h-7 w-7 rounded-full border border-slate-600 bg-slate-800" />
+        </div>
       </header>
 
-      {/* BODY : sidebar + contenu */}
-      <div className="mx-auto flex max-w-6xl gap-4 px-4 py-6 md:px-6 md:py-8">
-        {/* Sidebar gauche */}
-        <aside className="hidden w-56 shrink-0 md:block">
-          <div className="sticky top-20 rounded-2xl border border-slate-800 bg-slate-900/40 p-3">
-            <p className="mb-2 text-xs font-semibold uppercase tracking-[0.25em] text-slate-500">
-              {currentSection === 'pro'
-                ? 'Pro'
-                : currentSection === 'personal'
-                  ? 'Perso'
-                  : currentSection === 'performance'
-                    ? 'Performance'
-                    : 'Section'}
-            </p>
-            <ul className="space-y-1">
-              {sidebarItems.length === 0 ? (
-                <li className="text-xs text-slate-600">
-                  Navigation à venir pour cette section.
-                </li>
-              ) : (
-                sidebarItems.map((item) => (
-                  <li key={item.href}>
-                    <Link
-                      href={item.href}
-                      className="block rounded-lg px-3 py-1.5 text-sm text-slate-300 transition hover:bg-slate-800 hover:text-white"
-                    >
-                      {item.label}
-                    </Link>
-                  </li>
-                ))
-              )}
-            </ul>
-          </div>
-        </aside>
+      {/* SIDEBAR FIXE */}
+      <AppSidebar space={space} pathname={pathname} businessId={businessId} />
 
-        {/* Contenu */}
-        <main className="w-full space-y-5 md:max-w-3xl">
-          {(title || description) && (
-            <header className="space-y-1">
-              {title ? (
-                <h1 className="text-xl font-semibold text-slate-50 md:text-2xl">
-                  {title}
-                </h1>
-              ) : null}
-              {description ? (
-                <p className="text-sm text-slate-400">{description}</p>
-              ) : null}
-            </header>
-          )}
-
-          {children}
-        </main>
-      </div>
+      {/* CONTENU */}
+      <main className="min-h-screen pt-14 pl-64">
+        <div className="p-6">{children}</div>
+      </main>
     </div>
   );
 }

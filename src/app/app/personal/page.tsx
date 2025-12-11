@@ -1,25 +1,16 @@
-import { Card } from '@/components/ui/card';
-import { AppShell } from '../AppShell';
-
-export default function PersonalSpacePage() {
-  const sidebarItems = [
-    { href: '/app/personal', label: 'Vue d’ensemble' },
-    // plus tard: comptes, transactions, budgets, etc.
-  ];
-
+export default function PersonalHomePage() {
   return (
-    <AppShell
-      currentSection="personal"
-      title="Espace perso"
-      description="Pilote tes finances personnelles, budgets et objectifs. Section à enrichir."
-      sidebarItems={sidebarItems}
-    >
-      <Card className="p-5">
-        <p className="text-sm text-slate-400">
-          Ici on mettra les données financières personnelles et les dashboards
-          associés.
-        </p>
-      </Card>
-    </AppShell>
+    <div className="space-y-4">
+      <h1 className="text-xl font-semibold text-slate-50">
+        Espace 🟩 PERSO
+      </h1>
+      <p className="text-sm text-slate-400">
+        Ici, tu piloteras tes finances perso, ton runway, tes objectifs.
+      </p>
+      <p className="text-xs text-slate-500">
+        Pour l&apos;instant, cette page est un squelette. Tu pourras y brancher
+        les bases de données perso (comptes, transactions, budgets, épargne…).
+      </p>
+    </div>
   );
 }
