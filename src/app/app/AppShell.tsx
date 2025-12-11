@@ -42,16 +42,16 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const desktopMainPadding = sidebarCollapsed ? 'md:pl-16' : 'md:pl-64';
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50">
+    <div className="min-h-screen bg-[var(--background)] text-[var(--text-primary)]">
       {/* HEADER FIXE */}
-      <header className="fixed inset-x-0 top-0 z-50 flex h-14 items-center justify-between border-b border-slate-200 bg-white/90 px-4 backdrop-blur dark:border-slate-800 dark:bg-slate-950/90 md:px-6">
+      <header className="fixed inset-x-0 top-0 z-50 flex h-14 items-center justify-between border-b border-[var(--border)] bg-[var(--background-alt)]/90 px-4 backdrop-blur md:px-6">
         {/* Left: burger + logo */}
         <div className="flex items-center gap-3">
           {/* Burger mobile */}
           <button
             type="button"
             aria-label="Ouvrir la navigation"
-            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-700 shadow-sm hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 md:hidden"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[var(--border)] bg-[var(--surface)] text-[var(--text-primary)] shadow-sm hover:bg-[var(--surface-hover)] md:hidden"
             onClick={() => setMobileSidebarOpen(true)}
           >
             <span className="sr-only">Ouvrir la navigation</span>
@@ -64,14 +64,14 @@ export default function AppShell({ children }: { children: ReactNode }) {
 
           {/* Logo / titre OS */}
           <div className="flex items-center gap-2">
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg border border-slate-300 bg-slate-100 text-xs font-semibold text-slate-800 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface)] text-xs font-semibold text-[var(--text-primary)]">
               SF
             </div>
             <div className="flex flex-col">
-              <span className="text-[11px] font-semibold uppercase tracking-[0.25em] text-slate-500 dark:text-slate-400">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.25em] text-[var(--text-secondary)]">
                 StudioFief OS
               </span>
-              <span className="text-xs text-slate-400 dark:text-slate-500">
+              <span className="text-xs text-[var(--text-secondary)]">
                 Système interne · /app
               </span>
             </div>
@@ -89,8 +89,8 @@ export default function AppShell({ children }: { children: ReactNode }) {
                 className={[
                   'flex items-center gap-1 rounded-full px-3 py-1.5 text-xs transition-colors',
                   isActive
-                    ? 'bg-slate-900 text-slate-50 dark:bg-slate-100 dark:text-slate-900'
-                    : 'border border-slate-300 text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-900',
+                    ? 'border border-[var(--border)] bg-[var(--surface)] text-[var(--text-primary)]'
+                    : 'border border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]',
                 ].join(' ')}
               >
                 <span>{item.emoji}</span>
@@ -101,16 +101,16 @@ export default function AppShell({ children }: { children: ReactNode }) {
         </nav>
 
         {/* Right: user slot */}
-        <div className="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
+        <div className="flex items-center gap-3 text-xs text-[var(--text-secondary)]">
           <span className="hidden sm:inline">Compte</span>
-          <div className="h-7 w-7 rounded-full border border-slate-300 bg-slate-100 dark:border-slate-700 dark:bg-slate-800" />
+          <div className="h-7 w-7 rounded-full border border-[var(--border)] bg-[var(--surface-hover)]" />
         </div>
       </header>
 
       {/* SIDEBAR DESKTOP */}
       <aside
         className={[
-          'fixed inset-y-14 left-0 z-40 hidden border-r border-slate-200 bg-white/95 backdrop-blur transition-[width] duration-200 dark:border-slate-800 dark:bg-slate-950/95 md:flex md:flex-col',
+          'fixed inset-y-14 left-0 z-40 hidden border-r border-[var(--border)] bg-[var(--background-alt)]/95 backdrop-blur transition-[width] duration-200 md:flex md:flex-col',
           desktopSidebarWidth,
         ].join(' ')}
       >
@@ -123,11 +123,11 @@ export default function AppShell({ children }: { children: ReactNode }) {
           />
 
           {/* Toggle collapse bouton (desktop only) */}
-          <div className="border-t border-slate-200 p-2 dark:border-slate-800">
+          <div className="border-t border-[var(--border)] p-2">
             <button
               type="button"
               onClick={() => setSidebarCollapsed((prev) => !prev)}
-              className="flex w-full items-center justify-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-medium text-slate-500 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400 dark:hover:bg-slate-800"
+              className="flex w-full items-center justify-center gap-2 rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-[11px] font-medium text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]"
             >
               <span className="inline-block h-[1px] w-4 rounded bg-current" />
               <span>{sidebarCollapsed ? 'Déplier' : 'Replier'}</span>
@@ -140,17 +140,17 @@ export default function AppShell({ children }: { children: ReactNode }) {
       {mobileSidebarOpen && (
         <div className="fixed inset-0 z-50 flex md:hidden">
           {/* Fond “liquid glass” */}
-          <div className="absolute inset-0 bg-slate-900/70 backdrop-blur-xl" />
+          <div className="absolute inset-0 bg-[var(--background)]/80 backdrop-blur-xl" />
 
           {/* Contenu du menu */}
           <div className="relative flex h-full w-full flex-col px-4 py-4">
             {/* Header du menu mobile */}
             <div className="mb-4 flex items-center justify-between">
               <div className="flex flex-col">
-                <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-300">
+                <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[var(--text-secondary)]">
                   Navigation
                 </span>
-                <span className="text-xs text-slate-400">
+                <span className="text-xs text-[var(--text-secondary)]">
                   Choisis un espace : PRO, PERSO ou PERFORMANCE.
                 </span>
               </div>
@@ -158,7 +158,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
                 type="button"
                 aria-label="Fermer"
                 onClick={() => setMobileSidebarOpen(false)}
-                className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-600 text-slate-100 hover:bg-slate-800"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[var(--border)] text-[var(--text-primary)] hover:bg-[var(--surface-hover)]"
               >
                 <span className="sr-only">Fermer le menu</span>
                 <span className="block h-[1.5px] w-3 rotate-45 rounded bg-current" />
@@ -167,7 +167,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
             </div>
 
             {/* Onglets PRO / PERSO / PERFORMANCE en haut du menu */}
-            <div className="mb-4 flex items-center justify-between gap-2 rounded-full bg-slate-900/60 p-1 text-[11px]">
+            <div className="mb-4 flex items-center justify-between gap-2 rounded-full bg-[var(--background-alt)]/80 p-1 text-[11px]">
             {topNavItems.map((item) => {
               const isActive = space === item.key;
                 return (
@@ -178,8 +178,8 @@ export default function AppShell({ children }: { children: ReactNode }) {
                     className={[
                       'flex flex-1 items-center justify-center gap-1 rounded-full px-2 py-1 transition-colors',
                       isActive
-                        ? 'bg-slate-100 text-slate-900'
-                        : 'text-slate-300 hover:bg-slate-800',
+                        ? 'border border-[var(--border)] bg-[var(--surface)] text-[var(--text-primary)]'
+                        : 'text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]',
                     ].join(' ')}
                   >
                    <span>{item.emoji}</span>
@@ -191,7 +191,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
 
 
             {/* Bloc navigation (AppSidebar) */}
-            <div className="flex-1 overflow-y-auto rounded-2xl border border-slate-700/60 bg-slate-950/60 p-3 shadow-xl">
+            <div className="flex-1 overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--background-alt)]/80 p-3 shadow-xl">
               <AppSidebar
                 space={space}
                 pathname={pathname}
@@ -202,7 +202,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
             </div>
 
             {/* Légende en bas */}
-            <div className="mt-3 text-[10px] text-slate-400">
+            <div className="mt-3 text-[10px] text-[var(--text-secondary)]">
               La page actuelle est mise en évidence. Tu peux changer d’espace
               en haut ou de vue dans la liste.
             </div>
