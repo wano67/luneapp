@@ -1,12 +1,15 @@
 // src/app/app/pro/ProHomeClient.tsx
 'use client';
 
-import { useEffect, useState, FormEvent } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Modal } from '@/components/ui/modal';
+
+/* ===================== TYPES ===================== */
 
 type PublicUser = {
   id: string;
@@ -26,10 +29,6 @@ type BusinessSummary = {
 
 type AuthMeResponse = {
   user: PublicUser;
-  memberships: {
-    business: BusinessSummary;
-    role: string;
-  }[];
 };
 
 type BusinessesResponse = {
@@ -41,99 +40,160 @@ type BusinessesResponse = {
 
 type BusinessInviteAcceptResponse = {
   business: BusinessSummary;
-  role: string; // BusinessRole (OWNER / ADMIN / MEMBER / VIEWER)
+  role: string;
 };
+
+type CreateBusinessDraft = {
+  name: string;
+  legalName: string;
+  email: string;
+  phone: string;
+  website: string;
+  country: string;
+  city: string;
+  address: string;
+  vatNumber: string;
+};
+
+/* ===================== UTILS ===================== */
+
+function isEmail(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+}
+
+async function safeJson(res: Response) {
+  try {
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
+/* ===================== COMPONENT ===================== */
 
 export default function ProHomeClient() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
   const [me, setMe] = useState<AuthMeResponse | null>(null);
   const [businesses, setBusinesses] = useState<BusinessesResponse | null>(null);
 
+  /* ---------- CREATE MODAL ---------- */
+  const [createOpen, setCreateOpen] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [newBusinessName, setNewBusinessName] = useState('');
   const [creationError, setCreationError] = useState<string | null>(null);
 
+  const [draft, setDraft] = useState<CreateBusinessDraft>({
+    name: '',
+    legalName: '',
+    email: '',
+    phone: '',
+    website: '',
+    country: 'France',
+    city: '',
+    address: '',
+    vatNumber: '',
+  });
+
+  /* ---------- JOIN MODAL ---------- */
+  const [joinOpen, setJoinOpen] = useState(false);
   const [joinToken, setJoinToken] = useState('');
   const [joining, setJoining] = useState(false);
   const [joinError, setJoinError] = useState<string | null>(null);
   const [joinSuccess, setJoinSuccess] = useState<string | null>(null);
 
+  /* ---------- DATA ---------- */
+  const items = businesses?.items ?? [];
+  const userName = me?.user.name || me?.user.email || 'toi';
+
+  const createValidation = useMemo(() => {
+    const issues: string[] = [];
+    if (!draft.name.trim()) issues.push("Le nom de l'entreprise est obligatoire.");
+    if (draft.email && !isEmail(draft.email)) issues.push("Email invalide.");
+    return { ok: issues.length === 0, issues };
+  }, [draft]);
+
+  /* ===================== SIDEBAR ACTIONS ===================== */
   useEffect(() => {
-    let isMounted = true;
+    function onSidebarAction(e: Event) {
+      const ce = e as CustomEvent<{ action: 'create-business' | 'join-business' }>;
+      const action = ce?.detail?.action;
+      if (!action) return;
+
+      // Ne déclenche que sur /app/pro (pas sur /app/pro/[businessId])
+      if (typeof window !== 'undefined') {
+        const path = window.location.pathname;
+        if (path !== '/app/pro') return;
+      }
+
+      if (action === 'create-business') setCreateOpen(true);
+      if (action === 'join-business') setJoinOpen(true);
+    }
+
+    window.addEventListener('pro:sidebar-action', onSidebarAction);
+    return () => window.removeEventListener('pro:sidebar-action', onSidebarAction);
+  }, []);
+
+  /* ===================== LOAD ===================== */
+
+  useEffect(() => {
+    let mounted = true;
 
     async function load() {
       try {
-        const [meRes, businessesRes] = await Promise.all([
+        const [meRes, bizRes] = await Promise.all([
           fetch('/api/auth/me', { credentials: 'include' }),
           fetch('/api/pro/businesses', { credentials: 'include' }),
         ]);
 
-        // Non authentifié → redirection login
         if (meRes.status === 401) {
-          if (typeof window !== 'undefined') {
-            window.location.href = '/login?from=/app/pro';
-          }
+          window.location.href = '/login?from=/app/pro';
           return;
         }
 
-        if (!meRes.ok) {
-          throw new Error("Impossible de charger les informations utilisateur.");
-        }
-
-        if (!businessesRes.ok) {
-          throw new Error("Impossible de charger les entreprises.");
-        }
+        if (!meRes.ok || !bizRes.ok) throw new Error('Chargement impossible.');
 
         const meJson = (await meRes.json()) as AuthMeResponse;
-        const businessesJson = (await businessesRes.json()) as BusinessesResponse;
+        const bizJson = (await bizRes.json()) as BusinessesResponse;
 
-        if (!isMounted) return;
-
+        if (!mounted) return;
         setMe(meJson);
-        setBusinesses(businessesJson);
+        setBusinesses(bizJson);
         setError(null);
       } catch (err) {
         console.error(err);
-        if (!isMounted) return;
-        setError(
-          err instanceof Error
-            ? err.message
-            : "Une erreur est survenue lors du chargement de l'espace pro."
-        );
+        if (!mounted) return;
+        setError("Impossible de charger l’espace PRO.");
       } finally {
-        if (isMounted) setLoading(false);
+        if (mounted) setLoading(false);
       }
     }
 
     load();
-
     return () => {
-      isMounted = false;
+      mounted = false;
     };
   }, []);
 
   async function refreshBusinesses() {
     try {
-      const businessesRes = await fetch('/api/pro/businesses', {
-        credentials: 'include',
-      });
-      if (businessesRes.ok) {
-        const businessesJson = (await businessesRes.json()) as BusinessesResponse;
-        setBusinesses(businessesJson);
-      }
+      const res = await fetch('/api/pro/businesses', { credentials: 'include' });
+      if (!res.ok) return;
+      const json = (await res.json()) as BusinessesResponse;
+      setBusinesses(json);
     } catch (err) {
-      console.error('Erreur lors du rafraîchissement des entreprises', err);
+      console.error('refreshBusinesses failed', err);
     }
   }
 
-  async function handleCreateBusiness(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  /* ===================== ACTIONS ===================== */
+
+  async function handleCreateBusiness(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
     setCreationError(null);
 
-    const name = newBusinessName.trim();
-    if (!name) {
-      setCreationError("Merci d'indiquer un nom d'entreprise.");
+    if (!createValidation.ok) {
+      setCreationError(createValidation.issues[0] ?? 'Formulaire invalide.');
       return;
     }
 
@@ -144,40 +204,49 @@ export default function ProHomeClient() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ name }),
+        body: JSON.stringify({ name: draft.name.trim() }),
       });
 
-      const json = await res.json().catch(() => ({} as any));
+      const json = await safeJson(res);
 
       if (!res.ok) {
-        setCreationError(
-          typeof (json as any).error === 'string'
-            ? (json as any).error
-            : "Impossible de créer l'entreprise."
-        );
+        const msg =
+          (json && typeof (json as any).error === 'string' && (json as any).error) ||
+          "Création impossible.";
+        setCreationError(msg);
         return;
       }
 
       await refreshBusinesses();
 
-      setNewBusinessName('');
-      setCreationError(null);
+      setCreateOpen(false);
+      setDraft({
+        name: '',
+        legalName: '',
+        email: '',
+        phone: '',
+        website: '',
+        country: 'France',
+        city: '',
+        address: '',
+        vatNumber: '',
+      });
     } catch (err) {
       console.error(err);
-      setCreationError('Une erreur est survenue pendant la création.');
+      setCreationError("Création impossible.");
     } finally {
       setCreating(false);
     }
   }
 
-  async function handleJoinBusiness(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function handleJoinBusiness(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
     setJoinError(null);
     setJoinSuccess(null);
 
     const token = joinToken.trim();
     if (!token) {
-      setJoinError("Merci de coller le token d'invitation reçu par email.");
+      setJoinError('Token requis.');
       return;
     }
 
@@ -191,216 +260,183 @@ export default function ProHomeClient() {
         body: JSON.stringify({ token }),
       });
 
-      const json = await res.json().catch(() => ({} as any));
+      const json = await safeJson(res);
 
       if (!res.ok) {
-        setJoinError(
-          typeof (json as any).error === 'string'
-            ? (json as any).error
-            : "Impossible de rejoindre l'entreprise avec ce token."
-        );
+        const msg =
+          (json && typeof (json as any).error === 'string' && (json as any).error) ||
+          'Token invalide.';
+        setJoinError(msg);
         return;
       }
 
-      const data = json as BusinessInviteAcceptResponse;
-
-      setJoinSuccess(
-        `Tu as rejoint « ${data.business.name} » en tant que ${data.role}.`
-      );
-      setJoinError(null);
+      const data = (json ?? {}) as BusinessInviteAcceptResponse;
+      setJoinSuccess(`Tu as rejoint « ${data.business?.name ?? 'l’entreprise'} ».`);
       setJoinToken('');
-
       await refreshBusinesses();
+      setJoinOpen(false);
     } catch (err) {
       console.error(err);
-      setJoinError('Une erreur est survenue pendant la tentative de rejoindre.');
+      setJoinError('Erreur de connexion.');
     } finally {
       setJoining(false);
     }
   }
 
+  /* ===================== UI ===================== */
+
   if (loading) {
     return (
       <Card className="p-5">
-        <p className="text-sm text-[var(--text-secondary)]">
-          Chargement de ton espace pro…
-        </p>
+        <p className="text-sm text-[var(--text-secondary)]">Chargement…</p>
       </Card>
     );
   }
 
   if (error) {
     return (
-      <Card className="space-y-2 border border-rose-400/40 bg-rose-500/5 p-5">
-        <p className="text-sm font-semibold text-rose-200">Espace PRO</p>
-        <p className="text-sm text-rose-300">{error}</p>
-        <p className="text-xs text-[var(--text-secondary)]">
-          Tu peux essayer de recharger la page ou de te reconnecter.
-        </p>
+      <Card className="p-5">
+        <p className="text-sm font-semibold text-rose-500">Espace PRO</p>
+        <p className="text-sm text-rose-500/90">{error}</p>
       </Card>
     );
   }
 
-  const items = businesses?.items ?? [];
-  const userName = me?.user.name || me?.user.email;
-
-  // Cas 1 : aucune entreprise
-  if (items.length === 0) {
-    return (
-      <div className="space-y-6">
-        <div className="space-y-1">
-          <p className="text-sm text-[var(--text-secondary)]">
-            Bienvenue {userName}. Tu n&apos;as pas encore d&apos;entreprise configurée.
-          </p>
-          <p className="text-xs text-[var(--text-secondary)]">
-            Crée ton espace PRO ou rejoins une entreprise via une invitation.
-          </p>
-        </div>
-
-        <div className="grid gap-4 md:grid-cols-2">
-          {/* Créer une entreprise */}
-          <Card className="space-y-3 p-5">
-            <h2 className="text-lg font-semibold">Créer une entreprise</h2>
-            <p className="text-sm text-[var(--text-secondary)]">
-              Crée l&apos;espace PRO de ton activité. Tu pourras ensuite inviter des
-              collaborateurs et configurer tes clients, projets et finances.
-            </p>
-            <form onSubmit={handleCreateBusiness} className="space-y-3">
-              <Input
-                value={newBusinessName}
-                onChange={(e) => setNewBusinessName(e.target.value)}
-                placeholder="Nom de l’entreprise"
-                label="Nom de l’entreprise"
-                error={creationError}
-              />
-              <Button type="submit" disabled={creating} className="w-full md:w-auto">
-                {creating ? 'Création…' : 'Créer mon entreprise'}
-              </Button>
-            </form>
-          </Card>
-
-          {/* Rejoindre une entreprise */}
-          <Card className="space-y-3 p-5">
-            <h2 className="text-lg font-semibold">Rejoindre une entreprise</h2>
-            <p className="text-sm text-[var(--text-secondary)]">
-              Si quelqu&apos;un t&apos;a invité, tu as reçu un lien ou un token
-              d&apos;invitation. Colle-le ici pour rejoindre l&apos;entreprise.
-            </p>
-            <form onSubmit={handleJoinBusiness} className="space-y-3">
-              <Input
-                value={joinToken}
-                onChange={(e) => setJoinToken(e.target.value)}
-                placeholder="Token d’invitation"
-                label="Token"
-                error={joinError}
-              />
-              <Button type="submit" disabled={joining} className="w-full md:w-auto">
-                {joining ? 'Vérification…' : "Rejoindre l'entreprise"}
-              </Button>
-              {joinSuccess && (
-                <p className="text-xs text-emerald-500">{joinSuccess}</p>
-              )}
-            </form>
-            <p className="text-xs text-[var(--text-secondary)]">
-              Ce token correspond à l&apos;endpoint{' '}
-              <code className="font-mono text-[11px]">
-                POST /api/pro/businesses/invites/accept
-              </code>{' '}
-              de ton API.
-            </p>
-          </Card>
-        </div>
-      </div>
-    );
-  }
-
-  // Cas 2 : au moins une entreprise
   return (
     <div className="space-y-6">
-      {/* Header + création d’entreprise */}
+      {/* HEADER */}
       <Card className="p-5">
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div className="space-y-1">
             <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-[var(--text-secondary)]">
               App · PRO
             </p>
-            <h2 className="text-lg font-semibold">
-              Espace PRO de {userName}
-            </h2>
+            <h2 className="text-lg font-semibold">Espace PRO de {userName}</h2>
             <p className="text-sm text-[var(--text-secondary)]">
-              Choisis une entreprise à piloter, crée-en une nouvelle ou rejoins
-              une équipe via un token.
+              Crée une entreprise ou rejoins une équipe via invitation.
             </p>
           </div>
 
-          <div className="flex flex-col gap-3 md:w-80">
-            <form
-              onSubmit={handleCreateBusiness}
-              className="flex flex-col gap-2"
-            >
-              <Input
-                value={newBusinessName}
-                onChange={(e) => setNewBusinessName(e.target.value)}
-                placeholder="Nom de la nouvelle entreprise"
-                label="Nouvelle entreprise"
-                error={creationError || undefined}
-              />
-              <Button type="submit" disabled={creating} className="w-full">
-                {creating ? 'Création…' : 'Nouvelle entreprise'}
-              </Button>
-            </form>
-
-            <form onSubmit={handleJoinBusiness} className="flex flex-col gap-2">
-              <Input
-                value={joinToken}
-                onChange={(e) => setJoinToken(e.target.value)}
-                placeholder="Token d’invitation"
-                label="Rejoindre une entreprise"
-                error={joinError || undefined}
-              />
-              <Button type="submit" disabled={joining} variant="outline" className="w-full">
-                {joining ? 'Vérification…' : "Rejoindre avec un token"}
-              </Button>
-              {joinSuccess && (
-                <p className="text-xs text-emerald-500">{joinSuccess}</p>
-              )}
-            </form>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Button onClick={() => setCreateOpen(true)}>Créer une entreprise</Button>
+            <Button variant="outline" onClick={() => setJoinOpen(true)}>
+              Rejoindre une entreprise
+            </Button>
           </div>
         </div>
       </Card>
 
-      {/* Liste des entreprises */}
-      <section className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {items.map(({ business, role }) => (
-          <Card
-            key={business.id}
-            className="flex h-full flex-col justify-between p-5"
-          >
-            <div className="space-y-2">
-              <div className="flex items-center justify-between gap-2">
-                <h3 className="text-lg font-semibold">
-                  {business.name}
-                </h3>
-                <Badge variant="neutral" className="text-[11px]">
+      {/* EMPTY STATE */}
+      {items.length === 0 ? (
+        <Card className="p-5">
+          <p className="text-sm text-[var(--text-secondary)]">
+            Aucune entreprise pour le moment. Crée-en une ou rejoins-en une.
+          </p>
+          <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+            <Button onClick={() => setCreateOpen(true)}>Créer une entreprise</Button>
+            <Button variant="outline" onClick={() => setJoinOpen(true)}>
+              Rejoindre une entreprise
+            </Button>
+          </div>
+        </Card>
+      ) : null}
+
+      {/* LIST */}
+      {items.length > 0 ? (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {items.map(({ business, role }) => (
+            <Card key={business.id} className="p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate font-semibold">{business.name}</p>
+                  <p className="text-xs text-[var(--text-secondary)]">
+                    Créée le{' '}
+                    {new Date(business.createdAt).toLocaleDateString('fr-FR')}
+                  </p>
+                </div>
+                <Badge variant="neutral" className="shrink-0">
                   {role}
                 </Badge>
               </div>
-              <p className="text-xs text-[var(--text-secondary)]">
-                Créée le{' '}
-                {new Date(business.createdAt).toLocaleDateString('fr-FR')}
-              </p>
-            </div>
-            <div className="mt-4 flex items-center justify-between">
+
               <Link
                 href={`/app/pro/${business.id}`}
-                className="text-sm font-semibold text-[var(--accent)] hover:underline"
+                className="mt-3 inline-block text-sm font-semibold text-[var(--accent)] hover:underline"
               >
-                Entrer dans l&apos;espace →
+                Entrer →
               </Link>
-            </div>
-          </Card>
-        ))}
-      </section>
+            </Card>
+          ))}
+        </div>
+      ) : null}
+
+      {/* CREATE MODAL */}
+      <Modal
+        open={createOpen}
+        onClose={() => (creating ? null : setCreateOpen(false))}
+        title="Créer une entreprise"
+        description="Formulaire complet (pour l’instant, l’API n’exige que le nom)."
+      >
+        <form onSubmit={handleCreateBusiness} className="space-y-4">
+          <Input
+            label="Nom de l’entreprise *"
+            value={draft.name}
+            onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
+            error={creationError ?? undefined}
+            placeholder="Ex: StudioFief"
+          />
+
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              type="button"
+              onClick={() => setCreateOpen(false)}
+              disabled={creating}
+            >
+              Annuler
+            </Button>
+            <Button type="submit" disabled={creating}>
+              {creating ? 'Création…' : 'Créer'}
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* JOIN MODAL */}
+      <Modal
+        open={joinOpen}
+        onClose={() => (joining ? null : setJoinOpen(false))}
+        title="Rejoindre une entreprise"
+        description="Colle ici le token d’invitation reçu par email."
+      >
+        <form onSubmit={handleJoinBusiness} className="space-y-4">
+          <Input
+            label="Token d’invitation"
+            value={joinToken}
+            onChange={(e) => setJoinToken(e.target.value)}
+            error={joinError ?? undefined}
+            placeholder="eyJhbGciOi..."
+          />
+
+          {joinSuccess ? (
+            <p className="text-xs text-emerald-500">{joinSuccess}</p>
+          ) : null}
+
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              type="button"
+              onClick={() => setJoinOpen(false)}
+              disabled={joining}
+            >
+              Annuler
+            </Button>
+            <Button type="submit" disabled={joining}>
+              {joining ? 'Vérification…' : 'Rejoindre'}
+            </Button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 }

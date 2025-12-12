@@ -5,6 +5,8 @@ import {
   buildSchemaList,
 } from '@/lib/openapi/endpoint-groups';
 
+export const runtime = 'nodejs';
+
 type HttpMethod =
   | 'GET'
   | 'POST'

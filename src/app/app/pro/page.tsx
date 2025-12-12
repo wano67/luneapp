@@ -7,10 +7,10 @@ export default function ProHomePage() {
     <div className="space-y-6">
       <header className="space-y-1">
         <p className="text-xs font-semibold uppercase tracking-[0.25em] text-[var(--text-secondary)]">
-          App · Pro
+          ESPACE PRO
         </p>
         <h1 className="text-2xl font-semibold text-[var(--text-primary)]">
-          Espace PRO
+          DASHBOARD
         </h1>
         <p className="text-sm text-[var(--text-secondary)]">
           Pilote tes entreprises, tes clients et tes projets depuis un seul endroit.

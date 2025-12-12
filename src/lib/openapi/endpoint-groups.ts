@@ -85,6 +85,10 @@ function loadOpenApiSpec(): OpenAPISpec | null {
 let cachedSpec: OpenAPISpec | null | undefined;
 
 function getSpec(): OpenAPISpec | null {
+  if (process.env.NODE_ENV !== 'production') {
+    return loadOpenApiSpec();
+  }
+
   if (cachedSpec !== undefined) return cachedSpec;
   cachedSpec = loadOpenApiSpec();
   return cachedSpec;

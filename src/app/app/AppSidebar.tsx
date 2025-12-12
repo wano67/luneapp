@@ -4,6 +4,7 @@
 import Link from 'next/link';
 
 export type Space = 'pro' | 'perso' | 'performance' | null;
+export type SidebarAction = 'create-business' | 'join-business';
 
 type AppSidebarProps = {
   space: Space;
@@ -11,13 +12,12 @@ type AppSidebarProps = {
   businessId: string | null;
   collapsed?: boolean;
   onNavigate?: () => void;
+  onAction?: (action: SidebarAction) => void;
 };
 
-type NavItem = {
-  href: string;
-  label: string;
-  icon: string; // simple emoji pour éviter de rajouter une lib
-};
+type NavItem =
+  | { kind?: 'link'; href: string; label: string; icon: string }
+  | { kind: 'action'; action: SidebarAction; label: string; icon: string };
 
 type NavSection = {
   title: string;
@@ -28,24 +28,37 @@ function classNames(...parts: Array<string | false | null | undefined>) {
   return parts.filter(Boolean).join(' ');
 }
 
+/**
+ * Active match:
+ * - exact match
+ * - prefix match for nested routes
+ */
+function isActivePath(currentPathname: string, href: string) {
+  if (!href) return false;
+  if (currentPathname === href) return true;
+  if (href === '/app') return currentPathname === '/app';
+  return currentPathname.startsWith(href + '/');
+}
+
 // ----- SECTIONS PRO / PERSO / PERFORMANCE -----
 
-function getProSections(businessId: string | null): NavSection[] {
-  if (!businessId) {
-    return [
-      {
-        title: 'Espace PRO',
-        items: [
-          {
-            href: '/app/pro',
-            label: 'Choisir une entreprise',
-            icon: '🏢',
-          },
-        ],
-      },
-    ];
-  }
+function getProRootSections(): NavSection[] {
+  return [
+    {
+      title: '🧭 Hub PRO',
+      items: [{ href: '/app/pro', label: 'Mes entreprises', icon: '🏢' }],
+    },
+    {
+      title: '⚡ Actions',
+      items: [
+        { kind: 'action', action: 'create-business', label: 'Créer une entreprise', icon: '➕' },
+        { kind: 'action', action: 'join-business', label: 'Rejoindre une entreprise', icon: '🔑' },
+      ],
+    },
+  ];
+}
 
+function getProBusinessSections(businessId: string): NavSection[] {
   const base = `/app/pro/${businessId}`;
 
   return [
@@ -71,6 +84,11 @@ function getProSections(businessId: string | null): NavSection[] {
       ],
     },
   ];
+}
+
+function getProSections(businessId: string | null): NavSection[] {
+  if (!businessId) return getProRootSections();
+  return getProBusinessSections(businessId);
 }
 
 function getPersoSections(): NavSection[] {
@@ -116,7 +134,7 @@ function buildSections(space: Space, businessId: string | null): NavSection[] {
   if (space === 'pro') return getProSections(businessId);
   if (space === 'perso') return getPersoSections();
   if (space === 'performance') return getPerformanceSections();
-  // Page /app d’accueil ou route inconnue
+
   return [
     {
       title: 'StudioFief OS',
@@ -124,7 +142,6 @@ function buildSections(space: Space, businessId: string | null): NavSection[] {
         { href: '/app/pro', label: 'Espace PRO', icon: '🟦' },
         { href: '/app/personal', label: 'Espace PERSO', icon: '🟩' },
         { href: '/app/performance', label: 'Espace PERFORMANCE', icon: '🟥' },
-        { href: '/app/docs', label: 'API Docs', icon: '📜' },
       ],
     },
   ];
@@ -133,8 +150,7 @@ function buildSections(space: Space, businessId: string | null): NavSection[] {
 // ----- COMPONENT -----
 
 export default function AppSidebar(props: AppSidebarProps) {
-  const { space, pathname, businessId, collapsed = false, onNavigate } = props;
-
+  const { space, pathname, businessId, collapsed = false, onNavigate, onAction } = props;
   const sections = buildSections(space, businessId);
 
   return (
@@ -155,31 +171,46 @@ export default function AppSidebar(props: AppSidebarProps) {
             )}
 
             <div className="flex flex-col gap-1">
-              {section.items.map((item) => {
-                const isActive =
-                  pathname === item.href ||
-                  (item.href !== '/app/pro' &&
-                    pathname.startsWith(item.href) &&
-                    item.href !== '/app/personal');
+              {section.items.map((item, idx) => {
+                const isAction = item.kind === 'action';
+                const active = !isAction && isActivePath(pathname, item.href);
+
+                const commonClasses = classNames(
+                  'group flex items-center gap-2 rounded-md px-2 py-1.5 text-xs font-medium transition-colors',
+                  active
+                    ? 'border border-[var(--border)] bg-[var(--surface)] text-[var(--text-primary)]'
+                    : 'text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]',
+                  collapsed ? 'justify-center' : ''
+                );
+
+                if (isAction) {
+                  return (
+                    <button
+                      key={`${section.title}-${item.action}-${idx}`}
+                      type="button"
+                      onClick={() => {
+                        onAction?.(item.action);
+                        onNavigate?.(); // ferme le menu mobile si besoin
+                      }}
+                      title={collapsed ? item.label : undefined}
+                      className={classNames(commonClasses, 'w-full text-left')}
+                    >
+                      <span className="text-base">{item.icon}</span>
+                      {!collapsed && <span className="truncate">{item.label}</span>}
+                    </button>
+                  );
+                }
 
                 return (
                   <Link
-                    key={item.href}
+                    key={`${section.title}-${item.href}-${item.label}-${idx}`}
                     href={item.href}
-                    onClick={onNavigate}
+                    onClick={() => onNavigate?.()}
                     title={collapsed ? item.label : undefined}
-                    className={classNames(
-                      'group flex items-center gap-2 rounded-md px-2 py-1.5 text-xs font-medium transition-colors',
-                      isActive
-                        ? 'bg-[var(--surface)] text-[var(--text-primary)] border border-[var(--border)]'
-                        : 'text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]',
-                      collapsed ? 'justify-center' : ''
-                    )}
+                    className={commonClasses}
                   >
                     <span className="text-base">{item.icon}</span>
-                    {!collapsed && (
-                      <span className="truncate">{item.label}</span>
-                    )}
+                    {!collapsed && <span className="truncate">{item.label}</span>}
                   </Link>
                 );
               })}

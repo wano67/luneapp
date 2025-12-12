@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import AppSidebar, { type Space } from './AppSidebar';
 import ThemeToggle from '@/components/ThemeToggle';
+import type { SidebarAction } from './AppSidebar';
 
 function getCurrentSpace(pathname: string): Space {
   if (pathname.startsWith('/app/pro')) return 'pro';
@@ -46,6 +47,11 @@ export default function AppShell({ children }: { children: ReactNode }) {
 
   const desktopSidebarWidth = sidebarCollapsed ? 'md:w-16' : 'md:w-64';
   const desktopMainPadding = sidebarCollapsed ? 'md:pl-16' : 'md:pl-64';
+
+  function dispatchProAction(action: SidebarAction) {
+    if (typeof window === 'undefined') return;
+    window.dispatchEvent(new CustomEvent('pro:sidebar-action', { detail: { action } }));
+  }
 
   return (
     <div className="min-h-screen bg-[var(--background)] text-[var(--text-primary)]">
@@ -129,6 +135,9 @@ export default function AppShell({ children }: { children: ReactNode }) {
             pathname={pathname}
             businessId={businessId}
             collapsed={sidebarCollapsed}
+            onAction={(action) => {
+              dispatchProAction(action);
+            }}
           />
 
           {/* Toggle collapse bouton (desktop only) */}
@@ -206,6 +215,9 @@ export default function AppShell({ children }: { children: ReactNode }) {
                 businessId={businessId}
                 collapsed={false}
                 onNavigate={() => setMobileSidebarOpen(false)}
+                onAction={(action) => {
+                  dispatchProAction(action);
+                }}
               />
             </div>
 
