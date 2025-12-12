@@ -1,4 +1,3 @@
-// src/app/app/AppShell.tsx
 'use client';
 
 import type { ReactNode } from 'react';
@@ -6,6 +5,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import AppSidebar, { type Space } from './AppSidebar';
+import ThemeToggle from '@/components/ThemeToggle';
 
 function getCurrentSpace(pathname: string): Space {
   if (pathname.startsWith('/app/pro')) return 'pro';
@@ -32,11 +32,17 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false); // desktop
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false); // mobile
 
-  const topNavItems: { key: Space; label: string; emoji: string; href: string }[] = [
-    { key: 'pro', label: 'PRO', emoji: '🟦', href: '/app/pro' },
-    { key: 'perso', label: 'PERSO', emoji: '🟩', href: '/app/personal' },
-    { key: 'performance', label: 'PERFORMANCE', emoji: '🟥', href: '/app/performance' },
-  ];
+  const topNavItems: { key: Space; label: string; emoji: string; href: string }[] =
+    [
+      { key: 'pro', label: 'PRO', emoji: '🟦', href: '/app/pro' },
+      { key: 'perso', label: 'PERSO', emoji: '🟩', href: '/app/personal' },
+      {
+        key: 'performance',
+        label: 'PERFORMANCE',
+        emoji: '🟥',
+        href: '/app/performance',
+      },
+    ];
 
   const desktopSidebarWidth = sidebarCollapsed ? 'md:w-16' : 'md:w-64';
   const desktopMainPadding = sidebarCollapsed ? 'md:pl-16' : 'md:pl-64';
@@ -44,7 +50,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen bg-[var(--background)] text-[var(--text-primary)]">
       {/* HEADER FIXE */}
-      <header className="fixed inset-x-0 top-0 z-50 flex h-14 items-center justify-between border-b border-[var(--border)] bg-[var(--background-alt)]/90 px-4 backdrop-blur md:px-6">
+      <header className="fixed inset-x-0 top-0 z-50 flex h-14 items-center justify-between border-b border-[var(--border)] bg-[var(--background-alt)]/80 px-4 backdrop-blur-md md:px-6">
         {/* Left: burger + logo */}
         <div className="flex items-center gap-3">
           {/* Burger mobile */}
@@ -100,17 +106,20 @@ export default function AppShell({ children }: { children: ReactNode }) {
           })}
         </nav>
 
-        {/* Right: user slot */}
+        {/* Right: theme + user */}
         <div className="flex items-center gap-3 text-xs text-[var(--text-secondary)]">
-          <span className="hidden sm:inline">Compte</span>
-          <div className="h-7 w-7 rounded-full border border-[var(--border)] bg-[var(--surface-hover)]" />
+          <ThemeToggle />
+          <div className="hidden items-center gap-2 sm:flex">
+            <span>Compte</span>
+            <div className="h-7 w-7 rounded-full border border-[var(--border)] bg-[var(--surface-hover)]" />
+          </div>
         </div>
       </header>
 
       {/* SIDEBAR DESKTOP */}
       <aside
         className={[
-          'fixed inset-y-14 left-0 z-40 hidden border-r border-[var(--border)] bg-[var(--background-alt)]/95 backdrop-blur transition-[width] duration-200 md:flex md:flex-col',
+          'fixed inset-y-14 left-0 z-40 hidden border-r border-[var(--border)] bg-[var(--background-alt)]/75 backdrop-blur-md transition-[width] duration-200 md:flex md:flex-col',
           desktopSidebarWidth,
         ].join(' ')}
       >
@@ -168,13 +177,13 @@ export default function AppShell({ children }: { children: ReactNode }) {
 
             {/* Onglets PRO / PERSO / PERFORMANCE en haut du menu */}
             <div className="mb-4 flex items-center justify-between gap-2 rounded-full bg-[var(--background-alt)]/80 p-1 text-[11px]">
-            {topNavItems.map((item) => {
-              const isActive = space === item.key;
+              {topNavItems.map((item) => {
+                const isActive = space === item.key;
                 return (
                   <Link
                     key={item.key}
                     href={item.href}
-                    scroll={false} // on garde le contexte, menu reste ouvert
+                    scroll={false}
                     className={[
                       'flex flex-1 items-center justify-center gap-1 rounded-full px-2 py-1 transition-colors',
                       isActive
@@ -182,13 +191,12 @@ export default function AppShell({ children }: { children: ReactNode }) {
                         : 'text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]',
                     ].join(' ')}
                   >
-                   <span>{item.emoji}</span>
-                   <span className="font-medium">{item.label}</span>
-                 </Link>
-               );
-             })}
-          </div>
-
+                    <span>{item.emoji}</span>
+                    <span className="font-medium">{item.label}</span>
+                  </Link>
+                );
+              })}
+            </div>
 
             {/* Bloc navigation (AppSidebar) */}
             <div className="flex-1 overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--background-alt)]/80 p-3 shadow-xl">
