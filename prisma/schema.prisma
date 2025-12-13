@@ -80,6 +80,11 @@ model User {
   ownedBusinesses     Business[]           @relation("BusinessOwner")
   // Entreprises auxquelles il appartient (via membership)
   businessMemberships BusinessMembership[]
+
+  // Wallet (perso)
+  personalAccounts     PersonalAccount[]
+  personalTransactions PersonalTransaction[]
+  personalCategories   PersonalCategory[]
 }
 
 /**
@@ -209,4 +214,81 @@ model Project {
   updatedAt DateTime @updatedAt
 
   @@index([businessId, status])
+}
+
+/**
+ * ===================== WALLET (PERSONAL) =====================
+ */
+
+enum PersonalAccountType {
+  CURRENT
+  SAVINGS
+  INVEST
+  CASH
+}
+
+enum PersonalTransactionType {
+  INCOME
+  EXPENSE
+  TRANSFER
+}
+
+model PersonalAccount {
+  id     BigInt @id @default(autoincrement())
+  userId BigInt
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name         String
+  type         PersonalAccountType @default(CURRENT)
+  currency     String              @default("EUR")
+  institution  String?
+  iban         String?
+  initialCents BigInt              @default(0)
+
+  transactions PersonalTransaction[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, createdAt])
+}
+
+model PersonalCategory {
+  id     BigInt @id @default(autoincrement())
+  userId BigInt
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name      String
+  createdAt DateTime @default(now())
+
+  // ✅ inverse relation
+  transactions PersonalTransaction[]
+
+  @@unique([userId, name])
+}
+
+model PersonalTransaction {
+  id     BigInt @id @default(autoincrement())
+  userId BigInt
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  accountId BigInt
+  account   PersonalAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  categoryId BigInt?
+  category   PersonalCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  type        PersonalTransactionType
+  date        DateTime
+  amountCents BigInt
+  currency    String                  @default("EUR")
+
+  label String
+  note  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, date])
+  @@index([accountId, date])
 }
