@@ -5,11 +5,25 @@ import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { FormEvent, useState, type ChangeEvent } from 'react';
+import { FormEvent, useMemo, useState, type ChangeEvent } from 'react';
 
 type LoginFormProps = {
   redirectPath?: string;
 };
+
+function sanitizeRedirectPath(value?: string) {
+  // Only allow internal relative paths, keep querystring/hash.
+  // Reject absolute URLs, protocol-relative, or anything not starting with "/".
+  if (typeof value !== 'string') return '/app';
+  const v = value.trim();
+  if (!v) return '/app';
+
+  // Must be internal
+  if (!v.startsWith('/')) return '/app';
+  if (v.startsWith('//')) return '/app'; // protocol-relative
+  // Optional: prevent weird unicode whitespace etc. (basic)
+  return v;
+}
 
 export default function LoginForm({ redirectPath = '/app' }: LoginFormProps) {
   const router = useRouter();
@@ -17,6 +31,8 @@ export default function LoginForm({ redirectPath = '/app' }: LoginFormProps) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  const target = useMemo(() => sanitizeRedirectPath(redirectPath), [redirectPath]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -35,15 +51,14 @@ export default function LoginForm({ redirectPath = '/app' }: LoginFormProps) {
 
       if (!response.ok) {
         setError(
-          typeof payload.error === 'string'
-            ? payload.error
+          typeof (payload as any).error === 'string'
+            ? (payload as any).error
             : 'Impossible de se connecter.'
         );
         return;
       }
 
-      // Redirection après login
-      const target = redirectPath && redirectPath.length > 0 ? redirectPath : '/app';
+      // ✅ Redirect after login (safe + preserves querystring)
       router.push(target);
     } catch (err) {
       console.error(err);
@@ -71,9 +86,7 @@ export default function LoginForm({ redirectPath = '/app' }: LoginFormProps) {
               autoComplete="email"
               label="Email"
               value={email}
-              onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                setEmail(event.target.value)
-              }
+              onChange={(event: ChangeEvent<HTMLInputElement>) => setEmail(event.target.value)}
               required
             />
 
@@ -83,9 +96,7 @@ export default function LoginForm({ redirectPath = '/app' }: LoginFormProps) {
               autoComplete="current-password"
               label="Mot de passe"
               value={password}
-              onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                setPassword(event.target.value)
-              }
+              onChange={(event: ChangeEvent<HTMLInputElement>) => setPassword(event.target.value)}
               required
               minLength={8}
             />
@@ -102,10 +113,7 @@ export default function LoginForm({ redirectPath = '/app' }: LoginFormProps) {
 
             <p className="text-center text-xs text-slate-400">
               Pas de compte ?{' '}
-              <Link
-                href="/register"
-                className="text-blue-300 hover:text-blue-200"
-              >
+              <Link href="/register" className="text-blue-300 hover:text-blue-200">
                 Créer un compte
               </Link>
             </p>

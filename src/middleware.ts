@@ -1,3 +1,4 @@
+// src/middleware.ts
 import { verifyAuthToken, AUTH_COOKIE_NAME } from '@/server/auth/jwt';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -7,7 +8,10 @@ function unauthorizedResponse(request: NextRequest) {
   }
 
   const loginUrl = new URL('/login', request.url);
-  loginUrl.searchParams.set('from', request.nextUrl.pathname);
+
+  // ✅ preserve querystring (ex: /app/pro?create=1)
+  const from = request.nextUrl.pathname + request.nextUrl.search;
+  loginUrl.searchParams.set('from', from);
 
   return NextResponse.redirect(loginUrl);
 }

@@ -1,10 +1,17 @@
 // src/app/app/AppSidebar.tsx
 'use client';
 
+import type { ReactNode } from 'react';
 import Link from 'next/link';
+import {
+  IconHome,
+  IconWallet,
+  IconStudio,
+  IconFocus,
+  IconSettings,
+} from '@/components/icons';
 
 export type Space = 'pro' | 'perso' | 'performance' | null;
-export type SidebarAction = 'create-business' | 'join-business';
 
 type AppSidebarProps = {
   space: Space;
@@ -12,14 +19,16 @@ type AppSidebarProps = {
   businessId: string | null;
   collapsed?: boolean;
   onNavigate?: () => void;
-  onAction?: (action: SidebarAction) => void;
 };
 
-type NavItem =
-  | { kind?: 'link'; href: string; label: string; icon: string }
-  | { kind: 'action'; action: SidebarAction; label: string; icon: string };
+export type NavItem = {
+  href?: string;
+  label: string;
+  icon: ReactNode;
+  accent?: 'wallet' | 'studio' | 'focus';
+};
 
-type NavSection = {
+export type NavSection = {
   title: string;
   items: NavItem[];
 };
@@ -28,129 +37,134 @@ function classNames(...parts: Array<string | false | null | undefined>) {
   return parts.filter(Boolean).join(' ');
 }
 
-/**
- * Active match:
- * - exact match
- * - prefix match for nested routes
- */
-function isActivePath(currentPathname: string, href: string) {
+function isActivePath(currentPathname: string, href?: string) {
   if (!href) return false;
-  if (currentPathname === href) return true;
-  if (href === '/app') return currentPathname === '/app';
-  return currentPathname.startsWith(href + '/');
+  const cleanHref = href.split('?')[0];
+  if (currentPathname === cleanHref) return true;
+  if (cleanHref === '/app') return currentPathname === '/app';
+  return currentPathname.startsWith(cleanHref + '/');
 }
 
-// ----- SECTIONS PRO / PERSO / PERFORMANCE -----
+function accentClasses(accent?: NavItem['accent']) {
+  if (accent === 'wallet')
+    return 'data-[active=true]:shadow-[0_0_0_1px_rgba(59,130,246,0.35)]';
+  if (accent === 'studio')
+    return 'data-[active=true]:shadow-[0_0_0_1px_rgba(34,197,94,0.30)]';
+  if (accent === 'focus')
+    return 'data-[active=true]:shadow-[0_0_0_1px_rgba(244,63,94,0.28)]';
+  return '';
+}
 
-function getProRootSections(): NavSection[] {
+/* ---------------- SECTIONS ---------------- */
+
+function getGlobalSections(): NavSection[] {
   return [
     {
-      title: '🧭 Hub PRO',
-      items: [{ href: '/app/pro', label: 'Mes entreprises', icon: '🏢' }],
+      title: 'Navigation',
+      items: [
+        { href: '/app', label: 'Accueil', icon: <IconHome size={18} /> },
+        { href: '/app/personal', label: 'Wallet', icon: <IconWallet size={18} />, accent: 'wallet' },
+        { href: '/app/pro', label: 'Studio', icon: <IconStudio size={18} />, accent: 'studio' },
+        { href: '/app/performance', label: 'Focus', icon: <IconFocus size={18} />, accent: 'focus' },
+      ],
     },
     {
-      title: '⚡ Actions',
+      title: 'Compte',
+      items: [{ href: '/app/account', label: 'Paramètres', icon: <IconSettings size={18} /> }],
+    },
+  ];
+}
+
+function getStudioRootSections(): NavSection[] {
+  return [
+    {
+      title: 'Studio',
+      items: [{ href: '/app/pro', label: 'Mes entreprises', icon: <IconStudio size={18} />, accent: 'studio' }],
+    },
+    {
+      title: 'Actions',
       items: [
-        { kind: 'action', action: 'create-business', label: 'Créer une entreprise', icon: '➕' },
-        { kind: 'action', action: 'join-business', label: 'Rejoindre une entreprise', icon: '🔑' },
+        { href: '/app/pro?create=1', label: 'Créer une entreprise', icon: <span className="text-[16px] leading-none">+</span> },
+        { href: '/app/pro?join=1', label: 'Rejoindre une entreprise', icon: <span className="text-[16px] leading-none">↗</span> },
       ],
     },
   ];
 }
 
-function getProBusinessSections(businessId: string): NavSection[] {
+function getStudioBusinessSections(businessId: string): NavSection[] {
   const base = `/app/pro/${businessId}`;
-
   return [
     {
-      title: '📊 Données de l’entreprise',
+      title: 'Studio',
+      items: [{ href: '/app/pro', label: 'Mes entreprises', icon: <IconStudio size={18} />, accent: 'studio' }],
+    },
+    {
+      title: 'Données',
       items: [
-        { href: `${base}/dash-entreprise`, label: 'Vue d’ensemble', icon: '📌' },
-        { href: `${base}/clients`, label: 'Clients', icon: '👥' },
-        { href: `${base}/prospects`, label: 'Prospects', icon: '🧲' },
-        { href: `${base}/projets`, label: 'Projets', icon: '📁' },
-        { href: `${base}/services`, label: 'Services', icon: '🛠️' },
-        { href: `${base}/taches`, label: 'Tâches', icon: '✅' },
-        { href: `${base}/finances`, label: 'Finances Pro', icon: '💶' },
-        { href: `${base}/process`, label: 'Process & SOP', icon: '📚' },
+        { href: `${base}/dash-entreprise`, label: 'Vue d’ensemble', icon: <span className="text-[16px]">•</span> },
+        { href: `${base}/clients`, label: 'Clients', icon: <span className="text-[16px]">•</span> },
+        { href: `${base}/prospects`, label: 'Prospects', icon: <span className="text-[16px]">•</span> },
+        { href: `${base}/projets`, label: 'Projets', icon: <span className="text-[16px]">•</span> },
+        { href: `${base}/services`, label: 'Services', icon: <span className="text-[16px]">•</span> },
+        { href: `${base}/taches`, label: 'Tâches', icon: <span className="text-[16px]">•</span> },
+        { href: `${base}/finances`, label: 'Finances', icon: <span className="text-[16px]">•</span> },
+        { href: `${base}/process`, label: 'Process', icon: <span className="text-[16px]">•</span> },
       ],
     },
     {
-      title: '📋 Pilotage & dashboards',
+      title: 'Dashboards',
       items: [
-        { href: `${base}/dash-projets`, label: 'Dashboard Projets', icon: '📈' },
-        { href: `${base}/dash-finances`, label: 'Dashboard Finances', icon: '💹' },
-        { href: `${base}/dash-admin-process`, label: 'Admin & Process', icon: '🧩' },
+        { href: `${base}/dash-projets`, label: 'Projets', icon: <span className="text-[16px]">•</span> },
+        { href: `${base}/dash-finances`, label: 'Finances', icon: <span className="text-[16px]">•</span> },
+        { href: `${base}/dash-admin-process`, label: 'Admin', icon: <span className="text-[16px]">•</span> },
       ],
     },
   ];
 }
 
-function getProSections(businessId: string | null): NavSection[] {
-  if (!businessId) return getProRootSections();
-  return getProBusinessSections(businessId);
-}
-
-function getPersoSections(): NavSection[] {
+function getWalletSections(): NavSection[] {
   const base = '/app/personal';
   return [
     {
-      title: '💾 Données perso',
+      title: 'Wallet',
       items: [
-        { href: `${base}`, label: 'Vue d’accueil', icon: '🏠' },
-        { href: `${base}/comptes`, label: 'Comptes bancaires', icon: '🏦' },
-        { href: `${base}/transactions`, label: 'Transactions', icon: '💳' },
-        { href: `${base}/revenus`, label: 'Revenus', icon: '💼' },
-        { href: `${base}/budgets`, label: 'Budgets', icon: '📊' },
-        { href: `${base}/epargne`, label: 'Épargne & investissements', icon: '📈' },
-        { href: `${base}/admin`, label: 'Administratif', icon: '📂' },
-      ],
-    },
-    {
-      title: '📈 Pilotage perso',
-      items: [
-        { href: `${base}/dash-finances`, label: 'Dashboard Finances', icon: '💹' },
-        { href: `${base}/dash-objectifs`, label: 'Objectifs & Runway', icon: '🎯' },
+        { href: `${base}`, label: 'Vue d’accueil', icon: <IconWallet size={18} />, accent: 'wallet' },
+        { href: `${base}/comptes`, label: 'Comptes', icon: <span className="text-[16px]">•</span> },
+        { href: `${base}/transactions`, label: 'Transactions', icon: <span className="text-[16px]">•</span> },
+        { href: `${base}/revenus`, label: 'Revenus', icon: <span className="text-[16px]">•</span> },
+        { href: `${base}/budgets`, label: 'Budgets', icon: <span className="text-[16px]">•</span> },
+        { href: `${base}/epargne`, label: 'Épargne', icon: <span className="text-[16px]">•</span> },
+        { href: `${base}/admin`, label: 'Administratif', icon: <span className="text-[16px]">•</span> },
       ],
     },
   ];
 }
 
-function getPerformanceSections(): NavSection[] {
+function getFocusSections(): NavSection[] {
   const base = '/app/performance';
   return [
     {
-      title: '🟥 Performance',
+      title: 'Focus',
       items: [
-        { href: `${base}/pro`, label: 'Vue Performance Pro', icon: '🏢' },
-        { href: `${base}/perso`, label: 'Vue Performance Perso', icon: '🧍‍♂️' },
-        { href: `${base}/alignement`, label: 'Alignement Pro ↔ Perso', icon: '⚖️' },
+        { href: `${base}/pro`, label: 'Pro', icon: <IconFocus size={18} />, accent: 'focus' },
+        { href: `${base}/perso`, label: 'Perso', icon: <span className="text-[16px]">•</span> },
+        { href: `${base}/alignement`, label: 'Alignement', icon: <span className="text-[16px]">•</span> },
       ],
     },
   ];
 }
 
 function buildSections(space: Space, businessId: string | null): NavSection[] {
-  if (space === 'pro') return getProSections(businessId);
-  if (space === 'perso') return getPersoSections();
-  if (space === 'performance') return getPerformanceSections();
-
-  return [
-    {
-      title: 'StudioFief OS',
-      items: [
-        { href: '/app/pro', label: 'Espace PRO', icon: '🟦' },
-        { href: '/app/personal', label: 'Espace PERSO', icon: '🟩' },
-        { href: '/app/performance', label: 'Espace PERFORMANCE', icon: '🟥' },
-      ],
-    },
-  ];
+  if (space === 'pro') return businessId ? getStudioBusinessSections(businessId) : getStudioRootSections();
+  if (space === 'perso') return getWalletSections();
+  if (space === 'performance') return getFocusSections();
+  return getGlobalSections();
 }
 
-// ----- COMPONENT -----
+/* ---------------- COMPONENT ---------------- */
 
 export default function AppSidebar(props: AppSidebarProps) {
-  const { space, pathname, businessId, collapsed = false, onNavigate, onAction } = props;
+  const { space, pathname, businessId, collapsed = false, onNavigate } = props;
   const sections = buildSections(space, businessId);
 
   return (
@@ -159,7 +173,7 @@ export default function AppSidebar(props: AppSidebarProps) {
         'flex-1 overflow-y-auto px-2 py-3 text-[var(--text-primary)]',
         collapsed ? 'items-center' : ''
       )}
-      aria-label="Navigation principale"
+      aria-label="Navigation latérale"
     >
       <div className="flex flex-col gap-4">
         {sections.map((section) => (
@@ -171,45 +185,34 @@ export default function AppSidebar(props: AppSidebarProps) {
             )}
 
             <div className="flex flex-col gap-1">
-              {section.items.map((item, idx) => {
-                const isAction = item.kind === 'action';
-                const active = !isAction && isActivePath(pathname, item.href);
+              {section.items.map((item) => {
+                const active = isActivePath(pathname, item.href);
 
-                const commonClasses = classNames(
-                  'group flex items-center gap-2 rounded-md px-2 py-1.5 text-xs font-medium transition-colors',
-                  active
-                    ? 'border border-[var(--border)] bg-[var(--surface)] text-[var(--text-primary)]'
-                    : 'text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]',
-                  collapsed ? 'justify-center' : ''
-                );
-
-                if (isAction) {
-                  return (
-                    <button
-                      key={`${section.title}-${item.action}-${idx}`}
-                      type="button"
-                      onClick={() => {
-                        onAction?.(item.action);
-                        onNavigate?.(); // ferme le menu mobile si besoin
-                      }}
-                      title={collapsed ? item.label : undefined}
-                      className={classNames(commonClasses, 'w-full text-left')}
-                    >
-                      <span className="text-base">{item.icon}</span>
-                      {!collapsed && <span className="truncate">{item.label}</span>}
-                    </button>
-                  );
-                }
+                const baseClasses =
+                  'group flex items-center gap-2 rounded-xl px-2 py-1.5 text-xs font-medium transition-all duration-150 ease-out will-change-transform';
+                const inactiveClasses =
+                  'text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]';
+                const activeClasses =
+                  'border border-[var(--border)] bg-[var(--surface)] text-[var(--text-primary)]';
 
                 return (
                   <Link
-                    key={`${section.title}-${item.href}-${item.label}-${idx}`}
-                    href={item.href}
+                    key={`${section.title}-${item.href}-${item.label}`}
+                    href={item.href ?? '/app'}
                     onClick={() => onNavigate?.()}
                     title={collapsed ? item.label : undefined}
-                    className={commonClasses}
+                    data-active={active ? 'true' : 'false'}
+                    className={classNames(
+                      baseClasses,
+                      'hover:scale-[1.03] active:scale-[0.99]',
+                      active ? activeClasses : inactiveClasses,
+                      collapsed ? 'justify-center' : '',
+                      accentClasses(item.accent)
+                    )}
                   >
-                    <span className="text-base">{item.icon}</span>
+                    <span className="text-[var(--text-secondary)] transition-transform duration-150 group-hover:scale-110 group-hover:text-[var(--text-primary)]">
+                      {item.icon}
+                    </span>
                     {!collapsed && <span className="truncate">{item.label}</span>}
                   </Link>
                 );
@@ -220,4 +223,33 @@ export default function AppSidebar(props: AppSidebarProps) {
       </div>
     </nav>
   );
+}
+
+/* ✅ utilitaires pour AppShell (menu title) */
+
+export function getSidebarSections(space: Space, businessId: string | null): NavSection[] {
+  return buildSections(space, businessId);
+}
+
+export function getActiveSidebarMeta(
+  space: Space,
+  pathname: string,
+  businessId: string | null
+): {
+  sectionTitle?: string;
+  itemLabel?: string;
+  itemHref?: string;
+} {
+  const sections = buildSections(space, businessId);
+
+  for (const section of sections) {
+    for (const item of section.items) {
+      if (!item.href) continue;
+      if (isActivePath(pathname, item.href)) {
+        return { sectionTitle: section.title, itemLabel: item.label, itemHref: item.href };
+      }
+    }
+  }
+
+  return {};
 }

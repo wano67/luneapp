@@ -1,12 +1,13 @@
+// src/app/login/page.tsx
 import LoginForm from './LoginForm';
 
-export default async function LoginPage({
+export default function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ from?: string }>;
+  searchParams?: { from?: string };
 }) {
-  const sp = await searchParams;
-  const from = sp?.from;
+  const from = searchParams?.from;
+
   const redirectPath =
     typeof from === 'string' && from.length > 0 ? from : '/app';
 

@@ -1,43 +1,45 @@
+// src/components/ThemeToggle.tsx
 'use client';
 
 import { useEffect, useState } from 'react';
+import { IconMoon, IconSun } from '@/components/icons';
 
-type Theme = 'light' | 'dark';
-const STORAGE_KEY = 'lune-theme';
+function getInitialTheme(): 'light' | 'dark' {
+  if (typeof document === 'undefined') return 'light';
+  const attr = document.documentElement.getAttribute('data-theme');
+  if (attr === 'dark') return 'dark';
+  return 'light';
+}
+
+function applyTheme(next: 'light' | 'dark') {
+  document.documentElement.setAttribute('data-theme', next);
+  try {
+    localStorage.setItem('theme', next);
+  } catch {}
+}
 
 export default function ThemeToggle() {
-  const [theme, setTheme] = useState<Theme>('light');
+  const [theme, setTheme] = useState<'light' | 'dark'>('light');
 
-  // Init
   useEffect(() => {
-    if (typeof window === 'undefined') return;
+    // hydrate from localStorage first
+    try {
+      const saved = localStorage.getItem('theme');
+      if (saved === 'dark' || saved === 'light') {
+        setTheme(saved);
+        applyTheme(saved);
+        return;
+      }
+    } catch {}
 
-    const stored = window.localStorage.getItem(STORAGE_KEY) as Theme | null;
-    const preferred =
-      stored ??
-      (window.matchMedia &&
-      window.matchMedia('(prefers-color-scheme: dark)').matches
-        ? 'dark'
-        : 'light');
-
-    setTheme(preferred);
-    applyTheme(preferred);
+    const initial = getInitialTheme();
+    setTheme(initial);
   }, []);
 
-  // Appliquer le thème
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    applyTheme(theme);
-    window.localStorage.setItem(STORAGE_KEY, theme);
-  }, [theme]);
-
-  function applyTheme(next: Theme) {
-    const root = document.documentElement;
-    if (next === 'dark') {
-      root.setAttribute('data-theme', 'dark');
-    } else {
-      root.removeAttribute('data-theme');
-    }
+  function toggle() {
+    const next = theme === 'dark' ? 'light' : 'dark';
+    setTheme(next);
+    applyTheme(next);
   }
 
   const isDark = theme === 'dark';
@@ -45,18 +47,11 @@ export default function ThemeToggle() {
   return (
     <button
       type="button"
-      onClick={() => setTheme(isDark ? 'light' : 'dark')}
+      onClick={toggle}
       aria-label={isDark ? 'Passer en mode clair' : 'Passer en mode sombre'}
-      className="inline-flex h-8 items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 text-xs font-medium text-[var(--text-secondary)] shadow-sm hover:bg-[var(--surface-hover)]"
+      className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface)] text-[var(--text-primary)] hover:bg-[var(--surface-hover)]"
     >
-      <span
-        className={`inline-flex h-5 w-5 items-center justify-center rounded-full ${
-          isDark ? 'bg-yellow-400/20' : 'bg-slate-900/10'
-        }`}
-      >
-        {isDark ? '🌙' : '☀️'}
-      </span>
-      <span>{isDark ? 'Sombre' : 'Clair'}</span>
+      {isDark ? <IconSun size={18} /> : <IconMoon size={18} />}
     </button>
   );
 }

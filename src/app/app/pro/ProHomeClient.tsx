@@ -3,6 +3,7 @@
 
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -72,6 +73,9 @@ async function safeJson(res: Response) {
 /* ===================== COMPONENT ===================== */
 
 export default function ProHomeClient() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -109,30 +113,29 @@ export default function ProHomeClient() {
   const createValidation = useMemo(() => {
     const issues: string[] = [];
     if (!draft.name.trim()) issues.push("Le nom de l'entreprise est obligatoire.");
-    if (draft.email && !isEmail(draft.email)) issues.push("Email invalide.");
+    if (draft.email && !isEmail(draft.email)) issues.push('Email invalide.');
     return { ok: issues.length === 0, issues };
   }, [draft]);
 
-  /* ===================== SIDEBAR ACTIONS ===================== */
+  /* ===================== OPEN MODALS FROM QUERY ===================== */
   useEffect(() => {
-    function onSidebarAction(e: Event) {
-      const ce = e as CustomEvent<{ action: 'create-business' | 'join-business' }>;
-      const action = ce?.detail?.action;
-      if (!action) return;
+    // Only for /app/pro route (this component is mounted there anyway)
+    const create = searchParams?.get('create');
+    const join = searchParams?.get('join');
 
-      // Ne déclenche que sur /app/pro (pas sur /app/pro/[businessId])
-      if (typeof window !== 'undefined') {
-        const path = window.location.pathname;
-        if (path !== '/app/pro') return;
-      }
-
-      if (action === 'create-business') setCreateOpen(true);
-      if (action === 'join-business') setJoinOpen(true);
+    if (create === '1') {
+      setCreateOpen(true);
+      // clean URL (no history pollution)
+      router.replace('/app/pro');
+      return;
     }
 
-    window.addEventListener('pro:sidebar-action', onSidebarAction);
-    return () => window.removeEventListener('pro:sidebar-action', onSidebarAction);
-  }, []);
+    if (join === '1') {
+      setJoinOpen(true);
+      router.replace('/app/pro');
+      return;
+    }
+  }, [searchParams, router]);
 
   /* ===================== LOAD ===================== */
 
@@ -147,7 +150,8 @@ export default function ProHomeClient() {
         ]);
 
         if (meRes.status === 401) {
-          window.location.href = '/login?from=/app/pro';
+          const from = window.location.pathname + window.location.search;
+          window.location.href = `/login?from=${encodeURIComponent(from)}`;
           return;
         }
 
@@ -212,7 +216,7 @@ export default function ProHomeClient() {
       if (!res.ok) {
         const msg =
           (json && typeof (json as any).error === 'string' && (json as any).error) ||
-          "Création impossible.";
+          'Création impossible.';
         setCreationError(msg);
         return;
       }
@@ -233,7 +237,7 @@ export default function ProHomeClient() {
       });
     } catch (err) {
       console.error(err);
-      setCreationError("Création impossible.");
+      setCreationError('Création impossible.');
     } finally {
       setCreating(false);
     }
@@ -350,8 +354,7 @@ export default function ProHomeClient() {
                 <div className="min-w-0">
                   <p className="truncate font-semibold">{business.name}</p>
                   <p className="text-xs text-[var(--text-secondary)]">
-                    Créée le{' '}
-                    {new Date(business.createdAt).toLocaleDateString('fr-FR')}
+                    Créée le {new Date(business.createdAt).toLocaleDateString('fr-FR')}
                   </p>
                 </div>
                 <Badge variant="neutral" className="shrink-0">
@@ -418,9 +421,7 @@ export default function ProHomeClient() {
             placeholder="eyJhbGciOi..."
           />
 
-          {joinSuccess ? (
-            <p className="text-xs text-emerald-500">{joinSuccess}</p>
-          ) : null}
+          {joinSuccess ? <p className="text-xs text-emerald-500">{joinSuccess}</p> : null}
 
           <div className="flex justify-end gap-2">
             <Button
