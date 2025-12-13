@@ -1,80 +1,81 @@
-// src/components/ui/modal.tsx
 'use client';
 
-import type { ReactNode } from 'react';
-import { useEffect } from 'react';
+import React, { useEffect } from 'react';
 
 type ModalProps = {
   open: boolean;
   onClose: () => void;
-  title?: string;
+  title: string;
   description?: string;
-  children: ReactNode;
+  children: React.ReactNode;
 };
 
 export function Modal({ open, onClose, title, description, children }: ModalProps) {
   useEffect(() => {
     if (!open) return;
 
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+
+    // lock scroll
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
 
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.key === 'Escape') onClose();
-    }
-
-    document.addEventListener('keydown', onKeyDown);
-
+    window.addEventListener('keydown', onKeyDown);
     return () => {
+      window.removeEventListener('keydown', onKeyDown);
       document.body.style.overflow = prevOverflow;
-      document.removeEventListener('keydown', onKeyDown);
     };
   }, [open, onClose]);
 
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50">
       {/* overlay */}
-      <div
-        className="absolute inset-0 bg-black/40 backdrop-blur-md"
+      <button
+        type="button"
+        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
         onClick={onClose}
-        aria-hidden="true"
+        aria-label="Fermer"
       />
 
       {/* panel */}
-      <div
-        className="relative w-full max-w-xl overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)]/90 shadow-xl backdrop-blur"
-        role="dialog"
-        aria-modal="true"
-      >
-        <div className="flex items-start justify-between gap-4 border-b border-[var(--border)] px-5 py-4">
-          <div className="space-y-1">
-            {title ? (
-              <h2 className="text-base font-semibold text-[var(--text-primary)]">
-                {title}
-              </h2>
-            ) : null}
-            {description ? (
-              <p className="text-sm text-[var(--text-secondary)]">{description}</p>
-            ) : null}
+      <div className="absolute left-1/2 top-1/2 w-[92vw] max-w-2xl -translate-x-1/2 -translate-y-1/2">
+        <div className="overflow-hidden rounded-3xl border border-[var(--border)] bg-[var(--background-alt)]/90 shadow-2xl backdrop-blur-md">
+          <div className="relative px-6 py-5">
+            <div className="pr-14">
+              <h3 className="text-xl font-semibold">{title}</h3>
+              {description ? (
+                <p className="mt-1 text-sm text-[var(--text-secondary)]">{description}</p>
+              ) : null}
+            </div>
+
+            {/* Close X (grosse, propre) */}
+            <button
+              type="button"
+              onClick={onClose}
+              className="absolute right-4 top-4 inline-flex h-12 w-12 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
+              aria-label="Fermer la fenêtre"
+              title="Fermer"
+            >
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path
+                  d="M6 6l12 12M18 6L6 18"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                />
+              </svg>
+            </button>
           </div>
 
-          <button
-            type="button"
-            onClick={onClose}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface)] text-[var(--text-primary)] hover:bg-[var(--surface-hover)]"
-            aria-label="Fermer la fenêtre"
-          >
-            <span className="block h-[1.5px] w-4 rotate-45 rounded bg-current" />
-            <span className="block h-[1.5px] w-4 -translate-y-[1.5px] -rotate-45 rounded bg-current" />
-          </button>
-        </div>
-
-        <div className="px-5 py-4" onClick={(e) => e.stopPropagation()}>
-          {children}
+          <div className="border-t border-[var(--border)] px-6 py-5">{children}</div>
         </div>
       </div>
     </div>
   );
 }
+
+export default Modal;
