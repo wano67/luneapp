@@ -7,28 +7,6 @@ function cls(base: string, className?: string) {
   return [base, className].filter(Boolean).join(' ');
 }
 
-export function IconLune({ size = 18, className, ...props }: IconProps) {
-  // Croissant de lune (simple, fin)
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      className={cls('shrink-0', className)}
-      aria-hidden="true"
-      {...props}
-    >
-      <path
-        d="M21 14.8A8.5 8.5 0 0 1 9.2 3a7 7 0 1 0 11.8 11.8Z"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
 export function IconHome({ size = 18, className, ...props }: IconProps) {
   return (
     <svg
@@ -192,7 +170,7 @@ export function IconMoon({ size = 18, className, ...props }: IconProps) {
       {...props}
     >
       <path
-        d="M21 14.8A8.5 8.5 0 0 1 9.2 3a7 7 0 1 0 11.8 11.8Z"
+        d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z"
         stroke="currentColor"
         strokeWidth="1.5"
         strokeLinejoin="round"

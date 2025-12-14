@@ -43,8 +43,9 @@ export function Modal({ open, onClose, title, description, children }: ModalProp
 
       {/* panel */}
       <div className="absolute left-1/2 top-1/2 w-[92vw] max-w-2xl -translate-x-1/2 -translate-y-1/2">
-        <div className="overflow-hidden rounded-3xl border border-[var(--border)] bg-[var(--background-alt)]/90 shadow-2xl backdrop-blur-md">
-          <div className="relative px-6 py-5">
+        <div className="flex max-h-[90vh] flex-col overflow-hidden rounded-3xl border border-[var(--border)] bg-[var(--background-alt)]/90 shadow-2xl backdrop-blur-md">
+          {/* Header */}
+          <div className="relative shrink-0 px-6 py-5">
             <div className="pr-14">
               <h3 className="text-xl font-semibold">{title}</h3>
               {description ? (
@@ -52,7 +53,6 @@ export function Modal({ open, onClose, title, description, children }: ModalProp
               ) : null}
             </div>
 
-            {/* Close X (grosse, propre) */}
             <button
               type="button"
               onClick={onClose}
@@ -71,7 +71,27 @@ export function Modal({ open, onClose, title, description, children }: ModalProp
             </button>
           </div>
 
-          <div className="border-t border-[var(--border)] px-6 py-5">{children}</div>
+          {/* Body scrollable */}
+          <div className="min-h-0 flex-1 overflow-y-auto border-t border-[var(--border)] px-6 py-5">
+            {children}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+type ModalFooterStickyProps = {
+  children: React.ReactNode;
+};
+
+export function ModalFooterSticky({ children }: ModalFooterStickyProps) {
+  return (
+    <div className="sticky bottom-0 -mx-6 mt-6 px-6 pb-5 pt-3">
+      {/* barre flottante centrée */}
+      <div className="mx-auto w-fit rounded-2xl border border-[var(--border)] bg-[var(--background-alt)]/80 px-3 py-3 shadow-lg shadow-black/30 backdrop-blur-md">
+        <div className="flex items-center justify-center gap-2">
+          {children}
         </div>
       </div>
     </div>

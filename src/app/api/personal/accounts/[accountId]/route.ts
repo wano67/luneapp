@@ -9,11 +9,11 @@ function startOfDayUTC(d: Date) {
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { accountId: string } }
+  ctx: { params: Promise<{ accountId: string }> }
 ) {
   try {
     const { userId } = await requireAuthAsync(req);
-    const { accountId } = params;
+    const { accountId } = await ctx.params;
 
     if (!/^\d+$/.test(accountId)) {
       return NextResponse.json({ error: 'Invalid accountId' }, { status: 400 });

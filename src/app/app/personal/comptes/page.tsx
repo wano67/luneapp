@@ -7,6 +7,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import Modal from '@/components/ui/modal';
+import CsvImportModal from '@/components/CsvImportModal';
 
 type AccountItem = {
   id: string;
@@ -56,6 +57,7 @@ export default function ComptesPage() {
 
   // modal create
   const [open, setOpen] = useState(false);
+  const [openImport, setOpenImport] = useState(false);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
 
@@ -154,7 +156,7 @@ export default function ComptesPage() {
           </div>
 
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => alert('Import CSV (placeholder)')}>
+            <Button variant="outline" onClick={() => setOpenImport(true)}>
               Importer CSV
             </Button>
             <Button onClick={() => setOpen(true)}>Créer un compte</Button>
@@ -291,6 +293,14 @@ export default function ComptesPage() {
           </div>
         </form>
       </Modal>
+
+      <CsvImportModal
+        open={openImport}
+        onClose={() => setOpenImport(false)}
+        accounts={items.map((a) => ({ id: a.id, name: a.name, currency: a.currency }))}
+        defaultAccountId={items[0]?.id}
+        onImported={load}
+      />
     </div>
   );
 }

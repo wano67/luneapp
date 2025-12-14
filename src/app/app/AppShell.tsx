@@ -3,6 +3,7 @@
 
 import type { ReactNode } from 'react';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import AppSidebar, { type Space, getActiveSidebarMeta } from './AppSidebar';
@@ -13,7 +14,6 @@ import {
   IconWallet,
   IconFocus,
   IconUser,
-  IconLune,
 } from '@/components/icons';
 
 function getCurrentSpace(pathname: string): Space {
@@ -365,7 +365,14 @@ export default function AppShell({ children }: { children: ReactNode }) {
           {/* Left: logo / identité */}
           <Link href="/app" className="flex items-center gap-2 no-underline hover:no-underline">
             <div className="flex h-8 w-8 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--surface)]">
-              <IconLune size={18} />
+              <Image
+                src="/icon.svg"
+                alt="Lune"
+                width={20}
+                height={20}
+                className="h-5 w-5"
+                priority
+              />
             </div>
             <div className="flex flex-col">
               <span className="text-sm font-semibold leading-4">Lune OS</span>
