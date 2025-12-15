@@ -3,7 +3,8 @@ import { prisma } from '@/server/db/client';
 import { AUTH_COOKIE_NAME } from '@/server/auth/auth.service';
 import { verifyAuthToken } from '@/server/auth/jwt';
 import type { Business, BusinessRole } from '@/generated/prisma/client';
-import { assertSameOrigin, jsonNoStore, withNoStore } from '@/server/security/csrf';
+import { assertSameOrigin, withNoStore } from '@/server/security/csrf';
+import { rateLimit } from '@/server/security/rateLimit';
 
 function unauthorized() {
   return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -72,6 +73,13 @@ export async function POST(request: NextRequest) {
 
   const userId = await getAuthenticatedUserId(request);
   if (!userId) return unauthorized();
+
+  const limited = rateLimit(request, {
+    key: `pro:businesses:create:${userId.toString()}`,
+    limit: 20,
+    windowMs: 60 * 60 * 1000,
+  });
+  if (limited) return limited;
 
   const body = await request.json().catch(() => null);
 

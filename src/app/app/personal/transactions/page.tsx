@@ -9,6 +9,7 @@ import { Modal } from '@/components/ui/modal';
 import { formatCents, absCents } from '@/lib/money';
 
 type AccountItem = { id: string; name: string; currency: string };
+type CategoryItem = { id: string; name: string };
 
 type TxItem = {
   id: string;
@@ -20,6 +21,88 @@ type TxItem = {
   note: string | null;
   account: { id: string; name: string };
   category: { id: string; name: string } | null;
+};
+
+type ApiErrorShape = { error: string };
+
+function isApiErrorShape(x: unknown): x is ApiErrorShape {
+  return (
+    !!x &&
+    typeof x === 'object' &&
+    'error' in x &&
+    typeof (x as { error?: unknown }).error === 'string'
+  );
+}
+
+function getErrorMessage(e: unknown): string {
+  return e instanceof Error ? e.message : 'Erreur';
+}
+
+async function safeJson(res: Response): Promise<unknown> {
+  try {
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
+type AccountApiItem = { id: unknown; name: unknown; currency?: unknown };
+type CategoryApiItem = { id: unknown; name: unknown };
+
+function toAccountItem(a: AccountApiItem): AccountItem {
+  return {
+    id: String(a.id),
+    name: String(a.name),
+    currency: String(a.currency ?? 'EUR'),
+  };
+}
+
+function toCategoryItem(c: CategoryApiItem): CategoryItem {
+  return {
+    id: String(c.id),
+    name: String(c.name),
+  };
+}
+
+type TxApiItem = {
+  id: unknown;
+  type: unknown;
+  date: unknown;
+  amountCents: unknown;
+  currency?: unknown;
+  label?: unknown;
+  note?: unknown;
+  account?: { id?: unknown; name?: unknown } | null;
+  category?: { id?: unknown; name?: unknown } | null;
+};
+
+function toTxItem(t: TxApiItem): TxItem {
+  return {
+    id: String(t.id),
+    type: String(t.type),
+    date: String(t.date),
+    amountCents: String(t.amountCents),
+    currency: String(t.currency ?? 'EUR'),
+    label: String(t.label ?? ''),
+    note: t.note == null ? null : String(t.note),
+    account: { id: String(t.account?.id ?? ''), name: String(t.account?.name ?? '') },
+    category: t.category ? { id: String(t.category.id), name: String(t.category.name ?? '') } : null,
+  };
+}
+
+function isTxnType(v: string): v is 'INCOME' | 'EXPENSE' | 'TRANSFER' {
+  return v === 'INCOME' || v === 'EXPENSE' || v === 'TRANSFER';
+}
+
+type TxUpsertPayload = {
+  accountId: string;
+  type: 'INCOME' | 'EXPENSE' | 'TRANSFER';
+  date: string;
+  amountCents: string;
+  currency: string;
+  label: string;
+  note: string | null;
+  categoryId?: string | null;
 };
 
 function buildQuery(params: Record<string, string | undefined | null>) {
@@ -58,24 +141,28 @@ function formatDateFR(iso: string) {
 }
 
 function centsFromEuroInput(euros: string): string | null {
-  // ex: "12,34" or "-12.34"
-  const raw = euros.trim().replace(/\s/g, '').replace(',', '.');
-  if (!raw) return null;
-  if (!/^-?\d+(\.\d{0,2})?$/.test(raw)) return null;
-
-  const neg = raw.startsWith('-');
-  const [intRaw, decRaw = ''] = raw.replace('-', '').split('.');
-  const intPart = intRaw || '0';
-  const decPart = (decRaw + '00').slice(0, 2);
-
-  const hundred = BigInt(100); // ✅ pas de 100n
-  const cents = BigInt(intPart) * hundred + BigInt(decPart);
-  return (neg ? -cents : cents).toString();
+  const cleaned = String(euros ?? '')
+    .trim()
+    .replace(/\s+/g, '')
+    .replace(',', '.');
+  if (!cleaned) return null;
+  const sign = cleaned.startsWith('-') ? -1n : 1n;
+  const unsigned = cleaned.replace(/^[+-]/, '');
+  if (!/^\d+(\.\d{0,2})?$/.test(unsigned)) return null;
+  const [intRaw, decRaw = ''] = unsigned.split('.');
+  try {
+    const intPart = BigInt(intRaw || '0');
+    const decPart = BigInt((decRaw + '00').slice(0, 2));
+    const cents = intPart * 100n + decPart;
+    return (sign * cents).toString();
+  } catch {
+    return null;
+  }
 }
 
 function isNegCents(cents: string) {
   try {
-    return BigInt(cents) < BigInt(0); // ✅ pas de 0n
+    return BigInt(cents) < 0n; // ✅ pas de 0n
   } catch {
     return String(cents).startsWith('-');
   }
@@ -87,11 +174,13 @@ export default function PersoTransactionsPage() {
 
   // data
   const [accounts, setAccounts] = useState<AccountItem[]>([]);
+  const [categories, setCategories] = useState<CategoryItem[]>([]);
   const [items, setItems] = useState<TxItem[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
 
   // ui state
   const [loadingAccounts, setLoadingAccounts] = useState(true);
+  const [loadingCategories, setLoadingCategories] = useState(true);
   const [loadingList, setLoadingList] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -137,15 +226,17 @@ export default function PersoTransactionsPage() {
   const [eCurrency, setECurrency] = useState<string>('EUR');
   const [eLabel, setELabel] = useState<string>('');
   const [eNote, setENote] = useState<string>('');
+  const [eCategoryId, setECategoryId] = useState<string>('');
   const eAmountRef = useRef<HTMLInputElement | null>(null);
   const [editAttemptedSubmit, setEditAttemptedSubmit] = useState(false);
 
   function euroFromCentsStr(centsStr: string) {
     try {
       const b = BigInt(centsStr);
-      const abs = b < BigInt(0) ? -b : b;
-      const euros = Number(abs) / 100;
-      return euros.toFixed(2).replace('.', ',');
+      const abs = b < 0n ? -b : b;
+      const euros = abs / 100n;
+      const remainder = abs % 100n;
+      return `${euros.toString()},${remainder.toString().padStart(2, '0')}`;
     } catch {
       return '';
     }
@@ -180,12 +271,14 @@ export default function PersoTransactionsPage() {
       if (res.status === 401) return handle401();
       if (!res.ok) throw new Error('Impossible de charger les comptes');
 
-      const data = await res.json();
-      const list: AccountItem[] = (data?.items ?? []).map((a: any) => ({
-        id: String(a.id),
-        name: String(a.name),
-        currency: String(a.currency ?? 'EUR'),
-      }));
+      const data = await safeJson(res);
+
+      const raw =
+        data && typeof data === 'object' && 'items' in data
+          ? (data as { items?: unknown }).items
+          : [];
+
+      const list = Array.isArray(raw) ? raw.map((x) => toAccountItem(x as AccountApiItem)) : [];
 
       setAccounts(list);
 
@@ -194,10 +287,31 @@ export default function PersoTransactionsPage() {
         setFAccountId(list[0].id);
         setFCurrency(list[0].currency ?? 'EUR');
       }
-    } catch (e: any) {
-      setError(e?.message ?? 'Erreur lors du chargement des comptes');
+    } catch (e: unknown) {
+      setError(getErrorMessage(e) || 'Erreur lors du chargement des comptes');
     } finally {
       setLoadingAccounts(false);
+    }
+  }
+
+  async function fetchCategories() {
+    setLoadingCategories(true);
+    try {
+      const res = await fetch('/api/personal/categories', { credentials: 'include' });
+      if (res.status === 401) return handle401();
+      if (!res.ok) throw new Error('Impossible de charger les catégories');
+
+      const data = await safeJson(res);
+      const raw =
+        data && typeof data === 'object' && 'items' in data
+          ? (data as { items?: unknown }).items
+          : [];
+      const list = Array.isArray(raw) ? raw.map((x) => toCategoryItem(x as CategoryApiItem)) : [];
+      setCategories(list);
+    } catch (e: unknown) {
+      console.error(e);
+    } finally {
+      setLoadingCategories(false);
     }
   }
 
@@ -229,23 +343,23 @@ export default function PersoTransactionsPage() {
       if (res.status === 401) return handle401();
       if (!res.ok) throw new Error('Impossible de charger les transactions');
 
-      const data = await res.json();
-      const got: TxItem[] = (data?.items ?? []).map((t: any) => ({
-        id: String(t.id),
-        type: t.type,
-        date: String(t.date),
-        amountCents: String(t.amountCents),
-        currency: String(t.currency ?? 'EUR'),
-        label: String(t.label ?? ''),
-        note: t.note ?? null,
-        account: { id: String(t.account?.id), name: String(t.account?.name ?? '') },
-        category: t.category ? { id: String(t.category.id), name: String(t.category.name ?? '') } : null,
-      }));
+      const data = await safeJson(res);
+
+      const raw =
+        data && typeof data === 'object' && 'items' in data
+          ? (data as { items?: unknown }).items
+          : [];
+
+      const got = Array.isArray(raw) ? raw.map((x) => toTxItem(x as TxApiItem)) : [];
 
       setItems((prev) => (reset ? got : [...prev, ...got]));
-      setNextCursor(data?.nextCursor ?? null);
-    } catch (e: any) {
-      setError(e?.message ?? 'Erreur lors du chargement des transactions');
+      const cursor =
+        data && typeof data === 'object' && 'nextCursor' in data
+          ? (data as { nextCursor?: unknown }).nextCursor
+          : null;
+      setNextCursor(typeof cursor === 'string' ? cursor : null);
+    } catch (e: unknown) {
+      setError(getErrorMessage(e) || 'Erreur lors du chargement des transactions');
     } finally {
       setLoadingList(false);
       setLoadingMore(false);
@@ -254,6 +368,7 @@ export default function PersoTransactionsPage() {
 
   useEffect(() => {
     fetchAccounts();
+    fetchCategories();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -306,12 +421,13 @@ export default function PersoTransactionsPage() {
     setEditAttemptedSubmit(false);
 
     setEAccountId(t.account?.id || accounts[0]?.id || '');
-    setEType((t.type as any) || 'EXPENSE');
+    setEType(isTxnType(String(t.type)) ? (t.type as 'INCOME' | 'EXPENSE' | 'TRANSFER') : 'EXPENSE');
     setEDate(t.date ? isoDateOnly(new Date(t.date)) : isoDateOnly(new Date()));
     setEAmountEuro(euroFromCentsStr(t.amountCents));
     setECurrency((t.currency || 'EUR').toUpperCase());
     setELabel(t.label || '');
     setENote(t.note || '');
+    setECategoryId(t.category?.id ?? '');
 
     setOpenEdit(true);
     setTimeout(() => eAmountRef.current?.focus(), 50);
@@ -351,15 +467,14 @@ export default function PersoTransactionsPage() {
     }
 
     let amount = BigInt(eAmountCentsRaw!);
-    const zero = BigInt(0);
-    if (amount === zero) {
+    if (amount === 0n) {
       setEditError('Le montant ne peut pas être 0.');
       return;
     }
-    if (eType === 'EXPENSE' && amount > zero) amount = -amount;
-    if (eType === 'INCOME' && amount < zero) amount = -amount;
+    if (eType === 'EXPENSE' && amount > 0n) amount = -amount;
+    if (eType === 'INCOME' && amount < 0n) amount = -amount;
 
-    const payload: any = {
+    const payload: TxUpsertPayload = {
       accountId: eAccountId,
       type: eType,
       date: eDateIso,
@@ -368,6 +483,7 @@ export default function PersoTransactionsPage() {
       label: eLabel.trim(),
       note: eNote.trim() ? eNote.trim() : null,
     };
+    payload.categoryId = eCategoryId ? eCategoryId : null;
 
     setEditLoading(true);
     try {
@@ -379,17 +495,17 @@ export default function PersoTransactionsPage() {
       });
 
       if (res.status === 401) return handle401();
-      const data = await res.json().catch(() => ({}));
+      const data = await safeJson(res);
       if (!res.ok) {
-        setEditError(data?.error ?? 'Modification impossible.');
+        setEditError(isApiErrorShape(data) ? data.error : 'Modification impossible.');
         return;
       }
 
       setOpenEdit(false);
       setEditing(null);
       await fetchTransactions({ reset: true });
-    } catch (e: any) {
-      setEditError(e?.message ?? 'Erreur réseau.');
+    } catch (e: unknown) {
+      setEditError(getErrorMessage(e) || 'Erreur réseau.');
     } finally {
       setEditLoading(false);
     }
@@ -421,13 +537,13 @@ export default function PersoTransactionsPage() {
       });
 
       if (res.status === 401) return handle401();
-      const j = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(j?.error ?? 'Suppression impossible');
+      const j = await safeJson(res);
+      if (!res.ok) throw new Error(isApiErrorShape(j) ? j.error : 'Suppression impossible');
 
       clearSelection();
       await fetchTransactions({ reset: true });
-    } catch (e: any) {
-      setError(e?.message ?? 'Suppression impossible');
+    } catch (e: unknown) {
+      setError(getErrorMessage(e) || 'Suppression impossible');
     }
   }
 
@@ -479,11 +595,14 @@ export default function PersoTransactionsPage() {
 
     // Convention: EXPENSE => négatif, INCOME => positif
     let amount = BigInt(amountCentsRaw!);
-    const zero = BigInt(0);
-    if (fType === 'EXPENSE' && amount > zero) amount = -amount;
-    if (fType === 'INCOME' && amount < zero) amount = -amount;
+    if (amount === 0n) {
+      setCreateError('Le montant ne peut pas être 0.');
+      return;
+    }
+    if (fType === 'EXPENSE' && amount > 0n) amount = -amount;
+    if (fType === 'INCOME' && amount < 0n) amount = -amount;
 
-    const payload: any = {
+    const payload: TxUpsertPayload = {
       accountId: fAccountId,
       type: fType,
       date: dateIso,
@@ -504,17 +623,17 @@ export default function PersoTransactionsPage() {
       });
 
       if (res.status === 401) return handle401();
-      const data = await res.json().catch(() => ({}));
+      const data = await safeJson(res);
 
       if (!res.ok) {
-        setCreateError(data?.error ?? 'Création impossible.');
+        setCreateError(isApiErrorShape(data) ? data.error : 'Création impossible.');
         return;
       }
 
       setOpenAdd(false);
       await fetchTransactions({ reset: true });
-    } catch (e: any) {
-      setCreateError(e?.message ?? 'Erreur réseau.');
+    } catch (e: unknown) {
+      setCreateError(getErrorMessage(e) || 'Erreur réseau.');
     } finally {
       setCreateLoading(false);
     }
@@ -884,14 +1003,22 @@ export default function PersoTransactionsPage() {
 
               <div>
                 <label className="mb-1.5 block text-sm text-slate-300">Catégorie (optionnel)</label>
-                <input
+                <select
                   value={fCategoryId}
                   onChange={(e) => setFCategoryId(e.target.value)}
-                  placeholder="id (temporaire)"
                   className={inputBase + ' ' + inputOk}
-                  disabled={createLoading}
-                  inputMode="numeric"
-                />
+                  disabled={createLoading || loadingCategories}
+                >
+                  <option value="">Aucune catégorie</option>
+                  {categories.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1 text-xs text-slate-500">
+                  {loadingCategories ? 'Chargement des catégories…' : 'Optionnel'}
+                </p>
               </div>
 
               <div className="sm:col-span-2">
@@ -1053,6 +1180,26 @@ export default function PersoTransactionsPage() {
                   className={inputBase + ' ' + inputOk}
                   disabled={editLoading}
                 />
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-sm text-slate-300">Catégorie (optionnel)</label>
+                <select
+                  value={eCategoryId}
+                  onChange={(e) => setECategoryId(e.target.value)}
+                  className={inputBase + ' ' + inputOk}
+                  disabled={editLoading || loadingCategories}
+                >
+                  <option value="">Aucune catégorie</option>
+                  {categories.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1 text-xs text-slate-500">
+                  {loadingCategories ? 'Chargement des catégories…' : 'Optionnel'}
+                </p>
               </div>
 
               <div className="sm:col-span-2">

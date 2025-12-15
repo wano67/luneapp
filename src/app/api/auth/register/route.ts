@@ -6,12 +6,20 @@ import {
   registerUser,
   toPublicUser,
 } from '@/server/auth/auth.service';
+import { rateLimit, makeIpKey } from '@/server/security/rateLimit';
 import { assertSameOrigin } from '@/server/security/csrf';
 import { NextRequest, NextResponse } from 'next/server';
 
 const MIN_PASSWORD_LENGTH = 8;
 
 export async function POST(request: NextRequest) {
+  const limited = rateLimit(request, {
+    key: makeIpKey(request, 'auth:register'),
+    limit: 5,
+    windowMs: 60 * 60 * 1000,
+  });
+  if (limited) return limited;
+
   const csrf = assertSameOrigin(request);
   if (csrf) return csrf;
 

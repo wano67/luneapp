@@ -64,6 +64,9 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const DOCK_W_OPEN_PX = 256;
   const dockPaddingPx =
     DOCK_LEFT_PX + (dockOpen ? DOCK_W_OPEN_PX : DOCK_W_CLOSED_PX) + DOCK_GAP_PX;
+  const dockStyle = useMemo(() => {
+    return { ['--dock-pl' as const]: `${dockPaddingPx}px` } as React.CSSProperties;
+  }, [dockPaddingPx]);
 
   /* ---------------- NAV ---------------- */
   const centerNav = useMemo(
@@ -134,9 +137,9 @@ export default function AppShell({ children }: { children: ReactNode }) {
 
     wasOpenAtStart.current = mobileMenuOpen;
     pointerStartY.current = e.clientY;
-    pointerStartT.current = performance.now();
+    pointerStartT.current = e.timeStamp;
     lastY.current = e.clientY;
-    lastT.current = pointerStartT.current;
+    lastT.current = e.timeStamp;
     pointerDragging.current = false;
   }
 
@@ -153,7 +156,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
     pointerDragging.current = true;
 
     // vitesse (pour snap)
-    const now = performance.now();
+    const now = e.timeStamp;
     lastY.current = e.clientY;
     lastT.current = now;
 
@@ -171,8 +174,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
       return;
     }
 
-    const now = performance.now();
-    const dt = Math.max(1, now - pointerStartT.current);
+    const dt = Math.max(1, lastT.current - pointerStartT.current);
 
     // vitesse moyenne (px/ms) sur le geste
     const vy = (lastY.current - (pointerStartY.current ?? lastY.current)) / dt;
@@ -307,7 +309,11 @@ export default function AppShell({ children }: { children: ReactNode }) {
                   onClick={() => {
                     if (active) {
                       haptic(10);
-                      mobileMenuOpen ? closeMobileMenu() : openMobileMenu();
+                      if (mobileMenuOpen) {
+                        closeMobileMenu();
+                      } else {
+                        openMobileMenu();
+                      }
                       return;
                     }
                     haptic(10);
@@ -331,7 +337,13 @@ export default function AppShell({ children }: { children: ReactNode }) {
             {/* Bouton chevron (fallback ouverture) */}
             <button
               type="button"
-              onClick={() => (mobileMenuOpen ? closeMobileMenu() : openMobileMenu())}
+              onClick={() => {
+                if (mobileMenuOpen) {
+                  closeMobileMenu();
+                } else {
+                  openMobileMenu();
+                }
+              }}
               className="ml-1 inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--background)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
               aria-label={mobileMenuOpen ? 'Fermer le menu' : 'Ouvrir le menu'}
               title={mobileMenuOpen ? 'Fermer' : 'Menu'}
@@ -528,7 +540,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
 
       {/* CONTENU */}
       <main
-        style={{ ['--dock-pl' as any]: `${dockPaddingPx}px` } as React.CSSProperties}
+        style={dockStyle}
         className={[
           'min-h-screen pt-14',
           'transition-[padding-left] duration-200 ease-out',

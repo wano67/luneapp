@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { prisma } from '@/server/db/client';
 import { requireAuthAsync } from '@/server/auth/requireAuth';
-import { assertSameOrigin, jsonNoStore, withNoStore } from '@/server/security/csrf';
+import { assertSameOrigin, jsonNoStore } from '@/server/security/csrf';
+import { rateLimit } from '@/server/security/rateLimit';
 
 type ParsedRow = {
   rowNumber: number;
@@ -18,10 +19,60 @@ type ParsedValid = ParsedRow & {
   type: 'INCOME' | 'EXPENSE';
 };
 
-type RowError = { row: number; reason: string; data?: any };
+type RowError = { row: number; reason: string; data?: unknown };
 
 function normalizeHeader(h: string) {
   return h.trim().toLowerCase();
+}
+
+function sanitizeCategoryLabel(name: string) {
+  return name.trim().slice(0, 80);
+}
+
+function normalizeCategoryName(name: string) {
+  return sanitizeCategoryLabel(name).toLowerCase();
+}
+
+function sanitizeLabel(raw: unknown) {
+  const label = String(raw ?? '').trim();
+  if (label.length > 160) {
+    return {
+      value: label,
+      error: { reason: 'LABEL_TOO_LONG', data: { labelLen: label.length } as const },
+    } as const;
+  }
+  return { value: label } as const;
+}
+
+function sanitizeNote(raw: unknown) {
+  if (raw === null || raw === undefined) return { value: null as string | null } as const;
+  const note = String(raw).trim();
+  if (!note) return { value: null as string | null } as const;
+  if (note.length > 2000) {
+    return {
+      value: null as string | null,
+      error: { reason: 'NOTE_TOO_LONG', data: { noteLen: note.length } as const },
+    } as const;
+  }
+  return { value: note } as const;
+}
+
+function sanitizeCurrency(raw: unknown, fallback: string) {
+  const base = typeof fallback === 'string' && fallback.trim() ? fallback.trim() : 'EUR';
+  const candidate =
+    typeof raw === 'string'
+      ? raw.trim()
+      : raw === null || raw === undefined
+      ? ''
+      : String(raw).trim();
+  const value = (candidate || base).toUpperCase();
+  if (value.length > 8) {
+    return {
+      value,
+      error: { reason: 'CURRENCY_TOO_LONG', data: { currencyLen: value.length } as const },
+    } as const;
+  }
+  return { value } as const;
 }
 
 function parseCSV(content: string, delimiter: ',' | ';' | '\t') {
@@ -140,6 +191,13 @@ export async function POST(req: NextRequest) {
 
     const { userId } = await requireAuthAsync(req);
 
+    const limited = rateLimit(req, {
+      key: `personal:tx:import:${userId}`,
+      limit: 10,
+      windowMs: 60 * 60 * 1000,
+    });
+    if (limited) return limited;
+
     const form = await req.formData();
     const file = form.get('file');
     const accountId = String(form.get('accountId') ?? '').trim();
@@ -148,10 +206,13 @@ export async function POST(req: NextRequest) {
     if (!file || typeof file === 'string') {
       return NextResponse.json({ error: 'Missing file' }, { status: 400 });
     }
-    if (typeof (file as any).size === 'number' && (file as any).size > 2 * 1024 * 1024) {
+    const fileSize = typeof (file as { size?: unknown }).size === 'number' ? (file as { size: number }).size : null;
+    if (fileSize !== null && fileSize > 2 * 1024 * 1024) {
       return NextResponse.json({ error: 'File too large (max 2MB)' }, { status: 400 });
     }
-    const mime = (file as any).type?.toLowerCase?.() as string | undefined;
+    const mime = typeof (file as { type?: unknown }).type === 'string'
+      ? ((file as { type: string }).type.toLowerCase?.() ?? (file as { type: string }).type.toLowerCase())
+      : undefined;
     if (mime && mime !== 'text/csv' && mime !== 'application/vnd.ms-excel') {
       return NextResponse.json({ error: 'Invalid file type' }, { status: 400 });
     }
@@ -206,15 +267,33 @@ export async function POST(req: NextRequest) {
       const row = table[r];
 
       const dateIso = toISODate(String(row[iDate] ?? ''));
-      const label = String(row[iLabel] ?? '').trim();
+      const labelResult = sanitizeLabel(row[iLabel]);
+      if (labelResult.error) {
+        errors.push({ row: r + 1, reason: labelResult.error.reason, data: labelResult.error.data });
+        continue;
+      }
+      const label = labelResult.value;
       const amountCents = centsFromAmount(String(row[iAmount] ?? ''));
 
-      const currency = String((iCurrency !== -1 ? row[iCurrency] : acc.currency) ?? acc.currency)
-        .trim()
-        .toUpperCase();
+      const noteResult = sanitizeNote(iNote !== -1 ? row[iNote] : null);
+      if (noteResult.error) {
+        errors.push({ row: r + 1, reason: noteResult.error.reason, data: noteResult.error.data });
+        continue;
+      }
+      const note = noteResult.value;
 
-      const note = iNote !== -1 ? String(row[iNote] ?? '').trim() || null : null;
-      const categoryName = iCategory !== -1 ? String(row[iCategory] ?? '').trim() || null : null;
+      const currencyResult = sanitizeCurrency(iCurrency !== -1 ? row[iCurrency] : acc.currency, acc.currency);
+      if (currencyResult.error) {
+        errors.push({
+          row: r + 1,
+          reason: currencyResult.error.reason,
+          data: currencyResult.error.data,
+        });
+        continue;
+      }
+      const currency = currencyResult.value;
+      const rawCategory = iCategory !== -1 ? String(row[iCategory] ?? '') : '';
+      const categoryName = rawCategory ? sanitizeCategoryLabel(rawCategory) || null : null;
 
       if (!dateIso || !label || !amountCents) {
         errors.push({
@@ -251,26 +330,38 @@ export async function POST(req: NextRequest) {
     }
 
     // categories (unique per user)
-    const uniqueCats = Array.from(
-      new Set(parsedWithType.map((p) => p.categoryName).filter(Boolean) as string[])
-    );
+    const catKeyToLabel = new Map<string, string>();
+    for (const p of parsedWithType) {
+      if (!p.categoryName) continue;
+      const label = sanitizeCategoryLabel(p.categoryName);
+      if (!label) continue;
+      const key = normalizeCategoryName(label);
+      if (!catKeyToLabel.has(key)) catKeyToLabel.set(key, label);
+    }
 
+    const uniqueCatKeys = Array.from(catKeyToLabel.keys());
     const catMap = new Map<string, bigint>();
 
-    if (uniqueCats.length) {
+    if (uniqueCatKeys.length) {
+      const orFilters = uniqueCatKeys.map((key) => {
+        const label = catKeyToLabel.get(key) ?? key;
+        return { name: { equals: label, mode: 'insensitive' as const } };
+      });
+
       const existing = await prisma.personalCategory.findMany({
-        where: { userId: BigInt(userId), name: { in: uniqueCats } },
+        where: { userId: BigInt(userId), OR: orFilters },
         select: { id: true, name: true },
       });
-      existing.forEach((c) => catMap.set(c.name, c.id));
+      existing.forEach((c) => catMap.set(normalizeCategoryName(c.name), c.id));
 
-      const missing = uniqueCats.filter((n) => !catMap.has(n));
-      for (const name of missing) {
+      const missing = uniqueCatKeys.filter((k) => !catMap.has(k));
+      for (const key of missing) {
+        const label = catKeyToLabel.get(key) ?? key;
         const created = await prisma.personalCategory.create({
-          data: { userId: BigInt(userId), name },
+          data: { userId: BigInt(userId), name: label },
           select: { id: true, name: true },
         });
-        catMap.set(created.name, created.id);
+        catMap.set(normalizeCategoryName(created.name), created.id);
       }
     }
 
@@ -293,10 +384,12 @@ export async function POST(req: NextRequest) {
       if (amt > BigInt(0)) sumPos += amt;
       if (amt < BigInt(0)) sumNegAbs += -amt;
 
+      const catKey = p.categoryName ? normalizeCategoryName(p.categoryName) : null;
+
       txData.push({
         userId: BigInt(userId),
         accountId: BigInt(accountId),
-        categoryId: p.categoryName ? catMap.get(p.categoryName) ?? null : null,
+        categoryId: catKey ? catMap.get(catKey) ?? null : null,
         type: p.type,
         date: d,
         amountCents: amt,
@@ -327,8 +420,8 @@ export async function POST(req: NextRequest) {
         expenseAbsCents: sumNegAbs.toString(),
       },
     });
-  } catch (e: any) {
-    if (String(e?.message) === 'UNAUTHORIZED') {
+  } catch (e: unknown) {
+    if (e instanceof Error && e.message === 'UNAUTHORIZED') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
     console.error(e);

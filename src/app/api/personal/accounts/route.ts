@@ -2,10 +2,23 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { prisma } from '@/server/db/client';
 import { requireAuthAsync } from '@/server/auth/requireAuth';
-import { assertSameOrigin, jsonNoStore, withNoStore } from '@/server/security/csrf';
+import { assertSameOrigin, jsonNoStore } from '@/server/security/csrf';
+import { rateLimit } from '@/server/security/rateLimit';
 
 function toStrId(v: bigint) {
   return v.toString();
+}
+
+async function readJson(req: NextRequest): Promise<unknown> {
+  try {
+    return await req.json();
+  } catch {
+    return null;
+  }
+}
+
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return !!v && typeof v === 'object';
 }
 
 function startOfDayUTC(d: Date) {
@@ -86,8 +99,8 @@ export async function GET(req: NextRequest) {
         };
       }),
     });
-  } catch (e: any) {
-    if (String(e?.message) === 'UNAUTHORIZED') {
+  } catch (e: unknown) {
+    if (e instanceof Error && e.message === 'UNAUTHORIZED') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
     console.error(e);
@@ -101,33 +114,59 @@ export async function POST(req: NextRequest) {
 
   try {
     const { userId } = await requireAuthAsync(req);
+    const limited = rateLimit(req, {
+      key: `personal:accounts:create:${userId}`,
+      limit: 120,
+      windowMs: 10 * 60 * 1000,
+    });
+    if (limited) return limited;
 
-    const body = (await req.json()) as {
-      name?: string;
-      type?: 'CURRENT' | 'SAVINGS' | 'INVEST' | 'CASH';
-      currency?: string;
-      institution?: string | null;
-      iban?: string | null;
-      initialCents?: string | number;
-    };
+    const body = await readJson(req);
+    if (!isRecord(body)) return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
 
-    const name = (body.name ?? '').trim();
+    const name = typeof body.name === 'string' ? body.name.trim() : '';
+    const type =
+      body.type === 'CURRENT' || body.type === 'SAVINGS' || body.type === 'INVEST' || body.type === 'CASH'
+        ? body.type
+        : 'CURRENT';
+    const currencyRaw = typeof body.currency === 'string' ? body.currency.trim() : '';
+    const currency = (currencyRaw || 'EUR').toUpperCase();
+    const institution =
+      typeof body.institution === 'string'
+        ? body.institution.trim() || null
+        : body.institution === null
+        ? null
+        : null;
+    const iban = typeof body.iban === 'string' ? body.iban.trim() || null : null;
+    const initialCentsRaw =
+      typeof body.initialCents === 'number' || typeof body.initialCents === 'string'
+        ? body.initialCents
+        : '0';
+
     if (!name) return NextResponse.json({ error: 'name required' }, { status: 400 });
+    if (name.length > 120) return NextResponse.json({ error: 'name too long' }, { status: 400 });
+    if (currency.length > 8) return NextResponse.json({ error: 'currency too long' }, { status: 400 });
+    if (institution && institution.length > 120) {
+      return NextResponse.json({ error: 'institution too long' }, { status: 400 });
+    }
+    if (iban && iban.length > 34) {
+      return NextResponse.json({ error: 'iban too long' }, { status: 400 });
+    }
 
     const initialCents = BigInt(
-      typeof body.initialCents === 'number'
-        ? Math.trunc(body.initialCents)
-        : (body.initialCents ?? '0').toString().trim() || '0'
+      typeof initialCentsRaw === 'number'
+        ? Math.trunc(initialCentsRaw)
+        : (initialCentsRaw ?? '0').toString().trim() || '0'
     );
 
     const created = await prisma.personalAccount.create({
       data: {
         userId: BigInt(userId),
         name,
-        type: body.type ?? 'CURRENT',
-        currency: (body.currency ?? 'EUR').trim() || 'EUR',
-        institution: body.institution ?? null,
-        iban: body.iban ?? null,
+        type,
+        currency,
+        institution,
+        iban,
         initialCents,
       },
     });
@@ -136,8 +175,8 @@ export async function POST(req: NextRequest) {
       { account: { id: created.id.toString(), name: created.name } },
       { status: 201 }
     );
-  } catch (e: any) {
-    if (String(e?.message) === 'UNAUTHORIZED') {
+  } catch (e: unknown) {
+    if (e instanceof Error && e.message === 'UNAUTHORIZED') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
     console.error(e);

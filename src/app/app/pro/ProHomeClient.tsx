@@ -62,12 +62,23 @@ function isEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 }
 
-async function safeJson(res: Response) {
+async function safeJson(res: Response): Promise<unknown> {
   try {
     return await res.json();
   } catch {
     return null;
   }
+}
+
+type ApiErrorShape = { error: string };
+
+function isApiErrorShape(x: unknown): x is ApiErrorShape {
+  return (
+    !!x &&
+    typeof x === 'object' &&
+    'error' in x &&
+    typeof (x as { error?: unknown }).error === 'string'
+  );
 }
 
 /* ===================== COMPONENT ===================== */
@@ -183,8 +194,10 @@ export default function ProHomeClient() {
     try {
       const res = await fetch('/api/pro/businesses', { credentials: 'include' });
       if (!res.ok) return;
-      const json = (await res.json()) as BusinessesResponse;
-      setBusinesses(json);
+      const json = await safeJson(res);
+      if (json && typeof json === 'object' && 'items' in json) {
+        setBusinesses(json as BusinessesResponse);
+      }
     } catch (err) {
       console.error('refreshBusinesses failed', err);
     }
@@ -214,9 +227,7 @@ export default function ProHomeClient() {
       const json = await safeJson(res);
 
       if (!res.ok) {
-        const msg =
-          (json && typeof (json as any).error === 'string' && (json as any).error) ||
-          'Création impossible.';
+        const msg = isApiErrorShape(json) ? json.error : 'Création impossible.';
         setCreationError(msg);
         return;
       }
@@ -267,9 +278,7 @@ export default function ProHomeClient() {
       const json = await safeJson(res);
 
       if (!res.ok) {
-        const msg =
-          (json && typeof (json as any).error === 'string' && (json as any).error) ||
-          'Token invalide.';
+        const msg = isApiErrorShape(json) ? json.error : 'Token invalide.';
         setJoinError(msg);
         return;
       }

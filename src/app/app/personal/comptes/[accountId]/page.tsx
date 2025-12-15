@@ -26,7 +26,7 @@ type Txn = {
   category: { id: string; name: string } | null;
 };
 
-async function safeJson(res: Response) {
+async function safeJson(res: Response): Promise<unknown> {
   try {
     return await res.json();
   } catch {
@@ -34,10 +34,28 @@ async function safeJson(res: Response) {
   }
 }
 
+function getErrorFromJson(json: unknown): string | null {
+  if (!json || typeof json !== 'object') return null;
+  if (!('error' in json)) return null;
+  const err = (json as { error?: unknown }).error;
+  return typeof err === 'string' ? err : null;
+}
+
+function getErrorMessage(e: unknown): string {
+  return e instanceof Error ? e.message : 'Erreur';
+}
+
 function centsToEUR(centsStr: string) {
-  const v = Number(centsStr);
-  if (!Number.isFinite(v)) return '0.00';
-  return (v / 100).toFixed(2);
+  try {
+    const b = BigInt(centsStr);
+    const sign = b < 0n ? '-' : '';
+    const abs = b < 0n ? -b : b;
+    const euros = abs / 100n;
+    const rem = abs % 100n;
+    return `${sign}${euros.toString()}.${rem.toString().padStart(2, '0')}`;
+  } catch {
+    return '0.00';
+  }
 }
 
 export default function AccountDetailPage() {
@@ -64,11 +82,13 @@ export default function AccountDetailPage() {
       }
 
       const aJson = await safeJson(aRes);
-      if (!aRes.ok) {
-        const msg = (aJson as any)?.error ?? `Erreur compte (${aRes.status})`;
-        throw new Error(msg);
-      }
-      setAccount((aJson as any).account as Account);
+      if (!aRes.ok) throw new Error(getErrorFromJson(aJson) ?? `Erreur compte (${aRes.status})`);
+
+      const accountRaw =
+        aJson && typeof aJson === 'object' && 'account' in aJson
+          ? (aJson as { account?: unknown }).account
+          : null;
+      setAccount(accountRaw as Account);
 
       // 2) fetch transactions
       const tRes = await fetch(
@@ -77,16 +97,18 @@ export default function AccountDetailPage() {
       );
 
       const tJson = await safeJson(tRes);
-      if (!tRes.ok) {
-        const msg = (tJson as any)?.error ?? `Erreur transactions (${tRes.status})`;
-        throw new Error(msg);
-      }
+      if (!tRes.ok) throw new Error(getErrorFromJson(tJson) ?? `Erreur transactions (${tRes.status})`);
 
-      setItems((tJson?.items ?? []) as Txn[]);
+      const itemsRaw =
+        tJson && typeof tJson === 'object' && 'items' in tJson
+          ? (tJson as { items?: unknown }).items
+          : [];
+
+      setItems(Array.isArray(itemsRaw) ? (itemsRaw as Txn[]) : []);
       setError(null);
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error(e);
-      setError(e?.message || 'Impossible de charger ce compte.');
+      setError(getErrorMessage(e) || 'Impossible de charger ce compte.');
     } finally {
       setLoading(false);
     }
@@ -112,8 +134,8 @@ export default function AccountDetailPage() {
             {account ? (
               <p className="text-sm text-[var(--text-secondary)]">
                 Solde : {centsToEUR(account.balanceCents)} € · 30j :{' '}
-                <span className={Number(account.delta30Cents) >= 0 ? 'text-emerald-400' : 'text-rose-400'}>
-                  {Number(account.delta30Cents) >= 0 ? '+' : ''}
+                <span className={BigInt(account.delta30Cents) >= 0n ? 'text-emerald-400' : 'text-rose-400'}>
+                  {BigInt(account.delta30Cents) >= 0n ? '+' : ''}
                   {centsToEUR(account.delta30Cents)} €
                 </span>
               </p>

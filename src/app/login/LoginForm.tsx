@@ -11,6 +11,17 @@ type LoginFormProps = {
   redirectPath?: string;
 };
 
+type ApiErrorShape = { error: string };
+
+function isApiErrorShape(x: unknown): x is ApiErrorShape {
+  return (
+    !!x &&
+    typeof x === 'object' &&
+    'error' in x &&
+    typeof (x as { error?: unknown }).error === 'string'
+  );
+}
+
 function sanitizeRedirectPath(value?: string) {
   // Only allow internal relative paths, keep querystring/hash.
   // Reject absolute URLs, protocol-relative, or anything not starting with "/".
@@ -47,14 +58,10 @@ export default function LoginForm({ redirectPath = '/app' }: LoginFormProps) {
         body: JSON.stringify({ email, password }),
       });
 
-      const payload = await response.json().catch(() => ({}));
+      const payload: unknown = await response.json().catch(() => null);
 
       if (!response.ok) {
-        setError(
-          typeof (payload as any).error === 'string'
-            ? (payload as any).error
-            : 'Impossible de se connecter.'
-        );
+        setError(isApiErrorShape(payload) ? payload.error : 'Impossible de se connecter.');
         return;
       }
 

@@ -3,7 +3,8 @@ import { prisma } from '@/server/db/client';
 import { AUTH_COOKIE_NAME } from '@/server/auth/auth.service';
 import { verifyAuthToken } from '@/server/auth/jwt';
 import { requireBusinessRole } from '@/server/auth/businessRole';
-import { assertSameOrigin, jsonNoStore, withNoStore } from '@/server/security/csrf';
+import { assertSameOrigin, jsonNoStore } from '@/server/security/csrf';
+import { rateLimit } from '@/server/security/rateLimit';
 
 function unauthorized() {
   return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -15,6 +16,10 @@ function forbidden() {
 
 function badRequest(message: string) {
   return NextResponse.json({ error: message }, { status: 400 });
+}
+
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return !!v && typeof v === 'object';
 }
 
 function parseId(param: string | undefined) {
@@ -38,6 +43,25 @@ async function getUserId(request: NextRequest): Promise<bigint | null> {
   } catch {
     return null;
   }
+}
+
+function normalizeStr(v: unknown) {
+  return String(v ?? '').trim();
+}
+
+function isValidEmail(s: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
+}
+
+function sanitizePhone(s: string) {
+  return normalizeStr(s).replace(/\s+/g, ' ');
+}
+
+function isValidPhone(s: string) {
+  if (!s) return false;
+  if (!/^[\d+\-().\s]+$/.test(s)) return false;
+  const digits = s.replace(/\D/g, '');
+  return digits.length >= 7 && digits.length <= 15;
 }
 
 // GET /api/pro/businesses/{businessId}/clients
@@ -106,26 +130,39 @@ export async function POST(
   const membership = await requireBusinessRole(businessIdBigInt, userId, 'ADMIN');
   if (!membership) return forbidden();
 
+  const limited = rateLimit(request, {
+    key: `pro:clients:create:${businessIdBigInt}:${userId.toString()}`,
+    limit: 120,
+    windowMs: 60 * 60 * 1000,
+  });
+  if (limited) return limited;
+
   const body = await request.json().catch(() => null);
-  if (!body || typeof body.name !== 'string') {
+  if (!isRecord(body) || typeof body.name !== 'string') {
     return badRequest('Le nom du client est requis.');
   }
 
-  const name = body.name.trim();
+  const name = normalizeStr(body.name);
   if (!name) return badRequest('Le nom du client ne peut pas être vide.');
+  if (name.length > 120) return badRequest('Le nom du client est trop long (max 120).');
 
-  const email =
-    typeof body.email === 'string' && body.email.trim()
-      ? body.email.trim()
-      : undefined;
-  const phone =
-    typeof body.phone === 'string' && body.phone.trim()
-      ? body.phone.trim()
-      : undefined;
-  const notes =
-    typeof body.notes === 'string' && body.notes.trim()
-      ? body.notes.trim()
-      : undefined;
+  const emailRaw = normalizeStr(typeof body.email === 'string' ? body.email : '');
+  const email = emailRaw ? emailRaw : undefined;
+  if (email && (email.length > 254 || !isValidEmail(email))) {
+    return badRequest('Email invalide.');
+  }
+
+  const phoneRaw = sanitizePhone(typeof body.phone === 'string' ? body.phone : '');
+  const phone = phoneRaw ? phoneRaw : undefined;
+  if (phone && (phone.length > 32 || !isValidPhone(phone))) {
+    return badRequest('Téléphone invalide.');
+  }
+
+  const notesRaw = normalizeStr(typeof body.notes === 'string' ? body.notes : '');
+  const notes = notesRaw ? notesRaw : undefined;
+  if (notes && notes.length > 2000) {
+    return badRequest('Notes trop longues (max 2000).');
+  }
 
   const client = await prisma.client.create({
     data: {

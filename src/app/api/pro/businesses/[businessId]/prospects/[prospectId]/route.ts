@@ -8,7 +8,8 @@ import {
   ProspectPipelineStatus,
 } from '@/generated/prisma/client';
 import { requireBusinessRole } from '@/server/auth/businessRole';
-import { assertSameOrigin, jsonNoStore, withNoStore } from '@/server/security/csrf';
+import { assertSameOrigin, jsonNoStore } from '@/server/security/csrf';
+import { rateLimit } from '@/server/security/rateLimit';
 
 function unauthorized() {
   return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -20,6 +21,29 @@ function forbidden() {
 
 function badRequest(message: string) {
   return NextResponse.json({ error: message }, { status: 400 });
+}
+
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return !!v && typeof v === 'object';
+}
+
+function normalizeStr(v: unknown) {
+  return String(v ?? '').trim();
+}
+
+function isValidEmail(s: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
+}
+
+function sanitizePhone(s: string) {
+  return normalizeStr(s).replace(/\s+/g, ' ');
+}
+
+function isValidPhone(s: string) {
+  if (!s) return false;
+  if (!/^[\d+\-().\s]+$/.test(s)) return false;
+  const digits = s.replace(/\D/g, '');
+  return digits.length >= 7 && digits.length <= 15;
 }
 
 function parseId(param: string | undefined) {
@@ -45,7 +69,23 @@ async function getUserId(request: NextRequest): Promise<bigint | null> {
   }
 }
 
-function serializeProspect(p: any) {
+function serializeProspect(p: {
+  id: bigint;
+  businessId: bigint;
+  name: string;
+  contactName: string | null;
+  contactEmail: string | null;
+  contactPhone: string | null;
+  source: LeadSource | null;
+  interestNote: string | null;
+  qualificationLevel: QualificationLevel | null;
+  projectIdea: string | null;
+  estimatedBudget: number | null;
+  firstContactAt: Date | null;
+  pipelineStatus: ProspectPipelineStatus;
+  createdAt: Date;
+  updatedAt: Date;
+}) {
   return {
     id: p.id.toString(),
     businessId: p.businessId.toString(),
@@ -131,6 +171,13 @@ export async function PATCH(
     const membership = await requireBusinessRole(businessId, userId, 'ADMIN');
     if (!membership) return forbidden();
 
+    const limited = rateLimit(request, {
+      key: `pro:prospects:update:${businessId.toString()}:${userId.toString()}`,
+      limit: 120,
+      windowMs: 60 * 60 * 1000,
+    });
+    if (limited) return limited;
+
     const existing = await prisma.prospect.findFirst({
       where: { id: prospectId, businessId },
     });
@@ -140,44 +187,70 @@ export async function PATCH(
     }
 
     const body = await request.json().catch(() => null);
-    if (!body || typeof body !== 'object') {
+    if (!isRecord(body)) {
       return badRequest('Corps de requête invalide.');
     }
 
-    const data: any = {};
+    const data: Record<string, unknown> = {};
 
     if (typeof body.name === 'string') {
-      const name = body.name.trim();
+      const name = normalizeStr(body.name);
       if (!name) {
         return badRequest("Le nom du prospect ne peut pas être vide.");
+      }
+      if (name.length > 120) {
+        return badRequest('Le nom du prospect est trop long (max 120).');
       }
       data.name = name;
     }
 
     if (typeof body.contactName === 'string') {
-      data.contactName = body.contactName.trim() || null;
+      const contactName = normalizeStr(body.contactName);
+      if (contactName && contactName.length > 120) {
+        return badRequest('Le nom du contact est trop long (max 120).');
+      }
+      data.contactName = contactName || null;
     }
 
     if (typeof body.contactEmail === 'string') {
-      data.contactEmail = body.contactEmail.trim() || null;
+      const contactEmail = normalizeStr(body.contactEmail);
+      if (contactEmail && (contactEmail.length > 254 || !isValidEmail(contactEmail))) {
+        return badRequest('Email du contact invalide.');
+      }
+      data.contactEmail = contactEmail || null;
     }
 
     if (typeof body.contactPhone === 'string') {
-      data.contactPhone = body.contactPhone.trim() || null;
+      const contactPhone = sanitizePhone(body.contactPhone);
+      if (contactPhone && (contactPhone.length > 32 || !isValidPhone(contactPhone))) {
+        return badRequest('Téléphone du contact invalide.');
+      }
+      data.contactPhone = contactPhone || null;
     }
 
     if (typeof body.interestNote === 'string') {
-      data.interestNote = body.interestNote.trim() || null;
+      const interestNote = normalizeStr(body.interestNote);
+      if (interestNote && interestNote.length > 2000) {
+        return badRequest("La note d'intérêt est trop longue (max 2000).");
+      }
+      data.interestNote = interestNote || null;
     }
 
     if (typeof body.projectIdea === 'string') {
-      data.projectIdea = body.projectIdea.trim() || null;
+      const projectIdea = normalizeStr(body.projectIdea);
+      if (projectIdea && projectIdea.length > 2000) {
+        return badRequest('L’idée de projet est trop longue (max 2000).');
+      }
+      data.projectIdea = projectIdea || null;
     }
 
     if (typeof body.estimatedBudget === 'number') {
-      data.estimatedBudget = Number.isFinite(body.estimatedBudget)
-        ? Math.round(body.estimatedBudget)
-        : null;
+      if (!Number.isFinite(body.estimatedBudget) || body.estimatedBudget < 0) {
+        return badRequest('Budget estimé invalide.');
+      }
+      data.estimatedBudget = Math.round(body.estimatedBudget);
+    } else if (body && 'estimatedBudget' in body && body.estimatedBudget === null) {
+      data.estimatedBudget = null;
     }
 
     if (typeof body.firstContactAt === 'string') {
@@ -248,6 +321,13 @@ export async function DELETE(
 
     const membership = await requireBusinessRole(businessId, userId, 'ADMIN');
     if (!membership) return forbidden();
+
+    const limited = rateLimit(request, {
+      key: `pro:prospects:delete:${businessId.toString()}:${userId.toString()}`,
+      limit: 120,
+      windowMs: 60 * 60 * 1000,
+    });
+    if (limited) return limited;
 
     const existing = await prisma.prospect.findFirst({
       where: { id: prospectId, businessId },

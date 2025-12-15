@@ -1,10 +1,15 @@
 // src/components/CsvImportModal.tsx
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Modal from '@/components/ui/modal';
 import { Button } from '@/components/ui/button';
+import { formatCents } from '@/lib/money';
+
+function getErrorMessage(e: unknown): string {
+  return e instanceof Error ? e.message : 'Erreur';
+}
 
 function detectDelimiter(text: string): ',' | ';' | '\t' {
   const lines = text
@@ -178,19 +183,38 @@ function findHeaderRowIndex(rows: string[][]) {
 }
 
 function formatEURfromCents(cents: string) {
-  const n = Number(cents);
-  const v = Number.isFinite(n) ? n / 100 : 0;
-  return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(v);
+  return formatCents(cents, 'EUR');
+}
+
+function isNegativeCents(value: string) {
+  try {
+    return BigInt(value) < 0n;
+  } catch {
+    return String(value).trim().startsWith('-');
+  }
 }
 
 type AccountOption = { id: string; name: string; currency: string };
+
+type MappingKey = 'date' | 'label' | 'amount' | 'currency' | 'note' | 'category';
+
+type Mapping = Record<MappingKey, string>;
+
+const mappingFields: Array<{ key: MappingKey; label: string }> = [
+  { key: 'date', label: 'Date *' },
+  { key: 'label', label: 'Libellé *' },
+  { key: 'amount', label: 'Montant *' },
+  { key: 'currency', label: 'Devise' },
+  { key: 'note', label: 'Note' },
+  { key: 'category', label: 'Catégorie' },
+];
 
 type PreviewResponse = {
   delimiter: string;
   totalRows: number;
   validRows: number;
   invalidRows: number;
-  errors: Array<{ row: number; reason: string; data?: any }>;
+  errors: Array<{ row: number; reason: string; data?: unknown }>;
   preview: Array<{
     dateIso: string;
     label: string;
@@ -216,23 +240,24 @@ type ImportResponse = {
 
 type CsvImportModalProps = {
   open: boolean;
-  onClose: () => void;
+  onCloseAction: () => void;
   accounts: AccountOption[];
   defaultAccountId?: string;
   lockedAccountId?: string;
-  onImported?: () => void;
+  onImportedAction?: () => void;
 };
 
 export default function CsvImportModal({
   open,
-  onClose,
+  onCloseAction,
   accounts,
   defaultAccountId,
   lockedAccountId,
-  onImported,
+  onImportedAction,
 }: CsvImportModalProps) {
   const router = useRouter();
-  const [accountId, setAccountId] = useState<string>(defaultAccountId || lockedAccountId || '');
+  const initialAccountId = defaultAccountId || lockedAccountId || '';
+  const [accountId, setAccountId] = useState<string>(initialAccountId);
   const [file, setFile] = useState<File | null>(null);
   const [serverError, setServerError] = useState<string | null>(null);
   const [preview, setPreview] = useState<PreviewResponse | null>(null);
@@ -242,33 +267,30 @@ export default function CsvImportModal({
   const [rawHeaders, setRawHeaders] = useState<string[]>([]);
   const [rawRows, setRawRows] = useState<string[][]>([]);
   const [showPreviewPanel, setShowPreviewPanel] = useState(false);
-  const [mapping, setMapping] = useState<{
-    date: string;
-    label: string;
-    amount: string;
-    currency: string;
-    note: string;
-    category: string;
-  }>({ date: '', label: '', amount: '', currency: '', note: '', category: '' });
+  const [mapping, setMapping] = useState<Mapping>({
+    date: '',
+    label: '',
+    amount: '',
+    currency: '',
+    note: '',
+    category: '',
+  });
 
-  useEffect(() => {
-    if (!open) {
-      setFile(null);
-      setServerError(null);
-      setPreview(null);
-      setImportResult(null);
-      setLoadingPreview(false);
-      setLoadingImport(false);
-      setAccountId(defaultAccountId || lockedAccountId || '');
-      setRawHeaders([]);
-      setRawRows([]);
-      setMapping({ date: '', label: '', amount: '', currency: '', note: '', category: '' });
-      setShowPreviewPanel(false);
-    }
-  }, [open, defaultAccountId, lockedAccountId]);
+  function resetState(nextOpenAccountId: string) {
+    setFile(null);
+    setServerError(null);
+    setPreview(null);
+    setImportResult(null);
+    setLoadingPreview(false);
+    setLoadingImport(false);
+    setAccountId(nextOpenAccountId);
+    setRawHeaders([]);
+    setRawRows([]);
+    setMapping({ date: '', label: '', amount: '', currency: '', note: '', category: '' });
+    setShowPreviewPanel(false);
+  }
 
   const canSelectAccount = !lockedAccountId;
-  const hasPreview = !!preview;
   const previewSummary = useMemo(() => {
     if (!preview) return 'Sélectionne un fichier puis prévisualise.';
     return `${preview.validRows}/${preview.totalRows} valides · ${preview.invalidRows} invalides`;
@@ -308,8 +330,8 @@ export default function CsvImportModal({
           note: sug.note,
           category: sug.category,
         });
-      } catch (err: any) {
-        setServerError(err?.message ?? 'Lecture du fichier impossible');
+      } catch (err: unknown) {
+        setServerError(getErrorMessage(err) || 'Lecture du fichier impossible');
       }
     }
   }
@@ -335,15 +357,24 @@ export default function CsvImportModal({
         router.push(`/login?from=${encodeURIComponent(from)}`);
         return null;
       }
-      const json = (await res.json().catch(() => null)) as any;
+      const json: unknown = await res.json().catch(() => null);
       if (!res.ok) {
-        setServerError(typeof json?.error === 'string' ? json.error : 'Import impossible');
+        if (
+          json &&
+          typeof json === 'object' &&
+          'error' in json &&
+          typeof (json as { error?: unknown }).error === 'string'
+        ) {
+          setServerError((json as { error: string }).error);
+        } else {
+          setServerError('Import impossible');
+        }
         return null;
       }
       setServerError(null);
       return json;
-    } catch (e: any) {
-      setServerError(e?.message ?? 'Erreur réseau.');
+    } catch (e: unknown) {
+      setServerError(getErrorMessage(e) || 'Erreur réseau.');
       return null;
     }
   }
@@ -382,7 +413,7 @@ export default function CsvImportModal({
     if (res) {
       setImportResult(res as ImportResponse);
       setPreview(null);
-      onImported?.();
+      onImportedAction?.();
     }
     setLoadingImport(false);
   }
@@ -392,7 +423,9 @@ export default function CsvImportModal({
       open={open}
       onClose={() => {
         if (loadingImport || loadingPreview) return;
-        onClose();
+        const next = defaultAccountId || lockedAccountId || '';
+        resetState(next);
+        onCloseAction();
       }}
       title="Importer un CSV"
       description="Prévisualise puis importe tes transactions."
@@ -443,7 +476,14 @@ export default function CsvImportModal({
             </div>
 
             <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={onClose}>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  const next = defaultAccountId || lockedAccountId || '';
+                  resetState(next);
+                  onCloseAction();
+                }}
+              >
                 Fermer
               </Button>
             </div>
@@ -493,18 +533,11 @@ export default function CsvImportModal({
                 </div>
 
                 <div className="grid gap-3 sm:grid-cols-3">
-                  {[
-                    { key: 'date', label: 'Date *' },
-                    { key: 'label', label: 'Libellé *' },
-                    { key: 'amount', label: 'Montant *' },
-                    { key: 'currency', label: 'Devise' },
-                    { key: 'note', label: 'Note' },
-                    { key: 'category', label: 'Catégorie' },
-                  ].map((f) => (
+                  {mappingFields.map((f) => (
                     <div key={f.key}>
                       <label className="mb-1.5 block text-sm text-slate-300">{f.label}</label>
                       <select
-                        value={(mapping as any)[f.key]}
+                        value={mapping[f.key]}
                         onChange={(e) => setMapping((m) => ({ ...m, [f.key]: e.target.value }))}
                         className="h-12 w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 text-base text-slate-50"
                       >
@@ -590,20 +623,28 @@ export default function CsvImportModal({
 
                 {preview?.preview?.length ? (
                   <div className="mt-4 space-y-2 text-xs text-slate-300">
-                    {preview.preview.map((p, idx) => (
-                      <div key={idx} className="flex flex-wrap items-center gap-2 rounded-xl border border-[var(--border)]/80 bg-[var(--surface)]/70 px-3 py-2">
-                        <span className="font-semibold">{p.label}</span>
-                        <span className="text-slate-400">{new Date(p.dateIso).toLocaleDateString('fr-FR')}</span>
-                        <span className={Number(p.amountCents) < 0 ? 'text-rose-300' : 'text-emerald-300'}>
-                          {Number(p.amountCents) / 100} {p.currency}
-                        </span>
-                        {p.categoryName ? (
-                          <span className="rounded-full border border-[var(--border)] px-2 py-[2px] text-[11px] text-slate-300">
-                            {p.categoryName}
+                    {preview.preview.map((p, idx) => {
+                      const neg = isNegativeCents(p.amountCents);
+                      return (
+                        <div
+                          key={idx}
+                          className="flex flex-wrap items-center gap-2 rounded-xl border border-[var(--border)]/80 bg-[var(--surface)]/70 px-3 py-2"
+                        >
+                          <span className="font-semibold">{p.label}</span>
+                          <span className="text-slate-400">
+                            {new Date(p.dateIso).toLocaleDateString('fr-FR')}
                           </span>
-                        ) : null}
-                      </div>
-                    ))}
+                          <span className={neg ? 'text-rose-300' : 'text-emerald-300'}>
+                            {formatCents(p.amountCents, p.currency)}
+                          </span>
+                          {p.categoryName ? (
+                            <span className="rounded-full border border-[var(--border)] px-2 py-[2px] text-[11px] text-slate-300">
+                              {p.categoryName}
+                            </span>
+                          ) : null}
+                        </div>
+                      );
+                    })}
                   </div>
                 ) : null}
               </div>
@@ -613,7 +654,15 @@ export default function CsvImportModal({
 
         <div className="sticky bottom-0 mt-3 border-t border-[var(--border)] bg-[var(--background-alt)]/90 px-4 py-3 backdrop-blur">
           <div className="flex flex-wrap justify-end gap-2">
-            <Button variant="outline" onClick={onClose} disabled={loadingImport || loadingPreview}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                const next = defaultAccountId || lockedAccountId || '';
+                resetState(next);
+                onCloseAction();
+              }}
+              disabled={loadingImport || loadingPreview}
+            >
               Fermer
             </Button>
             <Button

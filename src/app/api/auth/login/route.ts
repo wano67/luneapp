@@ -5,10 +5,18 @@ import {
   createSessionToken,
   toPublicUser,
 } from '@/server/auth/auth.service';
+import { rateLimit, makeIpKey } from '@/server/security/rateLimit';
 import { assertSameOrigin } from '@/server/security/csrf';
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(request: NextRequest) {
+  const limited = rateLimit(request, {
+    key: makeIpKey(request, 'auth:login'),
+    limit: 10,
+    windowMs: 10 * 60 * 1000,
+  });
+  if (limited) return limited;
+
   const csrf = assertSameOrigin(request);
   if (csrf) return csrf;
 

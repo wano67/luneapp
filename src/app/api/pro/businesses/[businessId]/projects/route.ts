@@ -4,7 +4,8 @@ import { AUTH_COOKIE_NAME } from '@/server/auth/auth.service';
 import { verifyAuthToken } from '@/server/auth/jwt';
 import { ProjectStatus } from '@/generated/prisma/client';
 import { requireBusinessRole } from '@/server/auth/businessRole';
-import { assertSameOrigin, jsonNoStore, withNoStore } from '@/server/security/csrf';
+import { assertSameOrigin, jsonNoStore } from '@/server/security/csrf';
+import { rateLimit } from '@/server/security/rateLimit';
 
 function unauthorized() {
   return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -105,6 +106,13 @@ export async function POST(
   }
   const membership = await requireBusinessRole(businessIdBigInt, userId, 'ADMIN');
   if (!membership) return forbidden();
+
+  const limited = rateLimit(request, {
+    key: `pro:projects:create:${businessIdBigInt}:${userId.toString()}`,
+    limit: 120,
+    windowMs: 60 * 60 * 1000,
+  });
+  if (limited) return limited;
 
   const body = await request.json().catch(() => null);
   if (!body || typeof body.name !== 'string') {

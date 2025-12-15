@@ -1,9 +1,25 @@
 // src/app/api/personal/transactions/route.ts
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import type { Prisma } from '@/generated/prisma/client';
 import { prisma } from '@/server/db/client';
 import { requireAuthAsync } from '@/server/auth/requireAuth';
 import { assertSameOrigin, withNoStore } from '@/server/security/csrf';
+import { rateLimit } from '@/server/security/rateLimit';
+
+type TxType = 'INCOME' | 'EXPENSE' | 'TRANSFER';
+
+function isTxnType(v: unknown): v is TxType {
+  return v === 'INCOME' || v === 'EXPENSE' || v === 'TRANSFER';
+}
+
+function isRecord(x: unknown): x is Record<string, unknown> {
+  return !!x && typeof x === 'object';
+}
+
+function getErrorMessage(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
+}
 
 function isNumericId(v: string) {
   return /^\d+$/.test(v);
@@ -62,7 +78,7 @@ export async function GET(req: NextRequest) {
 
     const accountId = url.searchParams.get('accountId') ?? undefined;
     const limitRaw = url.searchParams.get('limit');
-    const type = url.searchParams.get('type') ?? undefined;
+    const typeRaw = url.searchParams.get('type') ?? undefined;
     const q = (url.searchParams.get('q') ?? '').trim();
     const fromRaw = url.searchParams.get('from');
     const toRaw = url.searchParams.get('to');
@@ -72,10 +88,8 @@ export async function GET(req: NextRequest) {
 
     if (accountId && !isNumericId(accountId)) return badRequest('Invalid accountId');
 
-    // type validation (enum Prisma)
-    if (type && !['INCOME', 'EXPENSE', 'TRANSFER'].includes(type)) {
-      return badRequest('Invalid type');
-    }
+    const type: TxType | undefined = typeRaw ? (isTxnType(typeRaw) ? typeRaw : undefined) : undefined;
+    if (typeRaw && !type) return badRequest('Invalid type');
 
     const from = fromRaw ? new Date(fromRaw) : undefined;
     const to = toRaw ? new Date(toRaw) : undefined;
@@ -86,14 +100,10 @@ export async function GET(req: NextRequest) {
     if (cursorRaw && !cursor) return badRequest('Invalid cursor');
 
     // Pagination stable: order by date desc, id desc
-    // Cursor: items strictly "before" (date,id)
-    const cursorWhere =
+    const cursorWhere: Prisma.PersonalTransactionWhereInput =
       cursor
         ? {
-            OR: [
-              { date: { lt: cursor.date } },
-              { date: cursor.date, id: { lt: cursor.id } },
-            ],
+            OR: [{ date: { lt: cursor.date } }, { date: cursor.date, id: { lt: cursor.id } }],
           }
         : {};
 
@@ -101,7 +111,7 @@ export async function GET(req: NextRequest) {
       where: {
         userId: BigInt(userId),
         ...(accountId ? { accountId: BigInt(accountId) } : {}),
-        ...(type ? { type: type as any } : {}),
+        ...(type ? { type } : {}),
         ...(from || to ? { date: { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) } } : {}),
         ...(q
           ? {
@@ -111,19 +121,20 @@ export async function GET(req: NextRequest) {
               ],
             }
           : {}),
-        ...(cursorWhere as any),
+        ...cursorWhere,
       },
       orderBy: [{ date: 'desc' }, { id: 'desc' }],
-      take: limit + 1, // +1 pour savoir s'il y a une page suivante
+      take: limit + 1,
       include: { account: true, category: true },
     });
 
     const hasMore = items.length > limit;
     const page = hasMore ? items.slice(0, limit) : items;
 
-    const nextCursor = hasMore
-      ? makeCursor({ date: page[page.length - 1].date, id: page[page.length - 1].id })
-      : null;
+    const nextCursor =
+      hasMore && page.length
+        ? makeCursor({ date: page[page.length - 1].date, id: page[page.length - 1].id })
+        : null;
 
     return withNoStore(
       NextResponse.json({
@@ -141,8 +152,8 @@ export async function GET(req: NextRequest) {
         nextCursor,
       })
     );
-  } catch (e: any) {
-    if (String(e?.message) === 'UNAUTHORIZED') {
+  } catch (e: unknown) {
+    if (getErrorMessage(e) === 'UNAUTHORIZED') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
     console.error(e);
@@ -157,17 +168,24 @@ export async function POST(req: NextRequest) {
   try {
     const { userId } = await requireAuthAsync(req);
 
-    const body = await req.json().catch(() => null);
-    if (!body || typeof body !== 'object') return badRequest('Invalid JSON');
+    const limited = rateLimit(req, {
+      key: `personal:tx:create:${userId}`,
+      limit: 120,
+      windowMs: 10 * 60 * 1000,
+    });
+    if (limited) return limited;
 
-    const accountIdRaw = (body as any).accountId;
-    const categoryIdRaw = (body as any).categoryId;
-    const typeRaw = (body as any).type;
-    const dateRaw = (body as any).date;
-    const amountRaw = (body as any).amountCents;
-    const currencyRaw = (body as any).currency;
-    const labelRaw = (body as any).label;
-    const noteRaw = (body as any).note;
+    const body: unknown = await req.json().catch(() => null);
+    if (!isRecord(body)) return badRequest('Invalid JSON');
+
+    const accountIdRaw = body.accountId;
+    const categoryIdRaw = body.categoryId;
+    const typeRaw = body.type;
+    const dateRaw = body.date;
+    const amountRaw = body.amountCents;
+    const currencyRaw = body.currency;
+    const labelRaw = body.label;
+    const noteRaw = body.note;
 
     // accountId
     const accountIdStr = String(accountIdRaw ?? '').trim();
@@ -175,10 +193,8 @@ export async function POST(req: NextRequest) {
     const accountId = BigInt(accountIdStr);
 
     // type
-    if (!['INCOME', 'EXPENSE', 'TRANSFER'].includes(String(typeRaw))) {
-      return badRequest('Invalid type');
-    }
-    const type = String(typeRaw) as any;
+    if (!isTxnType(typeRaw)) return badRequest('Invalid type');
+    const type: TxType = typeRaw;
 
     // date
     const date = parseDateISO(dateRaw, 'date');
@@ -198,9 +214,7 @@ export async function POST(req: NextRequest) {
 
     // note
     const note =
-      noteRaw === null || noteRaw === undefined
-        ? null
-        : String(noteRaw).trim().slice(0, 2000) || null;
+      noteRaw === null || noteRaw === undefined ? null : String(noteRaw).trim().slice(0, 2000) || null;
 
     // Ensure account belongs to user
     const account = await prisma.personalAccount.findFirst({
@@ -226,7 +240,10 @@ export async function POST(req: NextRequest) {
     }
 
     // currency: prefer body, else account.currency, else EUR
-    const currency = (typeof currencyRaw === 'string' && currencyRaw.trim()) ? currencyRaw.trim() : (account.currency || 'EUR');
+    const currency =
+      typeof currencyRaw === 'string' && currencyRaw.trim()
+        ? currencyRaw.trim()
+        : account.currency || 'EUR';
     if (currency.length > 8) return badRequest('Invalid currency');
 
     const created = await prisma.personalTransaction.create({
@@ -254,17 +271,21 @@ export async function POST(req: NextRequest) {
         label: created.label,
         note: created.note,
         account: { id: toStrId(created.accountId), name: created.account.name },
-        category: created.category ? { id: toStrId(created.categoryId!), name: created.category.name } : null,
+        category: created.category
+          ? { id: toStrId(created.categoryId!), name: created.category.name }
+          : null,
       },
     });
-  } catch (e: any) {
-    if (String(e?.message) === 'UNAUTHORIZED') {
+  } catch (e: unknown) {
+    const msg = getErrorMessage(e);
+
+    if (msg === 'UNAUTHORIZED') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-    // erreurs de parsing spécifiques
-    if (String(e?.message || '').startsWith('INVALID_')) {
+    if (msg.startsWith('INVALID_')) {
       return NextResponse.json({ error: 'Invalid payload' }, { status: 400 });
     }
+
     console.error(e);
     return NextResponse.json({ error: 'Failed' }, { status: 500 });
   }

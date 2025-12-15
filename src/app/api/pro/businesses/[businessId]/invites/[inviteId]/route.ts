@@ -4,6 +4,7 @@ import { AUTH_COOKIE_NAME } from '@/server/auth/auth.service';
 import { verifyAuthToken } from '@/server/auth/jwt';
 import { requireBusinessRole } from '@/server/auth/businessRole';
 import { assertSameOrigin } from '@/server/security/csrf';
+import { rateLimit, makeIpKey } from '@/server/security/rateLimit';
 
 function unauthorized() {
   return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -46,6 +47,16 @@ export async function DELETE(
   context: { params: Promise<{ businessId: string; inviteId: string }> }
 ) {
   const { businessId, inviteId } = await context.params;
+
+  const userIdForRate = await getUserId(request);
+  const limited = rateLimit(request, {
+    key: userIdForRate
+      ? `pro:invites:delete:${businessId}:${userIdForRate.toString()}`
+      : makeIpKey(request, `pro:invites:delete:${businessId}`),
+    limit: 60,
+    windowMs: 60 * 60 * 1000,
+  });
+  if (limited) return limited;
 
   const csrf = assertSameOrigin(request);
   if (csrf) return csrf;

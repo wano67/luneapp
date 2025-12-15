@@ -3,12 +3,15 @@ import type { NextRequest } from 'next/server';
 import { prisma } from '@/server/db/client';
 import { requireAuthAsync } from '@/server/auth/requireAuth';
 import { assertSameOrigin } from '@/server/security/csrf';
+import { rateLimit } from '@/server/security/rateLimit';
+
+type TxType = 'INCOME' | 'EXPENSE' | 'TRANSFER';
 
 function isNumericId(s: string) {
   return /^\d+$/.test(s);
 }
 
-function parseBigIntString(v: any, field: string) {
+function parseBigIntString(v: unknown, field: string) {
   if (typeof v !== 'string' || !/^-?\d+$/.test(v)) throw new Error(`Invalid ${field}`);
   return BigInt(v);
 }
@@ -17,21 +20,36 @@ function toStrId(v: bigint) {
   return v.toString();
 }
 
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return !!v && typeof v === 'object';
+}
+
+function isTxnType(v: unknown): v is TxType {
+  return v === 'INCOME' || v === 'EXPENSE' || v === 'TRANSFER';
+}
+
 export async function PATCH(req: NextRequest, ctx: { params: Promise<{ transactionId: string }> }) {
   const csrf = assertSameOrigin(req);
   if (csrf) return csrf;
 
   try {
     const { userId } = await requireAuthAsync(req);
+    const limited = rateLimit(req, {
+      key: `personal:tx:update:${userId}`,
+      limit: 120,
+      windowMs: 10 * 60 * 1000,
+    });
+    if (limited) return limited;
     const { transactionId } = await ctx.params;
 
     if (!isNumericId(transactionId)) {
       return NextResponse.json({ error: 'Invalid transactionId' }, { status: 400 });
     }
 
-    const body = await req.json().catch(() => ({}));
+    const body = await req.json().catch(() => null);
+    if (!isRecord(body)) return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
 
-    const data: any = {};
+    const data: Record<string, unknown> = {};
 
     if (body.label !== undefined) {
       const label = String(body.label ?? '').trim();
@@ -80,10 +98,10 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ transacti
     }
 
     let amount: bigint | null = null;
-    let type: 'INCOME' | 'EXPENSE' | 'TRANSFER' | null = null;
+    let type: TxType | null = null;
 
     if (body.amountCents !== undefined) amount = parseBigIntString(body.amountCents, 'amountCents');
-    if (body.type !== undefined) type = String(body.type) as any;
+    if (body.type !== undefined && isTxnType(body.type)) type = body.type;
 
     if (amount !== null || type !== null) {
       const existing = await prisma.personalTransaction.findFirst({
@@ -92,7 +110,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ transacti
       });
       if (!existing) return NextResponse.json({ error: 'Transaction not found' }, { status: 404 });
 
-      const finalType = (type ?? existing.type) as any;
+      const finalType: TxType = type ?? existing.type;
       let finalAmount = amount ?? existing.amountCents;
 
       if (finalAmount === BigInt(0)) {
@@ -135,11 +153,11 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ transacti
           }
         : null,
     });
-  } catch (e: any) {
-    if (String(e?.message) === 'UNAUTHORIZED') {
+  } catch (e: unknown) {
+    if (e instanceof Error && e.message === 'UNAUTHORIZED') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-    return NextResponse.json({ error: e?.message ?? 'Failed' }, { status: 500 });
+    return NextResponse.json({ error: e instanceof Error ? e.message : 'Failed' }, { status: 500 });
   }
 }
 
@@ -149,6 +167,12 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ transact
 
   try {
     const { userId } = await requireAuthAsync(req);
+    const limited = rateLimit(req, {
+      key: `personal:tx:delete:${userId}`,
+      limit: 120,
+      windowMs: 10 * 60 * 1000,
+    });
+    if (limited) return limited;
     const { transactionId } = await ctx.params;
 
     if (!isNumericId(transactionId)) {
@@ -162,8 +186,8 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ transact
     if (del.count === 0) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
     return NextResponse.json({ deleted: del.count });
-  } catch (e: any) {
-    if (String(e?.message) === 'UNAUTHORIZED') {
+  } catch (e: unknown) {
+    if (e instanceof Error && e.message === 'UNAUTHORIZED') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
     return NextResponse.json({ error: 'Failed' }, { status: 500 });

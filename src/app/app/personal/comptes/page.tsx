@@ -21,7 +21,7 @@ type AccountItem = {
   delta30Cents: string;
 };
 
-async function safeJson(res: Response) {
+async function safeJson(res: Response): Promise<unknown> {
   try {
     return await res.json();
   } catch {
@@ -29,16 +29,43 @@ async function safeJson(res: Response) {
   }
 }
 
-function centsToEUR(centsStr: string) {
-  const v = Number(centsStr);
-  if (!Number.isFinite(v)) return '0.00';
-  return (v / 100).toFixed(2);
+function getErrorFromJson(json: unknown): string | null {
+  if (!json || typeof json !== 'object') return null;
+  if (!('error' in json)) return null;
+  const err = (json as { error?: unknown }).error;
+  return typeof err === 'string' ? err : null;
 }
 
-function eurosToCents(euros: string) {
-  const v = Number(String(euros).replace(',', '.'));
-  if (!Number.isFinite(v)) return '0';
-  return String(Math.round(v * 100));
+function centsToEUR(centsStr: string) {
+  try {
+    const b = BigInt(centsStr);
+    const sign = b < 0n ? '-' : '';
+    const abs = b < 0n ? -b : b;
+    const euros = abs / 100n;
+    const rem = abs % 100n;
+    return `${sign}${euros.toString()}.${rem.toString().padStart(2, '0')}`;
+  } catch {
+    return '0.00';
+  }
+}
+
+function eurosToCentsBigInt(input: string): bigint | null {
+  const cleaned = String(input ?? '')
+    .trim()
+    .replace(/\s+/g, '')
+    .replace(',', '.');
+  if (!cleaned) return null;
+  const sign = cleaned.startsWith('-') ? -1n : 1n;
+  const unsigned = cleaned.replace(/^[+-]/, '');
+  if (!/^\d+(\.\d{0,2})?$/.test(unsigned)) return null;
+  const [intPartRaw, decPartRaw = ''] = unsigned.split('.');
+  try {
+    const intPart = BigInt(intPartRaw || '0');
+    const decPart = BigInt((decPartRaw + '00').slice(0, 2));
+    return sign * (intPart * 100n + decPart);
+  } catch {
+    return null;
+  }
 }
 
 function typeLabel(t: AccountItem['type']) {
@@ -46,6 +73,10 @@ function typeLabel(t: AccountItem['type']) {
   if (t === 'SAVINGS') return 'Épargne';
   if (t === 'INVEST') return 'Invest';
   return 'Cash';
+}
+
+function isAccountType(v: string): v is AccountItem['type'] {
+  return v === 'CURRENT' || v === 'SAVINGS' || v === 'INVEST' || v === 'CASH';
 }
 
 export default function ComptesPage() {
@@ -77,8 +108,14 @@ export default function ComptesPage() {
         return;
       }
       const json = await safeJson(res);
-      if (!res.ok) throw new Error((json as any)?.error ?? 'Erreur');
-      setItems((json?.items ?? []) as AccountItem[]);
+      if (!res.ok) throw new Error(getErrorFromJson(json) ?? 'Erreur');
+
+      const itemsRaw =
+        json && typeof json === 'object' && 'items' in json
+          ? (json as { items?: unknown }).items
+          : [];
+
+      setItems(Array.isArray(itemsRaw) ? (itemsRaw as AccountItem[]) : []);
       setError(null);
     } catch (e) {
       console.error(e);
@@ -92,8 +129,8 @@ export default function ComptesPage() {
     load();
   }, []);
 
-  const total = useMemo(() => {
-    return items.reduce((acc, a) => acc + Number(a.balanceCents || '0'), 0);
+  const totalCents = useMemo(() => {
+    return items.reduce<bigint>((acc, a) => acc + BigInt(a.balanceCents || '0'), 0n);
   }, [items]);
 
   async function onCreate(e: FormEvent) {
@@ -118,12 +155,12 @@ export default function ComptesPage() {
           currency: 'EUR',
           institution: institution.trim() || null,
           iban: iban.trim() || null,
-          initialCents: eurosToCents(initialEuros),
+          initialCents: (eurosToCentsBigInt(initialEuros) ?? 0n).toString(),
         }),
       });
 
       const json = await safeJson(res);
-      if (!res.ok) throw new Error((json as any)?.error ?? 'Création impossible');
+      if (!res.ok) throw new Error(getErrorFromJson(json) ?? 'Création impossible');
 
       setOpen(false);
       setName('');
@@ -151,7 +188,7 @@ export default function ComptesPage() {
             </p>
             <h2 className="text-lg font-semibold">Comptes</h2>
             <p className="text-sm text-[var(--text-secondary)]">
-              Solde total (calculé) : {loading ? '—' : `${(total / 100).toFixed(2)} €`}
+              Solde total (calculé) : {loading ? '—' : `${centsToEUR(totalCents.toString())} €`}
             </p>
           </div>
 
@@ -187,8 +224,8 @@ export default function ComptesPage() {
           </Card>
         ) : (
           items.map((a) => {
-            const delta = Number(a.delta30Cents || '0');
-            const deltaTxt = `${(delta / 100).toFixed(2)} €`;
+            const deltaBig = BigInt(a.delta30Cents || '0');
+            const deltaTxt = `${centsToEUR(deltaBig.toString())} €`;
             return (
               <button
                 key={a.id}
@@ -211,10 +248,10 @@ export default function ComptesPage() {
                       <p
                         className={[
                           'mt-1 text-xs font-semibold',
-                          delta >= 0 ? 'text-emerald-400' : 'text-rose-400',
+                          deltaBig >= 0n ? 'text-emerald-400' : 'text-rose-400',
                         ].join(' ')}
                       >
-                        {delta >= 0 ? '+' : ''}
+                        {deltaBig >= 0n ? '+' : ''}
                         {deltaTxt} · 30j
                       </p>
                     </div>
@@ -252,7 +289,10 @@ export default function ComptesPage() {
             <label className="mb-1 block text-xs font-medium text-[var(--text-secondary)]">Type</label>
             <select
               value={type}
-              onChange={(e) => setType(e.target.value as any)}
+              onChange={(e) => {
+                const v = e.target.value;
+                if (isAccountType(v)) setType(v);
+              }}
               className="h-10 w-full rounded-xl border border-[var(--border)] bg-[var(--background)] px-3 text-sm"
             >
               <option value="CURRENT">Courant</option>
@@ -296,10 +336,10 @@ export default function ComptesPage() {
 
       <CsvImportModal
         open={openImport}
-        onClose={() => setOpenImport(false)}
+        onCloseAction={() => setOpenImport(false)}
         accounts={items.map((a) => ({ id: a.id, name: a.name, currency: a.currency }))}
         defaultAccountId={items[0]?.id}
-        onImported={load}
+        onImportedAction={load}
       />
     </div>
   );

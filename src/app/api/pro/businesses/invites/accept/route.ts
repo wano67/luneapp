@@ -4,6 +4,7 @@ import { AUTH_COOKIE_NAME } from '@/server/auth/auth.service';
 import { verifyAuthToken } from '@/server/auth/jwt';
 import { BusinessInviteStatus } from '@/generated/prisma/client';
 import { assertSameOrigin, jsonNoStore } from '@/server/security/csrf';
+import { rateLimit, makeIpKey } from '@/server/security/rateLimit';
 
 function unauthorized() {
   return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -29,7 +30,17 @@ export async function POST(request: NextRequest) {
   const csrf = assertSameOrigin(request);
   if (csrf) return csrf;
 
-  const userId = await getUserId(request);
+  const userIdForKey = await getUserId(request);
+  const limited = rateLimit(request, {
+    key: userIdForKey
+      ? `pro:invites:accept:${userIdForKey.toString()}`
+      : makeIpKey(request, 'pro:invites:accept'),
+    limit: 60,
+    windowMs: 60 * 60 * 1000,
+  });
+  if (limited) return limited;
+
+  const userId = userIdForKey;
   if (!userId) return unauthorized();
 
   const body = await request.json().catch(() => null);

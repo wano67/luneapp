@@ -4,8 +4,9 @@ import { AUTH_COOKIE_NAME } from '@/server/auth/auth.service';
 import { verifyAuthToken } from '@/server/auth/jwt';
 import { BusinessRole, BusinessInviteStatus } from '@/generated/prisma/client';
 import { requireBusinessRole } from '@/server/auth/businessRole';
-import { assertSameOrigin, getAllowedOrigins, jsonNoStore, withNoStore } from '@/server/security/csrf';
+import { assertSameOrigin, getAllowedOrigins, jsonNoStore } from '@/server/security/csrf';
 import crypto from 'crypto';
+import { rateLimit, makeIpKey } from '@/server/security/rateLimit';
 
 function unauthorized() {
   return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -88,7 +89,17 @@ export async function POST(
   const csrf = assertSameOrigin(request);
   if (csrf) return csrf;
 
-  const userId = await getUserId(request);
+  const userIdForRate = await getUserId(request);
+  const limited = rateLimit(request, {
+    key: userIdForRate
+      ? `pro:invites:create:${businessId}:${userIdForRate.toString()}`
+      : makeIpKey(request, `pro:invites:create:${businessId}`),
+    limit: 60,
+    windowMs: 60 * 60 * 1000,
+  });
+  if (limited) return limited;
+
+  const userId = userIdForRate;
   if (!userId) return unauthorized();
 
   const businessIdBigInt = parseId(businessId);

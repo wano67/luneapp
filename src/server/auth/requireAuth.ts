@@ -19,10 +19,13 @@ export async function requireAuthAsync(req: NextRequest): Promise<{
 
     if (!userId) throw new Error('UNAUTHORIZED');
 
+    const email = typeof payload.email === 'string' ? payload.email : undefined;
+    const role = typeof payload.role === 'string' ? payload.role : undefined;
+
     return {
       userId,
-      email: typeof (payload as any)?.email === 'string' ? (payload as any).email : undefined,
-      role: typeof (payload as any)?.role === 'string' ? (payload as any).role : undefined,
+      email,
+      role,
     };
   } catch {
     throw new Error('UNAUTHORIZED');

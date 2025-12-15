@@ -72,8 +72,8 @@ export async function GET(
         updatedAt: account.updatedAt.toISOString(),
       },
     });
-  } catch (e: any) {
-    if (String(e?.message) === 'UNAUTHORIZED') {
+  } catch (e: unknown) {
+    if (e instanceof Error && e.message === 'UNAUTHORIZED') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
     console.error(e);

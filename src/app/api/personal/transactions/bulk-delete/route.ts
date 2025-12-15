@@ -3,6 +3,11 @@ import type { NextRequest } from 'next/server';
 import { prisma } from '@/server/db/client';
 import { requireAuthAsync } from '@/server/auth/requireAuth';
 import { assertSameOrigin } from '@/server/security/csrf';
+import { rateLimit } from '@/server/security/rateLimit';
+
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return !!v && typeof v === 'object';
+}
 
 export async function POST(req: NextRequest) {
   const csrf = assertSameOrigin(req);
@@ -10,11 +15,16 @@ export async function POST(req: NextRequest) {
 
   try {
     const { userId } = await requireAuthAsync(req);
-    const body: unknown = await req.json().catch(() => ({}));
-
+    const limited = rateLimit(req, {
+      key: `personal:tx:bulk-delete:${userId}`,
+      limit: 30,
+      windowMs: 10 * 60 * 1000,
+    });
+    if (limited) return limited;
+    const body: unknown = await req.json().catch(() => null);
     const idsRaw =
-      typeof body === 'object' && body !== null && 'ids' in body && Array.isArray((body as any).ids)
-        ? ((body as any).ids as unknown[])
+      isRecord(body) && Array.isArray(body.ids)
+        ? body.ids
         : [];
 
     const ids: string[] = idsRaw.map((v) => String(v));
@@ -29,8 +39,8 @@ export async function POST(req: NextRequest) {
     });
 
     return NextResponse.json({ deleted: del.count });
-  } catch (e: any) {
-    if (String(e?.message) === 'UNAUTHORIZED') {
+  } catch (e: unknown) {
+    if (e instanceof Error && e.message === 'UNAUTHORIZED') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
     return NextResponse.json({ error: 'Failed' }, { status: 500 });

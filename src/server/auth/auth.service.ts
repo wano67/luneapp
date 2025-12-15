@@ -76,11 +76,14 @@ export async function createSessionToken(user: User) {
 }
 
 export function toPublicUser(user: User): PublicUser {
-  const { passwordHash, id, ...rest } = user;
-
   return {
-    ...rest,
-    id: id.toString(),
+    id: user.id.toString(),
+    email: user.email,
+    name: user.name,
+    role: user.role,
+    isActive: user.isActive,
+    createdAt: user.createdAt,
+    updatedAt: user.updatedAt,
   };
 }
 

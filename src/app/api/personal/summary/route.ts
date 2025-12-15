@@ -140,8 +140,8 @@ export async function GET(req: NextRequest) {
         category: t.category ? { id: toStrId(t.categoryId!), name: t.category.name } : null,
       })),
     });
-  } catch (e: any) {
-    if (String(e?.message) === 'UNAUTHORIZED') {
+  } catch (e: unknown) {
+    if (e instanceof Error && e.message === 'UNAUTHORIZED') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
     console.error(e);

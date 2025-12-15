@@ -32,7 +32,7 @@ type SummaryResponse = {
   }>;
 };
 
-async function safeJson(res: Response) {
+async function safeJson(res: Response): Promise<unknown> {
   try {
     return await res.json();
   } catch {
@@ -40,10 +40,24 @@ async function safeJson(res: Response) {
   }
 }
 
+function getErrorFromJson(json: unknown): string | null {
+  if (!json || typeof json !== 'object') return null;
+  if (!('error' in json)) return null;
+  const err = (json as { error?: unknown }).error;
+  return typeof err === 'string' ? err : null;
+}
+
 function centsToEUR(centsStr: string) {
-  const v = Number(centsStr);
-  if (!Number.isFinite(v)) return '0.00';
-  return (v / 100).toFixed(2);
+  try {
+    const b = BigInt(centsStr);
+    const sign = b < 0n ? '-' : '';
+    const abs = b < 0n ? -b : b;
+    const euros = abs / 100n;
+    const rem = abs % 100n;
+    return `${sign}${euros.toString()}.${rem.toString().padStart(2, '0')}`;
+  } catch {
+    return '0.00';
+  }
 }
 
 export default function WalletHomePage() {
@@ -61,7 +75,12 @@ export default function WalletHomePage() {
         return;
       }
       const json = await safeJson(res);
-      if (!res.ok) throw new Error((json as any)?.error ?? 'Erreur');
+      if (!res.ok) throw new Error(getErrorFromJson(json) ?? 'Erreur');
+
+      if (!json || typeof json !== 'object') {
+        throw new Error('Réponse invalide.');
+      }
+
       setData(json as SummaryResponse);
       setError(null);
     } catch (e) {
@@ -202,24 +221,21 @@ export default function WalletHomePage() {
           ) : (data?.latestTransactions?.length ?? 0) === 0 ? (
             <p className="py-3 text-sm text-[var(--text-secondary)]">Aucune transaction.</p>
           ) : (
-            data!.latestTransactions.map((t) => {
-              const eur = Number(t.amountCents) / 100;
-              return (
-                <div key={t.id} className="flex items-center justify-between gap-3 py-3">
-                  <div className="min-w-0">
-                    <p className="truncate font-semibold">{t.label}</p>
-                    <p className="text-xs text-[var(--text-secondary)]">
-                      {new Date(t.date).toLocaleDateString('fr-FR')} · {t.account.name}
-                      {t.category ? ` · ${t.category.name}` : ''}
-                    </p>
-                  </div>
-                  <div className="shrink-0 text-right">
-                    <p className="font-semibold">{eur.toFixed(2)} €</p>
-                    <p className="text-[11px] text-[var(--text-secondary)]">{t.type}</p>
-                  </div>
+            data!.latestTransactions.map((t) => (
+              <div key={t.id} className="flex items-center justify-between gap-3 py-3">
+                <div className="min-w-0">
+                  <p className="truncate font-semibold">{t.label}</p>
+                  <p className="text-xs text-[var(--text-secondary)]">
+                    {new Date(t.date).toLocaleDateString('fr-FR')} · {t.account.name}
+                    {t.category ? ` · ${t.category.name}` : ''}
+                  </p>
                 </div>
-              );
-            })
+                <div className="shrink-0 text-right">
+                  <p className="font-semibold">{centsToEUR(t.amountCents)} €</p>
+                  <p className="text-[11px] text-[var(--text-secondary)]">{t.type}</p>
+                </div>
+              </div>
+            ))
           )}
         </div>
       </Card>
