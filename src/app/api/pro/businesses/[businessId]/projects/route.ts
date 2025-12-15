@@ -1,21 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/server/db/client';
-import { AUTH_COOKIE_NAME } from '@/server/auth/auth.service';
-import { verifyAuthToken } from '@/server/auth/jwt';
 import { ProjectStatus } from '@/generated/prisma/client';
 import { requireBusinessRole } from '@/server/auth/businessRole';
 import { assertSameOrigin, jsonNoStore } from '@/server/security/csrf';
 import { rateLimit } from '@/server/security/rateLimit';
-
-function unauthorized() {
-  return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-}
-function forbidden() {
-  return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-}
-function badRequest(message: string) {
-  return NextResponse.json({ error: message }, { status: 400 });
-}
+import { requireAuthPro } from '@/server/auth/requireAuthPro';
+import {
+  badRequest,
+  forbidden,
+  getRequestId,
+  unauthorized,
+  withRequestId,
+} from '@/server/http/apiUtils';
 
 function parseId(param: string | undefined) {
   if (!param || !/^\d+$/.test(param)) {
@@ -28,34 +24,27 @@ function parseId(param: string | undefined) {
   }
 }
 
-async function getUserId(request: NextRequest): Promise<bigint | null> {
-  const token = request.cookies.get(AUTH_COOKIE_NAME)?.value;
-  if (!token) return null;
-  try {
-    const { payload } = await verifyAuthToken(token);
-    if (!payload.sub) return null;
-    return BigInt(payload.sub);
-  } catch {
-    return null;
-  }
-}
-
 // GET /api/pro/businesses/{businessId}/projects
 export async function GET(
   request: NextRequest,
   context: { params: Promise<{ businessId: string }> }
 ) {
+  const requestId = getRequestId(request);
   const { businessId } = await context.params;
 
-  const userId = await getUserId(request);
-  if (!userId) return unauthorized();
+  let userId: string;
+  try {
+    ({ userId } = await requireAuthPro(request));
+  } catch {
+    return withRequestId(unauthorized(), requestId);
+  }
 
   const businessIdBigInt = parseId(businessId);
   if (!businessIdBigInt) {
-    return badRequest('businessId invalide.');
+    return withRequestId(badRequest('businessId invalide.'), requestId);
   }
-  const membership = await requireBusinessRole(businessIdBigInt, userId, 'VIEWER');
-  if (!membership) return forbidden();
+  const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'VIEWER');
+  if (!membership) return withRequestId(forbidden(), requestId);
 
   const { searchParams } = new URL(request.url);
   const status = searchParams.get('status') as ProjectStatus | null;
@@ -92,20 +81,25 @@ export async function POST(
   request: NextRequest,
   context: { params: Promise<{ businessId: string }> }
 ) {
+  const requestId = getRequestId(request);
   const { businessId } = await context.params;
 
   const csrf = assertSameOrigin(request);
   if (csrf) return csrf;
 
-  const userId = await getUserId(request);
-  if (!userId) return unauthorized();
+  let userId: string;
+  try {
+    ({ userId } = await requireAuthPro(request));
+  } catch {
+    return withRequestId(unauthorized(), requestId);
+  }
 
   const businessIdBigInt = parseId(businessId);
   if (!businessIdBigInt) {
-    return badRequest('businessId invalide.');
+    return withRequestId(badRequest('businessId invalide.'), requestId);
   }
-  const membership = await requireBusinessRole(businessIdBigInt, userId, 'ADMIN');
-  if (!membership) return forbidden();
+  const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'ADMIN');
+  if (!membership) return withRequestId(forbidden(), requestId);
 
   const limited = rateLimit(request, {
     key: `pro:projects:create:${businessIdBigInt}:${userId.toString()}`,
@@ -116,11 +110,11 @@ export async function POST(
 
   const body = await request.json().catch(() => null);
   if (!body || typeof body.name !== 'string') {
-    return badRequest('Le nom du projet est requis.');
+    return withRequestId(badRequest('Le nom du projet est requis.'), requestId);
   }
 
   const name = body.name.trim();
-  if (!name) return badRequest('Le nom du projet ne peut pas être vide.');
+  if (!name) return withRequestId(badRequest('Le nom du projet ne peut pas être vide.'), requestId);
 
   let clientId: bigint | undefined;
   if (body.clientId && typeof body.clientId === 'string') {

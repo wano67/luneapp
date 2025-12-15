@@ -1,24 +1,18 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { prisma } from '@/server/db/client';
-import { AUTH_COOKIE_NAME } from '@/server/auth/auth.service';
-import { verifyAuthToken } from '@/server/auth/jwt';
 import { BusinessRole, BusinessInviteStatus } from '@/generated/prisma/client';
 import { requireBusinessRole } from '@/server/auth/businessRole';
 import { assertSameOrigin, getAllowedOrigins, jsonNoStore } from '@/server/security/csrf';
 import crypto from 'crypto';
 import { rateLimit, makeIpKey } from '@/server/security/rateLimit';
-
-function unauthorized() {
-  return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-}
-
-function forbidden() {
-  return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-}
-
-function badRequest(message: string) {
-  return NextResponse.json({ error: message }, { status: 400 });
-}
+import { requireAuthPro } from '@/server/auth/requireAuthPro';
+import {
+  badRequest,
+  forbidden,
+  getRequestId,
+  unauthorized,
+  withRequestId,
+} from '@/server/http/apiUtils';
 
 function parseId(param: string | undefined) {
   if (!param || !/^\d+$/.test(param)) {
@@ -31,35 +25,28 @@ function parseId(param: string | undefined) {
   }
 }
 
-async function getUserId(request: NextRequest): Promise<bigint | null> {
-  const token = request.cookies.get(AUTH_COOKIE_NAME)?.value;
-  if (!token) return null;
-  try {
-    const { payload } = await verifyAuthToken(token);
-    if (!payload.sub) return null;
-    return BigInt(payload.sub);
-  } catch {
-    return null;
-  }
-}
-
 // GET /api/pro/businesses/{businessId}/invites
 export async function GET(
   request: NextRequest,
   context: { params: Promise<{ businessId: string }> }
 ) {
+  const requestId = getRequestId(request);
   const { businessId } = await context.params;
 
-  const userId = await getUserId(request);
-  if (!userId) return unauthorized();
+  let userId: string;
+  try {
+    ({ userId } = await requireAuthPro(request));
+  } catch {
+    return withRequestId(unauthorized(), requestId);
+  }
 
   const businessIdBigInt = parseId(businessId);
   if (!businessIdBigInt) {
-    return badRequest('businessId invalide.');
+    return withRequestId(badRequest('businessId invalide.'), requestId);
   }
 
-  const membership = await requireBusinessRole(businessIdBigInt, userId, 'ADMIN');
-  if (!membership) return forbidden();
+  const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'ADMIN');
+  if (!membership) return withRequestId(forbidden(), requestId);
 
   const invites = await prisma.businessInvite.findMany({
     where: { businessId: businessIdBigInt },
@@ -84,12 +71,19 @@ export async function POST(
   request: NextRequest,
   context: { params: Promise<{ businessId: string }> }
 ) {
+  const requestId = getRequestId(request);
   const { businessId } = await context.params;
 
   const csrf = assertSameOrigin(request);
   if (csrf) return csrf;
 
-  const userIdForRate = await getUserId(request);
+  let userIdForRate: string | null = null;
+  try {
+    const auth = await requireAuthPro(request);
+    userIdForRate = auth.userId;
+  } catch {
+    userIdForRate = null;
+  }
   const limited = rateLimit(request, {
     key: userIdForRate
       ? `pro:invites:create:${businessId}:${userIdForRate.toString()}`
@@ -99,15 +93,19 @@ export async function POST(
   });
   if (limited) return limited;
 
-  const userId = userIdForRate;
-  if (!userId) return unauthorized();
+  let userId: string;
+  try {
+    ({ userId } = await requireAuthPro(request));
+  } catch {
+    return withRequestId(unauthorized(), requestId);
+  }
 
   const businessIdBigInt = parseId(businessId);
   if (!businessIdBigInt) {
-    return badRequest('businessId invalide.');
+    return withRequestId(badRequest('businessId invalide.'), requestId);
   }
-  const membership = await requireBusinessRole(businessIdBigInt, userId, 'ADMIN');
-  if (!membership) return forbidden();
+  const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'ADMIN');
+  if (!membership) return withRequestId(forbidden(), requestId);
 
   const body = await request.json().catch(() => null);
   if (
@@ -115,15 +113,15 @@ export async function POST(
     typeof body.email !== 'string' ||
     typeof body.role !== 'string'
   ) {
-    return badRequest('Email et rôle sont requis.');
+    return withRequestId(badRequest('Email et rôle sont requis.'), requestId);
   }
 
   const email = body.email.trim().toLowerCase();
-  if (!email) return badRequest("L'email ne peut pas être vide.");
+  if (!email) return withRequestId(badRequest("L'email ne peut pas être vide."), requestId);
 
   const role = body.role as BusinessRole;
   if (!['OWNER', 'ADMIN', 'MEMBER', 'VIEWER'].includes(role)) {
-    return badRequest('Rôle invalide.');
+    return withRequestId(badRequest('Rôle invalide.'), requestId);
   }
 
   const token = crypto.randomUUID();

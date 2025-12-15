@@ -1,22 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/server/db/client';
-import { AUTH_COOKIE_NAME } from '@/server/auth/auth.service';
-import { verifyAuthToken } from '@/server/auth/jwt';
 import { requireBusinessRole } from '@/server/auth/businessRole';
 import { assertSameOrigin } from '@/server/security/csrf';
 import { rateLimit, makeIpKey } from '@/server/security/rateLimit';
-
-function unauthorized() {
-  return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-}
-
-function forbidden() {
-  return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-}
-
-function badRequest(message: string) {
-  return NextResponse.json({ error: message }, { status: 400 });
-}
+import { requireAuthPro } from '@/server/auth/requireAuthPro';
+import {
+  badRequest,
+  forbidden,
+  getRequestId,
+  notFound,
+  unauthorized,
+  withRequestId,
+} from '@/server/http/apiUtils';
 
 function parseId(param: string | undefined) {
   if (!param || !/^\d+$/.test(param)) {
@@ -29,26 +24,21 @@ function parseId(param: string | undefined) {
   }
 }
 
-async function getUserId(request: NextRequest): Promise<bigint | null> {
-  const token = request.cookies.get(AUTH_COOKIE_NAME)?.value;
-  if (!token) return null;
-  try {
-    const { payload } = await verifyAuthToken(token);
-    if (!payload.sub) return null;
-    return BigInt(payload.sub);
-  } catch {
-    return null;
-  }
-}
-
 // DELETE /api/pro/businesses/{businessId}/invites/{inviteId}
 export async function DELETE(
   request: NextRequest,
   context: { params: Promise<{ businessId: string; inviteId: string }> }
 ) {
+  const requestId = getRequestId(request);
   const { businessId, inviteId } = await context.params;
 
-  const userIdForRate = await getUserId(request);
+  let userIdForRate: string | null = null;
+  try {
+    const auth = await requireAuthPro(request);
+    userIdForRate = auth.userId;
+  } catch {
+    userIdForRate = null;
+  }
   const limited = rateLimit(request, {
     key: userIdForRate
       ? `pro:invites:delete:${businessId}:${userIdForRate.toString()}`
@@ -64,24 +54,25 @@ export async function DELETE(
   const businessIdBigInt = parseId(businessId);
   const inviteIdBigInt = parseId(inviteId);
   if (!businessIdBigInt || !inviteIdBigInt) {
-    return badRequest('businessId ou inviteId invalide.');
+    return withRequestId(badRequest('businessId ou inviteId invalide.'), requestId);
   }
 
-  const userId = await getUserId(request);
-  if (!userId) return unauthorized();
+  let userId: string;
+  try {
+    ({ userId } = await requireAuthPro(request));
+  } catch {
+    return withRequestId(unauthorized(), requestId);
+  }
 
-  const membership = await requireBusinessRole(businessIdBigInt, userId, 'ADMIN');
-  if (!membership) return forbidden();
+  const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'ADMIN');
+  if (!membership) return withRequestId(forbidden(), requestId);
 
   const invite = await prisma.businessInvite.findUnique({
     where: { id: inviteIdBigInt },
   });
 
   if (!invite || invite.businessId !== businessIdBigInt) {
-    return NextResponse.json(
-      { error: 'Invitation non trouvée.' },
-      { status: 404 }
-    );
+    return withRequestId(notFound('Invitation non trouvée.'), requestId);
   }
 
   await prisma.businessInvite.update({

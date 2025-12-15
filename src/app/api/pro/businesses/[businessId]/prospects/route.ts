@@ -1,28 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/server/db/client';
-import { AUTH_COOKIE_NAME } from '@/server/auth/auth.service';
-import { verifyAuthToken } from '@/server/auth/jwt';
 import type { Prisma, Prospect } from '@/generated/prisma/client';
 import { LeadSource, ProspectPipelineStatus, QualificationLevel } from '@/generated/prisma/client';
 import { requireBusinessRole } from '@/server/auth/businessRole';
 import { assertSameOrigin, jsonNoStore } from '@/server/security/csrf';
 import { rateLimit } from '@/server/security/rateLimit';
-
-function unauthorized() {
-  return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-}
-
-function forbidden() {
-  return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-}
-
-function badRequest(message: string) {
-  return NextResponse.json({ error: message }, { status: 400 });
-}
-
-function isRecord(v: unknown): v is Record<string, unknown> {
-  return !!v && typeof v === 'object';
-}
+import { requireAuthPro } from '@/server/auth/requireAuthPro';
+import {
+  badRequest,
+  forbidden,
+  getRequestId,
+  readJson,
+  unauthorized,
+  withRequestId,
+  isRecord,
+} from '@/server/http/apiUtils';
 
 function normalizeStr(v: unknown) {
   return String(v ?? '').trim();
@@ -62,18 +54,6 @@ function parseBusinessId(param: string | undefined) {
   }
 }
 
-async function getUserId(request: NextRequest): Promise<bigint | null> {
-  const token = request.cookies.get(AUTH_COOKIE_NAME)?.value;
-  if (!token) return null;
-  try {
-    const { payload } = await verifyAuthToken(token);
-    if (!payload.sub) return null;
-    return BigInt(payload.sub);
-  } catch {
-    return null;
-  }
-}
-
 function serializeProspect(p: Prospect) {
   return {
     id: p.id.toString(),
@@ -99,18 +79,23 @@ export async function GET(
   request: NextRequest,
   context: { params: Promise<{ businessId: string }> }
 ) {
+  const requestId = getRequestId(request);
   try {
     const { businessId: businessIdParam } = await context.params;
-    const userId = await getUserId(request);
-    if (!userId) return unauthorized();
+    let userId: string;
+    try {
+      ({ userId } = await requireAuthPro(request));
+    } catch {
+      return withRequestId(unauthorized(), requestId);
+    }
 
     const businessId = parseBusinessId(businessIdParam);
     if (!businessId) {
-      return badRequest('businessId invalide.');
+      return withRequestId(badRequest('businessId invalide.'), requestId);
     }
 
-    const membership = await requireBusinessRole(businessId, userId, 'VIEWER');
-    if (!membership) return forbidden();
+    const membership = await requireBusinessRole(businessId, BigInt(userId), 'VIEWER');
+    if (!membership) return withRequestId(forbidden(), requestId);
 
     const { searchParams } = new URL(request.url);
     const search = searchParams.get('search')?.trim();
@@ -135,13 +120,14 @@ export async function GET(
       items: prospects.map(serializeProspect),
     });
   } catch (err) {
-    console.error(
-      'GET /api/pro/businesses/[businessId]/prospects error:',
-      err
-    );
-    return NextResponse.json(
-      { error: 'Server error while loading prospects' },
-      { status: 500 }
+    console.error({
+      requestId,
+      route: '/api/pro/businesses/[businessId]/prospects',
+      err,
+    });
+    return withRequestId(
+      NextResponse.json({ error: 'Server error while loading prospects' }, { status: 500 }),
+      requestId
     );
   }
 }
@@ -151,21 +137,26 @@ export async function POST(
   request: NextRequest,
   context: { params: Promise<{ businessId: string }> }
 ) {
+  const requestId = getRequestId(request);
   const csrf = assertSameOrigin(request);
   if (csrf) return csrf;
 
   try {
     const { businessId: businessIdParam } = await context.params;
-    const userId = await getUserId(request);
-    if (!userId) return unauthorized();
+    let userId: string;
+    try {
+      ({ userId } = await requireAuthPro(request));
+    } catch {
+      return withRequestId(unauthorized(), requestId);
+    }
 
     const businessId = parseBusinessId(businessIdParam);
     if (!businessId) {
-      return badRequest('businessId invalide.');
+      return withRequestId(badRequest('businessId invalide.'), requestId);
     }
 
-    const membership = await requireBusinessRole(businessId, userId, 'ADMIN');
-    if (!membership) return forbidden();
+    const membership = await requireBusinessRole(businessId, BigInt(userId), 'ADMIN');
+    if (!membership) return withRequestId(forbidden(), requestId);
 
     const limited = rateLimit(request, {
       key: `pro:prospects:create:${businessId.toString()}:${userId.toString()}`,
@@ -174,53 +165,53 @@ export async function POST(
     });
     if (limited) return limited;
 
-    const body = await request.json().catch(() => null);
+    const body = await readJson(request);
 
     if (!isRecord(body) || typeof body.name !== 'string') {
-      return badRequest("Le nom du prospect est requis.");
+      return withRequestId(badRequest("Le nom du prospect est requis."), requestId);
     }
 
     const name = normalizeStr(body.name);
     if (!name) {
-      return badRequest("Le nom du prospect ne peut pas être vide.");
+      return withRequestId(badRequest("Le nom du prospect ne peut pas être vide."), requestId);
     }
     if (name.length > 120) {
-      return badRequest('Le nom du prospect est trop long (max 120).');
+      return withRequestId(badRequest('Le nom du prospect est trop long (max 120).'), requestId);
     }
 
     const contactNameRaw = normalizeStr(
       typeof body.contactName === 'string' ? body.contactName : ''
     );
     if (contactNameRaw && contactNameRaw.length > 120) {
-      return badRequest('Le nom du contact est trop long (max 120).');
+      return withRequestId(badRequest('Le nom du contact est trop long (max 120).'), requestId);
     }
 
     const contactEmailRaw = normalizeStr(
       typeof body.contactEmail === 'string' ? body.contactEmail : ''
     );
     if (contactEmailRaw && (contactEmailRaw.length > 254 || !isValidEmail(contactEmailRaw))) {
-      return badRequest('Email du contact invalide.');
+      return withRequestId(badRequest('Email du contact invalide.'), requestId);
     }
 
     const contactPhoneRaw = sanitizePhone(
       typeof body.contactPhone === 'string' ? body.contactPhone : ''
     );
     if (contactPhoneRaw && (contactPhoneRaw.length > 32 || !isValidPhone(contactPhoneRaw))) {
-      return badRequest('Téléphone du contact invalide.');
+      return withRequestId(badRequest('Téléphone du contact invalide.'), requestId);
     }
 
     const interestNoteRaw = normalizeStr(
       typeof body.interestNote === 'string' ? body.interestNote : ''
     );
     if (interestNoteRaw && interestNoteRaw.length > 2000) {
-      return badRequest('Note d’intérêt trop longue (max 2000).');
+      return withRequestId(badRequest('Note d’intérêt trop longue (max 2000).'), requestId);
     }
 
     const projectIdeaRaw = normalizeStr(
       typeof body.projectIdea === 'string' ? body.projectIdea : ''
     );
     if (projectIdeaRaw && projectIdeaRaw.length > 2000) {
-      return badRequest('Idée de projet trop longue (max 2000).');
+      return withRequestId(badRequest('Idée de projet trop longue (max 2000).'), requestId);
     }
 
     const data: Prisma.ProspectCreateInput = {
@@ -235,7 +226,7 @@ export async function POST(
 
     if (typeof body.estimatedBudget === 'number') {
       if (!Number.isFinite(body.estimatedBudget) || body.estimatedBudget < 0) {
-        return badRequest('Budget estimé invalide.');
+        return withRequestId(badRequest('Budget estimé invalide.'), requestId);
       }
       data.estimatedBudget = Math.round(body.estimatedBudget);
     }
@@ -271,13 +262,14 @@ export async function POST(
 
     return NextResponse.json(serializeProspect(prospect), { status: 201 });
   } catch (err) {
-    console.error(
-      'POST /api/pro/businesses/[businessId]/prospects error:',
-      err
-    );
-    return NextResponse.json(
-      { error: "Server error while creating the prospect" },
-      { status: 500 }
+    console.error({
+      requestId,
+      route: '/api/pro/businesses/[businessId]/prospects',
+      err,
+    });
+    return withRequestId(
+      NextResponse.json({ error: 'Server error while creating the prospect' }, { status: 500 }),
+      requestId
     );
   }
 }

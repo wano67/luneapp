@@ -1,21 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/server/db/client';
-import { AUTH_COOKIE_NAME } from '@/server/auth/auth.service';
-import { verifyAuthToken } from '@/server/auth/jwt';
 import { requireBusinessRole } from '@/server/auth/businessRole';
 import { assertSameOrigin, jsonNoStore } from '@/server/security/csrf';
 import { rateLimit } from '@/server/security/rateLimit';
-
-function unauthorized() {
-  return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-}
+import { requireAuthPro } from '@/server/auth/requireAuthPro';
+import { badRequest, getRequestId, unauthorized, withRequestId } from '@/server/http/apiUtils';
 
 function forbidden() {
   return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-}
-
-function badRequest(message: string) {
-  return NextResponse.json({ error: message }, { status: 400 });
 }
 
 function isRecord(v: unknown): v is Record<string, unknown> {
@@ -28,18 +20,6 @@ function parseId(param: string | undefined) {
   }
   try {
     return BigInt(param);
-  } catch {
-    return null;
-  }
-}
-
-async function getUserId(request: NextRequest): Promise<bigint | null> {
-  const token = request.cookies.get(AUTH_COOKIE_NAME)?.value;
-  if (!token) return null;
-  try {
-    const { payload } = await verifyAuthToken(token);
-    if (!payload.sub) return null;
-    return BigInt(payload.sub);
   } catch {
     return null;
   }
@@ -69,16 +49,21 @@ export async function GET(
   request: NextRequest,
   context: { params: Promise<{ businessId: string }> }
 ) {
-  const userId = await getUserId(request);
-  if (!userId) return unauthorized();
+  const requestId = getRequestId(request);
+  let userId: string;
+  try {
+    ({ userId } = await requireAuthPro(request));
+  } catch {
+    return withRequestId(unauthorized(), requestId);
+  }
 
   const { businessId } = await context.params;
   const businessIdBigInt = parseId(businessId);
   if (!businessIdBigInt) {
-    return badRequest('businessId invalide.');
+    return withRequestId(badRequest('businessId invalide.'), requestId);
   }
 
-  const membership = await requireBusinessRole(businessIdBigInt, userId, 'VIEWER');
+  const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'VIEWER');
   if (!membership) return forbidden();
 
   const { searchParams } = new URL(request.url);
@@ -115,19 +100,24 @@ export async function POST(
   request: NextRequest,
   context: { params: Promise<{ businessId: string }> }
 ) {
+  const requestId = getRequestId(request);
   const csrf = assertSameOrigin(request);
   if (csrf) return csrf;
 
-  const userId = await getUserId(request);
-  if (!userId) return unauthorized();
+  let userId: string;
+  try {
+    ({ userId } = await requireAuthPro(request));
+  } catch {
+    return withRequestId(unauthorized(), requestId);
+  }
 
   const { businessId } = await context.params;
   const businessIdBigInt = parseId(businessId);
   if (!businessIdBigInt) {
-    return badRequest('businessId invalide.');
+    return withRequestId(badRequest('businessId invalide.'), requestId);
   }
 
-  const membership = await requireBusinessRole(businessIdBigInt, userId, 'ADMIN');
+  const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'ADMIN');
   if (!membership) return forbidden();
 
   const limited = rateLimit(request, {
@@ -139,29 +129,31 @@ export async function POST(
 
   const body = await request.json().catch(() => null);
   if (!isRecord(body) || typeof body.name !== 'string') {
-    return badRequest('Le nom du client est requis.');
+    return withRequestId(badRequest('Le nom du client est requis.'), requestId);
   }
 
   const name = normalizeStr(body.name);
-  if (!name) return badRequest('Le nom du client ne peut pas être vide.');
-  if (name.length > 120) return badRequest('Le nom du client est trop long (max 120).');
+  if (!name) return withRequestId(badRequest('Le nom du client ne peut pas être vide.'), requestId);
+  if (name.length > 120) {
+    return withRequestId(badRequest('Le nom du client est trop long (max 120).'), requestId);
+  }
 
   const emailRaw = normalizeStr(typeof body.email === 'string' ? body.email : '');
   const email = emailRaw ? emailRaw : undefined;
   if (email && (email.length > 254 || !isValidEmail(email))) {
-    return badRequest('Email invalide.');
+    return withRequestId(badRequest('Email invalide.'), requestId);
   }
 
   const phoneRaw = sanitizePhone(typeof body.phone === 'string' ? body.phone : '');
   const phone = phoneRaw ? phoneRaw : undefined;
   if (phone && (phone.length > 32 || !isValidPhone(phone))) {
-    return badRequest('Téléphone invalide.');
+    return withRequestId(badRequest('Téléphone invalide.'), requestId);
   }
 
   const notesRaw = normalizeStr(typeof body.notes === 'string' ? body.notes : '');
   const notes = notesRaw ? notesRaw : undefined;
   if (notes && notes.length > 2000) {
-    return badRequest('Notes trop longues (max 2000).');
+    return withRequestId(badRequest('Notes trop longues (max 2000).'), requestId);
   }
 
   const client = await prisma.client.create({

@@ -1,36 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/server/db/client';
-import { AUTH_COOKIE_NAME } from '@/server/auth/auth.service';
-import { verifyAuthToken } from '@/server/auth/jwt';
 import { BusinessInviteStatus } from '@/generated/prisma/client';
 import { assertSameOrigin, jsonNoStore } from '@/server/security/csrf';
 import { rateLimit, makeIpKey } from '@/server/security/rateLimit';
-
-function unauthorized() {
-  return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-}
-
-function badRequest(message: string) {
-  return NextResponse.json({ error: message }, { status: 400 });
-}
-
-async function getUserId(request: NextRequest): Promise<bigint | null> {
-  const token = request.cookies.get(AUTH_COOKIE_NAME)?.value;
-  if (!token) return null;
-  try {
-    const { payload } = await verifyAuthToken(token);
-    if (!payload.sub) return null;
-    return BigInt(payload.sub);
-  } catch {
-    return null;
-  }
-}
+import { requireAuthPro } from '@/server/auth/requireAuthPro';
+import {
+  badRequest,
+  getRequestId,
+  unauthorized,
+  withRequestId,
+} from '@/server/http/apiUtils';
 
 export async function POST(request: NextRequest) {
+  const requestId = getRequestId(request);
   const csrf = assertSameOrigin(request);
   if (csrf) return csrf;
 
-  const userIdForKey = await getUserId(request);
+  let userIdForKey: string | null = null;
+  try {
+    const auth = await requireAuthPro(request);
+    userIdForKey = auth.userId;
+  } catch {
+    userIdForKey = null;
+  }
   const limited = rateLimit(request, {
     key: userIdForKey
       ? `pro:invites:accept:${userIdForKey.toString()}`
@@ -40,36 +32,42 @@ export async function POST(request: NextRequest) {
   });
   if (limited) return limited;
 
-  const userId = userIdForKey;
-  if (!userId) return unauthorized();
+  let userId: string;
+  try {
+    ({ userId } = await requireAuthPro(request));
+  } catch {
+    return withRequestId(unauthorized(), requestId);
+  }
 
   const body = await request.json().catch(() => null);
   if (!body || typeof body.token !== 'string') {
-    return badRequest('Token requis.');
+    return withRequestId(badRequest('Token requis.'), requestId);
   }
 
   const token = body.token.trim();
-  if (!token) return badRequest('Token invalide.');
+  if (!token) return withRequestId(badRequest('Token invalide.'), requestId);
 
   const invite = await prisma.businessInvite.findUnique({
     where: { token },
   });
 
   if (!invite) {
-    return badRequest('Invitation introuvable ou déjà utilisée.');
+    return withRequestId(badRequest('Invitation introuvable ou déjà utilisée.'), requestId);
   }
 
   if (invite.status !== BusinessInviteStatus.PENDING) {
-    return badRequest('Invitation non valide.');
+    return withRequestId(badRequest('Invitation non valide.'), requestId);
   }
 
   if (invite.expiresAt && invite.expiresAt < new Date()) {
-    return badRequest('Invitation expirée.');
+    return withRequestId(badRequest('Invitation expirée.'), requestId);
   }
+
+  const userIdBigInt = BigInt(userId);
 
   const existing = await prisma.businessMembership.findUnique({
     where: {
-      businessId_userId: { businessId: invite.businessId, userId },
+      businessId_userId: { businessId: invite.businessId, userId: userIdBigInt },
     },
   });
 
@@ -77,7 +75,7 @@ export async function POST(request: NextRequest) {
     await prisma.businessMembership.create({
       data: {
         businessId: invite.businessId,
-        userId,
+        userId: userIdBigInt,
         role: invite.role,
       },
     });
@@ -95,9 +93,9 @@ export async function POST(request: NextRequest) {
   });
 
   if (!business) {
-    return NextResponse.json(
-      { error: 'Entreprise associée introuvable.' },
-      { status: 404 }
+    return withRequestId(
+      NextResponse.json({ error: 'Entreprise associée introuvable.' }, { status: 404 }),
+      requestId
     );
   }
 

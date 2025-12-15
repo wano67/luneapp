@@ -1,21 +1,16 @@
-import { NextRequest, NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
 import { prisma } from '@/server/db/client';
-import { AUTH_COOKIE_NAME } from '@/server/auth/auth.service';
-import { verifyAuthToken } from '@/server/auth/jwt';
 import { requireBusinessRole } from '@/server/auth/businessRole';
 import { jsonNoStore } from '@/server/security/csrf';
-
-function unauthorized() {
-  return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-}
-
-function forbidden() {
-  return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-}
-
-function badRequest(message: string) {
-  return NextResponse.json({ error: message }, { status: 400 });
-}
+import { requireAuthPro } from '@/server/auth/requireAuthPro';
+import {
+  badRequest,
+  forbidden,
+  getRequestId,
+  notFound,
+  unauthorized,
+  withRequestId,
+} from '@/server/http/apiUtils';
 
 function parseId(param: string | undefined) {
   if (!param || !/^\d+$/.test(param)) return null;
@@ -26,38 +21,31 @@ function parseId(param: string | undefined) {
   }
 }
 
-async function getUserId(request: NextRequest): Promise<bigint | null> {
-  const token = request.cookies.get(AUTH_COOKIE_NAME)?.value;
-  if (!token) return null;
-  try {
-    const { payload } = await verifyAuthToken(token);
-    if (!payload.sub) return null;
-    return BigInt(payload.sub);
-  } catch {
-    return null;
-  }
-}
-
 export async function GET(
   request: NextRequest,
   context: { params: Promise<{ businessId: string }> }
 ) {
+  const requestId = getRequestId(request);
   const { businessId } = await context.params;
   const businessIdBigInt = parseId(businessId);
-  if (!businessIdBigInt) return badRequest('businessId invalide.');
+  if (!businessIdBigInt) return withRequestId(badRequest('businessId invalide.'), requestId);
 
-  const userId = await getUserId(request);
-  if (!userId) return unauthorized();
+  let userId: string;
+  try {
+    ({ userId } = await requireAuthPro(request));
+  } catch {
+    return withRequestId(unauthorized(), requestId);
+  }
 
-  const membership = await requireBusinessRole(businessIdBigInt, userId, 'VIEWER');
-  if (!membership) return forbidden();
+  const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'VIEWER');
+  if (!membership) return withRequestId(forbidden(), requestId);
 
   const business = await prisma.business.findUnique({
     where: { id: businessIdBigInt },
   });
 
   if (!business) {
-    return NextResponse.json({ error: 'Entreprise introuvable.' }, { status: 404 });
+    return withRequestId(notFound('Entreprise introuvable.'), requestId);
   }
 
   return jsonNoStore({

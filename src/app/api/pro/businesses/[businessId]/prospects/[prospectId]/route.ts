@@ -1,31 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/server/db/client';
-import { AUTH_COOKIE_NAME } from '@/server/auth/auth.service';
-import { verifyAuthToken } from '@/server/auth/jwt';
-import {
-  LeadSource,
-  QualificationLevel,
-  ProspectPipelineStatus,
-} from '@/generated/prisma/client';
+import { LeadSource, QualificationLevel, ProspectPipelineStatus } from '@/generated/prisma/client';
 import { requireBusinessRole } from '@/server/auth/businessRole';
 import { assertSameOrigin, jsonNoStore } from '@/server/security/csrf';
 import { rateLimit } from '@/server/security/rateLimit';
-
-function unauthorized() {
-  return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-}
-
-function forbidden() {
-  return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-}
-
-function badRequest(message: string) {
-  return NextResponse.json({ error: message }, { status: 400 });
-}
-
-function isRecord(v: unknown): v is Record<string, unknown> {
-  return !!v && typeof v === 'object';
-}
+import { requireAuthPro } from '@/server/auth/requireAuthPro';
+import {
+  badRequest,
+  forbidden,
+  getRequestId,
+  notFound,
+  readJson,
+  unauthorized,
+  withRequestId,
+  isRecord,
+} from '@/server/http/apiUtils';
 
 function normalizeStr(v: unknown) {
   return String(v ?? '').trim();
@@ -52,18 +41,6 @@ function parseId(param: string | undefined) {
   }
   try {
     return BigInt(param);
-  } catch {
-    return null;
-  }
-}
-
-async function getUserId(request: NextRequest): Promise<bigint | null> {
-  const token = request.cookies.get(AUTH_COOKIE_NAME)?.value;
-  if (!token) return null;
-  try {
-    const { payload } = await verifyAuthToken(token);
-    if (!payload.sub) return null;
-    return BigInt(payload.sub);
   } catch {
     return null;
   }
@@ -110,39 +87,44 @@ export async function GET(
   request: NextRequest,
   context: { params: Promise<{ businessId: string; prospectId: string }> }
 ) {
+  const requestId = getRequestId(request);
   try {
-    const { businessId: businessIdParam, prospectId: prospectIdParam } =
-      await context.params;
+    const { businessId: businessIdParam, prospectId: prospectIdParam } = await context.params;
 
-    const userId = await getUserId(request);
-    if (!userId) return unauthorized();
+    let userId: string;
+    try {
+      ({ userId } = await requireAuthPro(request));
+    } catch {
+      return withRequestId(unauthorized(), requestId);
+    }
 
     const businessId = parseId(businessIdParam);
     const prospectId = parseId(prospectIdParam);
     if (!businessId || !prospectId) {
-      return badRequest('businessId ou prospectId invalide.');
+      return withRequestId(badRequest('businessId ou prospectId invalide.'), requestId);
     }
 
-    const membership = await requireBusinessRole(businessId, userId, 'VIEWER');
-    if (!membership) return forbidden();
+    const membership = await requireBusinessRole(businessId, BigInt(userId), 'VIEWER');
+    if (!membership) return withRequestId(forbidden(), requestId);
 
     const prospect = await prisma.prospect.findFirst({
       where: { id: prospectId, businessId },
     });
 
     if (!prospect) {
-      return NextResponse.json({ error: 'Prospect introuvable.' }, { status: 404 });
+      return withRequestId(notFound('Prospect introuvable.'), requestId);
     }
 
     return jsonNoStore(serializeProspect(prospect));
   } catch (err) {
-    console.error(
-      'GET /api/pro/businesses/[businessId]/prospects/[prospectId] error:',
-      err
-    );
-    return NextResponse.json(
-      { error: 'Server error while loading the prospect.' },
-      { status: 500 }
+    console.error({
+      requestId,
+      route: '/api/pro/businesses/[businessId]/prospects/[prospectId]',
+      err,
+    });
+    return withRequestId(
+      NextResponse.json({ error: 'Server error while loading the prospect.' }, { status: 500 }),
+      requestId
     );
   }
 }
@@ -152,24 +134,28 @@ export async function PATCH(
   request: NextRequest,
   context: { params: Promise<{ businessId: string; prospectId: string }> }
 ) {
+  const requestId = getRequestId(request);
   const csrf = assertSameOrigin(request);
   if (csrf) return csrf;
 
   try {
-    const { businessId: businessIdParam, prospectId: prospectIdParam } =
-      await context.params;
+    const { businessId: businessIdParam, prospectId: prospectIdParam } = await context.params;
 
-    const userId = await getUserId(request);
-    if (!userId) return unauthorized();
+    let userId: string;
+    try {
+      ({ userId } = await requireAuthPro(request));
+    } catch {
+      return withRequestId(unauthorized(), requestId);
+    }
 
     const businessId = parseId(businessIdParam);
     const prospectId = parseId(prospectIdParam);
     if (!businessId || !prospectId) {
-      return badRequest('businessId ou prospectId invalide.');
+      return withRequestId(badRequest('businessId ou prospectId invalide.'), requestId);
     }
 
-    const membership = await requireBusinessRole(businessId, userId, 'ADMIN');
-    if (!membership) return forbidden();
+    const membership = await requireBusinessRole(businessId, BigInt(userId), 'ADMIN');
+    if (!membership) return withRequestId(forbidden(), requestId);
 
     const limited = rateLimit(request, {
       key: `pro:prospects:update:${businessId.toString()}:${userId.toString()}`,
@@ -183,12 +169,12 @@ export async function PATCH(
     });
 
     if (!existing) {
-      return NextResponse.json({ error: 'Prospect introuvable.' }, { status: 404 });
+      return withRequestId(notFound('Prospect introuvable.'), requestId);
     }
 
-    const body = await request.json().catch(() => null);
+    const body = await readJson(request);
     if (!isRecord(body)) {
-      return badRequest('Corps de requête invalide.');
+      return withRequestId(badRequest('Corps de requête invalide.'), requestId);
     }
 
     const data: Record<string, unknown> = {};
@@ -196,10 +182,10 @@ export async function PATCH(
     if (typeof body.name === 'string') {
       const name = normalizeStr(body.name);
       if (!name) {
-        return badRequest("Le nom du prospect ne peut pas être vide.");
+        return withRequestId(badRequest("Le nom du prospect ne peut pas être vide."), requestId);
       }
       if (name.length > 120) {
-        return badRequest('Le nom du prospect est trop long (max 120).');
+        return withRequestId(badRequest('Le nom du prospect est trop long (max 120).'), requestId);
       }
       data.name = name;
     }
@@ -207,7 +193,7 @@ export async function PATCH(
     if (typeof body.contactName === 'string') {
       const contactName = normalizeStr(body.contactName);
       if (contactName && contactName.length > 120) {
-        return badRequest('Le nom du contact est trop long (max 120).');
+        return withRequestId(badRequest('Le nom du contact est trop long (max 120).'), requestId);
       }
       data.contactName = contactName || null;
     }
@@ -215,7 +201,7 @@ export async function PATCH(
     if (typeof body.contactEmail === 'string') {
       const contactEmail = normalizeStr(body.contactEmail);
       if (contactEmail && (contactEmail.length > 254 || !isValidEmail(contactEmail))) {
-        return badRequest('Email du contact invalide.');
+        return withRequestId(badRequest('Email du contact invalide.'), requestId);
       }
       data.contactEmail = contactEmail || null;
     }
@@ -223,7 +209,7 @@ export async function PATCH(
     if (typeof body.contactPhone === 'string') {
       const contactPhone = sanitizePhone(body.contactPhone);
       if (contactPhone && (contactPhone.length > 32 || !isValidPhone(contactPhone))) {
-        return badRequest('Téléphone du contact invalide.');
+        return withRequestId(badRequest('Téléphone du contact invalide.'), requestId);
       }
       data.contactPhone = contactPhone || null;
     }
@@ -231,7 +217,7 @@ export async function PATCH(
     if (typeof body.interestNote === 'string') {
       const interestNote = normalizeStr(body.interestNote);
       if (interestNote && interestNote.length > 2000) {
-        return badRequest("La note d'intérêt est trop longue (max 2000).");
+        return withRequestId(badRequest("La note d'intérêt est trop longue (max 2000)."), requestId);
       }
       data.interestNote = interestNote || null;
     }
@@ -239,14 +225,14 @@ export async function PATCH(
     if (typeof body.projectIdea === 'string') {
       const projectIdea = normalizeStr(body.projectIdea);
       if (projectIdea && projectIdea.length > 2000) {
-        return badRequest('L’idée de projet est trop longue (max 2000).');
+        return withRequestId(badRequest('L’idée de projet est trop longue (max 2000).'), requestId);
       }
       data.projectIdea = projectIdea || null;
     }
 
     if (typeof body.estimatedBudget === 'number') {
       if (!Number.isFinite(body.estimatedBudget) || body.estimatedBudget < 0) {
-        return badRequest('Budget estimé invalide.');
+        return withRequestId(badRequest('Budget estimé invalide.'), requestId);
       }
       data.estimatedBudget = Math.round(body.estimatedBudget);
     } else if (body && 'estimatedBudget' in body && body.estimatedBudget === null) {
@@ -262,22 +248,16 @@ export async function PATCH(
       data.source = body.source as keyof typeof LeadSource;
     }
 
-    if (
-      typeof body.qualificationLevel === 'string' &&
-      body.qualificationLevel in QualificationLevel
-    ) {
+    if (typeof body.qualificationLevel === 'string' && body.qualificationLevel in QualificationLevel) {
       data.qualificationLevel = body.qualificationLevel as keyof typeof QualificationLevel;
     }
 
-    if (
-      typeof body.pipelineStatus === 'string' &&
-      body.pipelineStatus in ProspectPipelineStatus
-    ) {
+    if (typeof body.pipelineStatus === 'string' && body.pipelineStatus in ProspectPipelineStatus) {
       data.pipelineStatus = body.pipelineStatus as keyof typeof ProspectPipelineStatus;
     }
 
     if (Object.keys(data).length === 0) {
-      return badRequest('Aucune donnée à mettre à jour.');
+      return withRequestId(badRequest('Aucune donnée à mettre à jour.'), requestId);
     }
 
     const prospect = await prisma.prospect.update({
@@ -287,13 +267,14 @@ export async function PATCH(
 
     return NextResponse.json(serializeProspect(prospect));
   } catch (err) {
-    console.error(
-      'PATCH /api/pro/businesses/[businessId]/prospects/[prospectId] error:',
-      err
-    );
-    return NextResponse.json(
-      { error: 'Server error while updating the prospect.' },
-      { status: 500 }
+    console.error({
+      requestId,
+      route: '/api/pro/businesses/[businessId]/prospects/[prospectId]',
+      err,
+    });
+    return withRequestId(
+      NextResponse.json({ error: 'Server error while updating the prospect.' }, { status: 500 }),
+      requestId
     );
   }
 }
@@ -303,24 +284,28 @@ export async function DELETE(
   request: NextRequest,
   context: { params: Promise<{ businessId: string; prospectId: string }> }
 ) {
+  const requestId = getRequestId(request);
   const csrf = assertSameOrigin(request);
   if (csrf) return csrf;
 
   try {
-    const { businessId: businessIdParam, prospectId: prospectIdParam } =
-      await context.params;
+    const { businessId: businessIdParam, prospectId: prospectIdParam } = await context.params;
 
-    const userId = await getUserId(request);
-    if (!userId) return unauthorized();
+    let userId: string;
+    try {
+      ({ userId } = await requireAuthPro(request));
+    } catch {
+      return withRequestId(unauthorized(), requestId);
+    }
 
     const businessId = parseId(businessIdParam);
     const prospectId = parseId(prospectIdParam);
     if (!businessId || !prospectId) {
-      return badRequest('businessId ou prospectId invalide.');
+      return withRequestId(badRequest('businessId ou prospectId invalide.'), requestId);
     }
 
-    const membership = await requireBusinessRole(businessId, userId, 'ADMIN');
-    if (!membership) return forbidden();
+    const membership = await requireBusinessRole(businessId, BigInt(userId), 'ADMIN');
+    if (!membership) return withRequestId(forbidden(), requestId);
 
     const limited = rateLimit(request, {
       key: `pro:prospects:delete:${businessId.toString()}:${userId.toString()}`,
@@ -334,7 +319,7 @@ export async function DELETE(
     });
 
     if (!existing) {
-      return NextResponse.json({ error: 'Prospect introuvable.' }, { status: 404 });
+      return withRequestId(notFound('Prospect introuvable.'), requestId);
     }
 
     await prisma.prospect.delete({
@@ -343,13 +328,14 @@ export async function DELETE(
 
     return new NextResponse(null, { status: 204 });
   } catch (err) {
-    console.error(
-      'DELETE /api/pro/businesses/[businessId]/prospects/[prospectId] error:',
-      err
-    );
-    return NextResponse.json(
-      { error: 'Server error while deleting the prospect.' },
-      { status: 500 }
+    console.error({
+      requestId,
+      route: '/api/pro/businesses/[businessId]/prospects/[prospectId]',
+      err,
+    });
+    return withRequestId(
+      NextResponse.json({ error: 'Server error while deleting the prospect.' }, { status: 500 }),
+      requestId
     );
   }
 }
