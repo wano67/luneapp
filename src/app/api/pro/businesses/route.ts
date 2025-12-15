@@ -3,6 +3,7 @@ import { prisma } from '@/server/db/client';
 import { AUTH_COOKIE_NAME } from '@/server/auth/auth.service';
 import { verifyAuthToken } from '@/server/auth/jwt';
 import type { Business, BusinessRole } from '@/generated/prisma/client';
+import { assertSameOrigin, jsonNoStore, withNoStore } from '@/server/security/csrf';
 
 function unauthorized() {
   return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -53,7 +54,7 @@ export async function GET(request: NextRequest) {
       role: membership.role,
     }));
 
-    return NextResponse.json({ items });
+    return withNoStore(NextResponse.json({ items }));
   } catch (error) {
     console.error('Error in GET /api/pro/businesses', error);
     return NextResponse.json(
@@ -66,6 +67,9 @@ export async function GET(request: NextRequest) {
 // POST /api/pro/businesses
 // -> crée une entreprise et membership OWNER
 export async function POST(request: NextRequest) {
+  const csrf = assertSameOrigin(request);
+  if (csrf) return csrf;
+
   const userId = await getAuthenticatedUserId(request);
   if (!userId) return unauthorized();
 

@@ -3,6 +3,8 @@ import { prisma } from '@/server/db/client';
 import { AUTH_COOKIE_NAME } from '@/server/auth/auth.service';
 import { verifyAuthToken } from '@/server/auth/jwt';
 import { BusinessRole, BusinessInviteStatus } from '@/generated/prisma/client';
+import { requireBusinessRole } from '@/server/auth/businessRole';
+import { assertSameOrigin, getAllowedOrigins, jsonNoStore, withNoStore } from '@/server/security/csrf';
 import crypto from 'crypto';
 
 function unauthorized() {
@@ -40,20 +42,6 @@ async function getUserId(request: NextRequest): Promise<bigint | null> {
   }
 }
 
-async function requireAdminOrOwner(businessId: bigint, userId: bigint) {
-  const membership = await prisma.businessMembership.findUnique({
-    where: {
-      businessId_userId: { businessId, userId },
-    },
-  });
-
-  if (!membership) return null;
-  if (membership.role === 'OWNER' || membership.role === 'ADMIN') {
-    return membership;
-  }
-  return null;
-}
-
 // GET /api/pro/businesses/{businessId}/invites
 export async function GET(
   request: NextRequest,
@@ -69,7 +57,7 @@ export async function GET(
     return badRequest('businessId invalide.');
   }
 
-  const membership = await requireAdminOrOwner(businessIdBigInt, userId);
+  const membership = await requireBusinessRole(businessIdBigInt, userId, 'ADMIN');
   if (!membership) return forbidden();
 
   const invites = await prisma.businessInvite.findMany({
@@ -77,7 +65,7 @@ export async function GET(
     orderBy: { createdAt: 'desc' },
   });
 
-  return NextResponse.json({
+  return jsonNoStore({
     items: invites.map((inv) => ({
       id: inv.id.toString(),
       businessId: inv.businessId.toString(),
@@ -97,6 +85,9 @@ export async function POST(
 ) {
   const { businessId } = await context.params;
 
+  const csrf = assertSameOrigin(request);
+  if (csrf) return csrf;
+
   const userId = await getUserId(request);
   if (!userId) return unauthorized();
 
@@ -104,7 +95,7 @@ export async function POST(
   if (!businessIdBigInt) {
     return badRequest('businessId invalide.');
   }
-  const membership = await requireAdminOrOwner(businessIdBigInt, userId);
+  const membership = await requireBusinessRole(businessIdBigInt, userId, 'ADMIN');
   if (!membership) return forbidden();
 
   const body = await request.json().catch(() => null);
@@ -141,7 +132,13 @@ export async function POST(
 
   // TODO: envoyer un email avec le lien d'invitation
 
-  return NextResponse.json(
+  const allowed = getAllowedOrigins();
+  const inviteLink =
+    allowed.length > 0
+      ? `${allowed[0]}/app/pro?join=1&token=${encodeURIComponent(invite.token)}`
+      : undefined;
+
+  return jsonNoStore(
     {
       id: invite.id.toString(),
       businessId: invite.businessId.toString(),
@@ -150,7 +147,7 @@ export async function POST(
       status: invite.status,
       createdAt: invite.createdAt.toISOString(),
       expiresAt: invite.expiresAt ? invite.expiresAt.toISOString() : null,
-      token: invite.token, // à retirer plus tard si tu veux
+      ...(inviteLink ? { inviteLink } : {}),
     },
     { status: 201 }
   );

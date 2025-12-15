@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { prisma } from '@/server/db/client';
 import { requireAuthAsync } from '@/server/auth/requireAuth';
+import { assertSameOrigin, jsonNoStore, withNoStore } from '@/server/security/csrf';
 
 type ParsedRow = {
   rowNumber: number;
@@ -134,6 +135,9 @@ function centsFromAmount(amount: string) {
 
 export async function POST(req: NextRequest) {
   try {
+    const csrf = assertSameOrigin(req);
+    if (csrf) return csrf;
+
     const { userId } = await requireAuthAsync(req);
 
     const form = await req.formData();
@@ -143,6 +147,13 @@ export async function POST(req: NextRequest) {
 
     if (!file || typeof file === 'string') {
       return NextResponse.json({ error: 'Missing file' }, { status: 400 });
+    }
+    if (typeof (file as any).size === 'number' && (file as any).size > 2 * 1024 * 1024) {
+      return NextResponse.json({ error: 'File too large (max 2MB)' }, { status: 400 });
+    }
+    const mime = (file as any).type?.toLowerCase?.() as string | undefined;
+    if (mime && mime !== 'text/csv' && mime !== 'application/vnd.ms-excel') {
+      return NextResponse.json({ error: 'Invalid file type' }, { status: 400 });
     }
     if (!accountId || !/^\d+$/.test(accountId)) {
       return NextResponse.json({ error: 'Missing or invalid accountId' }, { status: 400 });
@@ -161,6 +172,9 @@ export async function POST(req: NextRequest) {
 
     if (table.length < 2) {
       return NextResponse.json({ error: 'CSV seems empty' }, { status: 400 });
+    }
+    if (table.length - 1 > 5000) {
+      return NextResponse.json({ error: 'Too many rows (max 5000)' }, { status: 400 });
     }
 
     const headers = table[0].map((h) => normalizeHeader(h));
@@ -215,7 +229,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (dryRun) {
-      return NextResponse.json({
+      return jsonNoStore({
         delimiter,
         totalRows: table.length - 1,
         validRows: parsed.length,
@@ -301,14 +315,14 @@ export async function POST(req: NextRequest) {
       createdCount += r.count;
     }
 
-    return NextResponse.json({
+    return jsonNoStore({
       imported: createdCount,
       invalidRows: errors.length,
       errors: errors.slice(0, 25),
       summary: {
         accountId: accountId, // already string
-        dateFrom: minDate ? minDate.toISOString() : null,
-        dateTo: maxDate ? maxDate.toISOString() : null,
+        fromDateIso: minDate ? minDate.toISOString() : null,
+        toDateIso: maxDate ? maxDate.toISOString() : null,
         incomeCents: sumPos.toString(),
         expenseAbsCents: sumNegAbs.toString(),
       },

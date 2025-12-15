@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { prisma } from '@/server/db/client';
 import { requireAuthAsync } from '@/server/auth/requireAuth';
+import { assertSameOrigin } from '@/server/security/csrf';
 
 function isNumericId(s: string) {
   return /^\d+$/.test(s);
@@ -17,6 +18,9 @@ function toStrId(v: bigint) {
 }
 
 export async function PATCH(req: NextRequest, ctx: { params: Promise<{ transactionId: string }> }) {
+  const csrf = assertSameOrigin(req);
+  if (csrf) return csrf;
+
   try {
     const { userId } = await requireAuthAsync(req);
     const { transactionId } = await ctx.params;
@@ -140,6 +144,9 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ transacti
 }
 
 export async function DELETE(req: NextRequest, ctx: { params: Promise<{ transactionId: string }> }) {
+  const csrf = assertSameOrigin(req);
+  if (csrf) return csrf;
+
   try {
     const { userId } = await requireAuthAsync(req);
     const { transactionId } = await ctx.params;

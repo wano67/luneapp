@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { prisma } from '@/server/db/client';
 import { requireAuthAsync } from '@/server/auth/requireAuth';
+import { jsonNoStore } from '@/server/security/csrf';
 
 function toStrId(v: bigint) {
   return v.toString();
@@ -119,7 +120,7 @@ export async function GET(req: NextRequest) {
       include: { account: true, category: true },
     });
 
-    return NextResponse.json({
+    return jsonNoStore({
       kpis: {
         totalBalanceCents: totalBalanceCents.toString(),
         monthNetCents: monthNetCents.toString(),

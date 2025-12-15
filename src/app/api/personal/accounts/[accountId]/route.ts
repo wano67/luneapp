@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { prisma } from '@/server/db/client';
 import { requireAuthAsync } from '@/server/auth/requireAuth';
+import { jsonNoStore } from '@/server/security/csrf';
 
 function startOfDayUTC(d: Date) {
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 0, 0, 0));
@@ -56,7 +57,7 @@ export async function GET(
     const delta30 = sum30._sum.amountCents ?? BigInt(0);
     const balance = account.initialCents + txAll;
 
-    return NextResponse.json({
+    return jsonNoStore({
       account: {
         id: account.id.toString(),
         name: account.name,

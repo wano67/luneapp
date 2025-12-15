@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { prisma } from '@/server/db/client';
 import { requireAuthAsync } from '@/server/auth/requireAuth';
+import { assertSameOrigin, jsonNoStore, withNoStore } from '@/server/security/csrf';
 
 function toStrId(v: bigint) {
   return v.toString();
@@ -64,7 +65,7 @@ export async function GET(req: NextRequest) {
     const d30Map = new Map<string, bigint>();
     for (const row of sums30) d30Map.set(toStrId(row.accountId), row._sum.amountCents ?? BigInt(0));
 
-    return NextResponse.json({
+    return jsonNoStore({
       items: accounts.map((a) => {
         const txAll = allMap.get(toStrId(a.id)) ?? BigInt(0);
         const balanceCents = a.initialCents + txAll;
@@ -95,6 +96,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const csrf = assertSameOrigin(req);
+  if (csrf) return csrf;
+
   try {
     const { userId } = await requireAuthAsync(req);
 

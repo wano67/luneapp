@@ -7,6 +7,8 @@ import {
   ProspectPipelineStatus,
   QualificationLevel,
 } from '@/generated/prisma/client';
+import { requireBusinessRole } from '@/server/auth/businessRole';
+import { assertSameOrigin, jsonNoStore, withNoStore } from '@/server/security/csrf';
 
 function unauthorized() {
   return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -51,14 +53,6 @@ async function getUserId(request: NextRequest): Promise<bigint | null> {
   }
 }
 
-async function requireMembership(businessId: bigint, userId: bigint) {
-  return prisma.businessMembership.findUnique({
-    where: {
-      businessId_userId: { businessId, userId },
-    },
-  });
-}
-
 function serializeProspect(p: any) {
   return {
     id: p.id.toString(),
@@ -94,7 +88,7 @@ export async function GET(
       return badRequest('businessId invalide.');
     }
 
-    const membership = await requireMembership(businessId, userId);
+    const membership = await requireBusinessRole(businessId, userId, 'VIEWER');
     if (!membership) return forbidden();
 
     const { searchParams } = new URL(request.url);
@@ -116,7 +110,7 @@ export async function GET(
       orderBy: { createdAt: 'desc' },
     });
 
-    return NextResponse.json({
+    return jsonNoStore({
       items: prospects.map(serializeProspect),
     });
   } catch (err) {
@@ -136,6 +130,9 @@ export async function POST(
   request: NextRequest,
   context: { params: Promise<{ businessId: string }> }
 ) {
+  const csrf = assertSameOrigin(request);
+  if (csrf) return csrf;
+
   try {
     const { businessId: businessIdParam } = await context.params;
     const userId = await getUserId(request);
@@ -146,7 +143,7 @@ export async function POST(
       return badRequest('businessId invalide.');
     }
 
-    const membership = await requireMembership(businessId, userId);
+    const membership = await requireBusinessRole(businessId, userId, 'ADMIN');
     if (!membership) return forbidden();
 
     const body = await request.json().catch(() => null);

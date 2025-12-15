@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { prisma } from '@/server/db/client';
 import { requireAuthAsync } from '@/server/auth/requireAuth';
+import { assertSameOrigin, withNoStore } from '@/server/security/csrf';
 
 function isNumericId(v: string) {
   return /^\d+$/.test(v);
@@ -124,20 +125,22 @@ export async function GET(req: NextRequest) {
       ? makeCursor({ date: page[page.length - 1].date, id: page[page.length - 1].id })
       : null;
 
-    return NextResponse.json({
-      items: page.map((t) => ({
-        id: toStrId(t.id),
-        type: t.type,
-        date: t.date.toISOString(),
-        amountCents: t.amountCents.toString(),
-        currency: t.currency,
-        label: t.label,
-        note: t.note,
-        account: { id: toStrId(t.accountId), name: t.account.name },
-        category: t.category ? { id: toStrId(t.categoryId!), name: t.category.name } : null,
-      })),
-      nextCursor,
-    });
+    return withNoStore(
+      NextResponse.json({
+        items: page.map((t) => ({
+          id: toStrId(t.id),
+          type: t.type,
+          date: t.date.toISOString(),
+          amountCents: t.amountCents.toString(),
+          currency: t.currency,
+          label: t.label,
+          note: t.note,
+          account: { id: toStrId(t.accountId), name: t.account.name },
+          category: t.category ? { id: toStrId(t.categoryId!), name: t.category.name } : null,
+        })),
+        nextCursor,
+      })
+    );
   } catch (e: any) {
     if (String(e?.message) === 'UNAUTHORIZED') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -148,6 +151,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const csrf = assertSameOrigin(req);
+  if (csrf) return csrf;
+
   try {
     const { userId } = await requireAuthAsync(req);
 

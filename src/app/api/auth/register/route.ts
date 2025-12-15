@@ -6,11 +6,15 @@ import {
   registerUser,
   toPublicUser,
 } from '@/server/auth/auth.service';
+import { assertSameOrigin } from '@/server/security/csrf';
 import { NextRequest, NextResponse } from 'next/server';
 
 const MIN_PASSWORD_LENGTH = 8;
 
 export async function POST(request: NextRequest) {
+  const csrf = assertSameOrigin(request);
+  if (csrf) return csrf;
+
   const body = await request.json().catch(() => null);
 
   if (

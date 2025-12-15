@@ -3,6 +3,7 @@ import { prisma } from '@/server/db/client';
 import { AUTH_COOKIE_NAME } from '@/server/auth/auth.service';
 import { verifyAuthToken } from '@/server/auth/jwt';
 import { BusinessInviteStatus } from '@/generated/prisma/client';
+import { assertSameOrigin, jsonNoStore } from '@/server/security/csrf';
 
 function unauthorized() {
   return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -25,6 +26,9 @@ async function getUserId(request: NextRequest): Promise<bigint | null> {
 }
 
 export async function POST(request: NextRequest) {
+  const csrf = assertSameOrigin(request);
+  if (csrf) return csrf;
+
   const userId = await getUserId(request);
   if (!userId) return unauthorized();
 
@@ -86,7 +90,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  return NextResponse.json({
+  return jsonNoStore({
     business: {
       id: business.id.toString(),
       name: business.name,

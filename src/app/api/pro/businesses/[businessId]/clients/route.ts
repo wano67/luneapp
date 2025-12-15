@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/server/db/client';
 import { AUTH_COOKIE_NAME } from '@/server/auth/auth.service';
 import { verifyAuthToken } from '@/server/auth/jwt';
+import { requireBusinessRole } from '@/server/auth/businessRole';
+import { assertSameOrigin, jsonNoStore, withNoStore } from '@/server/security/csrf';
 
 function unauthorized() {
   return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -38,14 +40,6 @@ async function getUserId(request: NextRequest): Promise<bigint | null> {
   }
 }
 
-async function requireMembership(businessId: bigint, userId: bigint) {
-  return prisma.businessMembership.findUnique({
-    where: {
-      businessId_userId: { businessId, userId },
-    },
-  });
-}
-
 // GET /api/pro/businesses/{businessId}/clients
 export async function GET(
   request: NextRequest,
@@ -60,7 +54,7 @@ export async function GET(
     return badRequest('businessId invalide.');
   }
 
-  const membership = await requireMembership(businessIdBigInt, userId);
+  const membership = await requireBusinessRole(businessIdBigInt, userId, 'VIEWER');
   if (!membership) return forbidden();
 
   const { searchParams } = new URL(request.url);
@@ -78,7 +72,7 @@ export async function GET(
     orderBy: { name: 'asc' },
   });
 
-  return NextResponse.json({
+  return jsonNoStore({
     items: clients.map((c) => ({
       id: c.id.toString(),
       businessId: c.businessId.toString(),
@@ -97,6 +91,9 @@ export async function POST(
   request: NextRequest,
   context: { params: Promise<{ businessId: string }> }
 ) {
+  const csrf = assertSameOrigin(request);
+  if (csrf) return csrf;
+
   const userId = await getUserId(request);
   if (!userId) return unauthorized();
 
@@ -106,7 +103,7 @@ export async function POST(
     return badRequest('businessId invalide.');
   }
 
-  const membership = await requireMembership(businessIdBigInt, userId);
+  const membership = await requireBusinessRole(businessIdBigInt, userId, 'ADMIN');
   if (!membership) return forbidden();
 
   const body = await request.json().catch(() => null);

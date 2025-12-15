@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/server/db/client';
 import { AUTH_COOKIE_NAME, toPublicUser } from '@/server/auth/auth.service';
 import { verifyAuthToken } from '@/server/auth/jwt';
+import { jsonNoStore } from '@/server/security/csrf';
 
 function unauthorized(reason?: string) {
   return NextResponse.json(
@@ -58,7 +59,7 @@ export async function GET(request: NextRequest) {
 
     // Pour l’instant, on renvoie un memberships vide.
     // /api/pro/businesses reste la source de vérité pour les entreprises.
-    return NextResponse.json({
+    return jsonNoStore({
       user: toPublicUser(user),
       memberships: [],
     });

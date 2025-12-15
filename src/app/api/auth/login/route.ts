@@ -5,9 +5,13 @@ import {
   createSessionToken,
   toPublicUser,
 } from '@/server/auth/auth.service';
+import { assertSameOrigin } from '@/server/security/csrf';
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(request: NextRequest) {
+  const csrf = assertSameOrigin(request);
+  if (csrf) return csrf;
+
   const body = await request.json().catch(() => null);
 
   if (

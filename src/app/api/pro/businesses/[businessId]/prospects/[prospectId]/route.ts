@@ -7,6 +7,8 @@ import {
   QualificationLevel,
   ProspectPipelineStatus,
 } from '@/generated/prisma/client';
+import { requireBusinessRole } from '@/server/auth/businessRole';
+import { assertSameOrigin, jsonNoStore, withNoStore } from '@/server/security/csrf';
 
 function unauthorized() {
   return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -41,14 +43,6 @@ async function getUserId(request: NextRequest): Promise<bigint | null> {
   } catch {
     return null;
   }
-}
-
-async function requireMembership(businessId: bigint, userId: bigint) {
-  return prisma.businessMembership.findUnique({
-    where: {
-      businessId_userId: { businessId, userId },
-    },
-  });
 }
 
 function serializeProspect(p: any) {
@@ -89,7 +83,7 @@ export async function GET(
       return badRequest('businessId ou prospectId invalide.');
     }
 
-    const membership = await requireMembership(businessId, userId);
+    const membership = await requireBusinessRole(businessId, userId, 'VIEWER');
     if (!membership) return forbidden();
 
     const prospect = await prisma.prospect.findFirst({
@@ -100,7 +94,7 @@ export async function GET(
       return NextResponse.json({ error: 'Prospect introuvable.' }, { status: 404 });
     }
 
-    return NextResponse.json(serializeProspect(prospect));
+    return jsonNoStore(serializeProspect(prospect));
   } catch (err) {
     console.error(
       'GET /api/pro/businesses/[businessId]/prospects/[prospectId] error:',
@@ -118,6 +112,9 @@ export async function PATCH(
   request: NextRequest,
   context: { params: Promise<{ businessId: string; prospectId: string }> }
 ) {
+  const csrf = assertSameOrigin(request);
+  if (csrf) return csrf;
+
   try {
     const { businessId: businessIdParam, prospectId: prospectIdParam } =
       await context.params;
@@ -131,7 +128,7 @@ export async function PATCH(
       return badRequest('businessId ou prospectId invalide.');
     }
 
-    const membership = await requireMembership(businessId, userId);
+    const membership = await requireBusinessRole(businessId, userId, 'ADMIN');
     if (!membership) return forbidden();
 
     const existing = await prisma.prospect.findFirst({
@@ -233,6 +230,9 @@ export async function DELETE(
   request: NextRequest,
   context: { params: Promise<{ businessId: string; prospectId: string }> }
 ) {
+  const csrf = assertSameOrigin(request);
+  if (csrf) return csrf;
+
   try {
     const { businessId: businessIdParam, prospectId: prospectIdParam } =
       await context.params;
@@ -246,7 +246,7 @@ export async function DELETE(
       return badRequest('businessId ou prospectId invalide.');
     }
 
-    const membership = await requireMembership(businessId, userId);
+    const membership = await requireBusinessRole(businessId, userId, 'ADMIN');
     if (!membership) return forbidden();
 
     const existing = await prisma.prospect.findFirst({
