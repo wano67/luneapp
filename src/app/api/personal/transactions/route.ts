@@ -6,6 +6,7 @@ import { prisma } from '@/server/db/client';
 import { requireAuthAsync } from '@/server/auth/requireAuth';
 import { assertSameOrigin, withNoStore } from '@/server/security/csrf';
 import { rateLimit } from '@/server/security/rateLimit';
+import { getRequestId, withRequestId, badRequest, unauthorized } from '@/server/http/apiUtils';
 
 type TxType = 'INCOME' | 'EXPENSE' | 'TRANSFER';
 
@@ -66,11 +67,8 @@ function makeCursor(t: { date: Date; id: bigint }) {
   return `${t.date.toISOString()}|${t.id.toString()}`;
 }
 
-function badRequest(message: string) {
-  return NextResponse.json({ error: message }, { status: 400 });
-}
-
 export async function GET(req: NextRequest) {
+  const requestId = getRequestId(req);
   try {
     const { userId } = await requireAuthAsync(req);
 
@@ -86,18 +84,18 @@ export async function GET(req: NextRequest) {
 
     const limit = Math.min(200, Math.max(1, Number(limitRaw ?? 50) || 50));
 
-    if (accountId && !isNumericId(accountId)) return badRequest('Invalid accountId');
+    if (accountId && !isNumericId(accountId)) return withRequestId(badRequest('Invalid accountId'), requestId);
 
     const type: TxType | undefined = typeRaw ? (isTxnType(typeRaw) ? typeRaw : undefined) : undefined;
-    if (typeRaw && !type) return badRequest('Invalid type');
+    if (typeRaw && !type) return withRequestId(badRequest('Invalid type'), requestId);
 
     const from = fromRaw ? new Date(fromRaw) : undefined;
     const to = toRaw ? new Date(toRaw) : undefined;
-    if (fromRaw && Number.isNaN(from!.getTime())) return badRequest('Invalid from');
-    if (toRaw && Number.isNaN(to!.getTime())) return badRequest('Invalid to');
+    if (fromRaw && Number.isNaN(from!.getTime())) return withRequestId(badRequest('Invalid from'), requestId);
+    if (toRaw && Number.isNaN(to!.getTime())) return withRequestId(badRequest('Invalid to'), requestId);
 
     const cursor = cursorRaw ? parseCursor(cursorRaw) : null;
-    if (cursorRaw && !cursor) return badRequest('Invalid cursor');
+    if (cursorRaw && !cursor) return withRequestId(badRequest('Invalid cursor'), requestId);
 
     // Pagination stable: order by date desc, id desc
     const cursorWhere: Prisma.PersonalTransactionWhereInput =
@@ -154,14 +152,15 @@ export async function GET(req: NextRequest) {
     );
   } catch (e: unknown) {
     if (getErrorMessage(e) === 'UNAUTHORIZED') {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return withRequestId(unauthorized(), requestId);
     }
     console.error(e);
-    return NextResponse.json({ error: 'Failed' }, { status: 500 });
+    return withRequestId(NextResponse.json({ error: 'Failed' }, { status: 500 }), requestId);
   }
 }
 
 export async function POST(req: NextRequest) {
+  const requestId = getRequestId(req);
   const csrf = assertSameOrigin(req);
   if (csrf) return csrf;
 
@@ -221,7 +220,7 @@ export async function POST(req: NextRequest) {
       where: { id: accountId, userId: BigInt(userId) },
       select: { id: true, name: true, currency: true },
     });
-    if (!account) return NextResponse.json({ error: 'Account not found' }, { status: 404 });
+    if (!account) return withRequestId(NextResponse.json({ error: 'Account not found' }, { status: 404 }), requestId);
 
     // category (optional) must belong to user
     let categoryId: bigint | null = null;

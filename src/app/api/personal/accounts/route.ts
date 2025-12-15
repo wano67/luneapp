@@ -4,6 +4,7 @@ import { prisma } from '@/server/db/client';
 import { requireAuthAsync } from '@/server/auth/requireAuth';
 import { assertSameOrigin, jsonNoStore } from '@/server/security/csrf';
 import { rateLimit } from '@/server/security/rateLimit';
+import { getRequestId, withRequestId, badRequest, unauthorized } from '@/server/http/apiUtils';
 
 function toStrId(v: bigint) {
   return v.toString();
@@ -26,6 +27,7 @@ function startOfDayUTC(d: Date) {
 }
 
 export async function GET(req: NextRequest) {
+  const requestId = getRequestId(req);
   try {
     const { userId } = await requireAuthAsync(req);
 
@@ -101,14 +103,15 @@ export async function GET(req: NextRequest) {
     });
   } catch (e: unknown) {
     if (e instanceof Error && e.message === 'UNAUTHORIZED') {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return withRequestId(unauthorized(), requestId);
     }
     console.error(e);
-    return NextResponse.json({ error: 'Failed' }, { status: 500 });
+    return withRequestId(NextResponse.json({ error: 'Failed' }, { status: 500 }), requestId);
   }
 }
 
 export async function POST(req: NextRequest) {
+  const requestId = getRequestId(req);
   const csrf = assertSameOrigin(req);
   if (csrf) return csrf;
 
@@ -122,7 +125,7 @@ export async function POST(req: NextRequest) {
     if (limited) return limited;
 
     const body = await readJson(req);
-    if (!isRecord(body)) return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
+    if (!isRecord(body)) return withRequestId(badRequest('Invalid JSON'), requestId);
 
     const name = typeof body.name === 'string' ? body.name.trim() : '';
     const type =
@@ -143,14 +146,14 @@ export async function POST(req: NextRequest) {
         ? body.initialCents
         : '0';
 
-    if (!name) return NextResponse.json({ error: 'name required' }, { status: 400 });
-    if (name.length > 120) return NextResponse.json({ error: 'name too long' }, { status: 400 });
-    if (currency.length > 8) return NextResponse.json({ error: 'currency too long' }, { status: 400 });
+    if (!name) return withRequestId(badRequest('name required'), requestId);
+    if (name.length > 120) return withRequestId(badRequest('name too long'), requestId);
+    if (currency.length > 8) return withRequestId(badRequest('currency too long'), requestId);
     if (institution && institution.length > 120) {
-      return NextResponse.json({ error: 'institution too long' }, { status: 400 });
+      return withRequestId(badRequest('institution too long'), requestId);
     }
     if (iban && iban.length > 34) {
-      return NextResponse.json({ error: 'iban too long' }, { status: 400 });
+      return withRequestId(badRequest('iban too long'), requestId);
     }
 
     const initialCents = BigInt(

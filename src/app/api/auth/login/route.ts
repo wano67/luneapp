@@ -8,8 +8,10 @@ import {
 import { rateLimit, makeIpKey } from '@/server/security/rateLimit';
 import { assertSameOrigin } from '@/server/security/csrf';
 import { NextRequest, NextResponse } from 'next/server';
+import { badRequest, getRequestId, withRequestId } from '@/server/http/apiUtils';
 
 export async function POST(request: NextRequest) {
+  const requestId = getRequestId(request);
   const limited = rateLimit(request, {
     key: makeIpKey(request, 'auth:login'),
     limit: 10,
@@ -27,10 +29,7 @@ export async function POST(request: NextRequest) {
     typeof body.email !== 'string' ||
     typeof body.password !== 'string'
   ) {
-    return NextResponse.json(
-      { error: 'Email et mot de passe sont requis.' },
-      { status: 400 }
-    );
+    return withRequestId(badRequest('Email et mot de passe sont requis.'), requestId);
   }
 
   try {
@@ -40,9 +39,9 @@ export async function POST(request: NextRequest) {
     });
 
     if (!user) {
-      return NextResponse.json(
-        { error: 'Identifiants invalides ou utilisateur inactif.' },
-        { status: 401 }
+      return withRequestId(
+        NextResponse.json({ error: 'Identifiants invalides ou utilisateur inactif.' }, { status: 401 }),
+        requestId
       );
     }
 
@@ -59,9 +58,9 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Login error', error);
 
-    return NextResponse.json(
-      { error: 'Impossible de se connecter pour le moment.' },
-      { status: 500 }
+    return withRequestId(
+      NextResponse.json({ error: 'Impossible de se connecter pour le moment.' }, { status: 500 }),
+      requestId
     );
   }
 }

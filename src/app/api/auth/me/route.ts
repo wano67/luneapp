@@ -3,6 +3,7 @@ import { prisma } from '@/server/db/client';
 import { AUTH_COOKIE_NAME, toPublicUser } from '@/server/auth/auth.service';
 import { verifyAuthToken } from '@/server/auth/jwt';
 import { jsonNoStore } from '@/server/security/csrf';
+import { getRequestId, withRequestId } from '@/server/http/apiUtils';
 
 function unauthorized(reason?: string) {
   return NextResponse.json(
@@ -36,10 +37,11 @@ async function getUserIdFromRequest(request: NextRequest): Promise<bigint | null
 }
 
 export async function GET(request: NextRequest) {
+  const requestId = getRequestId(request);
   const userId = await getUserIdFromRequest(request);
 
   if (!userId) {
-    return unauthorized('invalid_or_missing_token');
+    return withRequestId(unauthorized('invalid_or_missing_token'), requestId);
   }
 
   try {
@@ -49,12 +51,12 @@ export async function GET(request: NextRequest) {
 
     if (!user) {
       console.warn('[auth/me] User not found for id', userId.toString());
-      return unauthorized('user_not_found');
+      return withRequestId(unauthorized('user_not_found'), requestId);
     }
 
     if (!user.isActive) {
       console.warn('[auth/me] User is not active', userId.toString());
-      return unauthorized('user_inactive');
+      return withRequestId(unauthorized('user_inactive'), requestId);
     }
 
     // Pour l’instant, on renvoie un memberships vide.
@@ -65,9 +67,9 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error('[auth/me] Error loading user', error);
-    return NextResponse.json(
-      { error: 'Internal Server Error' },
-      { status: 500 }
+    return withRequestId(
+      NextResponse.json({ error: 'Internal Server Error' }, { status: 500 }),
+      requestId
     );
   }
 }

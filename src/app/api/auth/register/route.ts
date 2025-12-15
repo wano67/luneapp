@@ -9,10 +9,12 @@ import {
 import { rateLimit, makeIpKey } from '@/server/security/rateLimit';
 import { assertSameOrigin } from '@/server/security/csrf';
 import { NextRequest, NextResponse } from 'next/server';
+import { badRequest, getRequestId, withRequestId } from '@/server/http/apiUtils';
 
 const MIN_PASSWORD_LENGTH = 8;
 
 export async function POST(request: NextRequest) {
+  const requestId = getRequestId(request);
   const limited = rateLimit(request, {
     key: makeIpKey(request, 'auth:register'),
     limit: 5,
@@ -30,20 +32,14 @@ export async function POST(request: NextRequest) {
     typeof body.email !== 'string' ||
     typeof body.password !== 'string'
   ) {
-    return NextResponse.json(
-      { error: 'Email et mot de passe sont requis.' },
-      { status: 400 }
-    );
+    return withRequestId(badRequest('Email et mot de passe sont requis.'), requestId);
   }
 
   const { email, password } = body;
   const name = typeof body.name === 'string' ? body.name : undefined;
 
   if (password.length < MIN_PASSWORD_LENGTH) {
-    return NextResponse.json(
-      { error: 'Le mot de passe doit contenir au moins 8 caractères.' },
-      { status: 400 }
-    );
+    return withRequestId(badRequest('Le mot de passe doit contenir au moins 8 caractères.'), requestId);
   }
 
   try {
@@ -66,17 +62,14 @@ export async function POST(request: NextRequest) {
       error instanceof Prisma.PrismaClientKnownRequestError &&
       error.code === 'P2002'
     ) {
-      return NextResponse.json(
-        { error: 'Cet email est déjà utilisé.' },
-        { status: 409 }
-      );
+      return withRequestId(NextResponse.json({ error: 'Cet email est déjà utilisé.' }, { status: 409 }), requestId);
     }
 
     console.error('Error during registration', error);
 
-    return NextResponse.json(
-      { error: 'Impossible de créer le compte pour le moment.' },
-      { status: 500 }
+    return withRequestId(
+      NextResponse.json({ error: 'Impossible de créer le compte pour le moment.' }, { status: 500 }),
+      requestId
     );
   }
 }
