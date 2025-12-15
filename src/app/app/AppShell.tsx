@@ -105,9 +105,12 @@ export default function AppShell({ children }: { children: ReactNode }) {
 
   // fermeture "propre" (évite click-through si tu veux animer un jour)
   function haptic(ms = 10) {
-    if (typeof window === 'undefined') return;
-    const vib = window.navigator?.vibrate;
-    if (typeof vib === 'function') vib(ms);
+    if (typeof navigator === 'undefined') return;
+    try {
+      navigator.vibrate?.(ms);
+    } catch {
+      // ignore haptic failures
+    }
   }
 
   function closeMobileMenu() {
@@ -148,9 +151,11 @@ export default function AppShell({ children }: { children: ReactNode }) {
     if (pointerStartY.current == null) return;
 
     const delta = e.clientY - pointerStartY.current;
+    const startDrag = Math.abs(delta) >= 12;
 
     // On gère le pull vers le bas (ouverture)
     if (!wasOpenAtStart.current && delta <= 0) return;
+    if (!wasOpenAtStart.current && !startDrag) return;
 
     const eased = Math.min(MOBILE_MENU_MAX, Math.max(0, delta) * 0.85);
     pointerDragging.current = true;
