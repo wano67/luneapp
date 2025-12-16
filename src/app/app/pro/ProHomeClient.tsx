@@ -1,7 +1,7 @@
 // src/app/app/pro/ProHomeClient.tsx
 'use client';
 
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Card } from '@/components/ui/card';
@@ -9,6 +9,9 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Modal } from '@/components/ui/modal';
+import { fetchJson, getErrorMessage } from '@/lib/apiClient';
+import SwitchBusinessModal from './SwitchBusinessModal';
+import { useActiveBusiness } from './ActiveBusinessProvider';
 
 /* ===================== TYPES ===================== */
 
@@ -46,52 +49,23 @@ type BusinessInviteAcceptResponse = {
 
 type CreateBusinessDraft = {
   name: string;
-  legalName: string;
-  email: string;
-  phone: string;
-  website: string;
-  country: string;
-  city: string;
-  address: string;
-  vatNumber: string;
 };
-
-/* ===================== UTILS ===================== */
-
-function isEmail(value: string) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
-}
-
-async function safeJson(res: Response): Promise<unknown> {
-  try {
-    return await res.json();
-  } catch {
-    return null;
-  }
-}
-
-type ApiErrorShape = { error: string };
-
-function isApiErrorShape(x: unknown): x is ApiErrorShape {
-  return (
-    !!x &&
-    typeof x === 'object' &&
-    'error' in x &&
-    typeof (x as { error?: unknown }).error === 'string'
-  );
-}
 
 /* ===================== COMPONENT ===================== */
 
 export default function ProHomeClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const activeCtx = useActiveBusiness({ optional: true });
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const [me, setMe] = useState<AuthMeResponse | null>(null);
   const [businesses, setBusinesses] = useState<BusinessesResponse | null>(null);
+  const loadController = useRef<AbortController | null>(null);
+  const [lastVisitedId, setLastVisitedId] = useState<string | null>(null);
+  const [activeId, setActiveId] = useState<string | null>(null);
 
   /* ---------- CREATE MODAL ---------- */
   const [createOpen, setCreateOpen] = useState(false);
@@ -100,14 +74,6 @@ export default function ProHomeClient() {
 
   const [draft, setDraft] = useState<CreateBusinessDraft>({
     name: '',
-    legalName: '',
-    email: '',
-    phone: '',
-    website: '',
-    country: 'France',
-    city: '',
-    address: '',
-    vatNumber: '',
   });
 
   /* ---------- JOIN MODAL ---------- */
@@ -118,21 +84,38 @@ export default function ProHomeClient() {
   const [joinSuccess, setJoinSuccess] = useState<string | null>(null);
 
   /* ---------- DATA ---------- */
-  const items = businesses?.items ?? [];
-  const userName = me?.user.name || me?.user.email || 'toi';
+  const items = useMemo(() => businesses?.items ?? [], [businesses]);
 
   const createValidation = useMemo(() => {
     const issues: string[] = [];
     if (!draft.name.trim()) issues.push("Le nom de l'entreprise est obligatoire.");
-    if (draft.email && !isEmail(draft.email)) issues.push('Email invalide.');
     return { ok: issues.length === 0, issues };
   }, [draft]);
 
+  useEffect(() => {
+    // hydrate once on mount
+    if (typeof window === 'undefined') return;
+    try {
+      const storedLast = localStorage.getItem('lastProBusinessId');
+      if (storedLast) setLastVisitedId(storedLast);
+      const storedActive = localStorage.getItem('activeProBusinessId');
+      if (storedActive) setActiveId(storedActive);
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  // auto-open disabled to avoid loops; handled explicitly elsewhere
+
   /* ===================== OPEN MODALS FROM QUERY ===================== */
+  const searchParamsKey = searchParams?.toString() ?? '';
+
   useEffect(() => {
     // Only for /app/pro route (this component is mounted there anyway)
-    const create = searchParams?.get('create');
-    const join = searchParams?.get('join');
+    const params = new URLSearchParams(searchParamsKey);
+    const create = params.get('create');
+    const join = params.get('join');
+    const tokenParam = params.get('token');
 
     if (create === '1') {
       setCreateOpen(true);
@@ -143,22 +126,30 @@ export default function ProHomeClient() {
 
     if (join === '1') {
       setJoinOpen(true);
+      if (tokenParam) setJoinToken(tokenParam);
       router.replace('/app/pro');
       return;
     }
-  }, [searchParams, router]);
+  }, [searchParamsKey, router]);
 
   /* ===================== LOAD ===================== */
 
   useEffect(() => {
-    let mounted = true;
+    const controller = new AbortController();
+    loadController.current?.abort();
+    loadController.current = controller;
 
     async function load() {
       try {
+        setLoading(true);
+        setError(null);
+
         const [meRes, bizRes] = await Promise.all([
-          fetch('/api/auth/me', { credentials: 'include' }),
-          fetch('/api/pro/businesses', { credentials: 'include' }),
+          fetchJson<AuthMeResponse>('/api/auth/me', {}, controller.signal),
+          fetchJson<BusinessesResponse>('/api/pro/businesses', {}, controller.signal),
         ]);
+
+        if (controller.signal.aborted) return;
 
         if (meRes.status === 401) {
           const from = window.location.pathname + window.location.search;
@@ -166,41 +157,54 @@ export default function ProHomeClient() {
           return;
         }
 
-        if (!meRes.ok || !bizRes.ok) throw new Error('Chargement impossible.');
+        if (!meRes.ok || !bizRes.ok || !meRes.data || !bizRes.data) {
+          const ref = meRes.requestId ?? bizRes.requestId;
+          const message = bizRes.error || meRes.error || 'Impossible de charger l’espace PRO.';
+          setError(ref ? `${message} (Ref: ${ref})` : message);
+          return;
+        }
 
-        const meJson = (await meRes.json()) as AuthMeResponse;
-        const bizJson = (await bizRes.json()) as BusinessesResponse;
-
-        if (!mounted) return;
-        setMe(meJson);
-        setBusinesses(bizJson);
-        setError(null);
+        setMe(meRes.data);
+        setBusinesses(bizRes.data);
       } catch (err) {
+        if (controller.signal.aborted) return;
         console.error(err);
-        if (!mounted) return;
-        setError("Impossible de charger l’espace PRO.");
+        setError(getErrorMessage(err));
       } finally {
-        if (mounted) setLoading(false);
+        if (!controller.signal.aborted) setLoading(false);
       }
     }
 
-    load();
-    return () => {
-      mounted = false;
-    };
+    void load();
+    return () => controller.abort();
   }, []);
 
-  async function refreshBusinesses() {
+  async function refreshBusinesses(signal?: AbortSignal) {
     try {
-      const res = await fetch('/api/pro/businesses', { credentials: 'include' });
-      if (!res.ok) return;
-      const json = await safeJson(res);
-      if (json && typeof json === 'object' && 'items' in json) {
-        setBusinesses(json as BusinessesResponse);
-      }
+      const res = await fetchJson<BusinessesResponse>(
+        '/api/pro/businesses',
+        {},
+        signal
+      );
+      if (!res.ok || !res.data || signal?.aborted) return;
+      setBusinesses(res.data);
     } catch (err) {
       console.error('refreshBusinesses failed', err);
     }
+  }
+
+  function rememberAndGo(businessId: string, path: string) {
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('lastProBusinessId', businessId);
+        localStorage.setItem('activeProBusinessId', businessId);
+        setLastVisitedId(businessId);
+        setActiveId(businessId);
+      } catch {
+        // ignore storage errors
+      }
+    }
+    router.push(path);
   }
 
   /* ===================== ACTIONS ===================== */
@@ -217,18 +221,19 @@ export default function ProHomeClient() {
     try {
       setCreating(true);
 
-      const res = await fetch('/api/pro/businesses', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ name: draft.name.trim() }),
-      });
+      const res = await fetchJson<BusinessInviteAcceptResponse>(
+        '/api/pro/businesses',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: draft.name.trim() }),
+        }
+      );
 
-      const json = await safeJson(res);
-
-      if (!res.ok) {
-        const msg = isApiErrorShape(json) ? json.error : 'Création impossible.';
-        setCreationError(msg);
+      if (!res.ok || !res.data) {
+        const ref = res.requestId;
+        const msg = res.error ?? 'Création impossible.';
+        setCreationError(ref ? `${msg} (Ref: ${ref})` : msg);
         return;
       }
 
@@ -237,15 +242,8 @@ export default function ProHomeClient() {
       setCreateOpen(false);
       setDraft({
         name: '',
-        legalName: '',
-        email: '',
-        phone: '',
-        website: '',
-        country: 'France',
-        city: '',
-        address: '',
-        vatNumber: '',
       });
+      rememberAndGo(res.data.business.id, `/app/pro/${res.data.business.id}`);
     } catch (err) {
       console.error(err);
       setCreationError('Création impossible.');
@@ -268,26 +266,28 @@ export default function ProHomeClient() {
     try {
       setJoining(true);
 
-      const res = await fetch('/api/pro/businesses/invites/accept', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ token }),
-      });
+      const res = await fetchJson<BusinessInviteAcceptResponse>(
+        '/api/pro/businesses/invites/accept',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token }),
+        }
+      );
 
-      const json = await safeJson(res);
-
-      if (!res.ok) {
-        const msg = isApiErrorShape(json) ? json.error : 'Token invalide.';
-        setJoinError(msg);
+      if (!res.ok || !res.data) {
+        const ref = res.requestId;
+        const msg = res.error ?? 'Token invalide.';
+        setJoinError(ref ? `${msg} (Ref: ${ref})` : msg);
         return;
       }
 
-      const data = (json ?? {}) as BusinessInviteAcceptResponse;
-      setJoinSuccess(`Tu as rejoint « ${data.business?.name ?? 'l’entreprise'} ».`);
+      const data = res.data;
+      setJoinSuccess(`Tu as rejoint « ${data.business?.name ?? "l'entreprise"} ».`);
       setJoinToken('');
       await refreshBusinesses();
       setJoinOpen(false);
+      rememberAndGo(data.business.id, `/app/pro/${data.business.id}`);
     } catch (err) {
       console.error(err);
       setJoinError('Erreur de connexion.');
@@ -295,6 +295,15 @@ export default function ProHomeClient() {
       setJoining(false);
     }
   }
+
+  const continueBusiness = useMemo(() => {
+    if (items.length === 0) return null;
+    if (lastVisitedId) {
+      const match = items.find((b) => b.business.id === lastVisitedId);
+      if (match) return match;
+    }
+    return items[0];
+  }, [items, lastVisitedId]);
 
   /* ===================== UI ===================== */
 
@@ -318,38 +327,92 @@ export default function ProHomeClient() {
   return (
     <div className="space-y-6">
       {/* HEADER */}
-      <Card className="p-5">
-        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+      <Card className="p-5 space-y-3">
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
           <div className="space-y-1">
             <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-[var(--text-secondary)]">
               App · PRO
             </p>
-            <h2 className="text-lg font-semibold">Espace PRO de {userName}</h2>
+            <h2 className="text-xl font-semibold">Espace PRO</h2>
             <p className="text-sm text-[var(--text-secondary)]">
-              Crée une entreprise ou rejoins une équipe via invitation.
+              Gère tes entreprises, prospects, projets et clients.
             </p>
+            {me?.user ? (
+              <p className="text-xs text-[var(--text-secondary)]">
+                Connecté en tant que <span className="font-semibold text-[var(--text-primary)]">{me.user.name ?? me.user.email}</span>
+              </p>
+            ) : null}
           </div>
 
           <div className="flex flex-col gap-2 sm:flex-row">
             <Button onClick={() => setCreateOpen(true)}>Créer une entreprise</Button>
             <Button variant="outline" onClick={() => setJoinOpen(true)}>
-              Rejoindre une entreprise
+              Rejoindre via invitation
             </Button>
           </div>
         </div>
       </Card>
 
-      {/* EMPTY STATE */}
-      {items.length === 0 ? (
+      {activeId ? (
         <Card className="p-5">
-          <p className="text-sm text-[var(--text-secondary)]">
-            Aucune entreprise pour le moment. Crée-en une ou rejoins-en une.
-          </p>
-          <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-            <Button onClick={() => setCreateOpen(true)}>Créer une entreprise</Button>
-            <Button variant="outline" onClick={() => setJoinOpen(true)}>
-              Rejoindre une entreprise
+          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+            <div className="space-y-1">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-[var(--text-secondary)]">
+                Entreprise active
+              </p>
+              <p className="text-lg font-semibold text-[var(--text-primary)]">
+                {activeCtx?.activeBusiness?.name ?? activeId}
+              </p>
+              <p className="text-xs text-[var(--text-secondary)]">
+                Définie depuis ta dernière navigation.
+              </p>
+            </div>
+            <Button onClick={() => rememberAndGo(activeId, `/app/pro/${activeId}`)}>
+              Ouvrir mon espace de travail
             </Button>
+            <Button variant="outline" onClick={() => activeCtx?.openSwitchModal?.()}>
+              Changer d’entreprise
+            </Button>
+          </div>
+        </Card>
+      ) : null}
+
+      {/* CONTINUER */}
+      {continueBusiness ? (
+        <Card className="p-5">
+          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+            <div className="space-y-1">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-[var(--text-secondary)]">
+                Continuer
+              </p>
+              <div className="flex items-center gap-2">
+                <h3 className="text-lg font-semibold">{continueBusiness.business.name}</h3>
+                <Badge variant="neutral">{continueBusiness.role}</Badge>
+              </div>
+              <p className="text-sm text-[var(--text-secondary)]">
+                Dernière entreprise visitée ou première de ta liste.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                onClick={() =>
+                  rememberAndGo(continueBusiness.business.id, `/app/pro/${continueBusiness.business.id}`)
+                }
+              >
+                Ouvrir
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() =>
+                  rememberAndGo(
+                    continueBusiness.business.id,
+                    `/app/pro/${continueBusiness.business.id}/prospects`
+                  )
+                }
+              >
+                Prospects
+              </Button>
+            </div>
           </div>
         </Card>
       ) : null}
@@ -357,30 +420,72 @@ export default function ProHomeClient() {
       {/* LIST */}
       {items.length > 0 ? (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {items.map(({ business, role }) => (
-            <Card key={business.id} className="p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="truncate font-semibold">{business.name}</p>
-                  <p className="text-xs text-[var(--text-secondary)]">
-                    Créée le {new Date(business.createdAt).toLocaleDateString('fr-FR')}
-                  </p>
+          {items.map(({ business, role }) => {
+            const isAdmin = role === 'ADMIN' || role === 'OWNER';
+            return (
+              <Card key={business.id} className="p-4 space-y-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate font-semibold">{business.name}</p>
+                    <p className="text-xs text-[var(--text-secondary)]">
+                      Créée le {new Date(business.createdAt).toLocaleDateString('fr-FR')}
+                    </p>
+                  </div>
+                  <Badge variant="neutral" className="shrink-0">
+                    {role}
+                  </Badge>
                 </div>
-                <Badge variant="neutral" className="shrink-0">
-                  {role}
-                </Badge>
-              </div>
 
-              <Link
-                href={`/app/pro/${business.id}`}
-                className="mt-3 inline-block text-sm font-semibold text-[var(--accent)] hover:underline"
-              >
-                Entrer →
-              </Link>
-            </Card>
-          ))}
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    size="sm"
+                    onClick={() => rememberAndGo(business.id, `/app/pro/${business.id}`)}
+                  >
+                    Ouvrir
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() =>
+                      rememberAndGo(business.id, `/app/pro/${business.id}/prospects`)
+                    }
+                  >
+                    Prospects
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => rememberAndGo(business.id, `/app/pro/${business.id}/projects`)}
+                  >
+                    Projets
+                  </Button>
+                  {isAdmin ? (
+                    <Link
+                      href={`/app/pro/${business.id}/invites`}
+                      className="text-xs font-semibold text-[var(--accent)] underline underline-offset-4"
+                      onClick={() => rememberAndGo(business.id, `/app/pro/${business.id}/invites`)}
+                    >
+                      Invitations
+                    </Link>
+                  ) : null}
+                </div>
+              </Card>
+            );
+          })}
         </div>
-      ) : null}
+      ) : (
+        <Card className="p-5">
+          <p className="text-sm text-[var(--text-secondary)]">
+            Aucune entreprise pour le moment. Crée-en une ou rejoins-en une.
+          </p>
+          <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+            <Button onClick={() => setCreateOpen(true)}>Créer une entreprise</Button>
+            <Button variant="outline" onClick={() => setJoinOpen(true)}>
+              Rejoindre via invitation
+            </Button>
+          </div>
+        </Card>
+      )}
 
       {/* CREATE MODAL */}
       <Modal
@@ -448,5 +553,15 @@ export default function ProHomeClient() {
         </form>
       </Modal>
     </div>
+  );
+}
+ 
+// include switch modal globally on /app/pro hub
+export function ProHomeWithSwitch() {
+  return (
+    <>
+      <ProHomeClient />
+      <SwitchBusinessModal />
+    </>
   );
 }

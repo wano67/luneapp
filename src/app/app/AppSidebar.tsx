@@ -10,6 +10,7 @@ import {
   IconFocus,
   IconSettings,
 } from '@/components/icons';
+import { useActiveBusiness } from './pro/ActiveBusinessProvider';
 
 export type Space = 'pro' | 'perso' | 'performance' | null;
 
@@ -26,6 +27,7 @@ export type NavItem = {
   label: string;
   icon: ReactNode;
   accent?: 'wallet' | 'studio' | 'focus';
+  onClick?: () => void;
 };
 
 export type NavSection = {
@@ -99,24 +101,55 @@ function getStudioBusinessSections(businessId: string): NavSection[] {
       items: [{ href: '/app/pro', label: 'Mes entreprises', icon: <IconStudio size={18} />, accent: 'studio' }],
     },
     {
-      title: 'Données',
+      title: 'Pilotage',
       items: [
-        { href: `${base}/dash-entreprise`, label: 'Vue d’ensemble', icon: <span className="text-[16px]">•</span> },
+        { href: `${base}`, label: 'Vue d’ensemble', icon: <span className="text-[16px]">•</span> },
         { href: `${base}/clients`, label: 'Clients', icon: <span className="text-[16px]">•</span> },
         { href: `${base}/prospects`, label: 'Prospects', icon: <span className="text-[16px]">•</span> },
-        { href: `${base}/projets`, label: 'Projets', icon: <span className="text-[16px]">•</span> },
+        { href: `${base}/projects`, label: 'Projects', icon: <span className="text-[16px]">•</span> },
         { href: `${base}/services`, label: 'Services', icon: <span className="text-[16px]">•</span> },
-        { href: `${base}/taches`, label: 'Tâches', icon: <span className="text-[16px]">•</span> },
-        { href: `${base}/finances`, label: 'Finances', icon: <span className="text-[16px]">•</span> },
+        { href: `${base}/tasks`, label: 'Tasks', icon: <span className="text-[16px]">•</span> },
         { href: `${base}/process`, label: 'Process', icon: <span className="text-[16px]">•</span> },
+        { href: `${base}/finances`, label: 'Finances', icon: <span className="text-[16px]">•</span> },
+        { href: `${base}/invites`, label: 'Invitations', icon: <span className="text-[16px]">•</span> },
       ],
     },
     {
-      title: 'Dashboards',
+      title: 'Settings',
       items: [
-        { href: `${base}/dash-projets`, label: 'Projets', icon: <span className="text-[16px]">•</span> },
-        { href: `${base}/dash-finances`, label: 'Finances', icon: <span className="text-[16px]">•</span> },
-        { href: `${base}/dash-admin-process`, label: 'Admin', icon: <span className="text-[16px]">•</span> },
+        { href: `${base}/settings`, label: 'Overview', icon: <span className="text-[16px]">•</span> },
+        { href: `${base}/settings/billing`, label: 'Billing', icon: <span className="text-[16px]">•</span> },
+        { href: `${base}/settings/taxes`, label: 'Taxes', icon: <span className="text-[16px]">•</span> },
+        { href: `${base}/settings/team`, label: 'Team', icon: <span className="text-[16px]">•</span> },
+        { href: `${base}/settings/integrations`, label: 'Integrations', icon: <span className="text-[16px]">•</span> },
+        { href: `${base}/settings/permissions`, label: 'Permissions', icon: <span className="text-[16px]">•</span> },
+      ],
+    },
+    {
+      title: 'Finances',
+      items: [
+        { href: `${base}/finances/payments`, label: 'Payments', icon: <span className="text-[16px]">•</span> },
+        { href: `${base}/finances/treasury`, label: 'Treasury', icon: <span className="text-[16px]">•</span> },
+        { href: `${base}/finances/vat`, label: 'VAT', icon: <span className="text-[16px]">•</span> },
+        { href: `${base}/finances/forecasting`, label: 'Forecasting', icon: <span className="text-[16px]">•</span> },
+      ],
+    },
+    {
+      title: 'Admin',
+      items: [
+        { href: `${base}/admin`, label: 'Administration', icon: <span className="text-[16px]">•</span> },
+        { href: `${base}/admin/documents`, label: 'Documents', icon: <span className="text-[16px]">•</span> },
+        { href: `${base}/admin/deadlines`, label: 'Deadlines', icon: <span className="text-[16px]">•</span> },
+      ],
+    },
+    {
+      title: 'References',
+      items: [
+        { href: `${base}/references`, label: 'Overview', icon: <span className="text-[16px]">•</span> },
+        { href: `${base}/references/categories`, label: 'Categories', icon: <span className="text-[16px]">•</span> },
+        { href: `${base}/references/tags`, label: 'Tags', icon: <span className="text-[16px]">•</span> },
+        { href: `${base}/references/automations`, label: 'Automations', icon: <span className="text-[16px]">•</span> },
+        { href: `${base}/references/numbering`, label: 'Numbering', icon: <span className="text-[16px]">•</span> },
       ],
     },
   ];
@@ -166,6 +199,7 @@ function buildSections(space: Space, businessId: string | null): NavSection[] {
 export default function AppSidebar(props: AppSidebarProps) {
   const { space, pathname, businessId, collapsed = false, onNavigate } = props;
   const sections = buildSections(space, businessId);
+  const activeCtx = useActiveBusiness({ optional: true });
 
   return (
     <nav
@@ -195,7 +229,29 @@ export default function AppSidebar(props: AppSidebarProps) {
                 const activeClasses =
                   'border border-[var(--border)] bg-[var(--surface)] text-[var(--text-primary)]';
 
-                return (
+                const content = item.onClick ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      item.onClick?.();
+                      onNavigate?.();
+                    }}
+                    title={collapsed ? item.label : undefined}
+                    data-active={active ? 'true' : 'false'}
+                    className={classNames(
+                      baseClasses,
+                      'hover:scale-[1.03] active:scale-[0.99]',
+                      active ? activeClasses : inactiveClasses,
+                      collapsed ? 'justify-center' : '',
+                      accentClasses(item.accent)
+                    )}
+                  >
+                    <span className="text-[var(--text-secondary)] transition-transform duration-150 group-hover:scale-110 group-hover:text-[var(--text-primary)]">
+                      {item.icon}
+                    </span>
+                    {!collapsed && <span className="truncate">{item.label}</span>}
+                  </button>
+                ) : (
                   <Link
                     key={`${section.title}-${item.href}-${item.label}`}
                     href={item.href ?? '/app'}
@@ -216,10 +272,34 @@ export default function AppSidebar(props: AppSidebarProps) {
                     {!collapsed && <span className="truncate">{item.label}</span>}
                   </Link>
                 );
+
+                return item.onClick ? (
+                  <div key={`${section.title}-${item.label}`}>{content}</div>
+                ) : (
+                  content
+                );
               })}
             </div>
           </div>
         ))}
+        {space === 'pro' && activeCtx?.openSwitchModal ? (
+          <div className="pt-2">
+            <button
+              type="button"
+              onClick={() => activeCtx.openSwitchModal()}
+              className={classNames(
+                'group flex w-full items-center gap-2 rounded-xl px-2 py-1.5 text-xs font-medium transition-all duration-150 ease-out hover:scale-[1.03] active:scale-[0.99]',
+                'text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]',
+                collapsed ? 'justify-center' : ''
+              )}
+            >
+              <span className="text-[var(--text-secondary)] transition-transform duration-150 group-hover:scale-110 group-hover:text-[var(--text-primary)]">
+                ↻
+              </span>
+              {!collapsed && <span className="truncate">Changer d’entreprise</span>}
+            </button>
+          </div>
+        ) : null}
       </div>
     </nav>
   );

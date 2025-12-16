@@ -1,21 +1,18 @@
+// src/app/app/pro/[businessId]/prospects/page.tsx
 'use client';
 
-import { useEffect, useState, FormEvent, type ChangeEvent } from 'react';
-import { useParams } from 'next/navigation';
+import Link from 'next/link';
+import { useEffect, useRef, useState, type FormEvent, type ChangeEvent } from 'react';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Modal } from '@/components/ui/modal';
+import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 
-type ProspectPipelineStatus =
-  | 'NEW'
-  | 'IN_DISCUSSION'
-  | 'OFFER_SENT'
-  | 'FOLLOW_UP'
-  | 'CLOSED';
-
+type ProspectPipelineStatus = 'NEW' | 'IN_DISCUSSION' | 'OFFER_SENT' | 'FOLLOW_UP' | 'CLOSED';
 type LeadSource = 'UNKNOWN' | 'OUTBOUND' | 'INBOUND' | 'REFERRAL' | 'OTHER';
-
 type QualificationLevel = 'COLD' | 'WARM' | 'HOT';
 
 type Prospect = {
@@ -84,7 +81,7 @@ function sourceLabel(source: LeadSource | null) {
 }
 
 function qualificationLabel(level: QualificationLevel | null) {
-  if (!level) return '-';
+  if (!level) return '—';
   switch (level) {
     case 'COLD':
       return 'Cold';
@@ -97,19 +94,34 @@ function qualificationLabel(level: QualificationLevel | null) {
   }
 }
 
+function formatCurrency(value: number | null) {
+  if (value == null) return '—';
+  try {
+    return new Intl.NumberFormat('fr-FR', {
+      style: 'currency',
+      currency: 'EUR',
+      maximumFractionDigits: 0,
+    }).format(value);
+  } catch {
+    return `${value} €`;
+  }
+}
+
 export default function BusinessProspectsPage() {
   const params = useParams();
-  const businessId = params?.businessId as string;
+  const router = useRouter();
+  const searchParams = useSearchParams();
 
+  const businessId = (params?.businessId ?? '') as string;
+
+  const [prospects, setProspects] = useState<Prospect[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [prospects, setProspects] = useState<Prospect[]>([]);
 
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] =
-    useState<ProspectPipelineStatus | 'ALL'>('ALL');
+  const [statusFilter, setStatusFilter] = useState<ProspectPipelineStatus | 'ALL'>('ALL');
 
-  // Formulaire de création rapide
+  const [createOpen, setCreateOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [name, setName] = useState('');
@@ -117,81 +129,73 @@ export default function BusinessProspectsPage() {
   const [contactEmail, setContactEmail] = useState('');
   const [contactPhone, setContactPhone] = useState('');
 
-  async function loadProspects(options?: { signal?: AbortSignal }) {
-    if (!businessId) return;
+  const fetchController = useRef<AbortController | null>(null);
+
+  const filteredCount = prospects.length;
+
+  useEffect(() => {
+    if (searchParams?.get('new') === '1') {
+      setCreateOpen(true);
+      router.replace(`/app/pro/${businessId}/prospects`);
+    }
+  }, [businessId, router, searchParams]);
+
+  async function loadProspects(signal?: AbortSignal) {
+    const controller = signal ? null : new AbortController();
+    const effectiveSignal = signal ?? controller?.signal;
+
+    if (controller) {
+      fetchController.current?.abort();
+      fetchController.current = controller;
+    }
+
     try {
       setLoading(true);
       setError(null);
 
-      const params = new URLSearchParams();
-      if (search.trim()) params.set('search', search.trim());
-      if (statusFilter !== 'ALL') params.set('status', statusFilter);
+      const paramsQuery = new URLSearchParams();
+      if (search.trim()) paramsQuery.set('search', search.trim());
+      if (statusFilter !== 'ALL') paramsQuery.set('status', statusFilter);
 
-      const res = await fetch(
-        `/api/pro/businesses/${businessId}/prospects` +
-          (params.toString() ? `?${params.toString()}` : ''),
-        {
-          credentials: 'include',
-          signal: options?.signal,
-        }
+      const res = await fetchJson<ProspectListResponse>(
+        `/api/pro/businesses/${businessId}/prospects${
+          paramsQuery.toString() ? `?${paramsQuery.toString()}` : ''
+        }`,
+        {},
+        effectiveSignal
       );
+
+      if (effectiveSignal?.aborted) return;
 
       if (res.status === 401) {
-        if (typeof window !== 'undefined') {
-          window.location.href = `/login?from=/app/pro/${businessId}/prospects`;
-        }
+        const from = window.location.pathname + window.location.search;
+        window.location.href = `/login?from=${encodeURIComponent(from)}`;
         return;
       }
 
-      if (!res.ok) {
-        const raw = await res.text().catch(() => '');
-        console.error('loadProspects failed', {
-          status: res.status,
-          statusText: res.statusText,
-          body: raw,
-        });
-
-        let message = 'Impossible de charger les prospects.';
-        try {
-          const parsed = raw ? (JSON.parse(raw) as { error?: string }) : {};
-          if (parsed && typeof parsed.error === 'string') {
-            message = parsed.error;
-          }
-        } catch {
-          // ignore JSON parse errors
-        }
-
-        throw new Error(message);
+      if (!res.ok || !res.data) {
+        const ref = res.requestId;
+        const msg = res.error ?? 'Impossible de charger les prospects.';
+        setError(ref ? `${msg} (Ref: ${ref})` : msg);
+        setProspects([]);
+        return;
       }
 
-      const json = (await res.json()) as ProspectListResponse;
-      setProspects(json.items);
+      setProspects(res.data.items);
     } catch (err) {
-      if (
-        err instanceof Error &&
-        (err.name === 'AbortError' ||
-          err.message === 'signal is aborted without reason')
-      ) {
-        return;
-      }
-      console.error('loadProspects error:', err);
-      setError(
-        err instanceof Error
-          ? err.message
-          : 'Une erreur est survenue lors du chargement des prospects.'
-      );
+      if (effectiveSignal?.aborted) return;
+      console.error(err);
+      setError(getErrorMessage(err));
     } finally {
-      setLoading(false);
+      if (!effectiveSignal?.aborted) setLoading(false);
     }
   }
 
   useEffect(() => {
-    const controller = new AbortController();
-    void loadProspects({ signal: controller.signal });
-
-    return () => controller.abort();
+    void loadProspects();
+    return () => fetchController.current?.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [businessId, statusFilter]); // on ne met pas `search` ici pour éviter de spam l'API à chaque frappe
+  }, [businessId, statusFilter]);
 
   async function handleSearchSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -210,7 +214,6 @@ export default function BusinessProspectsPage() {
 
     try {
       setCreating(true);
-
       const body: Record<string, unknown> = {
         name: trimmedName,
       };
@@ -219,175 +222,102 @@ export default function BusinessProspectsPage() {
       if (contactEmail.trim()) body.contactEmail = contactEmail.trim();
       if (contactPhone.trim()) body.contactPhone = contactPhone.trim();
 
-      const res = await fetch(`/api/pro/businesses/${businessId}/prospects`, {
+      const res = await fetchJson<Prospect>(`/api/pro/businesses/${businessId}/prospects`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify(body),
       });
 
-      const json = await res.json().catch(() => ({}));
-
-      if (!res.ok) {
-        setCreateError(
-          typeof json.error === 'string'
-            ? json.error
-            : 'Impossible de créer le prospect.'
-        );
+      if (!res.ok || !res.data) {
+        const ref = res.requestId;
+        const msg = res.error ?? 'Impossible de créer le prospect.';
+        setCreateError(ref ? `${msg} (Ref: ${ref})` : msg);
         return;
       }
 
-      // Reset formulaire
       setName('');
       setContactName('');
       setContactEmail('');
       setContactPhone('');
-      setCreateError(null);
-
-      // Rechargement de la liste
+      setCreateOpen(false);
       await loadProspects();
     } catch (err) {
       console.error(err);
-      setCreateError(
-        err instanceof Error
-          ? err.message
-          : 'Une erreur est survenue lors de la création.'
-      );
+      setCreateError(getErrorMessage(err));
     } finally {
       setCreating(false);
     }
   }
 
   return (
-    <div className="space-y-6">
-      {/* En-tête + filtres */}
-      <Card className="p-5 space-y-4">
+    <div className="space-y-5">
+      <Card className="space-y-4 p-5">
         <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
           <div>
-            <h1 className="text-lg font-semibold text-slate-50">
-              Prospects
-            </h1>
-            <p className="text-sm text-slate-400">
-              Suis les leads avant qu&apos;ils deviennent clients.
+            <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-[var(--text-secondary)]">
+              Pro · Prospects
+            </p>
+            <h1 className="text-lg font-semibold text-[var(--text-primary)]">Pipeline prospects</h1>
+            <p className="text-sm text-[var(--text-secondary)]">
+              Explore, filtre et passe en revue tes leads avant conversion.
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
-            {statusOptions.map((opt) => (
-              <Button
-                key={opt.value}
-                type="button"
-                size="sm"
-                variant={statusFilter === opt.value ? 'primary' : 'outline'}
-                onClick={() => setStatusFilter(opt.value)}
-              >
-                {opt.label}
-              </Button>
-            ))}
-          </div>
+          <Button onClick={() => setCreateOpen(true)}>Créer un prospect</Button>
         </div>
 
         <form
           onSubmit={handleSearchSubmit}
-          className="flex flex-col gap-2 md:flex-row md:items-center"
+          className="grid gap-3 md:grid-cols-[1fr,auto] md:items-end"
         >
           <Input
             label="Recherche"
             placeholder="Rechercher par nom..."
             value={search}
-            onChange={(e: ChangeEvent<HTMLInputElement>) =>
-              setSearch(e.target.value)
-            }
+            onChange={(e: ChangeEvent<HTMLInputElement>) => setSearch(e.target.value)}
           />
-          <Button
-            type="submit"
-            size="sm"
-            className="md:ml-2 md:w-auto w-full md:self-end"
-          >
-            Filtrer
-          </Button>
-        </form>
-      </Card>
-
-      {/* Formulaire de création rapide */}
-      <Card className="p-5 space-y-3">
-        <h2 className="text-sm font-semibold text-slate-100">
-          Ajouter un prospect
-        </h2>
-        <form
-          onSubmit={handleCreateProspect}
-          className="grid gap-3 md:grid-cols-4"
-        >
-          <Input
-            label="Nom du prospect"
-            value={name}
-            onChange={(e: ChangeEvent<HTMLInputElement>) =>
-              setName(e.target.value)
-            }
-            placeholder="Entreprise ou personne"
-            error={createError ?? undefined}
-          />
-          <Input
-            label="Contact"
-            value={contactName}
-            onChange={(e: ChangeEvent<HTMLInputElement>) =>
-              setContactName(e.target.value)
-            }
-            placeholder="Nom du contact"
-          />
-          <Input
-            label="Email"
-            type="email"
-            value={contactEmail}
-            onChange={(e: ChangeEvent<HTMLInputElement>) =>
-              setContactEmail(e.target.value)
-            }
-            placeholder="contact@exemple.com"
-          />
-          <div className="flex flex-col gap-2 md:items-end md:justify-end">
-            <Input
-              label="Téléphone"
-              value={contactPhone}
-              onChange={(e: ChangeEvent<HTMLInputElement>) =>
-                setContactPhone(e.target.value)
-              }
-              placeholder="+33..."
-            />
-            <Button
-              type="submit"
-              size="sm"
-              className="w-full md:w-auto"
-              disabled={creating}
-            >
-              {creating ? 'Création...' : 'Ajouter'}
+          <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-2">
+              {statusOptions.map((opt) => (
+                <Button
+                  key={opt.value}
+                  type="button"
+                  size="sm"
+                  variant={statusFilter === opt.value ? 'primary' : 'outline'}
+                  onClick={() => setStatusFilter(opt.value)}
+                >
+                  {opt.label}
+                </Button>
+              ))}
+            </div>
+            <Button type="submit" size="sm" className="md:self-center">
+              Filtrer
             </Button>
           </div>
         </form>
       </Card>
 
-      {/* Liste des prospects */}
       <Card className="p-5">
         {loading ? (
-          <p className="text-sm text-slate-400">Chargement des prospects…</p>
+          <p className="text-sm text-[var(--text-secondary)]">Chargement des prospects…</p>
         ) : error ? (
           <div className="space-y-2">
             <p className="text-sm text-rose-400">{error}</p>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() => loadProspects()}
-            >
+            <Button type="button" size="sm" variant="outline" onClick={() => loadProspects()}>
               Réessayer
             </Button>
           </div>
-        ) : prospects.length === 0 ? (
-          <p className="text-sm text-slate-400">
-            Aucun prospect pour le moment. Ajoute-en un avec le formulaire
-            ci-dessus.
-          </p>
+        ) : filteredCount === 0 ? (
+          <div className="space-y-3">
+            <p className="text-sm text-[var(--text-secondary)]">
+              Aucun prospect pour le moment. Crée un lead ou ajuste les filtres.
+            </p>
+            <Button size="sm" onClick={() => setCreateOpen(true)}>
+              Créer un prospect
+            </Button>
+          </div>
         ) : (
           <div className="space-y-3">
-            <div className="hidden grid-cols-[2fr,1.5fr,1.5fr,1fr,1fr] gap-3 text-xs font-semibold uppercase tracking-wide text-slate-400 md:grid">
+            <div className="hidden grid-cols-[2fr,1.5fr,1.5fr,1fr,1fr] gap-3 text-xs font-semibold uppercase tracking-wide text-[var(--text-secondary)] md:grid">
               <span>Prospect</span>
               <span>Contact</span>
               <span>Source & qualification</span>
@@ -399,12 +329,17 @@ export default function BusinessProspectsPage() {
               {prospects.map((p) => (
                 <div
                   key={p.id}
-                  className="grid gap-2 rounded-xl border border-slate-800/80 bg-slate-900/40 p-3 text-sm md:grid-cols-[2fr,1.5fr,1.5fr,1fr,1fr]"
+                  className="grid gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface)]/70 p-3 text-sm md:grid-cols-[2fr,1.5fr,1.5fr,1fr,1fr]"
                 >
                   <div className="space-y-1">
-                    <p className="font-medium text-slate-50">{p.name}</p>
+                    <Link
+                      className="font-semibold text-[var(--text-primary)] hover:underline"
+                      href={`/app/pro/${businessId}/prospects/${p.id}`}
+                    >
+                      {p.name}
+                    </Link>
                     {p.projectIdea ? (
-                      <p className="text-xs text-slate-500 line-clamp-2">
+                      <p className="text-xs text-[var(--text-secondary)] line-clamp-2">
                         {p.projectIdea}
                       </p>
                     ) : null}
@@ -412,20 +347,20 @@ export default function BusinessProspectsPage() {
 
                   <div className="space-y-1">
                     {p.contactName ? (
-                      <p className="text-slate-200">{p.contactName}</p>
+                      <p className="text-[var(--text-primary)]">{p.contactName}</p>
                     ) : (
-                      <p className="text-slate-500 text-xs">Contact inconnu</p>
+                      <p className="text-xs text-[var(--text-secondary)]">Contact inconnu</p>
                     )}
-                    <p className="text-xs text-slate-500">
+                    <p className="text-xs text-[var(--text-secondary)]">
                       {p.contactEmail || p.contactPhone || '—'}
                     </p>
                   </div>
 
                   <div className="space-y-1">
-                    <p className="text-xs text-slate-400">
+                    <p className="text-xs text-[var(--text-secondary)]">
                       Source : {sourceLabel(p.source)}
                     </p>
-                    <p className="text-xs text-slate-400">
+                    <p className="text-xs text-[var(--text-secondary)]">
                       Qualification : {qualificationLabel(p.qualificationLevel)}
                     </p>
                   </div>
@@ -436,14 +371,8 @@ export default function BusinessProspectsPage() {
                     </Badge>
                   </div>
 
-                  <div className="flex items-center text-xs text-slate-300">
-                    {p.estimatedBudget
-                      ? new Intl.NumberFormat('fr-FR', {
-                          style: 'currency',
-                          currency: 'EUR',
-                          maximumFractionDigits: 0,
-                        }).format(p.estimatedBudget)
-                      : '—'}
+                  <div className="flex items-center text-xs text-[var(--text-primary)]">
+                    {formatCurrency(p.estimatedBudget)}
                   </div>
                 </div>
               ))}
@@ -451,6 +380,59 @@ export default function BusinessProspectsPage() {
           </div>
         )}
       </Card>
+
+      <Modal
+        open={createOpen}
+        onClose={() => (!creating ? setCreateOpen(false) : null)}
+        title="Créer un prospect"
+        description="Ajoute rapidement un lead dans le pipeline."
+      >
+        <form onSubmit={handleCreateProspect} className="space-y-4">
+          <Input
+            label="Nom du prospect *"
+            value={name}
+            onChange={(e: ChangeEvent<HTMLInputElement>) => setName(e.target.value)}
+            placeholder="Entreprise ou personne"
+            error={createError ?? undefined}
+          />
+          <div className="grid gap-3 md:grid-cols-2">
+            <Input
+              label="Contact (nom)"
+              value={contactName}
+              onChange={(e: ChangeEvent<HTMLInputElement>) => setContactName(e.target.value)}
+              placeholder="Nom du contact"
+            />
+            <Input
+              label="Téléphone"
+              value={contactPhone}
+              onChange={(e: ChangeEvent<HTMLInputElement>) => setContactPhone(e.target.value)}
+              placeholder="+33..."
+            />
+            <Input
+              label="Email"
+              type="email"
+              value={contactEmail}
+              onChange={(e: ChangeEvent<HTMLInputElement>) => setContactEmail(e.target.value)}
+              placeholder="contact@exemple.com"
+              className="md:col-span-2"
+            />
+          </div>
+
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              type="button"
+              onClick={() => setCreateOpen(false)}
+              disabled={creating}
+            >
+              Annuler
+            </Button>
+            <Button type="submit" disabled={creating}>
+              {creating ? 'Création…' : 'Créer'}
+            </Button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 }
