@@ -15,6 +15,10 @@
   --text-secondary: #6b7280;
   --border: #d4d4d8;
   --accent: #3b82f6;
+  --success: #10b981;
+  --danger: #ef4444;
+  --warning: #f59e0b;
+  --shadow-float: 0 18px 46px rgba(15, 23, 42, 0.25);
 }
 
 [data-theme="dark"],
@@ -28,6 +32,10 @@
   --text-secondary: #9ca3af;
   --border: #1e1f23;
   --accent: #4f9acb;
+  --success: #34d399;
+  --danger: #f87171;
+  --warning: #fbbf24;
+  --shadow-float: 0 18px 46px rgba(0, 0, 0, 0.55);
 }
 
 /* Base layout */

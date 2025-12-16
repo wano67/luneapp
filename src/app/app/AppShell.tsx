@@ -15,6 +15,7 @@ import {
   IconFocus,
   IconUser,
 } from '@/components/icons';
+import { useBodyScrollLock } from '@/lib/scrollLock';
 
 function getCurrentSpace(pathname: string): Space {
   if (pathname.startsWith('/app/pro')) return 'pro';
@@ -85,6 +86,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
   /* ---------------- MOBILE PULLDOWN + SNAP ---------------- */
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mobileDragY, setMobileDragY] = useState(0);
+  useBodyScrollLock(mobileMenuOpen);
 
   const MOBILE_MENU_MAX = 420;
   const MOBILE_MENU_OPEN = 360;
@@ -102,6 +104,17 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const pointerDragging = useRef(false);
   const dragYRef = useRef<number>(0);
   const wasOpenAtStart = useRef(false);
+
+  const LAYERS = {
+    header: 60,
+    overlay: 55,
+    menu: 57,
+    modal: 70,
+    toast: 80,
+  };
+
+  const focusRing =
+    'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-400/60';
 
   // fermeture "propre" (évite click-through si tu veux animer un jour)
   function haptic(ms = 10) {
@@ -271,10 +284,14 @@ export default function AppShell({ children }: { children: ReactNode }) {
       {/* HEADER */}
       <header
         className={[
-          'fixed inset-x-0 top-0 z-50 border-b border-[var(--border)] bg-[var(--background-alt)]/80 backdrop-blur-md',
+          'fixed inset-x-0 top-0 border-b border-[var(--border)] bg-[var(--background-alt)]/80 backdrop-blur-md',
           // IMPORTANT: empêche le scroll vertical par défaut => on peut “tirer” le header sans preventDefault
           'touch-pan-x',
         ].join(' ')}
+        style={{
+          zIndex: LAYERS.header,
+          paddingTop: 'env(safe-area-inset-top, 0px)',
+        }}
         onPointerDown={onHeaderPointerDown}
         onPointerMove={onHeaderPointerMove}
         onPointerUp={onHeaderPointerUp}
@@ -292,6 +309,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
                 pathname === '/app'
                   ? 'border-[var(--border)] bg-[var(--surface)] text-[var(--text-primary)]'
                   : 'border-[var(--border)] bg-[var(--background)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]',
+                focusRing,
               ].join(' ')}
               aria-label="Accueil"
               title="Accueil"
@@ -330,6 +348,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
                     active
                       ? 'border-[var(--border)] bg-[var(--surface)] text-[var(--text-primary)]'
                       : 'border-[var(--border)] bg-[var(--background)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]',
+                    focusRing,
                   ].join(' ')}
                   aria-pressed={active}
                 >
@@ -349,7 +368,10 @@ export default function AppShell({ children }: { children: ReactNode }) {
                   openMobileMenu();
                 }
               }}
-              className="ml-1 inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--background)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
+              className={[
+                'ml-1 inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--background)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]',
+                focusRing,
+              ].join(' ')}
               aria-label={mobileMenuOpen ? 'Fermer le menu' : 'Ouvrir le menu'}
               title={mobileMenuOpen ? 'Fermer' : 'Menu'}
             >
@@ -368,7 +390,10 @@ export default function AppShell({ children }: { children: ReactNode }) {
             <Link
               href="/app/account"
               onClick={() => closeMobileMenu()}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
+              className={[
+                'inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]',
+                focusRing,
+              ].join(' ')}
               aria-label="Compte"
               title="Compte"
             >
@@ -452,18 +477,26 @@ export default function AppShell({ children }: { children: ReactNode }) {
 
         {/* ✅ MOBILE PULL-DOWN MENU (cliquable) */}
         <div className="md:hidden">
-          {mobileMenuOpen && (
+          {mobileMenuOpen ? (
             <button
               type="button"
-              className="fixed inset-0 top-14 z-40 bg-[var(--background)]/50 backdrop-blur-sm"
+              className="fixed inset-x-0 bottom-0 bg-[var(--background)]/50 backdrop-blur-sm"
+              style={{
+                top: 'calc(56px + env(safe-area-inset-top, 0px))',
+                zIndex: LAYERS.overlay,
+              }}
               onClick={closeMobileMenu}
               aria-label="Fermer le menu"
             />
-          )}
+          ) : null}
 
           <div
-            className="relative z-50 overflow-hidden border-b border-[var(--border)] bg-[var(--background-alt)]/90 backdrop-blur-md transition-[height] duration-200 ease-out"
-            style={{ height: mobileMenuOpen ? mobileDragY : 0 }}
+            className="relative overflow-hidden border-b border-[var(--border)] bg-[var(--background-alt)]/90 backdrop-blur-md transition-[height] duration-200 ease-out"
+            style={{
+              height: mobileMenuOpen ? mobileDragY : 0,
+              zIndex: LAYERS.menu,
+              paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+            }}
           >
             <div className="max-h-[420px] overflow-y-auto px-2 pb-3">
               {/* ✅ Title */}
