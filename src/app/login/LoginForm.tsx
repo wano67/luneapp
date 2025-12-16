@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { FormEvent, useMemo, useState, type ChangeEvent } from 'react';
+import { getRequestIdFromResponse } from '@/lib/apiClient';
 
 type LoginFormProps = {
   redirectPath?: string;
@@ -41,6 +42,7 @@ export default function LoginForm({ redirectPath = '/app' }: LoginFormProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [requestId, setRequestId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   const target = useMemo(() => sanitizeRedirectPath(redirectPath), [redirectPath]);
@@ -48,6 +50,7 @@ export default function LoginForm({ redirectPath = '/app' }: LoginFormProps) {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
+    setRequestId(null);
     setSubmitting(true);
 
     try {
@@ -59,6 +62,8 @@ export default function LoginForm({ redirectPath = '/app' }: LoginFormProps) {
       });
 
       const payload: unknown = await response.json().catch(() => null);
+      const reqId = getRequestIdFromResponse(response);
+      if (reqId) setRequestId(reqId);
 
       if (!response.ok) {
         setError(isApiErrorShape(payload) ? payload.error : 'Impossible de se connecter.');
@@ -76,16 +81,19 @@ export default function LoginForm({ redirectPath = '/app' }: LoginFormProps) {
   }
 
   return (
-    <main className="min-h-screen bg-slate-950 text-slate-50 px-6 py-16">
-      <div className="mx-auto flex max-w-md flex-col space-y-8">
+    <main className="min-h-screen bg-[var(--bg)] px-6 py-16 text-[var(--text)]">
+      <div className="mx-auto flex max-w-lg flex-col space-y-8">
         <div className="space-y-2 text-center">
-          <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-500">
-            Public
+          <p className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--text-secondary)]">
+            Accès
           </p>
           <h1 className="text-3xl font-semibold">Connexion</h1>
+          <p className="text-sm text-[var(--text-secondary)]">
+            Connectez-vous pour accéder à votre espace.
+          </p>
         </div>
 
-        <Card className="border-slate-800/80 bg-slate-900/60 p-6">
+        <Card className="border-[var(--border)] bg-[var(--surface)] p-6">
           <form onSubmit={handleSubmit} className="space-y-3">
             <Input
               id="email"
@@ -109,8 +117,8 @@ export default function LoginForm({ redirectPath = '/app' }: LoginFormProps) {
             />
 
             {error ? (
-              <p className="text-sm text-rose-400" role="alert">
-                {error}
+              <p className="text-sm text-[var(--danger)]" role="alert">
+                {error} {requestId ? `(Ref: ${requestId})` : ''}
               </p>
             ) : null}
 
@@ -118,9 +126,9 @@ export default function LoginForm({ redirectPath = '/app' }: LoginFormProps) {
               {submitting ? 'Connexion...' : 'Se connecter'}
             </Button>
 
-            <p className="text-center text-xs text-slate-400">
+            <p className="text-center text-xs text-[var(--text-secondary)]">
               Pas de compte ?{' '}
-              <Link href="/register" className="text-blue-300 hover:text-blue-200">
+              <Link href="/register" className="text-[var(--accent-strong)] hover:underline">
                 Créer un compte
               </Link>
             </p>

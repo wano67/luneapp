@@ -9,10 +9,12 @@ type BadgeProps = HTMLAttributes<HTMLSpanElement> & {
 };
 
 const badgeVariants: Record<BadgeVariant, string> = {
-  neutral: 'text-slate-300 bg-slate-800/80 border border-slate-700',
-  pro: 'text-blue-300 bg-blue-500/10 border border-blue-500/40',
-  personal: 'text-emerald-300 bg-emerald-500/10 border border-emerald-500/40',
-  performance: 'text-rose-300 bg-rose-500/10 border border-rose-500/40',
+  neutral: 'text-[var(--text-muted)] bg-[var(--surface-2)] border border-[var(--border)]',
+  pro: 'text-[var(--accent-strong)] bg-[var(--surface-hover)] border border-[var(--accent-strong)]',
+  personal:
+    'text-emerald-700 dark:text-emerald-300 bg-[color:rgba(16,185,129,0.12)] border border-emerald-500/60',
+  performance:
+    'text-rose-700 dark:text-rose-300 bg-[color:rgba(244,63,94,0.12)] border border-rose-500/60',
 };
 
 export function Badge({

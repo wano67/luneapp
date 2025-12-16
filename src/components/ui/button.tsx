@@ -7,7 +7,7 @@ import {
   type ReactElement,
 } from 'react';
 
-type ButtonVariant = 'primary' | 'outline' | 'ghost';
+type ButtonVariant = 'primary' | 'outline' | 'ghost' | 'danger' | 'success';
 type ButtonSize = 'sm' | 'md' | 'lg';
 
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
@@ -22,21 +22,24 @@ type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
 };
 
 const baseStyles =
-  'inline-flex items-center justify-center rounded-lg font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500 disabled:opacity-60 disabled:cursor-not-allowed';
+  'inline-flex items-center justify-center gap-2 rounded-xl border font-semibold transition-colors shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)] disabled:cursor-not-allowed disabled:opacity-60';
 
 const variantStyles: Record<ButtonVariant, string> = {
   primary:
-    'bg-blue-500 text-slate-50 hover:bg-blue-400 border border-blue-500/70',
+    'bg-[var(--accent)] text-white border-[var(--accent-strong)] hover:bg-[var(--accent-strong)] hover:border-[var(--accent-strong)]',
   outline:
-    'border border-slate-800 text-slate-50 bg-slate-900/50 hover:border-blue-500/60 hover:text-white',
-  ghost:
-    'text-slate-200 hover:text-white border border-transparent hover:border-slate-700 bg-transparent',
+    'bg-[var(--surface)] text-[var(--text)] border-[var(--border)] hover:border-[var(--border-strong)] hover:bg-[var(--surface-hover)]',
+  ghost: 'border-transparent bg-transparent text-[var(--text)] hover:bg-[var(--surface-hover)]',
+  danger:
+    'bg-[var(--danger)] border-[var(--danger)] text-white hover:brightness-95 focus-visible:outline-[var(--danger)]',
+  success:
+    'bg-[var(--success)] border-[var(--success)] text-white hover:brightness-95 focus-visible:outline-[var(--success)]',
 };
 
 const sizeStyles: Record<ButtonSize, string> = {
   sm: 'px-3 py-1.5 text-xs',
   md: 'px-4 py-2 text-sm',
-  lg: 'px-5 py-2 text-base',
+  lg: 'px-5 py-2.5 text-base',
 };
 
 export function Button({

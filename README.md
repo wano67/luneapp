@@ -3,6 +3,7 @@
 Next.js 16 (App Router) + TypeScript + Tailwind v4 + Prisma 7 (PostgreSQL via adapter-pg).  
 Public front: `/`, `/login`, `/register`  
 App interne (protégée) : `/app/**`.
+Dev : `pnpm dev` (Turbopack) ou `pnpm dev:stable` (désactive Turbopack en cas de souci).
 
 ## Dépendances clés
 - Prisma client généré dans `src/generated/prisma`

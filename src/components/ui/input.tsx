@@ -14,14 +14,14 @@ export function Input({ label, error, className, ...props }: InputProps) {
       ) : null}
       <input
         className={cn(
-          'w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-base text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] transition',
-          'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-400/60',
-          error ? 'border-rose-400 focus-visible:outline-rose-400/70' : '',
+          'w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-base text-[var(--text-primary)] placeholder:text-[var(--text-faint)] transition-colors',
+          'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]',
+          error ? 'border-[var(--danger)] focus-visible:outline-[var(--danger)]' : 'hover:border-[var(--border-strong)]',
           className
         )}
         {...props}
       />
-      {error ? <span className="text-xs text-rose-400">{error}</span> : null}
+      {error ? <span className="text-xs text-[var(--danger)]">{error}</span> : null}
     </label>
   );
 }

@@ -53,25 +53,36 @@ export function Modal({ open, onClose, title, description, children }: ModalProp
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[70]" role="dialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={descId}>
+    <div
+      className="fixed inset-0 z-[70]"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby={titleId}
+      aria-describedby={descId}
+    >
       {/* overlay */}
       <button
         type="button"
-        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+        className="absolute inset-0 bg-black/55 backdrop-blur-sm"
         onClick={onClose}
         aria-label="Fermer"
       />
 
       {/* panel */}
-      <div className="absolute left-1/2 top-1/2 w-[92vw] max-w-2xl -translate-x-1/2 -translate-y-1/2 px-2"
-        style={{ paddingTop: 'env(safe-area-inset-top, 0px)', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+      <div
+        className="absolute left-1/2 top-1/2 w-[92vw] max-w-2xl -translate-x-1/2 -translate-y-1/2 px-2"
+        style={{
+          paddingTop: 'env(safe-area-inset-top, 0px)',
+          paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+        }}
+      >
         <div
           ref={panelRef}
           tabIndex={-1}
-          className="flex max-h-[90vh] flex-col overflow-hidden rounded-3xl border border-[var(--border)] bg-[var(--background-alt)]/90 shadow-2xl shadow-[var(--shadow-float)] backdrop-blur-md focus:outline-none"
+          className="flex max-h-[90vh] flex-col overflow-hidden rounded-3xl border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] shadow-2xl shadow-[var(--shadow-float)] backdrop-blur-md focus:outline-none"
         >
           {/* Header */}
-          <div className="relative shrink-0 px-6 py-5">
+          <div className="relative shrink-0 border-b border-[var(--border)] px-6 py-5">
             <div className="pr-14">
               <h3 id={titleId} className="text-xl font-semibold">
                 {title}
@@ -86,7 +97,7 @@ export function Modal({ open, onClose, title, description, children }: ModalProp
             <button
               type="button"
               onClick={onClose}
-              className="absolute right-4 top-4 inline-flex h-12 w-12 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-400/60"
+              className="absolute right-4 top-4 inline-flex h-11 w-11 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface-2)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
               aria-label="Fermer la fenêtre"
               title="Fermer"
             >
@@ -102,7 +113,7 @@ export function Modal({ open, onClose, title, description, children }: ModalProp
           </div>
 
           {/* Body scrollable */}
-          <div className="min-h-0 flex-1 overflow-y-auto border-t border-[var(--border)] px-6 py-5">
+          <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
             {children}
           </div>
         </div>

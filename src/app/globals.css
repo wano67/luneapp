@@ -6,36 +6,55 @@
 /* 2. Tokens de thème */
 
 :root {
-  /* LIGHT MODE */
-  --background: #f5f5f4;
-  --background-alt: #e5e7eb;
-  --surface: #f3f4f6;
-  --surface-hover: #e5e7eb;
-  --text-primary: #111827;
-  --text-secondary: #6b7280;
-  --border: #d4d4d8;
-  --accent: #3b82f6;
-  --success: #10b981;
-  --danger: #ef4444;
-  --warning: #f59e0b;
-  --shadow-float: 0 18px 46px rgba(15, 23, 42, 0.25);
+  /* LIGHT MODE — palette crème contrastée */
+  --bg: #fbfaf7;
+  --surface: #ffffff;
+  --surface-2: #f4f1ea;
+  --surface-hover: #efeade;
+  --border: #e2dccf;
+  --border-strong: #cfc7b5;
+  --text: #111827;
+  --text-muted: #374151;
+  --text-faint: #6b7280;
+  --accent: #2563eb;
+  --accent-strong: #1d4ed8;
+  --success: #166534;
+  --danger: #b91c1c;
+  --warning: #b45309;
+  --focus-ring: #60a5fa;
+  --shadow-float: 0 18px 46px rgba(17, 24, 39, 0.16);
+
+  /* Legacy aliases */
+  --background: var(--bg);
+  --background-alt: var(--surface-2);
+  --text-primary: var(--text);
+  --text-secondary: var(--text-faint);
 }
 
 [data-theme="dark"],
 .dark {
-  /* DARK MODE */
-  --background: #050608;
-  --background-alt: #0b0c10;
-  --surface: #111112;
-  --surface-hover: #0b0c10;
-  --text-primary: #e5e7eb;
-  --text-secondary: #9ca3af;
-  --border: #1e1f23;
-  --accent: #4f9acb;
-  --success: #34d399;
-  --danger: #f87171;
-  --warning: #fbbf24;
-  --shadow-float: 0 18px 46px rgba(0, 0, 0, 0.55);
+  /* DARK MODE — noir profond */
+  --bg: #050505;
+  --surface: #0b0b0c;
+  --surface-2: #121214;
+  --surface-hover: #19191c;
+  --border: #242427;
+  --border-strong: #33333a;
+  --text: #f3f4f6;
+  --text-muted: #d1d5db;
+  --text-faint: #9ca3af;
+  --accent: #60a5fa;
+  --accent-strong: #3b82f6;
+  --success: #22c55e;
+  --danger: #ef4444;
+  --warning: #f59e0b;
+  --focus-ring: #93c5fd;
+  --shadow-float: 0 18px 46px rgba(0, 0, 0, 0.52);
+
+  --background: var(--bg);
+  --background-alt: var(--surface-2);
+  --text-primary: var(--text);
+  --text-secondary: var(--text-faint);
 }
 
 /* Base layout */

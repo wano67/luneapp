@@ -1,4 +1,4 @@
-// src/middleware.ts
+// src/proxy.ts
 import { verifyAuthToken, AUTH_COOKIE_NAME } from '@/server/auth/jwt';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -6,6 +6,7 @@ function unauthorizedResponse(request: NextRequest) {
   const requestId =
     request.headers.get('x-request-id') ||
     (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}`);
+
   if (request.nextUrl.pathname.startsWith('/api')) {
     const res = NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     res.headers.set('Cache-Control', 'no-store');
@@ -15,8 +16,6 @@ function unauthorizedResponse(request: NextRequest) {
   }
 
   const loginUrl = new URL('/login', request.url);
-
-  // ✅ preserve querystring (ex: /app/pro?create=1)
   const from = request.nextUrl.pathname + request.nextUrl.search;
   loginUrl.searchParams.set('from', from);
 
@@ -25,7 +24,7 @@ function unauthorizedResponse(request: NextRequest) {
   return res;
 }
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const token = request.cookies.get(AUTH_COOKIE_NAME)?.value;
 
   if (!token) {
@@ -41,7 +40,7 @@ export async function middleware(request: NextRequest) {
 
     return NextResponse.next();
   } catch (error) {
-    console.error('Auth middleware error', error);
+    console.error('Auth proxy error', error);
     return unauthorizedResponse(request);
   }
 }
