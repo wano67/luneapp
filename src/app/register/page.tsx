@@ -8,6 +8,7 @@ import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Alert } from '@/components/ui/alert';
+import { applyThemePref, type ThemePref } from '@/lib/theme';
 
 type Prefs = { language: 'fr' | 'en'; theme: 'light' | 'dark' | 'system' };
 
@@ -30,7 +31,9 @@ export default function RegisterPage() {
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
       body: JSON.stringify(pref),
-    }).catch(() => null);
+    })
+      .then(() => applyThemePref(pref.theme as ThemePref))
+      .catch(() => null);
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {

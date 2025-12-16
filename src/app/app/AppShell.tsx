@@ -3,11 +3,9 @@
 
 import type { ReactNode } from 'react';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import AppSidebar, { type Space, getActiveSidebarMeta } from './AppSidebar';
-import ThemeToggle from '@/components/ThemeToggle';
 import {
   IconHome,
   IconStudio,
@@ -16,6 +14,7 @@ import {
   IconUser,
 } from '@/components/icons';
 import { useBodyScrollLock } from '@/lib/scrollLock';
+import { LogoMark } from '@/components/marketing/LogoMark';
 
 function getCurrentSpace(pathname: string): Space {
   if (pathname.startsWith('/app/pro')) return 'pro';
@@ -385,8 +384,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
           </nav>
 
           {/* RIGHT: Compte */}
-          <div className="ml-auto flex w-[72px] items-center justify-end gap-2">
-            <ThemeToggle />
+          <div className="ml-auto flex w-[40px] items-center justify-end">
             <Link
               href="/app/account"
               onClick={() => closeMobileMenu()}
@@ -406,16 +404,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
         <div className="mx-auto hidden h-14 max-w-6xl items-center justify-between px-4 md:flex md:max-w-none md:px-6">
           {/* Left: logo / identité */}
           <Link href="/app" className="flex items-center gap-2 no-underline hover:no-underline">
-            <div className="flex h-8 w-8 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--surface)]">
-              <Image
-                src="/icon.svg"
-                alt="Lune"
-                width={20}
-                height={20}
-                className="h-5 w-5"
-                priority
-              />
-            </div>
+            <LogoMark className="text-[var(--text)]" />
             <div className="flex flex-col">
               <span className="text-sm font-semibold leading-4">Lune OS</span>
               <span className="text-[11px] text-[var(--text-secondary)]">Système interne</span>
@@ -462,7 +451,6 @@ export default function AppShell({ children }: { children: ReactNode }) {
 
           {/* Right */}
           <div className="flex items-center gap-2">
-            <ThemeToggle />
             <Link
               href="/app/account"
               className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"

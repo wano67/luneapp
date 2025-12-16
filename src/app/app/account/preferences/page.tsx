@@ -6,6 +6,7 @@ import { SectionHeader } from '@/components/ui/section-header';
 import { Alert } from '@/components/ui/alert';
 import { fetchJson } from '@/lib/apiClient';
 import { Button } from '@/components/ui/button';
+import { applyThemePref, resolveTheme, type ThemePref } from '@/lib/theme';
 
 type Prefs = {
   language: 'fr' | 'en';
@@ -19,6 +20,7 @@ export default function PreferencesPage() {
   const [error, setError] = useState<string | null>(null);
   const [requestId, setRequestId] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [resolved, setResolved] = useState<'light' | 'dark'>('light');
 
   useEffect(() => {
     const controller = new AbortController();
@@ -28,6 +30,8 @@ export default function PreferencesPage() {
       if (res.ok && res.data) {
         setLanguage(res.data.language);
         setTheme(res.data.theme);
+        setResolved(resolveTheme(res.data.theme));
+        applyThemePref(res.data.theme as ThemePref);
       }
     })();
     return () => controller.abort();
@@ -58,6 +62,8 @@ export default function PreferencesPage() {
 
     setLanguage(res.data.language);
     setTheme(res.data.theme);
+    setResolved(resolveTheme(res.data.theme));
+    applyThemePref(res.data.theme as ThemePref);
     setSaved(true);
     setSaving(false);
   }
@@ -95,7 +101,9 @@ export default function PreferencesPage() {
 
         <div className="space-y-2">
           <label className="flex w-full flex-col gap-1">
-            <span className="text-sm font-semibold text-[var(--text-secondary)]">Thème</span>
+            <span className="text-sm font-semibold text-[var(--text-secondary)]">
+              Thème {resolved ? `(actuellement: ${resolved})` : ''}
+            </span>
             <select
               value={theme}
               onChange={(e) => void save({ theme: e.target.value as Prefs['theme'] })}

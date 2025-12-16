@@ -5,6 +5,11 @@ Public front: `/`, `/login`, `/register`
 App interne (protégée) : `/app/**`.
 Dev : `pnpm dev` (Turbopack) ou `pnpm dev:stable` (désactive Turbopack en cas de souci).
 
+### Vérifs middleware (dev)
+- Sans cookie : GET `/app` → redirige vers `/login?from=/app`
+- Sans cookie : GET `/api/pro/businesses` → 401 JSON + `Cache-Control: no-store`
+- Avec cookie valide : les routes protégées passent
+
 ## Dépendances clés
 - Prisma client généré dans `src/generated/prisma`
 - Adapter PostgreSQL `@prisma/adapter-pg`
