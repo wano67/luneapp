@@ -41,6 +41,8 @@ type ActiveBusinessContextValue = {
   loadingBusinesses: boolean;
   businessesError: string | null;
   refreshBusinesses: () => Promise<void>;
+  isAdmin: boolean;
+  isViewer: boolean;
 };
 
 const ActiveBusinessContext = createContext<ActiveBusinessContextValue | null>(null);
@@ -180,6 +182,8 @@ export function ActiveBusinessProvider({ children, initialBusiness }: ProviderPr
       loadingBusinesses,
       businessesError,
       refreshBusinesses,
+      isAdmin: activeBusiness?.role === 'ADMIN' || activeBusiness?.role === 'OWNER',
+      isViewer: !!activeBusiness,
     }),
     [
       activeBusiness,

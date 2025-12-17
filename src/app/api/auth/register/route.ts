@@ -32,14 +32,18 @@ export async function POST(request: NextRequest) {
     typeof body.email !== 'string' ||
     typeof body.password !== 'string'
   ) {
-    return withRequestId(badRequest('Email et mot de passe sont requis.'), requestId);
+    const res = withRequestId(badRequest('Email et mot de passe sont requis.'), requestId);
+    res.headers.set('Cache-Control', 'no-store');
+    return res;
   }
 
   const { email, password } = body;
   const name = typeof body.name === 'string' ? body.name : undefined;
 
   if (password.length < MIN_PASSWORD_LENGTH) {
-    return withRequestId(badRequest('Le mot de passe doit contenir au moins 8 caractères.'), requestId);
+    const res = withRequestId(badRequest('Le mot de passe doit contenir au moins 8 caractères.'), requestId);
+    res.headers.set('Cache-Control', 'no-store');
+    return res;
   }
 
   try {
@@ -56,20 +60,22 @@ export async function POST(request: NextRequest) {
       ...authCookieOptions,
     });
 
-    return response;
+    response.headers.set('Cache-Control', 'no-store');
+    return withRequestId(response, requestId);
   } catch (error) {
     if (
       error instanceof Prisma.PrismaClientKnownRequestError &&
       error.code === 'P2002'
     ) {
-      return withRequestId(NextResponse.json({ error: 'Cet email est déjà utilisé.' }, { status: 409 }), requestId);
+      const res = NextResponse.json({ error: 'Cet email est déjà utilisé.' }, { status: 409 });
+      res.headers.set('Cache-Control', 'no-store');
+      return withRequestId(res, requestId);
     }
 
     console.error('Error during registration', error);
 
-    return withRequestId(
-      NextResponse.json({ error: 'Impossible de créer le compte pour le moment.' }, { status: 500 }),
-      requestId
-    );
+    const res = NextResponse.json({ error: 'Impossible de créer le compte pour le moment.' }, { status: 500 });
+    res.headers.set('Cache-Control', 'no-store');
+    return withRequestId(res, requestId);
   }
 }

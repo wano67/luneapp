@@ -16,10 +16,14 @@ export async function POST(request: NextRequest) {
   const csrf = assertSameOrigin(request);
   if (csrf) return csrf;
 
-  const response = NextResponse.json({ status: 'logged_out' });
-
   const token = request.cookies.get(AUTH_COOKIE_NAME)?.value;
-  if (!token) return withRequestId(unauthorized(), requestId);
+  if (!token) {
+    const res = withRequestId(unauthorized(), requestId);
+    res.headers.set('Cache-Control', 'no-store');
+    return res;
+  }
+
+  const response = NextResponse.json({ status: 'logged_out' });
 
   response.cookies.set({
     name: AUTH_COOKIE_NAME,
@@ -29,6 +33,7 @@ export async function POST(request: NextRequest) {
     expires: new Date(0),
   });
 
+  response.headers.set('Cache-Control', 'no-store');
   response.headers.set('x-request-id', requestId);
   return response;
 }

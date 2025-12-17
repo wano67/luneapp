@@ -5,6 +5,13 @@ Public front: `/`, `/login`, `/register`
 App interne (protégée) : `/app/**`.
 Dev : `pnpm dev` (Turbopack) ou `pnpm dev:stable` (désactive Turbopack en cas de souci).
 
+## Railway deploy checklist
+- Gestionnaire : pnpm (lock `pnpm-lock.yaml`, `packageManager` déclaré, `.npmrc` désactive `package-lock`). Utiliser `pnpm install --frozen-lockfile`.
+- Env prod obligatoires : `DATABASE_URL`, `AUTH_SECRET`, `APP_URL`, `NEXT_PUBLIC_APP_URL`, `APP_ORIGINS` (origins supplémentaires, séparées par des virgules).
+- Build : `pnpm install --frozen-lockfile && pnpm build` (postinstall `prisma generate` ne requiert pas la DB).
+- Start : `pnpm start`.
+- Sécurité : si `APP_URL`/`NEXT_PUBLIC_APP_URL`/`APP_ORIGINS` manquent en prod, toutes les mutations seront refusées (CSRF fail-closed).
+
 ### Vérifs middleware (dev)
 - Sans cookie : GET `/app` → redirige vers `/login?from=/app`
 - Sans cookie : GET `/api/pro/businesses` → 401 JSON + `Cache-Control: no-store`

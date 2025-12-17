@@ -33,7 +33,7 @@ function isValidEmail(s: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
 }
 
-function sanitizePhone(s: string) {
+function sanitizePhone(s: unknown) {
   return normalizeStr(s).replace(/\s+/g, ' ');
 }
 
@@ -61,6 +61,11 @@ export async function GET(
   const businessIdBigInt = parseId(businessId);
   if (!businessIdBigInt) {
     return withRequestId(badRequest('businessId invalide.'), requestId);
+  }
+
+  const business = await prisma.business.findUnique({ where: { id: businessIdBigInt } });
+  if (!business) {
+    return withRequestId(NextResponse.json({ error: 'Entreprise introuvable.' }, { status: 404 }), requestId);
   }
 
   const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'VIEWER');
@@ -115,6 +120,11 @@ export async function POST(
   const businessIdBigInt = parseId(businessId);
   if (!businessIdBigInt) {
     return withRequestId(badRequest('businessId invalide.'), requestId);
+  }
+
+  const business = await prisma.business.findUnique({ where: { id: businessIdBigInt } });
+  if (!business) {
+    return withRequestId(NextResponse.json({ error: 'Entreprise introuvable.' }, { status: 404 }), requestId);
   }
 
   const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'ADMIN');

@@ -94,6 +94,11 @@ export async function GET(
       return withRequestId(badRequest('businessId invalide.'), requestId);
     }
 
+    const business = await prisma.business.findUnique({ where: { id: businessId } });
+    if (!business) {
+      return withRequestId(NextResponse.json({ error: 'Entreprise introuvable.' }, { status: 404 }), requestId);
+    }
+
     const membership = await requireBusinessRole(businessId, BigInt(userId), 'VIEWER');
     if (!membership) return withRequestId(forbidden(), requestId);
 
@@ -153,6 +158,11 @@ export async function POST(
     const businessId = parseBusinessId(businessIdParam);
     if (!businessId) {
       return withRequestId(badRequest('businessId invalide.'), requestId);
+    }
+
+    const business = await prisma.business.findUnique({ where: { id: businessId } });
+    if (!business) {
+      return withRequestId(NextResponse.json({ error: 'Entreprise introuvable.' }, { status: 404 }), requestId);
     }
 
     const membership = await requireBusinessRole(businessId, BigInt(userId), 'ADMIN');

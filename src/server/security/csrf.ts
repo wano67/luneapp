@@ -14,6 +14,8 @@ function normalizeOrigin(value: string): string | null {
   }
 }
 
+let warnedMissingOrigins = false;
+
 export function getAllowedOrigins(): string[] {
   // Mettre l’origin canonique en premier (utile pour construire inviteLink côté serveur)
   const primary = [process.env.APP_URL, process.env.NEXT_PUBLIC_APP_URL]
@@ -27,6 +29,12 @@ export function getAllowedOrigins(): string[] {
     .filter(Boolean);
 
   const normalized = [...primary, ...extras].map(normalizeOrigin).filter(Boolean) as string[];
+  if (process.env.NODE_ENV === 'production' && normalized.length === 0 && !warnedMissingOrigins) {
+    warnedMissingOrigins = true;
+    console.warn(
+      '[csrf] APP_URL / NEXT_PUBLIC_APP_URL / APP_ORIGINS non configurés : toutes les mutations seront refusées en production'
+    );
+  }
   return [...new Set(normalized)];
 }
 

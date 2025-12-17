@@ -16,6 +16,7 @@ type Business = {
   ownerId: string;
   createdAt: string;
   updatedAt: string;
+  role?: string | null;
 };
 
 const ADMIN_ROLES = new Set(['OWNER', 'ADMIN']);
@@ -71,12 +72,12 @@ export default function BusinessOverviewPage() {
         }
 
         setBusiness(detailRes.data);
-        const roleFromContext = null;
-        setRole(roleFromContext);
+        const roleFromApi = detailRes.data.role ?? null;
+        setRole(roleFromApi);
         setActiveBusiness?.({
           id: detailRes.data.id,
           name: detailRes.data.name,
-          role: roleFromContext,
+          role: roleFromApi,
         });
       } catch (err) {
         if (controller.signal.aborted) return;

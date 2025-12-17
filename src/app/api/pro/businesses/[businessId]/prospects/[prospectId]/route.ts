@@ -1,44 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/server/db/client';
-import { LeadSource, QualificationLevel, ProspectPipelineStatus } from '@/generated/prisma/client';
+import { requireAuthPro } from '@/server/auth/requireAuthPro';
 import { requireBusinessRole } from '@/server/auth/businessRole';
 import { assertSameOrigin, jsonNoStore } from '@/server/security/csrf';
-import { rateLimit } from '@/server/security/rateLimit';
-import { requireAuthPro } from '@/server/auth/requireAuthPro';
 import {
   badRequest,
   forbidden,
   getRequestId,
-  notFound,
-  readJson,
+  isRecord,
   unauthorized,
   withRequestId,
-  isRecord,
 } from '@/server/http/apiUtils';
-
-function normalizeStr(v: unknown) {
-  return String(v ?? '').trim();
-}
-
-function isValidEmail(s: string) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
-}
-
-function sanitizePhone(s: string) {
-  return normalizeStr(s).replace(/\s+/g, ' ');
-}
-
-function isValidPhone(s: string) {
-  if (!s) return false;
-  if (!/^[\d+\-().\s]+$/.test(s)) return false;
-  const digits = s.replace(/\D/g, '');
-  return digits.length >= 7 && digits.length <= 15;
-}
+import type { ProspectPipelineStatus, QualificationLevel, LeadSource } from '@/generated/prisma/client';
 
 function parseId(param: string | undefined) {
-  if (!param || !/^\d+$/.test(param)) {
-    return null;
-  }
+  if (!param || !/^\d+$/.test(param)) return null;
   try {
     return BigInt(param);
   } catch {
@@ -46,7 +22,19 @@ function parseId(param: string | undefined) {
   }
 }
 
-function serializeProspect(p: {
+function normalizeStr(v: unknown) {
+  return String(v ?? '').trim();
+}
+
+const VALID_STATUS = new Set<ProspectPipelineStatus>([
+  'NEW',
+  'IN_DISCUSSION',
+  'OFFER_SENT',
+  'FOLLOW_UP',
+  'CLOSED',
+]);
+
+type ProspectLike = {
   id: bigint;
   businessId: bigint;
   name: string;
@@ -62,7 +50,9 @@ function serializeProspect(p: {
   pipelineStatus: ProspectPipelineStatus;
   createdAt: Date;
   updatedAt: Date;
-}) {
+};
+
+function serializeProspect(p: ProspectLike) {
   return {
     id: p.id.toString(),
     businessId: p.businessId.toString(),
@@ -82,15 +72,12 @@ function serializeProspect(p: {
   };
 }
 
-// GET /api/pro/businesses/{businessId}/prospects/{prospectId}
 export async function GET(
   request: NextRequest,
   context: { params: Promise<{ businessId: string; prospectId: string }> }
 ) {
   const requestId = getRequestId(request);
   try {
-    const { businessId: businessIdParam, prospectId: prospectIdParam } = await context.params;
-
     let userId: string;
     try {
       ({ userId } = await requireAuthPro(request));
@@ -98,38 +85,35 @@ export async function GET(
       return withRequestId(unauthorized(), requestId);
     }
 
-    const businessId = parseId(businessIdParam);
-    const prospectId = parseId(prospectIdParam);
-    if (!businessId || !prospectId) {
-      return withRequestId(badRequest('businessId ou prospectId invalide.'), requestId);
+    const { businessId, prospectId } = await context.params;
+    const businessIdBigInt = parseId(businessId);
+    const prospectIdBigInt = parseId(prospectId);
+    if (!businessIdBigInt || !prospectIdBigInt) {
+      return withRequestId(badRequest('Paramètres invalides.'), requestId);
     }
 
-    const membership = await requireBusinessRole(businessId, BigInt(userId), 'VIEWER');
+    const business = await prisma.business.findUnique({ where: { id: businessIdBigInt } });
+    if (!business) {
+      return withRequestId(NextResponse.json({ error: 'Entreprise introuvable.' }, { status: 404 }), requestId);
+    }
+
+    const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'VIEWER');
     if (!membership) return withRequestId(forbidden(), requestId);
 
     const prospect = await prisma.prospect.findFirst({
-      where: { id: prospectId, businessId },
+      where: { id: prospectIdBigInt, businessId: businessIdBigInt },
     });
-
     if (!prospect) {
-      return withRequestId(notFound('Prospect introuvable.'), requestId);
+      return withRequestId(NextResponse.json({ error: 'Prospect introuvable.' }, { status: 404 }), requestId);
     }
 
     return jsonNoStore(serializeProspect(prospect));
   } catch (err) {
-    console.error({
-      requestId,
-      route: '/api/pro/businesses/[businessId]/prospects/[prospectId]',
-      err,
-    });
-    return withRequestId(
-      NextResponse.json({ error: 'Server error while loading the prospect.' }, { status: 500 }),
-      requestId
-    );
+    console.error({ err, route: '/api/pro/businesses/[businessId]/prospects/[prospectId]' });
+    return withRequestId(NextResponse.json({ error: 'Erreur serveur' }, { status: 500 }), requestId);
   }
 }
 
-// PATCH /api/pro/businesses/{businessId}/prospects/{prospectId}
 export async function PATCH(
   request: NextRequest,
   context: { params: Promise<{ businessId: string; prospectId: string }> }
@@ -138,148 +122,126 @@ export async function PATCH(
   const csrf = assertSameOrigin(request);
   if (csrf) return csrf;
 
+  let userId: string;
   try {
-    const { businessId: businessIdParam, prospectId: prospectIdParam } = await context.params;
-
-    let userId: string;
-    try {
-      ({ userId } = await requireAuthPro(request));
-    } catch {
-      return withRequestId(unauthorized(), requestId);
-    }
-
-    const businessId = parseId(businessIdParam);
-    const prospectId = parseId(prospectIdParam);
-    if (!businessId || !prospectId) {
-      return withRequestId(badRequest('businessId ou prospectId invalide.'), requestId);
-    }
-
-    const membership = await requireBusinessRole(businessId, BigInt(userId), 'ADMIN');
-    if (!membership) return withRequestId(forbidden(), requestId);
-
-    const limited = rateLimit(request, {
-      key: `pro:prospects:update:${businessId.toString()}:${userId.toString()}`,
-      limit: 120,
-      windowMs: 60 * 60 * 1000,
-    });
-    if (limited) return limited;
-
-    const existing = await prisma.prospect.findFirst({
-      where: { id: prospectId, businessId },
-    });
-
-    if (!existing) {
-      return withRequestId(notFound('Prospect introuvable.'), requestId);
-    }
-
-    const body = await readJson(request);
-    if (!isRecord(body)) {
-      return withRequestId(badRequest('Corps de requête invalide.'), requestId);
-    }
-
-    const data: Record<string, unknown> = {};
-
-    if (typeof body.name === 'string') {
-      const name = normalizeStr(body.name);
-      if (!name) {
-        return withRequestId(badRequest("Le nom du prospect ne peut pas être vide."), requestId);
-      }
-      if (name.length > 120) {
-        return withRequestId(badRequest('Le nom du prospect est trop long (max 120).'), requestId);
-      }
-      data.name = name;
-    }
-
-    if (typeof body.contactName === 'string') {
-      const contactName = normalizeStr(body.contactName);
-      if (contactName && contactName.length > 120) {
-        return withRequestId(badRequest('Le nom du contact est trop long (max 120).'), requestId);
-      }
-      data.contactName = contactName || null;
-    }
-
-    if (typeof body.contactEmail === 'string') {
-      const contactEmail = normalizeStr(body.contactEmail);
-      if (contactEmail && (contactEmail.length > 254 || !isValidEmail(contactEmail))) {
-        return withRequestId(badRequest('Email du contact invalide.'), requestId);
-      }
-      data.contactEmail = contactEmail || null;
-    }
-
-    if (typeof body.contactPhone === 'string') {
-      const contactPhone = sanitizePhone(body.contactPhone);
-      if (contactPhone && (contactPhone.length > 32 || !isValidPhone(contactPhone))) {
-        return withRequestId(badRequest('Téléphone du contact invalide.'), requestId);
-      }
-      data.contactPhone = contactPhone || null;
-    }
-
-    if (typeof body.interestNote === 'string') {
-      const interestNote = normalizeStr(body.interestNote);
-      if (interestNote && interestNote.length > 2000) {
-        return withRequestId(badRequest("La note d'intérêt est trop longue (max 2000)."), requestId);
-      }
-      data.interestNote = interestNote || null;
-    }
-
-    if (typeof body.projectIdea === 'string') {
-      const projectIdea = normalizeStr(body.projectIdea);
-      if (projectIdea && projectIdea.length > 2000) {
-        return withRequestId(badRequest('L’idée de projet est trop longue (max 2000).'), requestId);
-      }
-      data.projectIdea = projectIdea || null;
-    }
-
-    if (typeof body.estimatedBudget === 'number') {
-      if (!Number.isFinite(body.estimatedBudget) || body.estimatedBudget < 0) {
-        return withRequestId(badRequest('Budget estimé invalide.'), requestId);
-      }
-      data.estimatedBudget = Math.round(body.estimatedBudget);
-    } else if (body && 'estimatedBudget' in body && body.estimatedBudget === null) {
-      data.estimatedBudget = null;
-    }
-
-    if (typeof body.firstContactAt === 'string') {
-      const date = new Date(body.firstContactAt);
-      data.firstContactAt = Number.isNaN(date.getTime()) ? null : date;
-    }
-
-    if (typeof body.source === 'string' && body.source in LeadSource) {
-      data.source = body.source as keyof typeof LeadSource;
-    }
-
-    if (typeof body.qualificationLevel === 'string' && body.qualificationLevel in QualificationLevel) {
-      data.qualificationLevel = body.qualificationLevel as keyof typeof QualificationLevel;
-    }
-
-    if (typeof body.pipelineStatus === 'string' && body.pipelineStatus in ProspectPipelineStatus) {
-      data.pipelineStatus = body.pipelineStatus as keyof typeof ProspectPipelineStatus;
-    }
-
-    if (Object.keys(data).length === 0) {
-      return withRequestId(badRequest('Aucune donnée à mettre à jour.'), requestId);
-    }
-
-    const prospect = await prisma.prospect.update({
-      where: { id: prospectId },
-      data,
-    });
-
-    return NextResponse.json(serializeProspect(prospect));
-  } catch (err) {
-    console.error({
-      requestId,
-      route: '/api/pro/businesses/[businessId]/prospects/[prospectId]',
-      err,
-    });
-    return withRequestId(
-      NextResponse.json({ error: 'Server error while updating the prospect.' }, { status: 500 }),
-      requestId
-    );
+    ({ userId } = await requireAuthPro(request));
+  } catch {
+    return withRequestId(unauthorized(), requestId);
   }
+
+  const { businessId, prospectId } = await context.params;
+  const businessIdBigInt = parseId(businessId);
+  const prospectIdBigInt = parseId(prospectId);
+  if (!businessIdBigInt || !prospectIdBigInt) {
+    return withRequestId(badRequest('Paramètres invalides.'), requestId);
+  }
+
+  const business = await prisma.business.findUnique({ where: { id: businessIdBigInt } });
+  if (!business) {
+    return withRequestId(NextResponse.json({ error: 'Entreprise introuvable.' }, { status: 404 }), requestId);
+  }
+
+  const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'ADMIN');
+  if (!membership) return withRequestId(forbidden(), requestId);
+
+  const body = await request.json().catch(() => null);
+  if (!isRecord(body)) {
+    return withRequestId(badRequest('Payload invalide.'), requestId);
+  }
+
+  const data: Record<string, unknown> = {};
+
+  if ('name' in body) {
+    const name = normalizeStr((body as { name?: unknown }).name);
+    if (!name) return withRequestId(badRequest('Le nom est requis.'), requestId);
+    if (name.length > 120) return withRequestId(badRequest('Nom trop long (max 120).'), requestId);
+    data.name = name;
+  }
+
+  if ('contactName' in body) {
+    const contactName = normalizeStr((body as { contactName?: unknown }).contactName);
+    if (contactName && contactName.length > 120) {
+      return withRequestId(badRequest('Contact trop long (max 120).'), requestId);
+    }
+    data.contactName = contactName || null;
+  }
+
+  if ('contactEmail' in body) {
+    const email = normalizeStr((body as { contactEmail?: unknown }).contactEmail);
+    if (email && (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))) {
+      return withRequestId(badRequest('Email invalide.'), requestId);
+    }
+    data.contactEmail = email || null;
+  }
+
+  if ('contactPhone' in body) {
+    const phone = normalizeStr((body as { contactPhone?: unknown }).contactPhone);
+    if (phone && phone.length > 32) {
+      return withRequestId(badRequest('Téléphone invalide.'), requestId);
+    }
+    data.contactPhone = phone || null;
+  }
+
+  if ('source' in body) {
+    const source = (body as { source?: string }).source;
+    data.source = source ?? null;
+  }
+
+  if ('interestNote' in body) {
+    const note = normalizeStr((body as { interestNote?: unknown }).interestNote);
+    data.interestNote = note || null;
+  }
+
+  if ('qualificationLevel' in body) {
+    const level = (body as { qualificationLevel?: QualificationLevel | null }).qualificationLevel;
+    data.qualificationLevel = level ?? null;
+  }
+
+  if ('projectIdea' in body) {
+    const idea = normalizeStr((body as { projectIdea?: unknown }).projectIdea);
+    data.projectIdea = idea || null;
+  }
+
+  if ('estimatedBudget' in body) {
+    const budgetRaw = (body as { estimatedBudget?: unknown }).estimatedBudget;
+    data.estimatedBudget =
+      typeof budgetRaw === 'number' && Number.isFinite(budgetRaw) ? Math.trunc(budgetRaw) : null;
+  }
+
+  if ('firstContactAt' in body) {
+    const val = (body as { firstContactAt?: unknown }).firstContactAt;
+    const d = val ? new Date(String(val)) : null;
+    data.firstContactAt = d && !Number.isNaN(d.getTime()) ? d : null;
+  }
+
+  if ('pipelineStatus' in body) {
+    const status = (body as { pipelineStatus?: ProspectPipelineStatus | null }).pipelineStatus;
+    if (status && !VALID_STATUS.has(status)) {
+      return withRequestId(badRequest('Statut pipeline invalide.'), requestId);
+    }
+    data.pipelineStatus = status ?? undefined;
+  }
+
+  if (Object.keys(data).length === 0) {
+    return withRequestId(badRequest('Aucun champ à mettre à jour.'), requestId);
+  }
+
+  const updated = await prisma.prospect.updateMany({
+    where: { id: prospectIdBigInt, businessId: businessIdBigInt },
+    data,
+  });
+
+  if (updated.count === 0) {
+    return withRequestId(NextResponse.json({ error: 'Prospect introuvable.' }, { status: 404 }), requestId);
+  }
+
+  const prospect = await prisma.prospect.findFirst({
+    where: { id: prospectIdBigInt, businessId: businessIdBigInt },
+  });
+
+  return jsonNoStore(serializeProspect(prospect!));
 }
 
-// DELETE /api/pro/businesses/{businessId}/prospects/{prospectId}
 export async function DELETE(
   request: NextRequest,
   context: { params: Promise<{ businessId: string; prospectId: string }> }
@@ -288,54 +250,35 @@ export async function DELETE(
   const csrf = assertSameOrigin(request);
   if (csrf) return csrf;
 
+  let userId: string;
   try {
-    const { businessId: businessIdParam, prospectId: prospectIdParam } = await context.params;
-
-    let userId: string;
-    try {
-      ({ userId } = await requireAuthPro(request));
-    } catch {
-      return withRequestId(unauthorized(), requestId);
-    }
-
-    const businessId = parseId(businessIdParam);
-    const prospectId = parseId(prospectIdParam);
-    if (!businessId || !prospectId) {
-      return withRequestId(badRequest('businessId ou prospectId invalide.'), requestId);
-    }
-
-    const membership = await requireBusinessRole(businessId, BigInt(userId), 'ADMIN');
-    if (!membership) return withRequestId(forbidden(), requestId);
-
-    const limited = rateLimit(request, {
-      key: `pro:prospects:delete:${businessId.toString()}:${userId.toString()}`,
-      limit: 120,
-      windowMs: 60 * 60 * 1000,
-    });
-    if (limited) return limited;
-
-    const existing = await prisma.prospect.findFirst({
-      where: { id: prospectId, businessId },
-    });
-
-    if (!existing) {
-      return withRequestId(notFound('Prospect introuvable.'), requestId);
-    }
-
-    await prisma.prospect.delete({
-      where: { id: prospectId },
-    });
-
-    return new NextResponse(null, { status: 204 });
-  } catch (err) {
-    console.error({
-      requestId,
-      route: '/api/pro/businesses/[businessId]/prospects/[prospectId]',
-      err,
-    });
-    return withRequestId(
-      NextResponse.json({ error: 'Server error while deleting the prospect.' }, { status: 500 }),
-      requestId
-    );
+    ({ userId } = await requireAuthPro(request));
+  } catch {
+    return withRequestId(unauthorized(), requestId);
   }
+
+  const { businessId, prospectId } = await context.params;
+  const businessIdBigInt = parseId(businessId);
+  const prospectIdBigInt = parseId(prospectId);
+  if (!businessIdBigInt || !prospectIdBigInt) {
+    return withRequestId(badRequest('Paramètres invalides.'), requestId);
+  }
+
+  const business = await prisma.business.findUnique({ where: { id: businessIdBigInt } });
+  if (!business) {
+    return withRequestId(NextResponse.json({ error: 'Entreprise introuvable.' }, { status: 404 }), requestId);
+  }
+
+  const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'ADMIN');
+  if (!membership) return withRequestId(forbidden(), requestId);
+
+  const deleted = await prisma.prospect.deleteMany({
+    where: { id: prospectIdBigInt, businessId: businessIdBigInt },
+  });
+
+  if (deleted.count === 0) {
+    return withRequestId(NextResponse.json({ error: 'Prospect introuvable.' }, { status: 404 }), requestId);
+  }
+
+  return NextResponse.json({ deleted: deleted.count });
 }

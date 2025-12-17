@@ -17,6 +17,7 @@ type Business = {
   ownerId: string;
   createdAt: string;
   updatedAt: string;
+  role?: string;
 };
 
 type BusinessLayoutProps = {
@@ -47,8 +48,8 @@ export default function BusinessLayout({ children }: BusinessLayoutProps) {
         if (controller.signal.aborted) return;
         if (res.ok && res.data) {
           setBusiness(res.data);
+          setRole(res.data.role ?? null);
           setError(null);
-          setRole(null);
           return;
         }
         if (res.status === 401) {

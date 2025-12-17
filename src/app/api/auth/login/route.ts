@@ -29,7 +29,9 @@ export async function POST(request: NextRequest) {
     typeof body.email !== 'string' ||
     typeof body.password !== 'string'
   ) {
-    return withRequestId(badRequest('Email et mot de passe sont requis.'), requestId);
+    const res = withRequestId(badRequest('Email et mot de passe sont requis.'), requestId);
+    res.headers.set('Cache-Control', 'no-store');
+    return res;
   }
 
   try {
@@ -39,10 +41,9 @@ export async function POST(request: NextRequest) {
     });
 
     if (!user) {
-      return withRequestId(
-        NextResponse.json({ error: 'Identifiants invalides ou utilisateur inactif.' }, { status: 401 }),
-        requestId
-      );
+      const res = NextResponse.json({ error: 'Identifiants invalides ou utilisateur inactif.' }, { status: 401 });
+      res.headers.set('Cache-Control', 'no-store');
+      return withRequestId(res, requestId);
     }
 
     const token = await createSessionToken(user);
@@ -54,13 +55,13 @@ export async function POST(request: NextRequest) {
       ...authCookieOptions,
     });
 
-    return response;
+    response.headers.set('Cache-Control', 'no-store');
+    return withRequestId(response, requestId);
   } catch (error) {
     console.error('Login error', error);
 
-    return withRequestId(
-      NextResponse.json({ error: 'Impossible de se connecter pour le moment.' }, { status: 500 }),
-      requestId
-    );
+    const res = NextResponse.json({ error: 'Impossible de se connecter pour le moment.' }, { status: 500 });
+    res.headers.set('Cache-Control', 'no-store');
+    return withRequestId(res, requestId);
   }
 }
