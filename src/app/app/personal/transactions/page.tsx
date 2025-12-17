@@ -875,7 +875,7 @@ export default function PersoTransactionsPage() {
       {/* Modal add */}
       <Modal
         open={openAdd}
-        onClose={() => (createLoading ? null : setOpenAdd(false))}
+        onCloseAction={() => (createLoading ? null : setOpenAdd(false))}
         title="Ajouter une transaction"
         description="Renseigne les infos principales."
       >
@@ -1075,7 +1075,7 @@ export default function PersoTransactionsPage() {
       {/* Modal edit */}
       <Modal
         open={openEdit}
-        onClose={() => (editLoading ? null : setOpenEdit(false))}
+        onCloseAction={() => (editLoading ? null : setOpenEdit(false))}
         title="Modifier la transaction"
         description="Modifie une transaction passée."
       >

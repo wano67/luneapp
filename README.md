@@ -10,6 +10,10 @@ Dev : `pnpm dev` (Turbopack) ou `pnpm dev:stable` (désactive Turbopack en cas d
 - Sans cookie : GET `/api/pro/businesses` → 401 JSON + `Cache-Control: no-store`
 - Avec cookie valide : les routes protégées passent
 
+### Vérifs auth (manuel)
+- Token avec `isActive=false` → GET `/api/auth/me` doit 401 JSON + `x-request-id` + `Cache-Control: no-store`
+- Token dont `sub` pointe vers un user supprimé → GET `/api/auth/me` doit 401 JSON + `x-request-id` + `Cache-Control: no-store`
+
 ## Dépendances clés
 - Prisma client généré dans `src/generated/prisma`
 - Adapter PostgreSQL `@prisma/adapter-pg`

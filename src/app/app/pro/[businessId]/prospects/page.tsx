@@ -383,7 +383,7 @@ export default function BusinessProspectsPage() {
 
       <Modal
         open={createOpen}
-        onClose={() => (!creating ? setCreateOpen(false) : null)}
+        onCloseAction={() => (!creating ? setCreateOpen(false) : null)}
         title="Créer un prospect"
         description="Ajoute rapidement un lead dans le pipeline."
       >

@@ -5,20 +5,82 @@ import { useBodyScrollLock } from '@/lib/scrollLock';
 
 type ModalProps = {
   open: boolean;
-  onClose: () => void;
   title: string;
   description?: string;
   children: React.ReactNode;
+  onCloseAction: () => void;
 };
 
-export function Modal({ open, onClose, title, description, children }: ModalProps) {
+function getFocusableElements(root: HTMLElement | null) {
+  if (!root) return [];
+  const nodes = Array.from(
+    root.querySelectorAll<HTMLElement>(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"]), [contenteditable="true"]'
+    )
+  );
+  return nodes.filter((el) => {
+    const isDisabled = (el as HTMLButtonElement | HTMLInputElement).disabled;
+    const hidden = el.getAttribute('aria-hidden') === 'true';
+    const displayNone = el.offsetParent === null && el.getClientRects().length === 0;
+    return !isDisabled && !hidden && !displayNone;
+  });
+}
+
+export function Modal({ open, onCloseAction, title, description, children }: ModalProps) {
   const baseId = useId();
   const titleId = `modal-title-${baseId}`;
   const descId = description ? `modal-desc-${baseId}` : undefined;
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
   const lastActiveRef = useRef<HTMLElement | null>(null);
+  const closeRef = useRef<() => void>(() => {});
+
+  useEffect(() => {
+    closeRef.current = onCloseAction;
+  }, [onCloseAction]);
+
+  function requestClose() {
+    closeRef.current?.();
+  }
 
   useBodyScrollLock(open);
+
+  useEffect(() => {
+    if (!open) return;
+    const container = containerRef.current;
+    const parent = container?.parentElement;
+    if (!parent) return;
+
+    const siblings = Array.from(parent.children).filter((el) => el !== container) as HTMLElement[];
+    const previous = siblings.map((el) => ({
+      el,
+      ariaHidden: el.getAttribute('aria-hidden'),
+      hadInert: el.hasAttribute('inert'),
+    }));
+
+    siblings.forEach((el) => {
+      el.setAttribute('aria-hidden', 'true');
+      el.setAttribute('inert', '');
+      (el as HTMLElement & { inert?: boolean }).inert = true;
+    });
+
+    return () => {
+      previous.forEach(({ el, ariaHidden, hadInert }) => {
+        if (ariaHidden === null) {
+          el.removeAttribute('aria-hidden');
+        } else {
+          el.setAttribute('aria-hidden', ariaHidden);
+        }
+        if (hadInert) {
+          el.setAttribute('inert', '');
+          (el as HTMLElement & { inert?: boolean }).inert = true;
+        } else {
+          el.removeAttribute('inert');
+          (el as HTMLElement & { inert?: boolean }).inert = false;
+        }
+      });
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -26,17 +88,15 @@ export function Modal({ open, onClose, title, description, children }: ModalProp
     lastActiveRef.current = document.activeElement as HTMLElement | null;
 
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') requestClose();
     };
 
     const focusFirst = () => {
       const root = panelRef.current;
       if (!root) return;
-      const focusable = root.querySelector<HTMLElement>(
-        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-      );
-      if (focusable) {
-        focusable.focus();
+      const focusable = getFocusableElements(root);
+      if (focusable[0]) {
+        focusable[0].focus();
       } else {
         root.focus();
       }
@@ -48,12 +108,55 @@ export function Modal({ open, onClose, title, description, children }: ModalProp
       window.removeEventListener('keydown', onKeyDown);
       lastActiveRef.current?.focus?.();
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
 
+  const handleOverlayPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.target !== e.currentTarget) return;
+    e.preventDefault();
+    requestClose();
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== 'Tab') return;
+    const root = panelRef.current;
+    const focusables = getFocusableElements(root);
+
+    if (!root) return;
+    if (focusables.length === 0) {
+      e.preventDefault();
+      root.focus();
+      return;
+    }
+
+    const first = focusables[0];
+    const last = focusables[focusables.length - 1];
+    const active = document.activeElement as HTMLElement | null;
+    const isShift = e.shiftKey;
+
+    const isOutside = active ? !root.contains(active) : true;
+    if (isOutside) {
+      e.preventDefault();
+      (isShift ? last : first).focus();
+      return;
+    }
+
+    if (!isShift && active === last) {
+      e.preventDefault();
+      first.focus();
+      return;
+    }
+
+    if (isShift && active === first) {
+      e.preventDefault();
+      last.focus();
+    }
+  };
+
   return (
     <div
+      ref={containerRef}
       className="fixed inset-0 z-[70]"
       role="dialog"
       aria-modal="true"
@@ -61,11 +164,12 @@ export function Modal({ open, onClose, title, description, children }: ModalProp
       aria-describedby={descId}
     >
       {/* overlay */}
-      <button
-        type="button"
+      <div
+        role="presentation"
+        aria-hidden="true"
         className="absolute inset-0 bg-black/55 backdrop-blur-sm"
-        onClick={onClose}
-        aria-label="Fermer"
+        onPointerDown={handleOverlayPointerDown}
+        onClick={handleOverlayPointerDown}
       />
 
       {/* panel */}
@@ -78,6 +182,8 @@ export function Modal({ open, onClose, title, description, children }: ModalProp
       >
         <div
           ref={panelRef}
+          onKeyDown={handleKeyDown}
+          onPointerDown={(e) => e.stopPropagation()}
           tabIndex={-1}
           className="flex max-h-[90vh] flex-col overflow-hidden rounded-3xl border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] shadow-2xl shadow-[var(--shadow-float)] backdrop-blur-md focus:outline-none"
         >
@@ -96,7 +202,7 @@ export function Modal({ open, onClose, title, description, children }: ModalProp
 
             <button
               type="button"
-              onClick={onClose}
+              onClick={requestClose}
               className="absolute right-4 top-4 inline-flex h-11 w-11 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface-2)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
               aria-label="Fermer la fenêtre"
               title="Fermer"

@@ -242,7 +242,7 @@ export default function ClientsPage() {
 
       <Modal
         open={createOpen}
-        onClose={() => (!creating ? setCreateOpen(false) : null)}
+        onCloseAction={() => (!creating ? setCreateOpen(false) : null)}
         title="Nouveau client"
         description="Ajoute un client pour suivre les projets et finances."
       >

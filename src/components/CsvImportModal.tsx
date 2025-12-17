@@ -1,11 +1,13 @@
 // src/components/CsvImportModal.tsx
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Modal from '@/components/ui/modal';
 import { Button } from '@/components/ui/button';
 import { formatCents } from '@/lib/money';
+import { Select } from '@/components/ui/select';
+import { Dropzone } from '@/components/ui/dropzone';
 
 function getErrorMessage(e: unknown): string {
   return e instanceof Error ? e.message : 'Erreur';
@@ -182,10 +184,6 @@ function findHeaderRowIndex(rows: string[][]) {
   return 0;
 }
 
-function formatEURfromCents(cents: string) {
-  return formatCents(cents, 'EUR');
-}
-
 function isNegativeCents(value: string) {
   try {
     return BigInt(value) < 0n;
@@ -225,43 +223,35 @@ type PreviewResponse = {
   }>;
 };
 
-type ImportResponse = {
-  imported: number;
-  invalidRows: number;
-  errors?: Array<{ row: number; reason: string }>;
-  summary?: {
-    accountId: string;
-    fromDateIso: string | null;
-    toDateIso: string | null;
-    incomeCents: string;
-    expenseAbsCents: string;
-  };
-};
-
 type CsvImportModalProps = {
   open: boolean;
+  file: File | null;
   onCloseAction: () => void;
   accounts: AccountOption[];
   defaultAccountId?: string;
   lockedAccountId?: string;
-  onImportedAction?: () => void;
+  onConfirmImport?: (parsedRows: PreviewResponse['preview']) => Promise<void> | void;
+  onSelectFiles: (files: FileList | File[]) => void;
+  externalError?: string | null;
 };
 
 export default function CsvImportModal({
   open,
+  file,
   onCloseAction,
   accounts,
   defaultAccountId,
   lockedAccountId,
-  onImportedAction,
+  onConfirmImport,
+  onSelectFiles,
+  externalError,
 }: CsvImportModalProps) {
   const router = useRouter();
-  const initialAccountId = defaultAccountId || lockedAccountId || '';
+  const baseAccountId = useMemo(() => defaultAccountId || lockedAccountId || '', [defaultAccountId, lockedAccountId]);
+  const initialAccountId = baseAccountId;
   const [accountId, setAccountId] = useState<string>(initialAccountId);
-  const [file, setFile] = useState<File | null>(null);
   const [serverError, setServerError] = useState<string | null>(null);
   const [preview, setPreview] = useState<PreviewResponse | null>(null);
-  const [importResult, setImportResult] = useState<ImportResponse | null>(null);
   const [loadingPreview, setLoadingPreview] = useState(false);
   const [loadingImport, setLoadingImport] = useState(false);
   const [rawHeaders, setRawHeaders] = useState<string[]>([]);
@@ -276,19 +266,17 @@ export default function CsvImportModal({
     category: '',
   });
 
-  function resetState(nextOpenAccountId: string) {
-    setFile(null);
-    setServerError(null);
-    setPreview(null);
-    setImportResult(null);
-    setLoadingPreview(false);
-    setLoadingImport(false);
-    setAccountId(nextOpenAccountId);
-    setRawHeaders([]);
-    setRawRows([]);
-    setMapping({ date: '', label: '', amount: '', currency: '', note: '', category: '' });
-    setShowPreviewPanel(false);
-  }
+  const [fileName, setFileName] = useState<string>('');
+  const rawHeadersRef = useRef<string[]>([]);
+  const rawRowsRef = useRef<string[][]>([]);
+  const mappingRef = useRef<Mapping>({
+    date: '',
+    label: '',
+    amount: '',
+    currency: '',
+    note: '',
+    category: '',
+  });
 
   const canSelectAccount = !lockedAccountId;
   const previewSummary = useMemo(() => {
@@ -298,30 +286,160 @@ export default function CsvImportModal({
   const effectiveAccountId = lockedAccountId || accountId;
   const mappingOk = !!mapping.date && !!mapping.label && !!mapping.amount;
   const canSubmit = !!file && !!effectiveAccountId && /^\d+$/.test(effectiveAccountId) && mappingOk;
+  const canImport = canSubmit && !!preview?.preview?.length && !loadingPreview;
   const totalRows = rawRows.length;
 
-  async function onFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const f = e.target.files?.[0] || null;
-    setFile(f);
+  const resetFileParsing = useCallback((nextOpenAccountId: string | null = null) => {
     setPreview(null);
-    setImportResult(null);
     setServerError(null);
+    setLoadingImport(false);
+    setLoadingPreview(false);
     setRawHeaders([]);
     setRawRows([]);
     setMapping({ date: '', label: '', amount: '', currency: '', note: '', category: '' });
+    setShowPreviewPanel(false);
+    setFileName('');
+    if (nextOpenAccountId !== null) {
+      setAccountId(nextOpenAccountId);
+    }
+  }, []);
 
-    if (f) {
+  const handleClose = useCallback(() => {
+    if (loadingImport || loadingPreview) return;
+    resetFileParsing(baseAccountId);
+    setLoadingImport(false);
+    setLoadingPreview(false);
+    setServerError(null);
+    onCloseAction();
+  }, [baseAccountId, loadingImport, loadingPreview, onCloseAction, resetFileParsing]);
+
+  useEffect(() => {
+    if (!lockedAccountId && !accountId && baseAccountId) {
+      setAccountId(baseAccountId);
+    }
+  }, [accountId, baseAccountId, lockedAccountId]);
+
+  useEffect(() => {
+    rawHeadersRef.current = rawHeaders;
+  }, [rawHeaders]);
+
+  useEffect(() => {
+    rawRowsRef.current = rawRows;
+  }, [rawRows]);
+
+  useEffect(() => {
+    mappingRef.current = mapping;
+  }, [mapping]);
+
+  const runRequest = useCallback(
+    async (dryRun: boolean, normalizedFile: File) => {
+      if (!effectiveAccountId) {
+        setServerError('Choisis un compte.');
+        return null;
+      }
+      const fd = new FormData();
+      fd.append('accountId', effectiveAccountId);
+      fd.append('dryRun', dryRun ? 'true' : 'false');
+      fd.append('file', normalizedFile);
+
       try {
-        const text = await f.text();
+        const res = await fetch('/api/personal/transactions/import', {
+          method: 'POST',
+          credentials: 'include',
+          body: fd,
+        });
+        if (res.status === 401) {
+          const from = typeof window !== 'undefined' ? window.location.pathname + window.location.search : '/app';
+          router.push(`/login?from=${encodeURIComponent(from)}`);
+          return null;
+        }
+        const json: unknown = await res.json().catch(() => null);
+        if (!res.ok) {
+          if (
+            json &&
+            typeof json === 'object' &&
+            'error' in json &&
+            typeof (json as { error?: unknown }).error === 'string'
+          ) {
+            setServerError((json as { error: string }).error);
+          } else {
+            setServerError('Import impossible');
+          }
+          return null;
+        }
+        setServerError(null);
+        return json;
+      } catch (e: unknown) {
+        setServerError(getErrorMessage(e) || 'Erreur réseau.');
+        return null;
+      }
+    },
+    [effectiveAccountId, router]
+  );
+
+  const handlePreview = useCallback(
+    async (options?: {
+      file?: File | null;
+      headers?: string[];
+      rows?: string[][];
+      mappingOverride?: Mapping;
+      skipLoadingState?: boolean;
+    }) => {
+      const currentFile = options?.file ?? file;
+      const headersForRun = options?.headers ?? rawHeadersRef.current;
+      const rowsForRun = options?.rows ?? rawRowsRef.current;
+      const mappingForRun = options?.mappingOverride ?? mappingRef.current;
+
+      if (!currentFile || !mappingForRun.date || !mappingForRun.label || !mappingForRun.amount) {
+        setServerError('Mappe au moins Date / Libellé / Montant.');
+        return;
+      }
+      setShowPreviewPanel(true);
+      if (!effectiveAccountId) {
+        setServerError('Choisis un compte.');
+        return;
+      }
+
+      if (!options?.skipLoadingState) {
+        setLoadingPreview(true);
+      }
+      setServerError(null);
+      const normalizedCsv = buildNormalizedCsv(headersForRun, rowsForRun, mappingForRun);
+      const normalizedFile = new File(
+        [normalizedCsv],
+        currentFile.name.replace(/\.csv$/i, '') + '.normalized.csv',
+        { type: 'text/csv' }
+      );
+      const res = await runRequest(true, normalizedFile);
+      if (res) setPreview(res as PreviewResponse);
+      if (!options?.skipLoadingState) {
+        setLoadingPreview(false);
+      }
+    },
+    [effectiveAccountId, file, runRequest]
+  );
+
+  useEffect(() => {
+    resetFileParsing();
+    if (!file) return;
+
+    let cancelled = false;
+    const parseAndPreview = async () => {
+      setServerError(null);
+      setLoadingPreview(true);
+      setFileName(file.name);
+      try {
+        const text = await file.text();
+        if (cancelled) return;
         const delim = detectDelimiter(text);
         const table = parseCSV(text, delim);
         const headerIndex = findHeaderRowIndex(table);
         const headers = (table[headerIndex] ?? []).map((x) => String(x ?? '').trim());
         const rows = table.slice(headerIndex + 1);
+        const sug = suggestMapping(headers);
+
         setRawHeaders(headers);
         setRawRows(rows);
-
-        const sug = suggestMapping(headers);
         setMapping({
           date: sug.date,
           label: sug.label,
@@ -330,76 +448,49 @@ export default function CsvImportModal({
           note: sug.note,
           category: sug.category,
         });
-      } catch (err: unknown) {
-        setServerError(getErrorMessage(err) || 'Lecture du fichier impossible');
-      }
-    }
-  }
+        setShowPreviewPanel(true);
 
-  async function runRequest(dryRun: boolean, normalizedFile: File) {
-    if (!effectiveAccountId) {
-      setServerError('Choisis un compte.');
-      return null;
-    }
-    const fd = new FormData();
-    fd.append('accountId', effectiveAccountId);
-    fd.append('dryRun', dryRun ? 'true' : 'false');
-    fd.append('file', normalizedFile);
+        const mappingForPreview = {
+          date: sug.date,
+          label: sug.label,
+          amount: sug.amount,
+          currency: sug.currency,
+          note: sug.note,
+          category: sug.category,
+        };
 
-    try {
-      const res = await fetch('/api/personal/transactions/import', {
-        method: 'POST',
-        credentials: 'include',
-        body: fd,
-      });
-      if (res.status === 401) {
-        const from = typeof window !== 'undefined' ? window.location.pathname + window.location.search : '/app';
-        router.push(`/login?from=${encodeURIComponent(from)}`);
-        return null;
-      }
-      const json: unknown = await res.json().catch(() => null);
-      if (!res.ok) {
-        if (
-          json &&
-          typeof json === 'object' &&
-          'error' in json &&
-          typeof (json as { error?: unknown }).error === 'string'
-        ) {
-          setServerError((json as { error: string }).error);
-        } else {
-          setServerError('Import impossible');
+        if (mappingForPreview.date && mappingForPreview.label && mappingForPreview.amount) {
+          await handlePreview({
+            file,
+            headers,
+            rows,
+            mappingOverride: mappingForPreview,
+            skipLoadingState: true,
+          });
         }
-        return null;
+      } catch (err: unknown) {
+        if (cancelled) return;
+        setServerError(getErrorMessage(err) || 'Lecture du fichier impossible');
+      } finally {
+        if (cancelled) return;
+        setLoadingPreview(false);
       }
-      setServerError(null);
-      return json;
-    } catch (e: unknown) {
-      setServerError(getErrorMessage(e) || 'Erreur réseau.');
-      return null;
-    }
-  }
+    };
 
-  async function handlePreview() {
+    void parseAndPreview();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [file, handlePreview, resetFileParsing]);
+
+  const handleImport = useCallback(async () => {
     if (!file || !mappingOk) {
       setServerError('Mappe au moins Date / Libellé / Montant.');
       return;
     }
-    setLoadingPreview(true);
-    setImportResult(null);
-    const normalizedCsv = buildNormalizedCsv(rawHeaders, rawRows, mapping);
-    const normalizedFile = new File(
-      [normalizedCsv],
-      file.name.replace(/\.csv$/i, '') + '.normalized.csv',
-      { type: 'text/csv' }
-    );
-    const res = await runRequest(true, normalizedFile);
-    if (res) setPreview(res as PreviewResponse);
-    setLoadingPreview(false);
-  }
-
-  async function handleImport() {
-    if (!file || !mappingOk) {
-      setServerError('Mappe au moins Date / Libellé / Montant.');
+    if (!preview) {
+      setServerError('Prévisualise avant d’importer.');
       return;
     }
     setLoadingImport(true);
@@ -411,115 +502,56 @@ export default function CsvImportModal({
     );
     const res = await runRequest(false, normalizedFile);
     if (res) {
-      setImportResult(res as ImportResponse);
-      setPreview(null);
-      onImportedAction?.();
+      await onConfirmImport?.(preview.preview);
+      setLoadingImport(false);
+      handleClose();
+      return;
     }
     setLoadingImport(false);
-  }
+  }, [file, mappingOk, preview, rawHeaders, rawRows, mapping, runRequest, onConfirmImport, handleClose]);
 
   return (
     <Modal
       open={open}
-      onClose={() => {
-        if (loadingImport || loadingPreview) return;
-        const next = defaultAccountId || lockedAccountId || '';
-        resetState(next);
-        onCloseAction();
-      }}
+      onCloseAction={handleClose}
       title="Importer un CSV"
       description="Prévisualise puis importe tes transactions."
     >
       <div className="max-h-[78vh] overflow-hidden">
-        {serverError ? (
+        {externalError || serverError ? (
           <div className="mb-3 rounded-2xl border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-200">
-            {serverError}
+            {externalError || serverError}
           </div>
         ) : null}
 
-        {importResult?.summary ? (
-          <div className="space-y-4">
-            <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4">
-              <p className="text-sm font-semibold text-emerald-100">Import terminé ✅</p>
-              <p className="mt-1 text-sm text-emerald-100/90">
-                {importResult.imported} transaction(s) importée(s)
-                {importResult.invalidRows ? ` • ${importResult.invalidRows} ignorée(s)` : ''}
-              </p>
-            </div>
-
+        <div className="max-h-[calc(78vh-72px)] space-y-4 overflow-auto pr-1">
             <div className="grid gap-3 sm:grid-cols-2">
-              <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)]/50 p-4">
-                <p className="text-xs text-slate-400">Période</p>
-                <p className="mt-1 text-sm text-slate-100">
-                  {importResult.summary.fromDateIso
-                    ? new Date(importResult.summary.fromDateIso).toLocaleDateString('fr-FR')
-                    : '—'}{' '}
-                  →{' '}
-                  {importResult.summary.toDateIso
-                    ? new Date(importResult.summary.toDateIso).toLocaleDateString('fr-FR')
-                    : '—'}
-                </p>
-              </div>
-
-              <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)]/50 p-4">
-                <p className="text-xs text-slate-400">Totaux</p>
-                <p className="mt-1 text-sm">
-                  <span className="text-emerald-300">
-                    + {formatEURfromCents(importResult.summary.incomeCents)}
-                  </span>
-                  <span className="text-slate-500"> • </span>
-                  <span className="text-rose-300">
-                    - {formatEURfromCents(importResult.summary.expenseAbsCents)}
-                  </span>
-                </p>
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-2">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  const next = defaultAccountId || lockedAccountId || '';
-                  resetState(next);
-                  onCloseAction();
-                }}
+              <Select
+                label="Compte cible"
+                value={accountId}
+                onChange={(e) => setAccountId(e.target.value)}
+                disabled={!canSelectAccount || loadingPreview || loadingImport}
               >
-                Fermer
-              </Button>
-            </div>
-          </div>
-        ) : (
-          <div className="max-h-[calc(78vh-72px)] space-y-4 overflow-auto pr-1">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div>
-                <label className="mb-1 block text-sm text-slate-300">Compte cible</label>
-                <select
-                  value={accountId}
-                  onChange={(e) => setAccountId(e.target.value)}
-                  disabled={!canSelectAccount || loadingPreview || loadingImport}
-                  className="h-12 w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 text-sm text-slate-50"
-                >
-                  <option value="">Choisir un compte</option>
-                  {accounts.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.name} · {a.currency}
-                    </option>
-                  ))}
-                </select>
-              </div>
+                <option value="">Choisir un compte</option>
+                {accounts.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name} · {a.currency}
+                  </option>
+                ))}
+              </Select>
 
-              <div>
-                <label className="mb-1 block text-sm text-slate-300">Fichier CSV</label>
-                <input
-                  type="file"
+              <div className="space-y-1">
+                <Dropzone
+                  label="Fichier CSV"
+                  hint="CSV uniquement"
                   accept=".csv,text/csv"
-                  onChange={onFileChange}
+                  onFiles={onSelectFiles}
                   disabled={loadingPreview || loadingImport}
-                  className="w-full text-sm text-slate-200"
                 />
-                <p className="mt-1 text-xs text-slate-500">
-                  Format: date,label,amount,currency,note,category
-                </p>
+                <p className="text-xs text-slate-500">Format: date,label,amount,currency,note,category</p>
+                {fileName ? (
+                  <p className="text-xs text-slate-400">Sélectionné : {fileName}</p>
+                ) : null}
               </div>
             </div>
 
@@ -650,51 +682,25 @@ export default function CsvImportModal({
               </div>
             ) : null}
           </div>
-        )}
-
         <div className="sticky bottom-0 mt-3 border-t border-[var(--border)] bg-[var(--background-alt)]/90 px-4 py-3 backdrop-blur">
           <div className="flex flex-wrap justify-end gap-2">
             <Button
               variant="outline"
               onClick={() => {
                 const next = defaultAccountId || lockedAccountId || '';
-                resetState(next);
-                onCloseAction();
+                resetFileParsing(next);
+                handleClose();
               }}
               disabled={loadingImport || loadingPreview}
             >
               Fermer
             </Button>
             <Button
-              variant="outline"
-              onClick={() => {
-                setShowPreviewPanel((v) => !v);
-                if (!showPreviewPanel) handlePreview();
-              }}
-              disabled={loadingImport || loadingPreview || !mappingOk || !file}
-              className="min-w-[140px]"
-            >
-              <span className="inline-flex items-center gap-2">
-                Prévisualiser
-                {importResult?.imported ? (
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                    <path
-                      d="M20 6L9 17l-5-5"
-                      stroke="currentColor"
-                      strokeWidth="2.5"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                ) : null}
-              </span>
-            </Button>
-            <Button
               onClick={handleImport}
-              disabled={loadingImport || !canSubmit || !!importResult?.imported}
-              className="min-w-[140px]"
+              disabled={loadingImport || !canImport}
+              className="min-w-[160px]"
             >
-              {importResult?.imported ? 'Importé ✅' : loadingImport ? 'Import…' : 'Importer'}
+              {loadingImport ? 'Import…' : 'Importer'}
             </Button>
           </div>
         </div>

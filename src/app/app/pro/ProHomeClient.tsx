@@ -490,7 +490,7 @@ export default function ProHomeClient() {
       {/* CREATE MODAL */}
       <Modal
         open={createOpen}
-        onClose={() => (creating ? null : setCreateOpen(false))}
+        onCloseAction={() => (creating ? null : setCreateOpen(false))}
         title="Créer une entreprise"
         description="Formulaire complet (pour l’instant, l’API n’exige que le nom)."
       >
@@ -522,7 +522,7 @@ export default function ProHomeClient() {
       {/* JOIN MODAL */}
       <Modal
         open={joinOpen}
-        onClose={() => (joining ? null : setJoinOpen(false))}
+        onCloseAction={() => (joining ? null : setJoinOpen(false))}
         title="Rejoindre une entreprise"
         description="Colle ici le token d’invitation reçu par email."
       >

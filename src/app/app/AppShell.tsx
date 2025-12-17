@@ -15,6 +15,7 @@ import {
 } from '@/components/icons';
 import { useBodyScrollLock } from '@/lib/scrollLock';
 import { LogoMark } from '@/components/marketing/LogoMark';
+import { FileDropProvider } from '@/components/file-drop/FileDropProvider';
 
 function getCurrentSpace(pathname: string): Space {
   if (pathname.startsWith('/app/pro')) return 'pro';
@@ -279,7 +280,8 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const quickActions = getQuickActions(menuSpace, businessId);
 
   return (
-    <div className="min-h-screen bg-[var(--background)] text-[var(--text-primary)]">
+    <FileDropProvider>
+      <div className="min-h-screen bg-[var(--background)] text-[var(--text-primary)]">
       {/* HEADER */}
       <header
         className={[
@@ -405,10 +407,6 @@ export default function AppShell({ children }: { children: ReactNode }) {
           {/* Left: logo / identité */}
           <Link href="/app" className="flex items-center gap-2 no-underline hover:no-underline">
             <LogoMark className="text-[var(--text)]" />
-            <div className="flex flex-col">
-              <span className="text-sm font-semibold leading-4">Lune OS</span>
-              <span className="text-[11px] text-[var(--text-secondary)]">Système interne</span>
-            </div>
           </Link>
 
           {/* Center nav desktop */}
@@ -577,5 +575,6 @@ export default function AppShell({ children }: { children: ReactNode }) {
         <div className="p-4 md:p-6">{children}</div>
       </main>
     </div>
+    </FileDropProvider>
   );
 }

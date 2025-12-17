@@ -251,7 +251,7 @@ export default function ProjectsPage() {
 
       <Modal
         open={createOpen}
-        onClose={() => (!creating ? setCreateOpen(false) : null)}
+        onCloseAction={() => (!creating ? setCreateOpen(false) : null)}
         title="Nouveau projet"
         description="Associe un client (optionnel) et fixe le statut."
       >

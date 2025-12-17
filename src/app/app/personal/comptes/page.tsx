@@ -1,13 +1,15 @@
 'use client';
 
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Select } from '@/components/ui/select';
 import Modal from '@/components/ui/modal';
 import CsvImportModal from '@/components/CsvImportModal';
+import { useFileDropHandler } from '@/components/file-drop/FileDropProvider';
 
 type AccountItem = {
   id: string;
@@ -89,6 +91,9 @@ export default function ComptesPage() {
   // modal create
   const [open, setOpen] = useState(false);
   const [openImport, setOpenImport] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [lastImportedFileName, setLastImportedFileName] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
 
@@ -128,6 +133,25 @@ export default function ComptesPage() {
   useEffect(() => {
     load();
   }, []);
+
+  const handleCsvFiles = useCallback((files: FileList | File[]) => {
+    const list = Array.from(files as ArrayLike<File>);
+    if (!list.length) return;
+    const file = list[0];
+    const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
+    const isCsv = ext === 'csv' || file.type === 'text/csv';
+    if (!isCsv) {
+      setImportError(`Votre fichier est un fichier .${ext || 'inconnu'}. Le format requis est .csv.`);
+      setImportFile(null);
+      setOpenImport(true);
+      return;
+    }
+    setImportError(null);
+    setImportFile(file);
+    setOpenImport(true);
+  }, []);
+
+  useFileDropHandler(handleCsvFiles, { enabled: true });
 
   const totalCents = useMemo(() => {
     return items.reduce<bigint>((acc, a) => acc + BigInt(a.balanceCents || '0'), 0n);
@@ -193,7 +217,14 @@ export default function ComptesPage() {
           </div>
 
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => setOpenImport(true)}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setImportFile(null);
+                setImportError(null);
+                setOpenImport(true);
+              }}
+            >
               Importer CSV
             </Button>
             <Button onClick={() => setOpen(true)}>Créer un compte</Button>
@@ -272,7 +303,7 @@ export default function ComptesPage() {
 
       <Modal
         open={open}
-        onClose={() => (creating ? null : setOpen(false))}
+        onCloseAction={() => (creating ? null : setOpen(false))}
         title="Créer un compte bancaire"
         description="Ajoute un compte (courant, épargne, invest, cash). Le solde est calculé avec les transactions."
       >
@@ -285,22 +316,20 @@ export default function ComptesPage() {
             placeholder="Ex: Courant Revolut"
           />
 
-          <div>
-            <label className="mb-1 block text-xs font-medium text-[var(--text-secondary)]">Type</label>
-            <select
-              value={type}
-              onChange={(e) => {
-                const v = e.target.value;
-                if (isAccountType(v)) setType(v);
-              }}
-              className="h-10 w-full rounded-xl border border-[var(--border)] bg-[var(--background)] px-3 text-sm"
-            >
-              <option value="CURRENT">Courant</option>
-              <option value="SAVINGS">Épargne</option>
-              <option value="INVEST">Invest</option>
-              <option value="CASH">Cash</option>
-            </select>
-          </div>
+          <Select
+            label="Type"
+            value={type}
+            onChange={(e) => {
+              const v = e.target.value;
+              if (isAccountType(v)) setType(v);
+            }}
+            disabled={creating}
+          >
+            <option value="CURRENT">Courant</option>
+            <option value="SAVINGS">Épargne</option>
+            <option value="INVEST">Invest</option>
+            <option value="CASH">Cash</option>
+          </Select>
 
           <Input
             label="Solde initial (€)"
@@ -336,11 +365,29 @@ export default function ComptesPage() {
 
       <CsvImportModal
         open={openImport}
-        onCloseAction={() => setOpenImport(false)}
+        file={importFile}
+        onCloseAction={() => {
+          setOpenImport(false);
+          setImportFile(null);
+          setImportError(null);
+        }}
         accounts={items.map((a) => ({ id: a.id, name: a.name, currency: a.currency }))}
         defaultAccountId={items[0]?.id}
-        onImportedAction={load}
+        onConfirmImport={async () => {
+          await load();
+          if (importFile) setLastImportedFileName(importFile.name);
+          setImportFile(null);
+          setImportError(null);
+        }}
+        onSelectFiles={handleCsvFiles}
+        externalError={importError}
       />
+
+      {lastImportedFileName ? (
+        <div className="rounded-2xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">
+          Import réussi — {lastImportedFileName}
+        </div>
+      ) : null}
     </div>
   );
 }

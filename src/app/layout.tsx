@@ -20,6 +20,9 @@ const jetBrainsMono = JetBrains_Mono({
 export const metadata: Metadata = {
   title: 'Lune • OS perso & pro',
   description: "Landing publique et accès à l'app interne Lune.",
+  icons: {
+    icon: '/icon.svg',
+  },
 };
 
 export default async function RootLayout({

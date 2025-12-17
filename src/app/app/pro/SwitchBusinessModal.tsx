@@ -25,7 +25,7 @@ export default function SwitchBusinessModal() {
   return (
     <Modal
       open={switchOpen}
-      onClose={() => (loadingBusinesses ? null : closeSwitchModal())}
+      onCloseAction={() => (loadingBusinesses ? null : closeSwitchModal())}
       title="Changer d’entreprise"
       description="Sélectionne une entreprise pour basculer le contexte."
     >

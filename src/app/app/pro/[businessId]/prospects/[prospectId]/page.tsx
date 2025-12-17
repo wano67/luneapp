@@ -661,7 +661,7 @@ export default function ProspectDetailPage() {
 
       <Modal
         open={convertOpen}
-        onClose={() => setConvertOpen(false)}
+        onCloseAction={() => setConvertOpen(false)}
         title="Conversion client + projet"
         description="Préparer la future conversion d’un prospect en client/projet."
       >

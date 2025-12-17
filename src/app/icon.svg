@@ -8,5 +8,5 @@
   </defs>
 
   <!-- cercle principal masqué -->
-  <circle cx="28" cy="32" r="20" fill="#EAF2FF" mask="url(#m)"></circle>
+  <circle cx="28" cy="32" r="20" fill="currentColor" mask="url(#m)"></circle>
 </svg>
