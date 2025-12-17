@@ -373,6 +373,8 @@ export default function AppShell({ children }: { children: ReactNode }) {
                 'ml-1 inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--background)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]',
                 focusRing,
               ].join(' ')}
+              aria-expanded={mobileMenuOpen}
+              aria-controls="mobile-menu"
               aria-label={mobileMenuOpen ? 'Fermer le menu' : 'Ouvrir le menu'}
               title={mobileMenuOpen ? 'Fermer' : 'Menu'}
             >
@@ -483,6 +485,8 @@ export default function AppShell({ children }: { children: ReactNode }) {
               zIndex: LAYERS.menu,
               paddingBottom: 'env(safe-area-inset-bottom, 0px)',
             }}
+            id="mobile-menu"
+            aria-hidden={!mobileMenuOpen}
           >
             <div className="max-h-[420px] overflow-y-auto px-2 pb-3">
               {/* ✅ Title */}
@@ -539,7 +543,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
       >
         <div
           className={[
-            'rounded-3xl border border-[var(--border)]',
+            'rounded-3xl border border-[var(--border)] max-h-[90vh] overflow-y-auto',
             'bg-[var(--background-alt)]/70 backdrop-blur-md shadow-xl',
             'transition-all duration-200 ease-out',
             dockOpen ? 'w-64' : 'w-14',

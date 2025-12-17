@@ -28,6 +28,8 @@ export type NavItem = {
   icon: ReactNode;
   accent?: 'wallet' | 'studio' | 'focus';
   onClick?: () => void;
+  disabled?: boolean;
+  hint?: string;
 };
 
 export type NavSection = {
@@ -108,8 +110,8 @@ function getStudioBusinessSections(businessId: string): NavSection[] {
         { href: `${base}/prospects`, label: 'Prospects', icon: <span className="text-[16px]">•</span> },
         { href: `${base}/projects`, label: 'Projects', icon: <span className="text-[16px]">•</span> },
         { href: `${base}/services`, label: 'Services', icon: <span className="text-[16px]">•</span> },
-        { href: `${base}/tasks`, label: 'Tasks', icon: <span className="text-[16px]">•</span> },
-        { href: `${base}/process`, label: 'Process', icon: <span className="text-[16px]">•</span> },
+        { href: `${base}/tasks`, label: 'Tasks', icon: <span className="text-[16px]">•</span>, disabled: true, hint: 'Bientôt' },
+        { href: `${base}/process`, label: 'Process', icon: <span className="text-[16px]">•</span>, disabled: true, hint: 'Bientôt' },
         { href: `${base}/finances`, label: 'Finances', icon: <span className="text-[16px]">•</span> },
         { href: `${base}/invites`, label: 'Invitations', icon: <span className="text-[16px]">•</span> },
       ],
@@ -118,38 +120,38 @@ function getStudioBusinessSections(businessId: string): NavSection[] {
       title: 'Settings',
       items: [
         { href: `${base}/settings`, label: 'Overview', icon: <span className="text-[16px]">•</span> },
-        { href: `${base}/settings/billing`, label: 'Billing', icon: <span className="text-[16px]">•</span> },
-        { href: `${base}/settings/taxes`, label: 'Taxes', icon: <span className="text-[16px]">•</span> },
-        { href: `${base}/settings/team`, label: 'Team', icon: <span className="text-[16px]">•</span> },
-        { href: `${base}/settings/integrations`, label: 'Integrations', icon: <span className="text-[16px]">•</span> },
-        { href: `${base}/settings/permissions`, label: 'Permissions', icon: <span className="text-[16px]">•</span> },
+        { href: `${base}/settings/billing`, label: 'Billing', icon: <span className="text-[16px]">•</span>, disabled: true, hint: 'Bientôt' },
+        { href: `${base}/settings/taxes`, label: 'Taxes', icon: <span className="text-[16px]">•</span>, disabled: true, hint: 'Bientôt' },
+        { href: `${base}/settings/team`, label: 'Team', icon: <span className="text-[16px]">•</span>, disabled: true, hint: 'Bientôt' },
+        { href: `${base}/settings/integrations`, label: 'Integrations', icon: <span className="text-[16px]">•</span>, disabled: true, hint: 'Bientôt' },
+        { href: `${base}/settings/permissions`, label: 'Permissions', icon: <span className="text-[16px]">•</span>, disabled: true, hint: 'Bientôt' },
       ],
     },
     {
       title: 'Finances',
       items: [
-        { href: `${base}/finances/payments`, label: 'Payments', icon: <span className="text-[16px]">•</span> },
-        { href: `${base}/finances/treasury`, label: 'Treasury', icon: <span className="text-[16px]">•</span> },
-        { href: `${base}/finances/vat`, label: 'VAT', icon: <span className="text-[16px]">•</span> },
-        { href: `${base}/finances/forecasting`, label: 'Forecasting', icon: <span className="text-[16px]">•</span> },
+        { href: `${base}/finances/payments`, label: 'Payments', icon: <span className="text-[16px]">•</span>, disabled: true, hint: 'Bientôt' },
+        { href: `${base}/finances/treasury`, label: 'Treasury', icon: <span className="text-[16px]">•</span>, disabled: true, hint: 'Bientôt' },
+        { href: `${base}/finances/vat`, label: 'VAT', icon: <span className="text-[16px]">•</span>, disabled: true, hint: 'Bientôt' },
+        { href: `${base}/finances/forecasting`, label: 'Forecasting', icon: <span className="text-[16px]">•</span>, disabled: true, hint: 'Bientôt' },
       ],
     },
     {
       title: 'Admin',
       items: [
         { href: `${base}/admin`, label: 'Administration', icon: <span className="text-[16px]">•</span> },
-        { href: `${base}/admin/documents`, label: 'Documents', icon: <span className="text-[16px]">•</span> },
-        { href: `${base}/admin/deadlines`, label: 'Deadlines', icon: <span className="text-[16px]">•</span> },
+        { href: `${base}/admin/documents`, label: 'Documents', icon: <span className="text-[16px]">•</span>, disabled: true, hint: 'Bientôt' },
+        { href: `${base}/admin/deadlines`, label: 'Deadlines', icon: <span className="text-[16px]">•</span>, disabled: true, hint: 'Bientôt' },
       ],
     },
     {
       title: 'References',
       items: [
         { href: `${base}/references`, label: 'Overview', icon: <span className="text-[16px]">•</span> },
-        { href: `${base}/references/categories`, label: 'Categories', icon: <span className="text-[16px]">•</span> },
-        { href: `${base}/references/tags`, label: 'Tags', icon: <span className="text-[16px]">•</span> },
-        { href: `${base}/references/automations`, label: 'Automations', icon: <span className="text-[16px]">•</span> },
-        { href: `${base}/references/numbering`, label: 'Numbering', icon: <span className="text-[16px]">•</span> },
+        { href: `${base}/references/categories`, label: 'Categories', icon: <span className="text-[16px]">•</span>, disabled: true, hint: 'Bientôt' },
+        { href: `${base}/references/tags`, label: 'Tags', icon: <span className="text-[16px]">•</span>, disabled: true, hint: 'Bientôt' },
+        { href: `${base}/references/automations`, label: 'Automations', icon: <span className="text-[16px]">•</span>, disabled: true, hint: 'Bientôt' },
+        { href: `${base}/references/numbering`, label: 'Numbering', icon: <span className="text-[16px]">•</span>, disabled: true, hint: 'Bientôt' },
       ],
     },
   ];
@@ -229,47 +231,67 @@ export default function AppSidebar(props: AppSidebarProps) {
                 const activeClasses =
                   'border border-[var(--border)] bg-[var(--surface)] text-[var(--text-primary)]';
 
+                const isDisabled = item.disabled;
+                const sharedClasses = classNames(
+                  baseClasses,
+                  'hover:scale-[1.03] active:scale-[0.99]',
+                  active ? activeClasses : inactiveClasses,
+                  collapsed ? 'justify-center' : '',
+                  accentClasses(item.accent),
+                  'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]',
+                  isDisabled ? 'cursor-not-allowed opacity-60' : ''
+                );
+
                 const content = item.onClick ? (
                   <button
                     type="button"
                     onClick={() => {
+                      if (isDisabled) return;
                       item.onClick?.();
                       onNavigate?.();
                     }}
-                    title={collapsed ? item.label : undefined}
+                    title={collapsed ? item.label : item.hint ?? item.label}
                     data-active={active ? 'true' : 'false'}
-                    className={classNames(
-                      baseClasses,
-                      'hover:scale-[1.03] active:scale-[0.99]',
-                      active ? activeClasses : inactiveClasses,
-                      collapsed ? 'justify-center' : '',
-                      accentClasses(item.accent)
-                    )}
+                    className={sharedClasses}
+                    disabled={isDisabled}
+                    aria-disabled={isDisabled}
                   >
                     <span className="text-[var(--text-secondary)] transition-transform duration-150 group-hover:scale-110 group-hover:text-[var(--text-primary)]">
                       {item.icon}
                     </span>
                     {!collapsed && <span className="truncate">{item.label}</span>}
+                    {!collapsed && item.hint ? (
+                      <span className="text-[10px] uppercase tracking-[0.15em] text-[var(--text-secondary)]">
+                        {item.hint}
+                      </span>
+                    ) : null}
                   </button>
                 ) : (
                   <Link
                     key={`${section.title}-${item.href}-${item.label}`}
-                    href={item.href ?? '/app'}
-                    onClick={() => onNavigate?.()}
-                    title={collapsed ? item.label : undefined}
+                    href={isDisabled ? '#' : item.href ?? '/app'}
+                    onClick={(e) => {
+                      if (isDisabled) {
+                        e.preventDefault();
+                        return;
+                      }
+                      onNavigate?.();
+                    }}
+                    title={collapsed ? item.label : item.hint ?? item.label}
                     data-active={active ? 'true' : 'false'}
-                    className={classNames(
-                      baseClasses,
-                      'hover:scale-[1.03] active:scale-[0.99]',
-                      active ? activeClasses : inactiveClasses,
-                      collapsed ? 'justify-center' : '',
-                      accentClasses(item.accent)
-                    )}
+                    className={sharedClasses}
+                    aria-disabled={isDisabled}
+                    tabIndex={isDisabled ? -1 : 0}
                   >
                     <span className="text-[var(--text-secondary)] transition-transform duration-150 group-hover:scale-110 group-hover:text-[var(--text-primary)]">
                       {item.icon}
                     </span>
                     {!collapsed && <span className="truncate">{item.label}</span>}
+                    {!collapsed && item.hint ? (
+                      <span className="text-[10px] uppercase tracking-[0.15em] text-[var(--text-secondary)]">
+                        {item.hint}
+                      </span>
+                    ) : null}
                   </Link>
                 );
 
