@@ -105,7 +105,7 @@ function getStudioBusinessSections(businessId: string): NavSection[] {
     {
       title: 'Pilotage',
       items: [
-        { href: `${base}`, label: 'Vue d’ensemble', icon: <span className="text-[16px]">•</span> },
+        { href: `${base}/dash-entreprise`, label: 'Vue d’ensemble', icon: <span className="text-[16px]">•</span> },
         { href: `${base}/clients`, label: 'Clients', icon: <span className="text-[16px]">•</span> },
         { href: `${base}/prospects`, label: 'Prospects', icon: <span className="text-[16px]">•</span> },
         { href: `${base}/projects`, label: 'Projects', icon: <span className="text-[16px]">•</span> },
@@ -120,38 +120,38 @@ function getStudioBusinessSections(businessId: string): NavSection[] {
       title: 'Settings',
       items: [
         { href: `${base}/settings`, label: 'Overview', icon: <span className="text-[16px]">•</span> },
-        { href: `${base}/settings/billing`, label: 'Billing', icon: <span className="text-[16px]">•</span>, disabled: true, hint: 'Bientôt' },
-        { href: `${base}/settings/taxes`, label: 'Taxes', icon: <span className="text-[16px]">•</span>, disabled: true, hint: 'Bientôt' },
-        { href: `${base}/settings/team`, label: 'Team', icon: <span className="text-[16px]">•</span>, disabled: true, hint: 'Bientôt' },
-        { href: `${base}/settings/integrations`, label: 'Integrations', icon: <span className="text-[16px]">•</span>, disabled: true, hint: 'Bientôt' },
-        { href: `${base}/settings/permissions`, label: 'Permissions', icon: <span className="text-[16px]">•</span>, disabled: true, hint: 'Bientôt' },
+        { href: `${base}/settings/billing`, label: 'Billing', icon: <span className="text-[16px]">•</span> },
+        { href: `${base}/settings/taxes`, label: 'Taxes', icon: <span className="text-[16px]">•</span> },
+        { href: `${base}/settings/team`, label: 'Team', icon: <span className="text-[16px]">•</span> },
+        { href: `${base}/settings/integrations`, label: 'Integrations', icon: <span className="text-[16px]">•</span> },
+        { href: `${base}/settings/permissions`, label: 'Permissions', icon: <span className="text-[16px]">•</span> },
       ],
     },
     {
       title: 'Finances',
       items: [
-        { href: `${base}/finances/payments`, label: 'Payments', icon: <span className="text-[16px]">•</span>, disabled: true, hint: 'Bientôt' },
-        { href: `${base}/finances/treasury`, label: 'Treasury', icon: <span className="text-[16px]">•</span>, disabled: true, hint: 'Bientôt' },
-        { href: `${base}/finances/vat`, label: 'VAT', icon: <span className="text-[16px]">•</span>, disabled: true, hint: 'Bientôt' },
-        { href: `${base}/finances/forecasting`, label: 'Forecasting', icon: <span className="text-[16px]">•</span>, disabled: true, hint: 'Bientôt' },
+        { href: `${base}/finances/payments`, label: 'Payments', icon: <span className="text-[16px]">•</span> },
+        { href: `${base}/finances/treasury`, label: 'Treasury', icon: <span className="text-[16px]">•</span> },
+        { href: `${base}/finances/vat`, label: 'VAT', icon: <span className="text-[16px]">•</span> },
+        { href: `${base}/finances/forecasting`, label: 'Forecasting', icon: <span className="text-[16px]">•</span> },
       ],
     },
     {
       title: 'Admin',
       items: [
         { href: `${base}/admin`, label: 'Administration', icon: <span className="text-[16px]">•</span> },
-        { href: `${base}/admin/documents`, label: 'Documents', icon: <span className="text-[16px]">•</span>, disabled: true, hint: 'Bientôt' },
-        { href: `${base}/admin/deadlines`, label: 'Deadlines', icon: <span className="text-[16px]">•</span>, disabled: true, hint: 'Bientôt' },
+        { href: `${base}/admin/documents`, label: 'Documents', icon: <span className="text-[16px]">•</span> },
+        { href: `${base}/admin/deadlines`, label: 'Deadlines', icon: <span className="text-[16px]">•</span> },
       ],
     },
     {
       title: 'References',
       items: [
         { href: `${base}/references`, label: 'Overview', icon: <span className="text-[16px]">•</span> },
-        { href: `${base}/references/categories`, label: 'Categories', icon: <span className="text-[16px]">•</span>, disabled: true, hint: 'Bientôt' },
-        { href: `${base}/references/tags`, label: 'Tags', icon: <span className="text-[16px]">•</span>, disabled: true, hint: 'Bientôt' },
-        { href: `${base}/references/automations`, label: 'Automations', icon: <span className="text-[16px]">•</span>, disabled: true, hint: 'Bientôt' },
-        { href: `${base}/references/numbering`, label: 'Numbering', icon: <span className="text-[16px]">•</span>, disabled: true, hint: 'Bientôt' },
+        { href: `${base}/references/categories`, label: 'Categories', icon: <span className="text-[16px]">•</span> },
+        { href: `${base}/references/tags`, label: 'Tags', icon: <span className="text-[16px]">•</span> },
+        { href: `${base}/references/automations`, label: 'Automations', icon: <span className="text-[16px]">•</span> },
+        { href: `${base}/references/numbering`, label: 'Numbering', icon: <span className="text-[16px]">•</span> },
       ],
     },
   ];

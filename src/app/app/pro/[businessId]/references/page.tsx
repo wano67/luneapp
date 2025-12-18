@@ -5,16 +5,51 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import {
+  getMockAutomations,
+  getMockCategories,
+  getMockNumbering,
+  getMockTags,
+} from '../../pro-data';
+import { usePersistentState } from '../../usePersistentState';
 
 export default function ReferencesPage() {
   const params = useParams();
   const businessId = (params?.businessId ?? '') as string;
 
+  const [categories] = usePersistentState(`refs-categories:${businessId}`, getMockCategories());
+  const [tags] = usePersistentState(`refs-tags:${businessId}`, getMockTags());
+  const [automations] = usePersistentState(
+    `refs-automations:${businessId}`,
+    getMockAutomations()
+  );
+  const [numbering] = usePersistentState(`refs-numbering:${businessId}`, getMockNumbering());
+
   const links = [
-    { href: `/app/pro/${businessId}/references/categories`, label: 'Categories', desc: 'Catégories pour revenus/dépenses' },
-    { href: `/app/pro/${businessId}/references/tags`, label: 'Tags', desc: 'Étiquettes globales' },
-    { href: `/app/pro/${businessId}/references/automations`, label: 'Automations', desc: 'Règles et SOP' },
-    { href: `/app/pro/${businessId}/references/numbering`, label: 'Numbering', desc: 'Paramètres de numérotation' },
+    {
+      href: `/app/pro/${businessId}/references/categories`,
+      label: 'Categories',
+      desc: 'Catégories pour revenus/dépenses',
+      count: categories.length,
+    },
+    {
+      href: `/app/pro/${businessId}/references/tags`,
+      label: 'Tags',
+      desc: 'Étiquettes globales',
+      count: tags.length,
+    },
+    {
+      href: `/app/pro/${businessId}/references/automations`,
+      label: 'Automations',
+      desc: 'Règles et SOP',
+      count: automations.length,
+    },
+    {
+      href: `/app/pro/${businessId}/references/numbering`,
+      label: 'Numbering',
+      desc: 'Paramètres de numérotation',
+      count: numbering.length,
+    },
   ];
 
   return (
@@ -35,13 +70,17 @@ export default function ReferencesPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-semibold text-[var(--text-primary)]">{link.label}</p>
-                <p className="text-xs text-[var(--text-secondary)]">{link.desc}</p>
+                <p className="text-xs text-[var(--text-secondary)]">
+                  {link.desc} · {link.count} éléments
+                </p>
               </div>
               <Button asChild size="sm" variant="outline">
                 <Link href={link.href}>Ouvrir</Link>
               </Button>
             </div>
-            <p className="text-[10px] text-[var(--text-secondary)]">API à venir.</p>
+            <p className="text-[10px] text-[var(--text-secondary)]">
+              Mock persistant dans le navigateur, prêt pour branchement API.
+            </p>
           </Card>
         ))}
       </div>

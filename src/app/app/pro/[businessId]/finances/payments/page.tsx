@@ -1,23 +1,207 @@
 // src/app/app/pro/[businessId]/finances/payments/page.tsx
 'use client';
 
+import { useMemo, useState, type ChangeEvent, type FormEvent } from 'react';
 import { useParams } from 'next/navigation';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Select } from '@/components/ui/select';
+import { Modal } from '@/components/ui/modal';
+import { Table, TableBody, TableCell, TableEmpty, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import {
+  formatCurrency,
+  formatDate,
+  getMockPayments,
+  paginate,
+  type PaymentMethod,
+  type PaymentRow,
+  type PaymentStatus,
+} from '../../../pro-data';
+import { usePersistentState } from '../../../usePersistentState';
+import { KpiCard } from '@/components/ui/kpi-card';
+
+type SortKey = 'date' | 'amount' | 'status';
+
+const STATUS_LABELS: Record<PaymentStatus, string> = {
+  PAID: 'Payé',
+  PENDING: 'En attente',
+  LATE: 'En retard',
+};
+
+const METHOD_LABELS: Record<PaymentMethod, string> = {
+  VIREMENT: 'Virement',
+  CARTE: 'Carte',
+  CHEQUE: 'Chèque',
+  ESPECES: 'Espèces',
+};
+
+function buildPaymentDate(p: PaymentRow) {
+  return new Date(p.receivedAt || p.expectedAt);
+}
 
 export default function PaymentsPage() {
   const params = useParams();
   const businessId = (params?.businessId ?? '') as string;
 
-  const kpis = [
-    { label: 'Encaissements mois', value: '—' },
-    { label: 'Impayés', value: '—' },
-    { label: 'Délai moyen paiement', value: '—' },
-    { label: 'Montant en retard', value: '—' },
-  ];
+  const [payments, setPayments] = usePersistentState<PaymentRow[]>(
+    `payments:${businessId}`,
+    getMockPayments()
+  );
+
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<PaymentStatus | 'ALL'>('ALL');
+  const [methodFilter, setMethodFilter] = useState<PaymentMethod | 'ALL'>('ALL');
+  const [sort, setSort] = useState<SortKey>('date');
+  const [page, setPage] = useState(1);
+  const pageSize = 6;
+
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [form, setForm] = useState<{
+    clientName: string;
+    project: string;
+    amount: string;
+    method: PaymentMethod;
+    receivedAt: string;
+    expectedAt: string;
+    status: PaymentStatus;
+    note: string;
+  }>({
+    clientName: '',
+    project: '',
+    amount: '',
+    method: 'VIREMENT',
+    receivedAt: '',
+    expectedAt: '',
+    status: 'PAID',
+    note: '',
+  });
+  const [formError, setFormError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
+
+  const filtered = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    let list = payments;
+    if (statusFilter !== 'ALL') list = list.filter((p) => p.status === statusFilter);
+    if (methodFilter !== 'ALL') list = list.filter((p) => p.method === methodFilter);
+    if (term) {
+      list = list.filter(
+        (p) =>
+          p.clientName.toLowerCase().includes(term) ||
+          (p.invoiceId ?? '').toLowerCase().includes(term) ||
+          (p.project ?? '').toLowerCase().includes(term)
+      );
+    }
+
+    return [...list].sort((a, b) => {
+      if (sort === 'amount') return b.amount - a.amount;
+      if (sort === 'status') return a.status.localeCompare(b.status);
+      return buildPaymentDate(b).getTime() - buildPaymentDate(a).getTime();
+    });
+  }, [methodFilter, payments, search, sort, statusFilter]);
+
+  const { pageItems, totalPages } = useMemo(
+    () => paginate(filtered, page, pageSize),
+    [filtered, page]
+  );
+
+  const displaySelectedId = selectedId ?? pageItems[0]?.id ?? null;
+  const selected = payments.find((p) => p.id === displaySelectedId) ?? null;
+
+  const kpis = useMemo(() => {
+    const now = new Date();
+    const monthPaid = payments.filter(
+      (p) =>
+        p.status === 'PAID' &&
+        p.receivedAt &&
+        new Date(p.receivedAt).getMonth() === now.getMonth() &&
+        new Date(p.receivedAt).getFullYear() === now.getFullYear()
+    );
+    const encaissements = monthPaid.reduce((sum, p) => sum + p.amount, 0);
+    const late = payments.filter((p) => p.status === 'LATE');
+    const lateAmount = late.reduce((sum, p) => sum + p.amount, 0);
+    const delays = payments
+      .filter((p) => p.status !== 'PENDING' && p.receivedAt)
+      .map((p) => (buildPaymentDate(p).getTime() - new Date(p.expectedAt).getTime()) / (1000 * 60 * 60 * 24));
+    const avgDelay = delays.length
+      ? `${Math.round(delays.reduce((a, b) => a + b, 0) / delays.length)} j`
+      : '—';
+    const overdueAmount = payments
+      .filter((p) => p.status !== 'PAID' && new Date(p.expectedAt) < now)
+      .reduce((sum, p) => sum + p.amount, 0);
+
+    return [
+      { label: 'Encaissements mois', value: formatCurrency(encaissements) },
+      { label: 'Impayés', value: late.length.toString() },
+      { label: 'Délai moyen paiement', value: avgDelay },
+      { label: 'Montant en retard', value: formatCurrency(overdueAmount) },
+      { label: 'Montant impayé', value: formatCurrency(lateAmount) },
+    ];
+  }, [payments]);
+
+  function resetForm() {
+    setForm({
+      clientName: '',
+      project: '',
+      amount: '',
+      method: 'VIREMENT',
+      receivedAt: '',
+      expectedAt: '',
+      status: 'PAID',
+      note: '',
+    });
+    setFormError(null);
+  }
+
+  function handleCreate(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setFormError(null);
+    setInfo(null);
+
+    const amount = Number(form.amount);
+    if (!form.clientName.trim()) {
+      setFormError('Client requis');
+      return;
+    }
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setFormError('Montant invalide');
+      return;
+    }
+    if (!form.expectedAt && !form.receivedAt) {
+      setFormError('Date attendue ou reçue requise');
+      return;
+    }
+
+    const newPayment: PaymentRow = {
+      id: `pay-${Date.now()}`,
+      businessId,
+      clientName: form.clientName.trim(),
+      project: form.project.trim() || undefined,
+      invoiceId: undefined,
+      amount,
+      currency: 'EUR',
+      receivedAt: form.receivedAt ? new Date(form.receivedAt).toISOString() : '',
+      expectedAt: form.expectedAt
+        ? new Date(form.expectedAt).toISOString()
+        : form.receivedAt
+          ? new Date(form.receivedAt).toISOString()
+          : new Date().toISOString(),
+      method: form.method,
+      status: form.status,
+      note: form.note.trim() || undefined,
+    };
+
+    setPayments([...payments, newPayment]);
+    setSelectedId(newPayment.id);
+    setInfo('Paiement ajouté.');
+    setCreateOpen(false);
+    resetForm();
+  }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <Card className="p-5 space-y-1">
         <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-[var(--text-secondary)]">
           PRO · Finances · Payments
@@ -28,26 +212,312 @@ export default function PaymentsPage() {
         </p>
       </Card>
 
-      <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-5">
         {kpis.map((kpi) => (
-          <Card key={kpi.label} className="p-4">
-            <p className="text-xs text-[var(--text-secondary)]">{kpi.label}</p>
-            <p className="text-lg font-semibold text-[var(--text-primary)]">{kpi.value}</p>
-          </Card>
+          <KpiCard key={kpi.label} label={kpi.label} value={kpi.value} />
         ))}
       </div>
 
-      <Card className="p-5 space-y-3">
-        <div className="flex items-center justify-between">
-          <p className="text-sm font-semibold text-[var(--text-primary)]">Paiements récents</p>
-          <Button size="sm" variant="outline" disabled>
-            Ajouter (bientôt)
-          </Button>
+      <Card className="space-y-4 p-5">
+        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="text-sm font-semibold text-[var(--text-primary)]">Liste des paiements</p>
+            <p className="text-xs text-[var(--text-secondary)]">
+              Table, filtres, tri et pagination.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" onClick={() => setCreateOpen(true)}>
+              Enregistrer un paiement
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setInfo('Export CSV simulé.')}
+            >
+              Export CSV
+            </Button>
+            {info ? <span className="text-[10px] text-emerald-500">{info}</span> : null}
+          </div>
         </div>
-        <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)]/60 p-4 text-sm text-[var(--text-secondary)]">
-          Table à venir (API payments manquante).
+
+        <div className="grid gap-2 md:grid-cols-4">
+          <Input
+            label="Recherche"
+            placeholder="Client, facture, projet…"
+            value={search}
+            onChange={(e: ChangeEvent<HTMLInputElement>) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
+          />
+          <Select
+            label="Statut"
+            value={statusFilter}
+            onChange={(e) => {
+              setStatusFilter(e.target.value as PaymentStatus | 'ALL');
+              setPage(1);
+            }}
+          >
+            <option value="ALL">Tous</option>
+            <option value="PAID">Payé</option>
+            <option value="PENDING">En attente</option>
+            <option value="LATE">En retard</option>
+          </Select>
+          <Select
+            label="Méthode"
+            value={methodFilter}
+            onChange={(e) => {
+              setMethodFilter(e.target.value as PaymentMethod | 'ALL');
+              setPage(1);
+            }}
+          >
+            <option value="ALL">Toutes</option>
+            <option value="VIREMENT">Virement</option>
+            <option value="CARTE">Carte</option>
+            <option value="CHEQUE">Chèque</option>
+            <option value="ESPECES">Espèces</option>
+          </Select>
+          <Select label="Tri" value={sort} onChange={(e) => setSort(e.target.value as SortKey)}>
+            <option value="date">Date</option>
+            <option value="amount">Montant</option>
+            <option value="status">Statut</option>
+          </Select>
+        </div>
+
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Client</TableHead>
+              <TableHead>Projet</TableHead>
+              <TableHead>Date</TableHead>
+              <TableHead>Montant</TableHead>
+              <TableHead>Méthode</TableHead>
+              <TableHead>Statut</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {pageItems.length === 0 ? (
+              <TableEmpty>Aucun paiement ne correspond au filtre.</TableEmpty>
+            ) : (
+              pageItems.map((payment) => (
+                <TableRow
+                  key={payment.id}
+                  className={payment.id === displaySelectedId ? 'bg-[var(--surface-2)]' : ''}
+                  onClick={() => setSelectedId(payment.id)}
+                >
+                  <TableCell className="font-medium text-[var(--text-primary)]">
+                    {payment.clientName}
+                    <p className="text-[10px] text-[var(--text-secondary)]">
+                      {payment.invoiceId ?? 'Sans facture'}
+                    </p>
+                  </TableCell>
+                  <TableCell>{payment.project ?? '—'}</TableCell>
+                  <TableCell>{formatDate(payment.receivedAt || payment.expectedAt)}</TableCell>
+                  <TableCell>{formatCurrency(payment.amount, payment.currency)}</TableCell>
+                  <TableCell>{METHOD_LABELS[payment.method]}</TableCell>
+                  <TableCell>
+                    <Badge
+                      variant="neutral"
+                      className={
+                        payment.status === 'LATE'
+                          ? 'bg-rose-100 text-rose-700'
+                          : payment.status === 'PENDING'
+                            ? 'bg-amber-100 text-amber-700'
+                            : 'bg-emerald-100 text-emerald-700'
+                      }
+                    >
+                      {STATUS_LABELS[payment.status]}
+                    </Badge>
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+
+        <div className="flex items-center justify-between text-xs text-[var(--text-secondary)]">
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={page <= 1}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+            >
+              Page précédente
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={page >= totalPages}
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            >
+              Page suivante
+            </Button>
+          </div>
+          <p>
+            Page {page}/{totalPages}
+          </p>
         </div>
       </Card>
+
+      {selected ? (
+        <Card className="space-y-3 p-5">
+          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+            <div>
+              <p className="text-sm font-semibold text-[var(--text-primary)]">
+                Détail paiement · {selected.clientName}
+              </p>
+              <p className="text-xs text-[var(--text-secondary)]">
+                {selected.project ?? 'Sans projet'} — {selected.invoiceId ?? 'Sans facture'}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Badge variant="neutral">{STATUS_LABELS[selected.status]}</Badge>
+              <Button size="sm" variant="outline">
+                Relancer
+              </Button>
+              <Button size="sm" variant="outline">
+                Exporter reçu
+              </Button>
+            </div>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-2">
+            <Card className="border-dashed border-[var(--border)] bg-transparent p-3">
+              <p className="text-xs text-[var(--text-secondary)]">Montant</p>
+              <p className="text-lg font-semibold text-[var(--text-primary)]">
+                {formatCurrency(selected.amount, selected.currency)}
+              </p>
+              <p className="text-[10px] text-[var(--text-secondary)]">
+                Méthode {METHOD_LABELS[selected.method]}
+              </p>
+            </Card>
+            <Card className="border-dashed border-[var(--border)] bg-transparent p-3">
+              <p className="text-xs text-[var(--text-secondary)]">Échéance</p>
+              <p className="text-sm text-[var(--text-primary)]">
+                Attendu le {formatDate(selected.expectedAt)}
+              </p>
+              <p className="text-[10px] text-[var(--text-secondary)]">
+                Reçu le {selected.receivedAt ? formatDate(selected.receivedAt) : '—'}
+              </p>
+            </Card>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-3">
+            <Card className="border-dashed border-[var(--border)] bg-transparent p-3">
+              <p className="text-xs text-[var(--text-secondary)]">Relations</p>
+              <p className="text-sm text-[var(--text-primary)]">
+                {selected.invoiceId ?? 'Pas de facture'}
+              </p>
+              <p className="text-[10px] text-[var(--text-secondary)]">
+                Projet {selected.project ?? '—'}
+              </p>
+            </Card>
+            <Card className="border-dashed border-[var(--border)] bg-transparent p-3">
+              <p className="text-xs text-[var(--text-secondary)]">Historique</p>
+              <p className="text-sm text-[var(--text-primary)]">
+                Créé le {formatDate(buildPaymentDate(selected).toISOString())}
+              </p>
+              <p className="text-[10px] text-[var(--text-secondary)]">Note: {selected.note ?? '—'}</p>
+            </Card>
+            <Card className="border-dashed border-[var(--border)] bg-transparent p-3">
+              <p className="text-xs text-[var(--text-secondary)]">KPI</p>
+              <p className="text-sm text-[var(--text-primary)]">
+                Retard {Math.max(0, Math.round((buildPaymentDate(selected).getTime() - new Date(selected.expectedAt).getTime()) / (1000 * 60 * 60 * 24)))} j
+              </p>
+              <p className="text-[10px] text-[var(--text-secondary)]">Méthode {METHOD_LABELS[selected.method]}</p>
+            </Card>
+          </div>
+        </Card>
+      ) : null}
+
+      <Modal
+        open={createOpen}
+        onCloseAction={() => {
+          setCreateOpen(false);
+          resetForm();
+        }}
+        title="Enregistrer un paiement"
+        description="Saisie rapide pour suivre l’encaissement."
+      >
+        <form onSubmit={handleCreate} className="space-y-3">
+          <Input
+            label="Client"
+            value={form.clientName}
+            onChange={(e) => setForm((prev) => ({ ...prev, clientName: e.target.value }))}
+          />
+          <Input
+            label="Projet (optionnel)"
+            value={form.project}
+            onChange={(e) => setForm((prev) => ({ ...prev, project: e.target.value }))}
+          />
+          <div className="grid gap-3 md:grid-cols-2">
+            <Input
+              label="Montant"
+              type="number"
+              value={form.amount}
+              onChange={(e) => setForm((prev) => ({ ...prev, amount: e.target.value }))}
+            />
+            <Select
+              label="Méthode"
+              value={form.method}
+              onChange={(e) =>
+                setForm((prev) => ({ ...prev, method: e.target.value as PaymentMethod }))
+              }
+            >
+              <option value="VIREMENT">Virement</option>
+              <option value="CARTE">Carte</option>
+              <option value="CHEQUE">Chèque</option>
+              <option value="ESPECES">Espèces</option>
+            </Select>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            <Input
+              label="Reçu le"
+              type="date"
+              value={form.receivedAt}
+              onChange={(e) => setForm((prev) => ({ ...prev, receivedAt: e.target.value }))}
+            />
+            <Input
+              label="Attendu le"
+              type="date"
+              value={form.expectedAt}
+              onChange={(e) => setForm((prev) => ({ ...prev, expectedAt: e.target.value }))}
+            />
+          </div>
+          <Select
+            label="Statut"
+            value={form.status}
+            onChange={(e) =>
+              setForm((prev) => ({ ...prev, status: e.target.value as PaymentStatus }))
+            }
+          >
+            <option value="PAID">Payé</option>
+            <option value="PENDING">En attente</option>
+            <option value="LATE">En retard</option>
+          </Select>
+          <label className="space-y-1">
+            <span className="text-sm font-medium text-[var(--text-secondary)]">Note</span>
+            <textarea
+              className="w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-400/60"
+              rows={3}
+              value={form.note}
+              onChange={(e) => setForm((prev) => ({ ...prev, note: e.target.value }))}
+              placeholder="Référence, relance, banque…"
+            />
+          </label>
+          <div className="flex items-center justify-between">
+            {formError ? <p className="text-xs text-rose-500">{formError}</p> : null}
+            <div className="flex gap-2">
+              <Button variant="outline" type="button" onClick={() => setCreateOpen(false)}>
+                Annuler
+              </Button>
+              <Button type="submit">Enregistrer</Button>
+            </div>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 }

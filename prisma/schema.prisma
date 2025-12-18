@@ -80,6 +80,7 @@ model User {
   ownedBusinesses     Business[]           @relation("BusinessOwner")
   // Entreprises auxquelles il appartient (via membership)
   businessMemberships BusinessMembership[]
+  assignedTasks       Task[]
 
   // Wallet (perso)
   personalAccounts     PersonalAccount[]
@@ -102,6 +103,8 @@ model Business {
   prospects   Prospect[]
   clients     Client[]
   projects    Project[]
+  tasks       Task[]
+  finances    Finance[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -172,6 +175,17 @@ enum ProjectStatus {
   CANCELLED
 }
 
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  DONE
+}
+
+enum FinanceType {
+  INCOME
+  EXPENSE
+}
+
 model Client {
   id              BigInt       @id @default(autoincrement())
   businessId      BigInt
@@ -209,11 +223,53 @@ model Project {
 
   business Business @relation(fields: [businessId], references: [id])
   client   Client?  @relation(fields: [clientId], references: [id])
+  tasks    Task[]
+  finances Finance[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([businessId, status])
+}
+
+model Task {
+  id             BigInt      @id @default(autoincrement())
+  businessId     BigInt
+  projectId      BigInt?
+  assigneeUserId BigInt?
+  title          String
+  status         TaskStatus  @default(TODO)
+  dueDate        DateTime?
+
+  business Business @relation(fields: [businessId], references: [id])
+  project  Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  assignee User?    @relation(fields: [assigneeUserId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([businessId, status])
+  @@index([businessId, projectId])
+}
+
+model Finance {
+  id         BigInt      @id @default(autoincrement())
+  businessId BigInt
+  projectId  BigInt?
+  type       FinanceType
+  amountCents BigInt
+  category   String
+  date       DateTime
+  note       String?
+
+  business Business @relation(fields: [businessId], references: [id])
+  project  Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([businessId, date])
+  @@index([businessId, type])
 }
 
 /**

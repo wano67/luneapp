@@ -5,14 +5,27 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { getMockDeadlines, getMockDocuments } from '../../pro-data';
+import { usePersistentState } from '../../usePersistentState';
 
 export default function AdminPage() {
   const params = useParams();
   const businessId = (params?.businessId ?? '') as string;
 
+  const [docs] = usePersistentState(`admin-docs:${businessId}`, getMockDocuments());
+  const [deadlines] = usePersistentState(`deadlines:${businessId}`, getMockDeadlines());
+
   const links = [
-    { href: `/app/pro/${businessId}/admin/documents`, label: 'Documents', desc: 'Contrats, assurances, Kbis…' },
-    { href: `/app/pro/${businessId}/admin/deadlines`, label: 'Deadlines', desc: 'Échéances légales et administratives' },
+    {
+      href: `/app/pro/${businessId}/admin/documents`,
+      label: 'Documents',
+      desc: `Contrats, assurances, Kbis… (${docs.length})`,
+    },
+    {
+      href: `/app/pro/${businessId}/admin/deadlines`,
+      label: 'Deadlines',
+      desc: `Échéances légales et administratives (${deadlines.length})`,
+    },
   ];
 
   return (
@@ -39,7 +52,9 @@ export default function AdminPage() {
                 <Link href={link.href}>Ouvrir</Link>
               </Button>
             </div>
-            <p className="text-[10px] text-[var(--text-secondary)]">API à venir.</p>
+            <p className="text-[10px] text-[var(--text-secondary)]">
+              Mock persistant · prêt à brancher l’API admin.
+            </p>
           </Card>
         ))}
       </div>

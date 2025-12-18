@@ -7,5 +7,5 @@ type BusinessPageProps = {
 
 export default async function BusinessRedirectPage({ params }: BusinessPageProps) {
   const { businessId } = await params;
-  redirect(`/app/pro/${businessId}`);
+  redirect(`/app/pro/${businessId}/dash-entreprise`);
 }

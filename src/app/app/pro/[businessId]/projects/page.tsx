@@ -9,7 +9,9 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Modal } from '@/components/ui/modal';
+import { Select } from '@/components/ui/select';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
+import { useActiveBusiness } from '../../ActiveBusinessProvider';
 
 type ProjectStatus = 'PLANNED' | 'ACTIVE' | 'ON_HOLD' | 'COMPLETED' | 'CANCELLED';
 
@@ -54,10 +56,14 @@ function formatDate(value: string | null) {
 export default function ProjectsPage() {
   const params = useParams();
   const businessId = (params?.businessId ?? '') as string;
+  const activeCtx = useActiveBusiness({ optional: true });
+  const isAdmin = activeCtx?.activeBusiness?.role === 'ADMIN' || activeCtx?.activeBusiness?.role === 'OWNER';
 
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
 
   const [statusFilter, setStatusFilter] = useState<ProjectStatus | 'ALL'>('ALL');
 
@@ -69,8 +75,26 @@ export default function ProjectsPage() {
   const [status, setStatus] = useState<ProjectStatus>('PLANNED');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [editing, setEditing] = useState<Project | null>(null);
+  const [deleting, setDeleting] = useState<Project | null>(null);
 
   const fetchController = useRef<AbortController | null>(null);
+
+  function resetForm() {
+    setName('');
+    setClientId('');
+    setStatus('PLANNED');
+    setStartDate('');
+    setEndDate('');
+    setCreateError(null);
+  }
+
+  function closeModal() {
+    if (creating) return;
+    resetForm();
+    setEditing(null);
+    setCreateOpen(false);
+  }
 
   async function loadProjects(signal?: AbortSignal) {
     const controller = signal ? null : new AbortController();
@@ -129,6 +153,8 @@ export default function ProjectsPage() {
   async function handleCreate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setCreateError(null);
+    setActionError(null);
+    setSuccess(null);
 
     const trimmedName = name.trim();
     if (!trimmedName) {
@@ -150,6 +176,12 @@ export default function ProjectsPage() {
         }),
       });
 
+      if (res.status === 401) {
+        const from = window.location.pathname + window.location.search;
+        window.location.href = `/login?from=${encodeURIComponent(from)}`;
+        return;
+      }
+
       if (!res.ok || !res.data) {
         setCreateError(
           res.requestId ? `${res.error ?? 'Création impossible.'} (Ref: ${res.requestId})` : res.error ?? 'Création impossible.'
@@ -158,17 +190,114 @@ export default function ProjectsPage() {
       }
 
       setName('');
-      setClientId('');
-      setStatus('PLANNED');
-      setStartDate('');
-      setEndDate('');
+      resetForm();
       setCreateOpen(false);
+      setSuccess('Projet créé.');
       await loadProjects();
     } catch (err) {
       console.error(err);
       setCreateError(getErrorMessage(err));
     } finally {
       setCreating(false);
+    }
+  }
+
+  function openEdit(project: Project) {
+    setEditing(project);
+    setName(project.name);
+    setClientId(project.clientId ?? '');
+    setStatus(project.status);
+    setStartDate(project.startDate ? project.startDate.slice(0, 10) : '');
+    setEndDate(project.endDate ? project.endDate.slice(0, 10) : '');
+    setCreateError(null);
+    setSuccess(null);
+    setActionError(null);
+    setCreateOpen(true);
+  }
+
+  async function handleUpdate(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!editing) return;
+    setCreateError(null);
+    setActionError(null);
+    setSuccess(null);
+
+    const trimmedName = name.trim();
+    if (!trimmedName) {
+      setCreateError('Nom requis.');
+      return;
+    }
+
+    try {
+      setCreating(true);
+      const res = await fetchJson<Project>(
+        `/api/pro/businesses/${businessId}/projects/${editing.id}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: trimmedName,
+            clientId: clientId.trim() || null,
+            status,
+            startDate: startDate || null,
+            endDate: endDate || null,
+          }),
+        }
+      );
+
+      if (res.status === 401) {
+        const from = window.location.pathname + window.location.search;
+        window.location.href = `/login?from=${encodeURIComponent(from)}`;
+        return;
+      }
+
+      if (!res.ok || !res.data) {
+        const msg = res.error ?? 'Modification impossible.';
+        setCreateError(res.requestId ? `${msg} (Ref: ${res.requestId})` : msg);
+        return;
+      }
+
+      setSuccess('Projet mis à jour.');
+      setCreateOpen(false);
+      setEditing(null);
+      resetForm();
+      await loadProjects();
+    } catch (err) {
+      console.error(err);
+      setCreateError(getErrorMessage(err));
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  async function confirmDelete() {
+    if (!deleting) return;
+    setActionError(null);
+    setSuccess(null);
+    try {
+      const res = await fetchJson(
+        `/api/pro/businesses/${businessId}/projects/${deleting.id}`,
+        { method: 'DELETE' }
+      );
+
+      if (res.status === 401) {
+        const from = window.location.pathname + window.location.search;
+        window.location.href = `/login?from=${encodeURIComponent(from)}`;
+        return;
+      }
+
+      if (!res.ok) {
+        const msg = res.error ?? 'Suppression impossible.';
+        setActionError(res.requestId ? `${msg} (Ref: ${res.requestId})` : msg);
+        return;
+      }
+
+      setSuccess('Projet supprimé.');
+      setDeleting(null);
+      await loadProjects();
+    } catch (err) {
+      console.error(err);
+      setActionError(getErrorMessage(err));
     }
   }
 
@@ -185,7 +314,9 @@ export default function ProjectsPage() {
               Suis l’avancement et crée de nouveaux projets clients.
             </p>
           </div>
-          <Button onClick={() => setCreateOpen(true)}>Nouveau projet</Button>
+          {isAdmin ? (
+            <Button onClick={() => setCreateOpen(true)}>Nouveau projet</Button>
+          ) : null}
         </div>
 
         <div className="flex flex-wrap gap-2">
@@ -203,6 +334,7 @@ export default function ProjectsPage() {
       </Card>
 
       <Card className="p-5">
+        {success ? <p className="text-xs font-semibold text-emerald-500">{success}</p> : null}
         {loading ? (
           <p className="text-sm text-[var(--text-secondary)]">Chargement des projets…</p>
         ) : error ? (
@@ -217,9 +349,11 @@ export default function ProjectsPage() {
             <p className="text-sm text-[var(--text-secondary)]">
               Aucun projet pour le moment. Crée ton premier projet.
             </p>
-            <Button size="sm" onClick={() => setCreateOpen(true)}>
-              Créer un projet
-            </Button>
+            {isAdmin ? (
+              <Button size="sm" onClick={() => setCreateOpen(true)}>
+                Créer un projet
+              </Button>
+            ) : null}
           </div>
         ) : (
           <div className="space-y-2">
@@ -227,11 +361,11 @@ export default function ProjectsPage() {
               <div
                 key={project.id}
                 className="flex flex-col gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface)]/70 p-3 md:flex-row md:items-center md:justify-between"
-              >
-                <div className="space-y-1">
-                  <Link
-                    href={`/app/pro/${businessId}/projects/${project.id}`}
-                    className="font-semibold text-[var(--text-primary)] hover:underline"
+                >
+                  <div className="space-y-1">
+                    <Link
+                      href={`/app/pro/${businessId}/projects/${project.id}`}
+                      className="font-semibold text-[var(--text-primary)] hover:underline"
                   >
                     {project.name}
                   </Link>
@@ -241,21 +375,37 @@ export default function ProjectsPage() {
                   <p className="text-[10px] text-[var(--text-secondary)]">
                     {formatDate(project.startDate)} → {formatDate(project.endDate)}
                   </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant="neutral">{statusLabel(project.status)}</Badge>
+                    {isAdmin ? (
+                      <>
+                        <Button size="sm" variant="outline" onClick={() => openEdit(project)}>
+                          Modifier
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setDeleting(project)}
+                        >
+                          Supprimer
+                        </Button>
+                      </>
+                    ) : null}
+                  </div>
                 </div>
-                <Badge variant="neutral">{statusLabel(project.status)}</Badge>
-              </div>
-            ))}
+              ))}
           </div>
         )}
       </Card>
 
       <Modal
         open={createOpen}
-        onCloseAction={() => (!creating ? setCreateOpen(false) : null)}
-        title="Nouveau projet"
+        onCloseAction={closeModal}
+        title={editing ? 'Modifier le projet' : 'Nouveau projet'}
         description="Associe un client (optionnel) et fixe le statut."
       >
-        <form onSubmit={handleCreate} className="space-y-4">
+        <form onSubmit={editing ? handleUpdate : handleCreate} className="space-y-4">
           <Input
             label="Nom du projet *"
             value={name}
@@ -272,20 +422,17 @@ export default function ProjectsPage() {
           />
 
           <div className="grid gap-3 md:grid-cols-2">
-            <label className="space-y-1">
-              <span className="text-sm font-medium text-[var(--text-secondary)]">Statut</span>
-              <select
-                className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)]"
-                value={status}
-                onChange={(e) => setStatus(e.target.value as ProjectStatus)}
-              >
-                {STATUS_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <Select
+              label="Statut"
+              value={status}
+              onChange={(e) => setStatus(e.target.value as ProjectStatus)}
+            >
+              {STATUS_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </Select>
             <Input
               label="Début (optionnel)"
               type="date"
@@ -305,10 +452,33 @@ export default function ProjectsPage() {
               Annuler
             </Button>
             <Button type="submit" disabled={creating}>
-              {creating ? 'Création…' : 'Créer'}
+              {creating ? (editing ? 'Mise à jour…' : 'Création…') : editing ? 'Mettre à jour' : 'Créer'}
             </Button>
           </div>
         </form>
+      </Modal>
+
+      <Modal
+        open={!!deleting}
+        onCloseAction={() => setDeleting(null)}
+        title="Supprimer ce projet ?"
+        description={deleting ? `« ${deleting.name} » sera supprimé.` : undefined}
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-[var(--text-secondary)]">
+            Action définitive. Les données liées seront supprimées.
+          </p>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setDeleting(null)}>
+              Annuler
+            </Button>
+            <Button variant="danger" onClick={confirmDelete}>
+              Supprimer
+            </Button>
+          </div>
+          {actionError ? <p className="text-xs text-rose-500">{actionError}</p> : null}
+          {success ? <p className="text-xs text-emerald-500">{success}</p> : null}
+        </div>
       </Modal>
     </div>
   );

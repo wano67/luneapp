@@ -2,21 +2,80 @@
 'use client';
 
 import Link from 'next/link';
+import { useMemo } from 'react';
 import { useParams } from 'next/navigation';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import {
+  defaultBillingSettings,
+  defaultIntegrations,
+  defaultPermissions,
+  defaultTaxSettings,
+  formatDate,
+  type IntegrationSetting,
+} from '../../pro-data';
+import { usePersistentState } from '../../usePersistentState';
 
 export default function BusinessSettingsPage() {
   const params = useParams();
   const businessId = (params?.businessId ?? '') as string;
 
-  const links = [
-    { href: `/app/pro/${businessId}/settings/billing`, label: 'Billing', desc: 'Coordonnées de facturation, devises, préférences' },
-    { href: `/app/pro/${businessId}/settings/taxes`, label: 'Taxes', desc: 'TVA, périodes, seuils' },
-    { href: `/app/pro/${businessId}/settings/team`, label: 'Team', desc: 'Membres et rôles' },
-    { href: `/app/pro/${businessId}/settings/integrations`, label: 'Integrations', desc: 'Outillage connecté (CRM, compta, etc.)' },
-    { href: `/app/pro/${businessId}/settings/permissions`, label: 'Permissions', desc: 'Contrôles d’accès avancés' },
-  ];
+  const [billing] = usePersistentState(`billing:${businessId}`, defaultBillingSettings);
+  const [taxes] = usePersistentState(`taxes:${businessId}`, defaultTaxSettings);
+  const [integrations] = usePersistentState<IntegrationSetting[]>(
+    `integrations:${businessId}`,
+    defaultIntegrations
+  );
+  const [permissions] = usePersistentState(`permissions:${businessId}`, defaultPermissions);
+
+  function latestUpdateFromList(items: Array<{ updatedAt: string }>) {
+    if (!items.length) return null;
+    const sorted = [...items].sort(
+      (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+    );
+    return sorted[0]?.updatedAt ?? null;
+  }
+
+  const links = useMemo(
+    () => [
+      {
+        href: `/app/pro/${businessId}/settings/billing`,
+        label: 'Billing',
+        desc: 'Coordonnées de facturation, devises, préférences',
+        updatedAt: billing.updatedAt,
+        updatedBy: billing.updatedBy,
+      },
+      {
+        href: `/app/pro/${businessId}/settings/taxes`,
+        label: 'Taxes',
+        desc: 'TVA, périodes, seuils',
+        updatedAt: taxes.updatedAt,
+        updatedBy: taxes.updatedBy,
+      },
+      {
+        href: `/app/pro/${businessId}/settings/team`,
+        label: 'Team',
+        desc: 'Membres et rôles',
+        updatedAt: null,
+        updatedBy: null,
+      },
+      {
+        href: `/app/pro/${businessId}/settings/integrations`,
+        label: 'Integrations',
+        desc: 'Outillage connecté (CRM, compta, etc.)',
+        updatedAt: latestUpdateFromList(integrations),
+        updatedBy: integrations[0]?.updatedBy ?? null,
+      },
+      {
+        href: `/app/pro/${businessId}/settings/permissions`,
+        label: 'Permissions',
+        desc: 'Contrôles d’accès avancés',
+        updatedAt: permissions[0]?.updatedAt ?? null,
+        updatedBy: permissions[0]?.updatedBy ?? null,
+      },
+    ],
+    [billing, businessId, integrations, permissions, taxes]
+  );
 
   return (
     <div className="space-y-4">
@@ -42,7 +101,14 @@ export default function BusinessSettingsPage() {
                 <Link href={link.href}>Ouvrir</Link>
               </Button>
             </div>
-            <p className="text-[10px] text-[var(--text-secondary)]">API à venir · données locales non persistées</p>
+            <p className="text-[10px] text-[var(--text-secondary)]">
+              {link.updatedAt
+                ? `Mis à jour le ${formatDate(link.updatedAt)}`
+                : 'Brouillon local prêt à configurer.'}
+            </p>
+            {link.updatedBy ? (
+              <p className="text-[10px] text-[var(--text-secondary)]">Par {link.updatedBy}</p>
+            ) : null}
           </Card>
         ))}
       </div>
