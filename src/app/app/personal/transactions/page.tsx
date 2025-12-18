@@ -645,7 +645,9 @@ export default function PersoTransactionsPage() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-lg font-semibold text-slate-50">Transactions</h1>
-          <p className="text-sm text-slate-400">Filtre, consulte et ajoute des transactions.</p>
+          <p className="text-sm text-slate-400">
+            Point unique pour filtrer, ajouter et nettoyer tes mouvements.
+          </p>
         </div>
 
         <div className="flex items-center gap-2">

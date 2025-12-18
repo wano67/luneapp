@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 
 type Account = {
   id: string;
@@ -92,7 +93,7 @@ export default function AccountDetailPage() {
 
       // 2) fetch transactions
       const tRes = await fetch(
-        `/api/personal/transactions?accountId=${encodeURIComponent(accountId)}&limit=80`,
+        `/api/personal/transactions?accountId=${encodeURIComponent(accountId)}&limit=10`,
         { credentials: 'include' }
       );
 
@@ -121,6 +122,20 @@ export default function AccountDetailPage() {
 
   const title = useMemo(() => account?.name ?? 'Compte', [account]);
 
+  const miniStats = useMemo(() => {
+    const income = items
+      .filter((t) => t.type === 'INCOME')
+      .reduce((sum, t) => sum + BigInt(t.amountCents), 0n);
+    const expense = items
+      .filter((t) => t.type === 'EXPENSE')
+      .reduce((sum, t) => sum + BigInt(t.amountCents), 0n);
+    return {
+      income,
+      expense,
+      count: items.length,
+    };
+  }, [items]);
+
   return (
     <div className="space-y-6">
       <Card className="p-5">
@@ -132,24 +147,45 @@ export default function AccountDetailPage() {
             <h2 className="text-lg font-semibold">{loading ? 'Chargement…' : title}</h2>
 
             {account ? (
-              <p className="text-sm text-[var(--text-secondary)]">
-                Solde : {centsToEUR(account.balanceCents)} € · 30j :{' '}
-                <span className={BigInt(account.delta30Cents) >= 0n ? 'text-emerald-400' : 'text-rose-400'}>
-                  {BigInt(account.delta30Cents) >= 0n ? '+' : ''}
-                  {centsToEUR(account.delta30Cents)} €
-                </span>
-              </p>
+              <>
+                <p className="text-sm text-[var(--text-secondary)]">
+                  Vue d’ensemble du compte et de ses dernières transactions.
+                </p>
+                <p className="text-sm text-[var(--text-secondary)]">
+                  Solde : {centsToEUR(account.balanceCents)} € · 30j:{' '}
+                  <span className={BigInt(account.delta30Cents) >= 0n ? 'text-emerald-400' : 'text-rose-400'}>
+                    {BigInt(account.delta30Cents) >= 0n ? '+' : ''}
+                    {centsToEUR(account.delta30Cents)} €
+                  </span>
+                </p>
+              </>
             ) : (
               <p className="text-sm text-[var(--text-secondary)]">Historique des transactions du compte.</p>
             )}
           </div>
 
-          <Link
-            href="/app/personal/comptes"
-            className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs font-semibold hover:bg-[var(--surface-hover)]"
-          >
-            ← Retour
-          </Link>
+          <Button asChild variant="outline" size="sm">
+            <Link href="/app/personal/comptes">← Retour</Link>
+          </Button>
+        </div>
+      </Card>
+
+      <Card className="grid gap-3 p-5 md:grid-cols-3">
+        <div>
+          <p className="text-xs text-[var(--text-secondary)]">Encaissements (sélection)</p>
+          <p className="text-lg font-semibold text-[var(--text-primary)]">
+            {centsToEUR(miniStats.income.toString())} €
+          </p>
+        </div>
+        <div>
+          <p className="text-xs text-[var(--text-secondary)]">Dépenses (sélection)</p>
+          <p className="text-lg font-semibold text-[var(--text-primary)]">
+            {centsToEUR(miniStats.expense.toString())} €
+          </p>
+        </div>
+        <div>
+          <p className="text-xs text-[var(--text-secondary)]">Transactions chargées</p>
+          <p className="text-lg font-semibold text-[var(--text-primary)]">{miniStats.count}</p>
         </div>
       </Card>
 
@@ -160,7 +196,35 @@ export default function AccountDetailPage() {
         </Card>
       ) : null}
 
-      <Card className="p-5">
+      <Card className="p-5 space-y-4">
+        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="text-sm font-semibold text-[var(--text-primary)]">Vue rapide du compte</p>
+            <p className="text-xs text-[var(--text-secondary)]">
+              Dernières opérations et raccourcis dédiés à ce compte.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button asChild variant="outline" size="sm">
+              <Link href={`/app/personal/transactions?accountId=${encodeURIComponent(accountId)}`}>
+                Toutes les transactions
+              </Link>
+            </Button>
+            <Button asChild variant="outline" size="sm">
+              <Link
+                href={`/app/personal/transactions?accountId=${encodeURIComponent(accountId)}&import=1`}
+              >
+                Import CSV ciblé
+              </Link>
+            </Button>
+            <Button asChild size="sm">
+              <Link href={`/app/personal/transactions?accountId=${encodeURIComponent(accountId)}&new=1`}>
+                Créer une transaction
+              </Link>
+            </Button>
+          </div>
+        </div>
+
         {loading ? (
           <p className="text-sm text-[var(--text-secondary)]">Chargement…</p>
         ) : items.length === 0 ? (

@@ -271,7 +271,7 @@ export default function FinancesPage() {
           Finances de l’entreprise
         </h1>
         <p className="text-sm text-[var(--text-secondary)]">
-          Revenus, dépenses, trésorerie et rentabilité.
+          Vue unique pour suivre revenus, dépenses et trésorerie avant export.
         </p>
         {requestId ? (
           <p className="text-[10px] text-[var(--text-secondary)]">Request ID: {requestId}</p>

@@ -324,7 +324,7 @@ export default function ProjectsPage() {
             <Button
               key={opt.value}
               size="sm"
-              variant={statusFilter === opt.value ? 'primary' : 'outline'}
+              variant="outline"
               onClick={() => setStatusFilter(opt.value as ProjectStatus | 'ALL')}
             >
               {opt.label}

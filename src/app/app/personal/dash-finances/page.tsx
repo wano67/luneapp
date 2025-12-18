@@ -1,15 +1,36 @@
+import Link from 'next/link';
+import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+
 export default function PersoDashFinancesPage() {
   return (
-    <div className="space-y-2">
-      <h1 className="text-lg font-semibold text-slate-50">
-        Dashboard Finances Perso — à venir
-      </h1>
-      <p className="text-sm text-slate-400">
-        Cette page sera dédiée à la section &quot;Dashboard Finances Perso&quot; de cet espace.
-      </p>
-      <p className="text-xs text-slate-500">
-        Placeholder temporaire, la logique métier sera ajoutée plus tard.
-      </p>
+    <div className="space-y-4">
+      <Card className="space-y-2 p-5">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-[var(--text-secondary)]">
+          Bientôt
+        </p>
+        <h1 className="text-xl font-semibold text-[var(--text-primary)]">
+          Dashboard finances perso
+        </h1>
+        <p className="text-sm text-[var(--text-secondary)]">
+          Un tableau de bord arrivera ici. Consultez vos comptes et transactions pour l’instant.
+        </p>
+      </Card>
+
+      <Card className="flex flex-wrap items-center justify-between gap-2 p-4">
+        <div>
+          <p className="text-sm font-semibold text-[var(--text-primary)]">Continuer</p>
+          <p className="text-xs text-[var(--text-secondary)]">Comptes et transactions restent disponibles.</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button asChild variant="outline" size="sm">
+            <Link href="/app/personal/comptes">Comptes</Link>
+          </Button>
+          <Button asChild size="sm">
+            <Link href="/app/personal/transactions">Transactions</Link>
+          </Button>
+        </div>
+      </Card>
     </div>
   );
 }

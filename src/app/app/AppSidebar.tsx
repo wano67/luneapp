@@ -99,60 +99,19 @@ function getStudioBusinessSections(businessId: string): NavSection[] {
   const base = `/app/pro/${businessId}`;
   return [
     {
-      title: 'Studio',
-      items: [{ href: '/app/pro', label: 'Mes entreprises', icon: <IconStudio size={18} />, accent: 'studio' }],
-    },
-    {
       title: 'Pilotage',
       items: [
-        { href: `${base}/dash-entreprise`, label: 'Vue d’ensemble', icon: <span className="text-[16px]">•</span> },
+        { href: `${base}`, label: 'Dashboard', icon: <span className="text-[16px]">•</span> },
         { href: `${base}/clients`, label: 'Clients', icon: <span className="text-[16px]">•</span> },
-        { href: `${base}/prospects`, label: 'Prospects', icon: <span className="text-[16px]">•</span> },
-        { href: `${base}/projects`, label: 'Projects', icon: <span className="text-[16px]">•</span> },
-        { href: `${base}/services`, label: 'Services', icon: <span className="text-[16px]">•</span> },
-        { href: `${base}/tasks`, label: 'Tasks', icon: <span className="text-[16px]">•</span>, disabled: true, hint: 'Bientôt' },
-        { href: `${base}/process`, label: 'Process', icon: <span className="text-[16px]">•</span>, disabled: true, hint: 'Bientôt' },
+        { href: `${base}/prospects`, label: 'Pipeline', icon: <span className="text-[16px]">•</span> },
+        { href: `${base}/projects`, label: 'Projets', icon: <span className="text-[16px]">•</span> },
+        { href: `${base}/tasks`, label: 'Tâches', icon: <span className="text-[16px]">•</span> },
         { href: `${base}/finances`, label: 'Finances', icon: <span className="text-[16px]">•</span> },
-        { href: `${base}/invites`, label: 'Invitations', icon: <span className="text-[16px]">•</span> },
       ],
     },
     {
       title: 'Settings',
-      items: [
-        { href: `${base}/settings`, label: 'Overview', icon: <span className="text-[16px]">•</span> },
-        { href: `${base}/settings/billing`, label: 'Billing', icon: <span className="text-[16px]">•</span> },
-        { href: `${base}/settings/taxes`, label: 'Taxes', icon: <span className="text-[16px]">•</span> },
-        { href: `${base}/settings/team`, label: 'Team', icon: <span className="text-[16px]">•</span> },
-        { href: `${base}/settings/integrations`, label: 'Integrations', icon: <span className="text-[16px]">•</span> },
-        { href: `${base}/settings/permissions`, label: 'Permissions', icon: <span className="text-[16px]">•</span> },
-      ],
-    },
-    {
-      title: 'Finances',
-      items: [
-        { href: `${base}/finances/payments`, label: 'Payments', icon: <span className="text-[16px]">•</span> },
-        { href: `${base}/finances/treasury`, label: 'Treasury', icon: <span className="text-[16px]">•</span> },
-        { href: `${base}/finances/vat`, label: 'VAT', icon: <span className="text-[16px]">•</span> },
-        { href: `${base}/finances/forecasting`, label: 'Forecasting', icon: <span className="text-[16px]">•</span> },
-      ],
-    },
-    {
-      title: 'Admin',
-      items: [
-        { href: `${base}/admin`, label: 'Administration', icon: <span className="text-[16px]">•</span> },
-        { href: `${base}/admin/documents`, label: 'Documents', icon: <span className="text-[16px]">•</span> },
-        { href: `${base}/admin/deadlines`, label: 'Deadlines', icon: <span className="text-[16px]">•</span> },
-      ],
-    },
-    {
-      title: 'References',
-      items: [
-        { href: `${base}/references`, label: 'Overview', icon: <span className="text-[16px]">•</span> },
-        { href: `${base}/references/categories`, label: 'Categories', icon: <span className="text-[16px]">•</span> },
-        { href: `${base}/references/tags`, label: 'Tags', icon: <span className="text-[16px]">•</span> },
-        { href: `${base}/references/automations`, label: 'Automations', icon: <span className="text-[16px]">•</span> },
-        { href: `${base}/references/numbering`, label: 'Numbering', icon: <span className="text-[16px]">•</span> },
-      ],
+      items: [{ href: `${base}/settings`, label: 'Paramètres', icon: <span className="text-[16px]">•</span> }],
     },
   ];
 }
@@ -166,10 +125,10 @@ function getWalletSections(): NavSection[] {
         { href: `${base}`, label: 'Vue d’accueil', icon: <IconWallet size={18} />, accent: 'wallet' },
         { href: `${base}/comptes`, label: 'Comptes', icon: <span className="text-[16px]">•</span> },
         { href: `${base}/transactions`, label: 'Transactions', icon: <span className="text-[16px]">•</span> },
-        { href: `${base}/revenus`, label: 'Revenus', icon: <span className="text-[16px]">•</span> },
-        { href: `${base}/budgets`, label: 'Budgets', icon: <span className="text-[16px]">•</span> },
-        { href: `${base}/epargne`, label: 'Épargne', icon: <span className="text-[16px]">•</span> },
-        { href: `${base}/admin`, label: 'Administratif', icon: <span className="text-[16px]">•</span> },
+        { href: `${base}/transactions?type=INCOME`, label: 'Revenus', icon: <span className="text-[16px]">•</span> },
+        { href: `${base}/budgets`, label: 'Budgets', icon: <span className="text-[16px]">•</span>, disabled: true, hint: 'Bientôt' },
+        { href: `${base}/epargne`, label: 'Épargne', icon: <span className="text-[16px]">•</span>, disabled: true, hint: 'Bientôt' },
+        { href: `${base}/admin`, label: 'Administratif', icon: <span className="text-[16px]">•</span>, disabled: true, hint: 'Bientôt' },
       ],
     },
   ];

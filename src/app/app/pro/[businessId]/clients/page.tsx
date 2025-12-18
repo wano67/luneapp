@@ -164,7 +164,7 @@ export default function ClientsPage() {
             </p>
             <h1 className="text-lg font-semibold text-[var(--text-primary)]">Base clients</h1>
             <p className="text-sm text-[var(--text-secondary)]">
-              Liste des clients, contacts et notes rapides.
+              Centralise tes clients pour lier projets et facturation.
             </p>
           </div>
           <Button onClick={() => setCreateOpen(true)}>Ajouter un client</Button>
@@ -177,7 +177,7 @@ export default function ClientsPage() {
             value={search}
             onChange={(e: ChangeEvent<HTMLInputElement>) => setSearch(e.target.value)}
           />
-          <Button type="submit" size="sm" className="md:ml-2 md:w-auto">
+          <Button type="submit" size="sm" variant="outline" className="md:ml-2 md:w-auto">
             Filtrer
           </Button>
         </form>

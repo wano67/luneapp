@@ -244,7 +244,7 @@ export default function TasksPage() {
           <div>
             <h1 className="text-xl font-semibold text-[var(--text-primary)]">Tâches & production</h1>
             <p className="text-sm text-[var(--text-secondary)]">
-              Base de tâches liée aux projets pour suivre la charge et les urgences.
+              Base unique des tâches liées aux projets pour suivre charge et urgences.
             </p>
           </div>
           {isAdmin ? (
@@ -263,7 +263,7 @@ export default function TasksPage() {
               <Button
                 key={opt.value}
                 size="sm"
-                variant={statusFilter === opt.value ? 'primary' : 'outline'}
+                variant="outline"
                 onClick={() => setStatusFilter(opt.value as TaskStatus | 'ALL')}
               >
                 {opt.label}

@@ -212,6 +212,9 @@ export default function ComptesPage() {
             </p>
             <h2 className="text-lg font-semibold">Comptes</h2>
             <p className="text-sm text-[var(--text-secondary)]">
+              Gère tes comptes et soldes, point d’entrée unique avant les transactions.
+            </p>
+            <p className="text-sm text-[var(--text-secondary)]">
               Solde total (calculé) : {loading ? '—' : `${centsToEUR(totalCents.toString())} €`}
             </p>
           </div>
