@@ -180,6 +180,11 @@ export default function ProjectDetailPage() {
   const [taskActionId, setTaskActionId] = useState<string | null>(null);
   const [taskError, setTaskError] = useState<string | null>(null);
 
+  const [quoteStatusValue, setQuoteStatusValue] = useState<ProjectQuoteStatus>('DRAFT');
+  const [depositStatusValue, setDepositStatusValue] = useState<ProjectDepositStatus>('PENDING');
+  const [savingCommercial, setSavingCommercial] = useState(false);
+  const [commercialMessage, setCommercialMessage] = useState<string | null>(null);
+
   function resetServiceForm() {
     setEditingService(null);
     setServiceId('');
@@ -221,6 +226,8 @@ export default function ProjectDetailPage() {
       setRequestId(res.requestId ?? null);
       setProject(res.data.item);
       setServices(res.data.item.projectServices ?? []);
+      setQuoteStatusValue(res.data.item.quoteStatus);
+      setDepositStatusValue(res.data.item.depositStatus);
     } catch (err) {
       if (effectiveSignal?.aborted) return;
       console.error(err);
@@ -395,6 +402,32 @@ export default function ProjectDetailPage() {
     setTaskActionId(null);
   }
 
+  async function saveCommercial() {
+    if (!project || !isAdmin) return;
+    setSavingCommercial(true);
+    setCommercialMessage(null);
+    const res = await fetchJson<ProjectDetailResponse>(
+      `/api/pro/businesses/${businessId}/projects/${projectId}`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          quoteStatus: quoteStatusValue,
+          depositStatus: depositStatusValue,
+        }),
+      }
+    );
+    if (!res.ok || !res.data) {
+      setCommercialMessage(
+        res.requestId ? `${res.error ?? 'Enregistrement impossible.'} (Ref: ${res.requestId})` : res.error ?? 'Enregistrement impossible.'
+      );
+    } else {
+      setCommercialMessage('Statuts mis à jour.');
+      setProject(res.data.item);
+    }
+    setSavingCommercial(false);
+  }
+
   if (loading) {
     return (
       <Card className="p-5">
@@ -470,6 +503,52 @@ export default function ProjectDetailPage() {
       <Card className="space-y-3 p-5">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
+            <p className="text-sm font-semibold text-[var(--text-primary)]">Validation commerciale</p>
+            <p className="text-xs text-[var(--text-secondary)]">
+              Met à jour le statut du devis et de l’acompte pour débloquer le démarrage.
+            </p>
+          </div>
+          <Button size="sm" variant="outline" onClick={saveCommercial} disabled={!isAdmin || savingCommercial}>
+            {savingCommercial ? 'Enregistrement…' : 'Enregistrer'}
+          </Button>
+        </div>
+        <div className="grid gap-3 md:grid-cols-2">
+          <Select
+            label="Statut du devis"
+            value={quoteStatusValue}
+            onChange={(e) => setQuoteStatusValue(e.target.value as ProjectQuoteStatus)}
+            disabled={!isAdmin || savingCommercial}
+          >
+            {Object.entries(QUOTE_LABELS).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </Select>
+          <Select
+            label="Statut de l’acompte"
+            value={depositStatusValue}
+            onChange={(e) => setDepositStatusValue(e.target.value as ProjectDepositStatus)}
+            disabled={!isAdmin || savingCommercial}
+          >
+            {Object.entries(DEPOSIT_LABELS).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </Select>
+        </div>
+        {!project.startedAt && !canStart ? (
+          <p className="text-xs text-amber-600">
+            Démarrage bloqué tant que le devis n’est pas SIGNED/ACCEPTED et l’acompte non PAID ou NOT_REQUIRED.
+          </p>
+        ) : null}
+        {commercialMessage ? <p className="text-xs text-[var(--text-secondary)]">{commercialMessage}</p> : null}
+      </Card>
+
+      <Card className="space-y-3 p-5">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
             <p className="text-sm font-semibold text-[var(--text-primary)]">Démarrage du projet</p>
             <p className="text-xs text-[var(--text-secondary)]">
               Devis signé + acompte payé pour lancer le projet et générer les tâches.
@@ -478,7 +557,7 @@ export default function ProjectDetailPage() {
           {project.startedAt ? (
             <Badge variant="neutral">Démarré le {formatDate(project.startedAt)}</Badge>
           ) : (
-            <Button onClick={startProject} disabled={!canStart || startLoading} variant="primary">
+            <Button onClick={startProject} disabled={!canStart || startLoading || !isAdmin} variant="primary">
               {startLoading ? 'Démarrage…' : 'Démarrer le projet'}
             </Button>
           )}
@@ -487,6 +566,9 @@ export default function ProjectDetailPage() {
           <p className="text-sm text-amber-600">
             Pré-requis : devis SIGNED/ACCEPTED et acompte PAID ou NOT_REQUIRED.
           </p>
+        ) : null}
+        {!isAdmin ? (
+          <p className="text-xs text-[var(--text-secondary)]">Seuls les admins/owners peuvent démarrer un projet.</p>
         ) : null}
         {actionMessage ? <p className="text-xs text-[var(--text-secondary)]">{actionMessage}</p> : null}
       </Card>
@@ -500,9 +582,14 @@ export default function ProjectDetailPage() {
             </p>
           </div>
           {isAdmin ? (
-            <Button size="sm" onClick={() => openServiceModal()} variant="outline">
-              Ajouter un service
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" variant="ghost" asChild>
+                <Link href={`/app/pro/${businessId}/services`}>Gérer le catalogue</Link>
+              </Button>
+              <Button size="sm" onClick={() => openServiceModal()} variant="outline">
+                Ajouter un service
+              </Button>
+            </div>
           ) : null}
         </div>
 
@@ -561,7 +648,14 @@ export default function ProjectDetailPage() {
         {tasksLoading ? (
           <p className="text-sm text-[var(--text-secondary)]">Chargement des tâches…</p>
         ) : tasks.length === 0 ? (
-          <p className="text-sm text-[var(--text-secondary)]">Aucune tâche.</p>
+          <div className="space-y-2">
+            <p className="text-sm text-[var(--text-secondary)]">Aucune tâche pour ce projet.</p>
+            {!project.startedAt && isAdmin ? (
+              <Button size="sm" variant="outline" onClick={startProject} disabled={startLoading || !canStart}>
+                {startLoading ? 'Démarrage…' : 'Démarrer pour générer les tâches'}
+              </Button>
+            ) : null}
+          </div>
         ) : (
           <div className="space-y-3">
             {['CADRAGE', 'UX', 'DESIGN', 'DEV', 'SEO', 'LAUNCH', 'FOLLOW_UP', null].map((phase) => {

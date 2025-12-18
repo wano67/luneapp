@@ -373,6 +373,12 @@ export default function ProjectsPage() {
       </Card>
 
       <Card className="p-5">
+        <div className="flex flex-wrap items-center justify-between gap-2 pb-3">
+          <p className="text-sm font-semibold text-[var(--text-primary)]">Projets</p>
+          <Button asChild size="sm" variant="outline">
+            <Link href={`/app/pro/${businessId}/services`}>Catalogue de services</Link>
+          </Button>
+        </div>
         {success ? <p className="text-xs font-semibold text-emerald-500">{success}</p> : null}
         {loading ? (
           <p className="text-sm text-[var(--text-secondary)]">Chargement des projets…</p>
