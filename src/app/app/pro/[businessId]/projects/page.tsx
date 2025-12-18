@@ -14,6 +14,8 @@ import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import { useActiveBusiness } from '../../ActiveBusinessProvider';
 
 type ProjectStatus = 'PLANNED' | 'ACTIVE' | 'ON_HOLD' | 'COMPLETED' | 'CANCELLED';
+type ProjectQuoteStatus = 'DRAFT' | 'SENT' | 'ACCEPTED' | 'SIGNED';
+type ProjectDepositStatus = 'NOT_REQUIRED' | 'PENDING' | 'PAID';
 
 type Project = {
   id: string;
@@ -22,8 +24,14 @@ type Project = {
   clientName: string | null;
   name: string;
   status: ProjectStatus;
+  quoteStatus: ProjectQuoteStatus;
+  depositStatus: ProjectDepositStatus;
+  startedAt: string | null;
+  archivedAt: string | null;
   startDate: string | null;
   endDate: string | null;
+  progress?: number;
+  tasksSummary?: { total: number; open: number; done: number; progressPct: number };
   createdAt: string;
   updatedAt: string;
 };
@@ -39,6 +47,19 @@ const STATUS_OPTIONS: { value: ProjectStatus; label: string }[] = [
   { value: 'COMPLETED', label: 'Terminé' },
   { value: 'CANCELLED', label: 'Annulé' },
 ];
+
+const QUOTE_LABELS: Record<ProjectQuoteStatus, string> = {
+  DRAFT: 'Devis brouillon',
+  SENT: 'Devis envoyé',
+  ACCEPTED: 'Devis accepté',
+  SIGNED: 'Devis signé',
+};
+
+const DEPOSIT_LABELS: Record<ProjectDepositStatus, string> = {
+  NOT_REQUIRED: 'Acompte non requis',
+  PENDING: 'Acompte en attente',
+  PAID: 'Acompte payé',
+};
 
 function statusLabel(status: ProjectStatus) {
   return STATUS_OPTIONS.find((opt) => opt.value === status)?.label ?? status;
@@ -66,6 +87,7 @@ export default function ProjectsPage() {
   const [success, setSuccess] = useState<string | null>(null);
 
   const [statusFilter, setStatusFilter] = useState<ProjectStatus | 'ALL'>('ALL');
+  const [archivedFilter, setArchivedFilter] = useState<'all' | 'true' | 'false'>('false');
 
   const [createOpen, setCreateOpen] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -109,6 +131,7 @@ export default function ProjectsPage() {
       setError(null);
       const query = new URLSearchParams();
       if (statusFilter !== 'ALL') query.set('status', statusFilter);
+      if (archivedFilter !== 'all') query.set('archived', archivedFilter);
 
       const res = await fetchJson<ProjectListResponse>(
         `/api/pro/businesses/${businessId}/projects${query.toString() ? `?${query.toString()}` : ''}`,
@@ -148,7 +171,7 @@ export default function ProjectsPage() {
     void loadProjects();
     return () => fetchController.current?.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [businessId, statusFilter]);
+  }, [businessId, statusFilter, archivedFilter]);
 
   async function handleCreate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -331,6 +354,22 @@ export default function ProjectsPage() {
             </Button>
           ))}
         </div>
+        <div className="flex flex-wrap gap-2">
+          {[
+            { value: 'false', label: 'Actifs' },
+            { value: 'true', label: 'Archivés' },
+            { value: 'all', label: 'Tous' },
+          ].map((opt) => (
+            <Button
+              key={opt.value}
+              size="sm"
+              variant={archivedFilter === opt.value ? 'primary' : 'outline'}
+              onClick={() => setArchivedFilter(opt.value as 'all' | 'true' | 'false')}
+            >
+              {opt.label}
+            </Button>
+          ))}
+        </div>
       </Card>
 
       <Card className="p-5">
@@ -375,9 +414,15 @@ export default function ProjectsPage() {
                   <p className="text-[10px] text-[var(--text-secondary)]">
                     {formatDate(project.startDate)} → {formatDate(project.endDate)}
                   </p>
+                  <p className="text-[11px] text-[var(--text-secondary)]">
+                    Avancement : {project.progress ?? project.tasksSummary?.progressPct ?? 0}%
+                  </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge variant="neutral">{statusLabel(project.status)}</Badge>
+                    <Badge variant="neutral">{QUOTE_LABELS[project.quoteStatus]}</Badge>
+                    <Badge variant="neutral">{DEPOSIT_LABELS[project.depositStatus]}</Badge>
+                    {project.archivedAt ? <Badge variant="neutral">Archivé</Badge> : null}
                     {isAdmin ? (
                       <>
                         <Button size="sm" variant="outline" onClick={() => openEdit(project)}>

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/server/db/client';
 import { requireAuthPro } from '@/server/auth/requireAuthPro';
 import { requireBusinessRole } from '@/server/auth/businessRole';
-import { assertSameOrigin, jsonNoStore } from '@/server/security/csrf';
+import { assertSameOrigin, jsonNoStore, withNoStore } from '@/server/security/csrf';
 import { badRequest, getRequestId, unauthorized, withRequestId } from '@/server/http/apiUtils';
 
 function forbidden() {
@@ -20,6 +20,10 @@ function parseId(param: string | undefined) {
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return !!v && typeof v === 'object';
+}
+
+function withIdNoStore(res: NextResponse, requestId: string) {
+  return withNoStore(withRequestId(res, requestId));
 }
 
 async function getItem(businessId: bigint, projectId: bigint, itemId: bigint) {
@@ -40,13 +44,13 @@ export async function PATCH(
 ) {
   const requestId = getRequestId(request);
   const csrf = assertSameOrigin(request);
-  if (csrf) return csrf;
+  if (csrf) return withIdNoStore(csrf, requestId);
 
   let userId: string;
   try {
     ({ userId } = await requireAuthPro(request));
   } catch {
-    return withRequestId(unauthorized(), requestId);
+    return withIdNoStore(unauthorized(), requestId);
   }
 
   const { businessId, projectId, itemId } = await context.params;
@@ -54,19 +58,19 @@ export async function PATCH(
   const projectIdBigInt = parseId(projectId);
   const itemIdBigInt = parseId(itemId);
   if (!businessIdBigInt || !projectIdBigInt || !itemIdBigInt) {
-    return withRequestId(badRequest('Ids invalides.'), requestId);
+    return withIdNoStore(badRequest('Ids invalides.'), requestId);
   }
 
   const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'ADMIN');
-  if (!membership) return forbidden();
+  if (!membership) return withIdNoStore(forbidden(), requestId);
 
   const existing = await getItem(businessIdBigInt, projectIdBigInt, itemIdBigInt);
   if (!existing) {
-    return withRequestId(NextResponse.json({ error: 'Élément introuvable.' }, { status: 404 }), requestId);
+    return withIdNoStore(NextResponse.json({ error: 'Élément introuvable.' }, { status: 404 }), requestId);
   }
 
   const body = await request.json().catch(() => null);
-  if (!isRecord(body)) return withRequestId(badRequest('Payload invalide.'), requestId);
+  if (!isRecord(body)) return withIdNoStore(badRequest('Payload invalide.'), requestId);
 
   const quantity =
     typeof body.quantity === 'number' && Number.isFinite(body.quantity) ? Math.max(1, Math.trunc(body.quantity)) : null;
@@ -75,7 +79,7 @@ export async function PATCH(
       ? Math.max(0, Math.trunc(body.priceCents))
       : null;
   const notes = typeof body.notes === 'string' ? body.notes.trim() : undefined;
-  if (notes && notes.length > 2000) return withRequestId(badRequest('Notes trop longues.'), requestId);
+  if (notes && notes.length > 2000) return withIdNoStore(badRequest('Notes trop longues.'), requestId);
 
   const updated = await prisma.projectService.update({
     where: { id: itemIdBigInt },
@@ -87,21 +91,24 @@ export async function PATCH(
     include: { service: true },
   });
 
-  return jsonNoStore({
-    id: updated.id.toString(),
-    projectId: updated.projectId.toString(),
-    serviceId: updated.serviceId.toString(),
-    quantity: updated.quantity,
-    priceCents: updated.priceCents?.toString() ?? null,
-    notes: updated.notes,
-    createdAt: updated.createdAt.toISOString(),
-    service: {
-      id: updated.service.id.toString(),
-      code: updated.service.code,
-      name: updated.service.name,
-      type: updated.service.type,
-    },
-  });
+  return withIdNoStore(
+    jsonNoStore({
+      id: updated.id.toString(),
+      projectId: updated.projectId.toString(),
+      serviceId: updated.serviceId.toString(),
+      quantity: updated.quantity,
+      priceCents: updated.priceCents?.toString() ?? null,
+      notes: updated.notes,
+      createdAt: updated.createdAt.toISOString(),
+      service: {
+        id: updated.service.id.toString(),
+        code: updated.service.code,
+        name: updated.service.name,
+        type: updated.service.type,
+      },
+    }),
+    requestId
+  );
 }
 
 // DELETE /api/pro/businesses/{businessId}/projects/{projectId}/services/{itemId}
@@ -111,13 +118,13 @@ export async function DELETE(
 ) {
   const requestId = getRequestId(request);
   const csrf = assertSameOrigin(request);
-  if (csrf) return csrf;
+  if (csrf) return withIdNoStore(csrf, requestId);
 
   let userId: string;
   try {
     ({ userId } = await requireAuthPro(request));
   } catch {
-    return withRequestId(unauthorized(), requestId);
+    return withIdNoStore(unauthorized(), requestId);
   }
 
   const { businessId, projectId, itemId } = await context.params;
@@ -125,17 +132,17 @@ export async function DELETE(
   const projectIdBigInt = parseId(projectId);
   const itemIdBigInt = parseId(itemId);
   if (!businessIdBigInt || !projectIdBigInt || !itemIdBigInt) {
-    return withRequestId(badRequest('Ids invalides.'), requestId);
+    return withIdNoStore(badRequest('Ids invalides.'), requestId);
   }
 
   const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'ADMIN');
-  if (!membership) return forbidden();
+  if (!membership) return withIdNoStore(forbidden(), requestId);
 
   const existing = await getItem(businessIdBigInt, projectIdBigInt, itemIdBigInt);
   if (!existing) {
-    return withRequestId(NextResponse.json({ error: 'Élément introuvable.' }, { status: 404 }), requestId);
+    return withIdNoStore(NextResponse.json({ error: 'Élément introuvable.' }, { status: 404 }), requestId);
   }
 
   await prisma.projectService.delete({ where: { id: itemIdBigInt } });
-  return jsonNoStore({ ok: true });
+  return withIdNoStore(jsonNoStore({ ok: true }), requestId);
 }

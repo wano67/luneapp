@@ -19,6 +19,10 @@ function parseId(param: string | undefined) {
   }
 }
 
+function withIdNoStore(res: NextResponse, requestId: string) {
+  return withNoStore(withRequestId(res, requestId));
+}
+
 // POST /api/pro/businesses/{businessId}/projects/{projectId}/start
 export async function POST(
   request: NextRequest,
@@ -26,24 +30,24 @@ export async function POST(
 ) {
   const requestId = getRequestId(request);
   const csrf = assertSameOrigin(request);
-  if (csrf) return csrf;
+  if (csrf) return withIdNoStore(csrf, requestId);
 
   let userId: string;
   try {
     ({ userId } = await requireAuthPro(request));
   } catch {
-    return withRequestId(unauthorized(), requestId);
+    return withIdNoStore(unauthorized(), requestId);
   }
 
   const { businessId, projectId } = await context.params;
   const businessIdBigInt = parseId(businessId);
   const projectIdBigInt = parseId(projectId);
   if (!businessIdBigInt || !projectIdBigInt) {
-    return withRequestId(badRequest('Ids invalides.'), requestId);
+    return withIdNoStore(badRequest('Ids invalides.'), requestId);
   }
 
   const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'ADMIN');
-  if (!membership) return forbidden();
+  if (!membership) return withIdNoStore(forbidden(), requestId);
 
   const project = await prisma.project.findFirst({
     where: { id: projectIdBigInt, businessId: businessIdBigInt },
@@ -52,7 +56,7 @@ export async function POST(
     },
   });
   if (!project) {
-    return withRequestId(NextResponse.json({ error: 'Projet introuvable.' }, { status: 404 }), requestId);
+    return withIdNoStore(NextResponse.json({ error: 'Projet introuvable.' }, { status: 404 }), requestId);
   }
 
   if (project.startedAt) {
@@ -65,37 +69,52 @@ export async function POST(
   }
 
   if (!(project.quoteStatus === 'SIGNED' || project.quoteStatus === 'ACCEPTED')) {
-    return withRequestId(badRequest('Le devis doit être signé/accepté avant démarrage.'), requestId);
+    return withNoStore(
+      withRequestId(badRequest('Le devis doit être signé/accepté avant démarrage.'), requestId)
+    );
   }
   if (!(project.depositStatus === 'PAID' || project.depositStatus === 'NOT_REQUIRED')) {
-    return withRequestId(badRequest('L’acompte doit être payé ou non requis.'), requestId);
+    return withNoStore(
+      withRequestId(badRequest('L’acompte doit être payé ou non requis.'), requestId)
+    );
   }
 
   const now = new Date();
-  const tasksToCreate: {
-    title: string;
-    phase: TaskPhase | null;
-    projectId: bigint;
-    businessId: bigint;
-    status: string;
-    dueDate?: Date;
-  }[] = [];
-
-  for (const ps of project.projectServices) {
-    for (const tpl of ps.service.taskTemplates) {
-      const dueDate = tpl.defaultDueOffsetDays != null ? new Date(now.getTime() + tpl.defaultDueOffsetDays * 86400000) : undefined;
-      tasksToCreate.push({
-        title: tpl.title,
-        phase: (tpl.phase ?? null) as TaskPhase | null,
-        projectId: projectIdBigInt,
-        businessId: businessIdBigInt,
-        status: 'TODO',
-        dueDate,
-      });
-    }
-  }
 
   const result = await prisma.$transaction(async (tx) => {
+    const existingTasks = await tx.task.findMany({
+      where: { projectId: projectIdBigInt, businessId: businessIdBigInt },
+      select: { title: true, phase: true },
+    });
+    const existingKeys = new Set(existingTasks.map((t) => `${t.title}|${t.phase ?? ''}`));
+
+    const tasksToCreate: {
+      title: string;
+      phase: TaskPhase | null;
+      projectId: bigint;
+      businessId: bigint;
+      status: 'TODO' | 'IN_PROGRESS' | 'DONE';
+      dueDate?: Date;
+    }[] = [];
+
+    for (const ps of project.projectServices) {
+      for (const tpl of ps.service.taskTemplates) {
+        const dueDate =
+          tpl.defaultDueOffsetDays != null ? new Date(now.getTime() + tpl.defaultDueOffsetDays * 86400000) : undefined;
+        const key = `${tpl.title}|${tpl.phase ?? ''}`;
+        if (existingKeys.has(key)) continue;
+        existingKeys.add(key);
+        tasksToCreate.push({
+          title: tpl.title,
+          phase: (tpl.phase ?? null) as TaskPhase | null,
+          projectId: projectIdBigInt,
+          businessId: businessIdBigInt,
+          status: 'TODO',
+          dueDate,
+        });
+      }
+    }
+
     const updated = await tx.project.update({
       where: { id: projectIdBigInt },
       data: { startedAt: now, status: 'ACTIVE' },
@@ -103,18 +122,11 @@ export async function POST(
 
     let createdCount = 0;
     if (tasksToCreate.length) {
-      await tx.task.createMany({
-        data: tasksToCreate.map((t) => ({
-          title: t.title,
-          phase: t.phase ?? undefined,
-          projectId: t.projectId,
-          businessId: t.businessId,
-          status: t.status as 'TODO' | 'IN_PROGRESS' | 'DONE',
-          dueDate: t.dueDate,
-        })),
+      const created = await tx.task.createMany({
+        data: tasksToCreate,
         skipDuplicates: true,
       });
-      createdCount = tasksToCreate.length;
+      createdCount = created.count;
     }
 
     return { startedAt: updated.startedAt!, tasksCreated: createdCount };

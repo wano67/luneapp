@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/server/db/client';
 import { requireAuthPro } from '@/server/auth/requireAuthPro';
 import { requireBusinessRole } from '@/server/auth/businessRole';
-import { assertSameOrigin, jsonNoStore } from '@/server/security/csrf';
+import { assertSameOrigin, jsonNoStore, withNoStore } from '@/server/security/csrf';
 import { badRequest, getRequestId, unauthorized, withRequestId } from '@/server/http/apiUtils';
 
 function forbidden() {
@@ -22,6 +22,10 @@ function isRecord(v: unknown): v is Record<string, unknown> {
   return !!v && typeof v === 'object';
 }
 
+function withIdNoStore(res: NextResponse, requestId: string) {
+  return withNoStore(withRequestId(res, requestId));
+}
+
 // GET /api/pro/businesses/{businessId}/projects/{projectId}/services
 export async function GET(
   request: NextRequest,
@@ -32,21 +36,23 @@ export async function GET(
   try {
     ({ userId } = await requireAuthPro(request));
   } catch {
-    return withRequestId(unauthorized(), requestId);
+    return withIdNoStore(unauthorized(), requestId);
   }
 
   const { businessId, projectId } = await context.params;
   const businessIdBigInt = parseId(businessId);
   const projectIdBigInt = parseId(projectId);
-  if (!businessIdBigInt || !projectIdBigInt) return withRequestId(badRequest('Ids invalides.'), requestId);
+  if (!businessIdBigInt || !projectIdBigInt) return withIdNoStore(badRequest('Ids invalides.'), requestId);
 
   const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'VIEWER');
-  if (!membership) return forbidden();
+  if (!membership) return withIdNoStore(forbidden(), requestId);
 
   const project = await prisma.project.findFirst({
     where: { id: projectIdBigInt, businessId: businessIdBigInt },
   });
-  if (!project) return withRequestId(NextResponse.json({ error: 'Projet introuvable.' }, { status: 404 }), requestId);
+  if (!project) {
+    return withIdNoStore(NextResponse.json({ error: 'Projet introuvable.' }, { status: 404 }), requestId);
+  }
 
   const items = await prisma.projectService.findMany({
     where: { projectId: projectIdBigInt },
@@ -54,23 +60,26 @@ export async function GET(
     orderBy: { createdAt: 'desc' },
   });
 
-  return jsonNoStore({
-    items: items.map((it) => ({
-      id: it.id.toString(),
-      projectId: it.projectId.toString(),
-      serviceId: it.serviceId.toString(),
-      quantity: it.quantity,
-      priceCents: it.priceCents?.toString() ?? null,
-      notes: it.notes,
-      createdAt: it.createdAt.toISOString(),
-      service: {
-        id: it.service.id.toString(),
-        code: it.service.code,
-        name: it.service.name,
-        type: it.service.type,
-      },
-    })),
-  });
+  return withIdNoStore(
+    jsonNoStore({
+      items: items.map((it) => ({
+        id: it.id.toString(),
+        projectId: it.projectId.toString(),
+        serviceId: it.serviceId.toString(),
+        quantity: it.quantity,
+        priceCents: it.priceCents?.toString() ?? null,
+        notes: it.notes,
+        createdAt: it.createdAt.toISOString(),
+        service: {
+          id: it.service.id.toString(),
+          code: it.service.code,
+          name: it.service.name,
+          type: it.service.type,
+        },
+      })),
+    }),
+    requestId
+  );
 }
 
 // POST /api/pro/businesses/{businessId}/projects/{projectId}/services
@@ -80,32 +89,34 @@ export async function POST(
 ) {
   const requestId = getRequestId(request);
   const csrf = assertSameOrigin(request);
-  if (csrf) return csrf;
+  if (csrf) return withIdNoStore(csrf, requestId);
 
   let userId: string;
   try {
     ({ userId } = await requireAuthPro(request));
   } catch {
-    return withRequestId(unauthorized(), requestId);
+    return withIdNoStore(unauthorized(), requestId);
   }
 
   const { businessId, projectId } = await context.params;
   const businessIdBigInt = parseId(businessId);
   const projectIdBigInt = parseId(projectId);
-  if (!businessIdBigInt || !projectIdBigInt) return withRequestId(badRequest('Ids invalides.'), requestId);
+  if (!businessIdBigInt || !projectIdBigInt) return withIdNoStore(badRequest('Ids invalides.'), requestId);
 
   const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'ADMIN');
-  if (!membership) return forbidden();
+  if (!membership) return withIdNoStore(forbidden(), requestId);
 
   const project = await prisma.project.findFirst({
     where: { id: projectIdBigInt, businessId: businessIdBigInt },
   });
-  if (!project) return withRequestId(NextResponse.json({ error: 'Projet introuvable.' }, { status: 404 }), requestId);
+  if (!project) {
+    return withIdNoStore(NextResponse.json({ error: 'Projet introuvable.' }, { status: 404 }), requestId);
+  }
 
   const body = await request.json().catch(() => null);
-  if (!isRecord(body)) return withRequestId(badRequest('Payload invalide.'), requestId);
+  if (!isRecord(body)) return withIdNoStore(badRequest('Payload invalide.'), requestId);
   const serviceIdBigInt = parseId(typeof body.serviceId === 'string' ? body.serviceId : undefined);
-  if (!serviceIdBigInt) return withRequestId(badRequest('serviceId invalide.'), requestId);
+  if (!serviceIdBigInt) return withIdNoStore(badRequest('serviceId invalide.'), requestId);
 
   const quantity =
     typeof body.quantity === 'number' && Number.isFinite(body.quantity) ? Math.max(1, Math.trunc(body.quantity)) : 1;
@@ -114,12 +125,14 @@ export async function POST(
       ? Math.max(0, Math.trunc(body.priceCents))
       : null;
   const notes = typeof body.notes === 'string' ? body.notes.trim() : undefined;
-  if (notes && notes.length > 2000) return withRequestId(badRequest('Notes trop longues.'), requestId);
+  if (notes && notes.length > 2000) return withIdNoStore(badRequest('Notes trop longues.'), requestId);
 
   const service = await prisma.service.findFirst({
     where: { id: serviceIdBigInt, businessId: businessIdBigInt },
   });
-  if (!service) return withRequestId(NextResponse.json({ error: 'Service introuvable.' }, { status: 404 }), requestId);
+  if (!service) {
+    return withIdNoStore(NextResponse.json({ error: 'Service introuvable.' }, { status: 404 }), requestId);
+  }
 
   const created = await prisma.projectService.create({
     data: {
@@ -132,22 +145,25 @@ export async function POST(
     include: { service: true },
   });
 
-  return NextResponse.json(
-    {
-      id: created.id.toString(),
-      projectId: created.projectId.toString(),
-      serviceId: created.serviceId.toString(),
-      quantity: created.quantity,
-      priceCents: created.priceCents?.toString() ?? null,
-      notes: created.notes,
-      createdAt: created.createdAt.toISOString(),
-      service: {
-        id: created.service.id.toString(),
-        code: created.service.code,
-        name: created.service.name,
-        type: created.service.type,
+  return withIdNoStore(
+    NextResponse.json(
+      {
+        id: created.id.toString(),
+        projectId: created.projectId.toString(),
+        serviceId: created.serviceId.toString(),
+        quantity: created.quantity,
+        priceCents: created.priceCents?.toString() ?? null,
+        notes: created.notes,
+        createdAt: created.createdAt.toISOString(),
+        service: {
+          id: created.service.id.toString(),
+          code: created.service.code,
+          name: created.service.name,
+          type: created.service.type,
+        },
       },
-    },
-    { status: 201 }
+      { status: 201 }
+    ),
+    requestId
   );
 }

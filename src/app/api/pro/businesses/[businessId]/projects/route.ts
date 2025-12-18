@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/server/db/client';
-import { ProjectStatus, ProjectQuoteStatus, ProjectDepositStatus } from '@/generated/prisma/client';
+import { ProjectStatus, ProjectQuoteStatus, ProjectDepositStatus, TaskStatus } from '@/generated/prisma/client';
 import { requireBusinessRole } from '@/server/auth/businessRole';
 import { assertSameOrigin, jsonNoStore, withNoStore } from '@/server/security/csrf';
 import { rateLimit } from '@/server/security/rateLimit';
@@ -82,6 +82,36 @@ export async function GET(
     },
   });
 
+  const progressByProject = new Map<
+    bigint,
+    { total: number; done: number; open: number; progressPct: number }
+  >();
+
+  if (projects.length) {
+    const taskRows = await prisma.task.findMany({
+      where: { projectId: { in: projects.map((p) => p.id) } },
+      select: { projectId: true, status: true, progress: true },
+    });
+
+    const grouped = new Map<bigint, { total: number; done: number; open: number; sum: number }>();
+    for (const t of taskRows) {
+      if (!t.projectId) continue;
+      const bucket = grouped.get(t.projectId) ?? { total: 0, done: 0, open: 0, sum: 0 };
+      bucket.total += 1;
+      const pct =
+        t.status === TaskStatus.DONE ? 100 : t.status === TaskStatus.IN_PROGRESS ? t.progress ?? 0 : 0;
+      bucket.sum += pct;
+      if (t.status === TaskStatus.DONE) bucket.done += 1;
+      else bucket.open += 1;
+      grouped.set(t.projectId, bucket);
+    }
+
+    for (const [projectId, stats] of grouped.entries()) {
+      const progressPct = stats.total ? Math.round(stats.sum / stats.total) : 0;
+      progressByProject.set(projectId, { total: stats.total, done: stats.done, open: stats.open, progressPct });
+    }
+  }
+
   return withIdNoStore(
     jsonNoStore({
       items: projects.map((p) => ({
@@ -99,6 +129,15 @@ export async function GET(
         endDate: p.endDate ? p.endDate.toISOString() : null,
         createdAt: p.createdAt.toISOString(),
         updatedAt: p.updatedAt.toISOString(),
+        progress: progressByProject.get(p.id)?.progressPct ?? 0,
+        tasksSummary: progressByProject.get(p.id)
+          ? {
+              total: progressByProject.get(p.id)!.total,
+              open: progressByProject.get(p.id)!.open,
+              done: progressByProject.get(p.id)!.done,
+              progressPct: progressByProject.get(p.id)!.progressPct,
+            }
+          : { total: 0, open: 0, done: 0, progressPct: 0 },
       })),
     }),
     requestId

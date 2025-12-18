@@ -40,6 +40,17 @@ function serializeProject(project: {
   updatedAt: Date;
   client?: { id: bigint; name: string | null } | null;
   _count?: { tasks: number; projectServices: number; interactions: number };
+  projectServices?: {
+    id: bigint;
+    projectId: bigint;
+    serviceId: bigint;
+    quantity: number;
+    priceCents: bigint | null;
+    notes: string | null;
+    createdAt: Date;
+    service: { id: bigint; code: string; name: string; type: string | null; defaultPriceCents: bigint | null };
+  }[];
+  tasksSummary?: { total: number; open: number; done: number; progressPct: number };
 }) {
   return {
     id: project.id.toString(),
@@ -62,6 +73,25 @@ function serializeProject(project: {
           interactions: project._count.interactions,
         }
       : undefined,
+    projectServices: project.projectServices
+      ? project.projectServices.map((ps) => ({
+          id: ps.id.toString(),
+          projectId: ps.projectId.toString(),
+          serviceId: ps.serviceId.toString(),
+          quantity: ps.quantity,
+          priceCents: ps.priceCents?.toString() ?? null,
+          notes: ps.notes,
+          createdAt: ps.createdAt.toISOString(),
+          service: {
+            id: ps.service.id.toString(),
+            code: ps.service.code,
+            name: ps.service.name,
+            type: ps.service.type,
+            defaultPriceCents: ps.service.defaultPriceCents?.toString() ?? null,
+          },
+        }))
+      : undefined,
+    tasksSummary: project.tasksSummary,
     createdAt: project.createdAt.toISOString(),
     updatedAt: project.updatedAt.toISOString(),
   };
@@ -99,19 +129,45 @@ export async function GET(
   const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'VIEWER');
   if (!membership) return withIdNoStore(forbidden(), requestId);
 
-  const project = await prisma.project.findFirst({
-    where: { id: projectIdBigInt, businessId: businessIdBigInt },
-    include: {
-      client: { select: { id: true, name: true } },
-      _count: { select: { tasks: true, projectServices: true, interactions: true } },
-    },
-  });
+  const [project, taskRows] = await Promise.all([
+    prisma.project.findFirst({
+      where: { id: projectIdBigInt, businessId: businessIdBigInt },
+      include: {
+        client: { select: { id: true, name: true } },
+        _count: { select: { tasks: true, projectServices: true, interactions: true } },
+        projectServices: {
+          include: { service: { select: { id: true, code: true, name: true, type: true, defaultPriceCents: true } } },
+          orderBy: { createdAt: 'desc' },
+        },
+      },
+    }),
+    prisma.task.findMany({
+      where: { projectId: projectIdBigInt, businessId: businessIdBigInt },
+      select: { status: true, progress: true },
+    }),
+  ]);
 
   if (!project) {
     return withIdNoStore(notFound('Projet introuvable.'), requestId);
   }
 
-  return withIdNoStore(jsonNoStore({ item: serializeProject(project) }), requestId);
+  const summary = (() => {
+    if (!taskRows.length) return { total: 0, open: 0, done: 0, progressPct: 0 };
+    let total = 0;
+    let done = 0;
+    let open = 0;
+    let sum = 0;
+    for (const t of taskRows) {
+      total += 1;
+      const pct = t.status === 'DONE' ? 100 : t.status === 'IN_PROGRESS' ? t.progress ?? 0 : 0;
+      sum += pct;
+      if (t.status === 'DONE') done += 1;
+      else open += 1;
+    }
+    return { total, done, open, progressPct: Math.round(sum / total) };
+  })();
+
+  return withIdNoStore(jsonNoStore({ item: serializeProject({ ...project, tasksSummary: summary }) }), requestId);
 }
 
 // PATCH /api/pro/businesses/{businessId}/projects/{projectId}
