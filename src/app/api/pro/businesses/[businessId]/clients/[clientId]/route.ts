@@ -4,6 +4,7 @@ import { requireAuthPro } from '@/server/auth/requireAuthPro';
 import { requireBusinessRole } from '@/server/auth/businessRole';
 import { assertSameOrigin, jsonNoStore } from '@/server/security/csrf';
 import { badRequest, forbidden, getRequestId, unauthorized, withRequestId } from '@/server/http/apiUtils';
+import { ClientStatus, LeadSource } from '@/generated/prisma/client';
 
 function parseId(param: string | undefined) {
   if (!param || !/^\d+$/.test(param)) return null;
@@ -63,6 +64,7 @@ export async function GET(
 
     const client = await prisma.client.findFirst({
       where: { id: clientIdBigInt, businessId: businessIdBigInt },
+      include: { projects: { select: { id: true } }, interactions: { select: { id: true } } },
     });
     if (!client) {
       return withRequestId(NextResponse.json({ error: 'Client introuvable.' }, { status: 404 }), requestId);
@@ -75,6 +77,11 @@ export async function GET(
       email: client.email,
       phone: client.phone,
       notes: client.notes,
+      sector: client.sector,
+      status: client.status,
+      leadSource: client.leadSource,
+      interactionsCount: client.interactions.length,
+      projectsCount: client.projects.length,
       createdAt: client.createdAt.toISOString(),
       updatedAt: client.updatedAt.toISOString(),
     });
@@ -152,6 +159,32 @@ export async function PATCH(
       return withRequestId(badRequest('Notes trop longues (max 2000).'), requestId);
     }
     data.notes = notesRaw || null;
+  }
+
+  if ('sector' in body) {
+    const sector = normalizeStr((body as { sector?: unknown }).sector);
+    data.sector = sector || null;
+  }
+
+  if ('status' in body) {
+    const status = (body as { status?: unknown }).status;
+    if (typeof status === 'string' && Object.values(ClientStatus).includes(status as ClientStatus)) {
+      data.status = status as ClientStatus;
+    }
+  }
+
+  if ('leadSource' in body) {
+    const origin = normalizeStr((body as { leadSource?: unknown }).leadSource);
+    if (origin) {
+      const values = Object.values(LeadSource).map((v) => v.toLowerCase());
+      if (!values.includes(origin.toLowerCase())) {
+        return withRequestId(badRequest('leadSource invalide.'), requestId);
+      }
+      const match = Object.values(LeadSource).find((v) => v.toLowerCase() === origin.toLowerCase());
+      data.leadSource = match as LeadSource;
+    } else {
+      data.leadSource = null;
+    }
   }
 
   if (Object.keys(data).length === 0) {

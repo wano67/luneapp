@@ -43,6 +43,13 @@ enum LeadSource {
   OTHER
 }
 
+enum ProspectStatus {
+  NEW
+  FOLLOW_UP
+  WON
+  LOST
+}
+
 enum QualificationLevel {
   COLD
   WARM
@@ -86,6 +93,7 @@ model User {
   personalAccounts     PersonalAccount[]
   personalTransactions PersonalTransaction[]
   personalCategories   PersonalCategory[]
+  interactionsCreated  Interaction[] @relation("InteractionCreatedBy")
 }
 
 /**
@@ -105,6 +113,8 @@ model Business {
   projects    Project[]
   tasks       Task[]
   finances    Finance[]
+  services    Service[]
+  interactions Interaction[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -149,6 +159,7 @@ model Prospect {
   business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
 
   name         String
+  title        String?
   contactName  String?
   contactEmail String?
   contactPhone String?
@@ -159,9 +170,13 @@ model Prospect {
 
   projectIdea     String?
   estimatedBudget Int?
+  origin          String?
+  probability     Int       @default(0)
+  nextActionDate  DateTime?
 
   firstContactAt DateTime?
   pipelineStatus ProspectPipelineStatus @default(NEW)
+  status          ProspectStatus        @default(NEW)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -175,15 +190,46 @@ enum ProjectStatus {
   CANCELLED
 }
 
+enum ProjectQuoteStatus {
+  DRAFT
+  SENT
+  ACCEPTED
+  SIGNED
+}
+
+enum ProjectDepositStatus {
+  NOT_REQUIRED
+  PENDING
+  PAID
+}
+
 enum TaskStatus {
   TODO
   IN_PROGRESS
   DONE
 }
 
+enum TaskPhase {
+  CADRAGE
+  UX
+  DESIGN
+  DEV
+  SEO
+  LAUNCH
+  FOLLOW_UP
+}
+
 enum FinanceType {
   INCOME
   EXPENSE
+}
+
+enum InteractionType {
+  CALL
+  MEETING
+  EMAIL
+  NOTE
+  MESSAGE
 }
 
 model Client {
@@ -205,6 +251,7 @@ model Client {
 
   business Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
   projects Project[]
+  interactions Interaction[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -218,6 +265,10 @@ model Project {
   clientId   BigInt?
   name       String
   status     ProjectStatus @default(PLANNED)
+  quoteStatus   ProjectQuoteStatus   @default(DRAFT)
+  depositStatus ProjectDepositStatus @default(PENDING)
+  startedAt     DateTime?
+  archivedAt    DateTime?
   startDate  DateTime?
   endDate    DateTime?
 
@@ -225,6 +276,8 @@ model Project {
   client   Client?  @relation(fields: [clientId], references: [id])
   tasks    Task[]
   finances Finance[]
+  projectServices ProjectService[]
+  interactions Interaction[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -240,6 +293,10 @@ model Task {
   title          String
   status         TaskStatus  @default(TODO)
   dueDate        DateTime?
+  phase          TaskPhase?
+  progress       Int         @default(0)
+  completedAt    DateTime?
+  notes          String?
 
   business Business @relation(fields: [businessId], references: [id])
   project  Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
@@ -270,6 +327,78 @@ model Finance {
 
   @@index([businessId, date])
   @@index([businessId, type])
+}
+
+/**
+ * Catalogue de services vendables
+ */
+model Service {
+  id          BigInt   @id @default(autoincrement())
+  businessId  BigInt
+  business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  code        String   @unique
+  name        String
+  type        String?
+  description String?
+  defaultPriceCents BigInt?
+  tjmCents    BigInt?
+  durationHours Int?
+  vatRate     Int?
+
+  taskTemplates   ServiceTaskTemplate[]
+  projectServices ProjectService[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([businessId, code])
+}
+
+model ServiceTaskTemplate {
+  id        BigInt    @id @default(autoincrement())
+  serviceId BigInt
+  service   Service   @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  phase     TaskPhase?
+  title     String
+  defaultAssigneeRole String?
+  defaultDueOffsetDays Int?
+  createdAt DateTime @default(now())
+}
+
+model ProjectService {
+  id         BigInt   @id @default(autoincrement())
+  projectId  BigInt
+  serviceId  BigInt
+  quantity   Int      @default(1)
+  priceCents BigInt?
+  notes      String?
+  createdAt  DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  service Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, serviceId])
+}
+
+model Interaction {
+  id        BigInt   @id @default(autoincrement())
+  businessId BigInt
+  clientId  BigInt?
+  projectId BigInt?
+  type      InteractionType
+  content   String
+  happenedAt DateTime
+  nextActionDate DateTime?
+  createdByUserId BigInt?
+  createdAt DateTime @default(now())
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  client   Client?  @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  project  Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  createdBy User?   @relation("InteractionCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@index([businessId, clientId])
+  @@index([businessId, projectId])
 }
 
 /**

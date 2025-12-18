@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/server/db/client';
-import { TaskStatus } from '@/generated/prisma/client';
+import { TaskPhase, TaskStatus } from '@/generated/prisma/client';
 import { requireAuthPro } from '@/server/auth/requireAuthPro';
 import { requireBusinessRole } from '@/server/auth/businessRole';
 import { assertSameOrigin, jsonNoStore, withNoStore } from '@/server/security/csrf';
@@ -49,8 +49,12 @@ function serializeTask(task: {
   projectId: bigint | null;
   assigneeUserId: bigint | null;
   title: string;
+  phase: TaskPhase | null;
   status: TaskStatus;
+  progress: number;
   dueDate: Date | null;
+  completedAt: Date | null;
+  notes: string | null;
   createdAt: Date;
   updatedAt: Date;
   project?: { name: string | null } | null;
@@ -65,8 +69,12 @@ function serializeTask(task: {
     assigneeEmail: task.assignee?.email ?? null,
     assigneeName: task.assignee?.name ?? null,
     title: task.title,
+    phase: task.phase,
     status: task.status,
+    progress: task.progress,
     dueDate: task.dueDate ? task.dueDate.toISOString() : null,
+    completedAt: task.completedAt ? task.completedAt.toISOString() : null,
+    notes: task.notes,
     createdAt: task.createdAt.toISOString(),
     updatedAt: task.updatedAt.toISOString(),
   };
@@ -169,11 +177,32 @@ export async function PATCH(
     data.title = trimmed;
   }
 
+  if ('phase' in body) {
+    const phase = (body as { phase?: unknown }).phase;
+    if (
+      phase !== null &&
+      phase !== undefined &&
+      (typeof phase !== 'string' || !Object.values(TaskPhase).includes(phase as TaskPhase))
+    ) {
+      return withIdNoStore(badRequest('phase invalide.'), requestId);
+    }
+    data.phase = (phase as TaskPhase | null) ?? null;
+  }
+
   if ('status' in body) {
     if (!isValidStatus((body as { status?: unknown }).status)) {
       return withIdNoStore(badRequest('status invalide.'), requestId);
     }
     data.status = (body as { status: TaskStatus }).status;
+  }
+
+  if ('progress' in body) {
+    const progressRaw = (body as { progress?: unknown }).progress;
+    if (typeof progressRaw !== 'number' || !Number.isFinite(progressRaw)) {
+      return withIdNoStore(badRequest('progress invalide.'), requestId);
+    }
+    const progress = Math.min(100, Math.max(0, Math.trunc(progressRaw)));
+    data.progress = progress;
   }
 
   if ('projectId' in body) {
@@ -228,8 +257,33 @@ export async function PATCH(
     }
   }
 
+  if ('notes' in body) {
+    const raw = (body as { notes?: unknown }).notes;
+    if (raw === null || raw === undefined || raw === '') {
+      data.notes = null;
+    } else if (typeof raw === 'string') {
+      const trimmed = raw.trim();
+      if (trimmed.length > 2000) {
+        return withIdNoStore(badRequest('notes trop longues.'), requestId);
+      }
+      data.notes = trimmed || null;
+    } else {
+      return withIdNoStore(badRequest('notes invalides.'), requestId);
+    }
+  }
+
   if (Object.keys(data).length === 0) {
     return withIdNoStore(badRequest('Aucune modification.'), requestId);
+  }
+
+  if ('status' in data) {
+    const newStatus = data.status as TaskStatus;
+    if (newStatus === TaskStatus.DONE) {
+      data.completedAt = new Date();
+      data.progress = 100;
+    } else if (existing.status === TaskStatus.DONE) {
+      data.completedAt = null;
+    }
   }
 
   const updated = await prisma.task.update({

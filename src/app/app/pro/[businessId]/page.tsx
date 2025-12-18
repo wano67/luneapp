@@ -15,33 +15,51 @@ import { useActiveBusiness } from '../ActiveBusinessProvider';
 type TaskStatus = 'TODO' | 'IN_PROGRESS' | 'DONE';
 type FinanceType = 'INCOME' | 'EXPENSE';
 
-type DashboardResponse = {
+type DashboardTask = {
+  id?: string;
+  title?: string;
+  status?: TaskStatus;
+  dueDate?: string | null;
+  createdAt?: string | null;
+  projectId?: string | null;
+  projectName?: string | null;
+};
+
+type DashboardFinance = {
+  id?: string;
+  type?: FinanceType;
+  amountCents?: string | number;
+  amount?: number;
+  category?: string;
+  date?: string | null;
+  projectId?: string | null;
+  projectName?: string | null;
+};
+
+type DashboardResponse = Partial<{
   clientsCount: number;
   activeProjectsCount: number;
   openTasksCount: number;
   monthFinance: {
-    income: { amountCents: string; amount: number };
-    expense: { amountCents: string; amount: number };
-    period: { start: string; end: string };
+    income?: { amountCents?: string | number; amount?: number };
+    expense?: { amountCents?: string | number; amount?: number };
+    period?: { start?: string; end?: string };
   };
-  latestTasks: {
-    id: string;
-    title: string;
-    status: TaskStatus;
-    dueDate: string | null;
-    createdAt: string;
-  }[];
-  latestFinances: {
-    id: string;
-    type: FinanceType;
-    amountCents: string;
-    amount: number;
-    category: string;
-    date: string;
-    projectId: string | null;
-    projectName: string | null;
-  }[];
-};
+  latestTasks: DashboardTask[];
+  latestFinances: DashboardFinance[];
+  kpis: Partial<{
+    clientsCount: number;
+    projectsActiveCount: number;
+    activeProjectsCount: number;
+    openTasksCount: number;
+    mtdIncomeCents: string;
+    mtdExpenseCents: string;
+  }>;
+  nextActions: Partial<{
+    tasks: DashboardTask[];
+    interactions: unknown[];
+  }>;
+}> & Record<string, unknown>;
 
 const STATUS_LABELS: Record<TaskStatus, string> = {
   TODO: 'À faire',
@@ -56,6 +74,99 @@ function formatDate(value: string | null | undefined) {
   } catch {
     return value;
   }
+}
+
+function parseAmount(value: unknown) {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string') {
+    const num = Number(value);
+    return Number.isFinite(num) ? num / 100 : 0;
+  }
+  return 0;
+}
+
+function toTaskStatus(value: unknown): TaskStatus {
+  return value === 'IN_PROGRESS' || value === 'DONE' ? value : 'TODO';
+}
+
+function normalizeDashboardData(data: DashboardResponse | null) {
+  const clientsCount =
+    typeof data?.clientsCount === 'number'
+      ? data.clientsCount
+      : typeof data?.kpis?.clientsCount === 'number'
+        ? data.kpis.clientsCount
+        : 0;
+
+  const activeProjectsCount =
+    typeof data?.activeProjectsCount === 'number'
+      ? data.activeProjectsCount
+      : typeof data?.kpis?.projectsActiveCount === 'number'
+        ? data.kpis.projectsActiveCount
+        : typeof data?.kpis?.activeProjectsCount === 'number'
+          ? data.kpis.activeProjectsCount
+          : 0;
+
+  const openTasksCount =
+    typeof data?.openTasksCount === 'number'
+      ? data.openTasksCount
+      : typeof data?.kpis?.openTasksCount === 'number'
+        ? data.kpis.openTasksCount
+        : 0;
+
+  const incomeAmount =
+    data?.monthFinance?.income?.amount ??
+    parseAmount(data?.monthFinance?.income?.amountCents) ??
+    parseAmount(data?.kpis?.mtdIncomeCents) ??
+    0;
+
+  const expenseAmount =
+    data?.monthFinance?.expense?.amount ??
+    parseAmount(data?.monthFinance?.expense?.amountCents) ??
+    parseAmount(data?.kpis?.mtdExpenseCents) ??
+    0;
+
+  const tasksSource =
+    Array.isArray(data?.latestTasks) && data.latestTasks.length > 0
+      ? data.latestTasks
+      : Array.isArray(data?.nextActions?.tasks)
+        ? data.nextActions.tasks
+        : [];
+
+  const tasks: DashboardTask[] = tasksSource.map((task, idx) => ({
+    id: task.id ?? `task-${idx}`,
+    title: task.title ?? 'Sans titre',
+    status: toTaskStatus(task.status),
+    dueDate: task.dueDate ?? null,
+    createdAt: task.createdAt ?? null,
+    projectId: task.projectId ?? null,
+    projectName: task.projectName ?? null,
+  }));
+
+  const finances: DashboardFinance[] = Array.isArray(data?.latestFinances)
+    ? data!.latestFinances.map((op, idx) => ({
+        id: op.id ?? `finance-${idx}`,
+        type: op.type ?? 'EXPENSE',
+        amount: typeof op.amount === 'number' ? op.amount : parseAmount(op.amountCents),
+        amountCents:
+          typeof op.amountCents === 'string' || typeof op.amountCents === 'number'
+            ? op.amountCents
+            : undefined,
+        category: op.category ?? 'Opération',
+        date: op.date ?? null,
+        projectId: op.projectId ?? null,
+        projectName: op.projectName ?? null,
+      }))
+    : [];
+
+  return {
+    clientsCount,
+    activeProjectsCount,
+    openTasksCount,
+    incomeAmount,
+    expenseAmount,
+    tasks,
+    finances,
+  };
 }
 
 export default function BusinessDashboardPage() {
@@ -112,16 +223,18 @@ export default function BusinessDashboardPage() {
     return () => controller.abort();
   }, [businessId]);
 
-  const kpis = useMemo(() => {
-    if (!data) return [];
-    return [
-      { label: 'Clients', value: data.clientsCount.toString() },
-      { label: 'Projets actifs', value: data.activeProjectsCount.toString() },
-      { label: 'Tâches ouvertes', value: data.openTasksCount.toString() },
-      { label: 'Revenus (mois)', value: formatCurrency(data.monthFinance.income.amount) },
-      { label: 'Dépenses (mois)', value: formatCurrency(data.monthFinance.expense.amount) },
-    ];
-  }, [data]);
+  const normalized = useMemo(() => normalizeDashboardData(data), [data]);
+
+  const kpis = useMemo(
+    () => [
+      { label: 'Clients', value: normalized.clientsCount.toString() },
+      { label: 'Projets actifs', value: normalized.activeProjectsCount.toString() },
+      { label: 'Tâches ouvertes', value: normalized.openTasksCount.toString() },
+      { label: 'Revenus (mois)', value: formatCurrency(normalized.incomeAmount) },
+      { label: 'Dépenses (mois)', value: formatCurrency(normalized.expenseAmount) },
+    ],
+    [normalized]
+  );
 
   return (
     <div className="space-y-5">
@@ -177,16 +290,18 @@ export default function BusinessDashboardPage() {
                 </Button>
               </div>
               <div className="space-y-2">
-                {data.latestTasks.length === 0 ? (
+                {normalized.tasks.length === 0 ? (
                   <p className="text-sm text-[var(--text-secondary)]">Aucune tâche.</p>
                 ) : (
-                  data.latestTasks.map((task) => (
+                  normalized.tasks.map((task, idx) => (
                     <div
-                      key={task.id}
+                      key={task.id ?? `task-${idx}`}
                       className="flex items-center justify-between rounded-xl border border-[var(--border)] bg-[var(--surface)]/60 p-3"
                     >
                       <div>
-                        <p className="text-sm font-semibold text-[var(--text-primary)]">{task.title}</p>
+                        <p className="text-sm font-semibold text-[var(--text-primary)]">
+                          {task.title ?? 'Sans titre'}
+                        </p>
                         <p className="text-[10px] text-[var(--text-secondary)]">
                           Due {formatDate(task.dueDate)} · Créée {formatDate(task.createdAt)}
                         </p>
@@ -201,7 +316,7 @@ export default function BusinessDashboardPage() {
                               : 'bg-amber-100 text-amber-700'
                         }
                       >
-                        {STATUS_LABELS[task.status]}
+                        {STATUS_LABELS[task.status as TaskStatus] ?? STATUS_LABELS.TODO}
                       </Badge>
                     </div>
                   ))
@@ -220,16 +335,18 @@ export default function BusinessDashboardPage() {
                 </Button>
               </div>
               <div className="space-y-2">
-                {data.latestFinances.length === 0 ? (
+                {normalized.finances.length === 0 ? (
                   <p className="text-sm text-[var(--text-secondary)]">Aucune opération.</p>
                 ) : (
-                  data.latestFinances.map((op) => (
+                  normalized.finances.map((op, idx) => (
                     <div
-                      key={op.id}
+                      key={op.id ?? `finance-${idx}`}
                       className="flex items-center justify-between rounded-xl border border-[var(--border)] bg-[var(--surface)]/60 p-3"
                     >
                       <div>
-                        <p className="text-sm font-semibold text-[var(--text-primary)]">{op.category}</p>
+                        <p className="text-sm font-semibold text-[var(--text-primary)]">
+                          {op.category ?? 'Opération'}
+                        </p>
                         <p className="text-[10px] text-[var(--text-secondary)]">
                           {formatDate(op.date)} · {op.projectName ?? '—'}
                         </p>
@@ -243,7 +360,7 @@ export default function BusinessDashboardPage() {
                         }
                       >
                         {op.type === 'INCOME' ? '+' : '-'}
-                        {formatCurrency(op.amount)}
+                        {formatCurrency(op.amount ?? 0)}
                       </Badge>
                     </div>
                   ))

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/server/db/client';
+import { ProjectDepositStatus, ProjectQuoteStatus, ProjectStatus } from '@/generated/prisma/client';
 import { requireBusinessRole } from '@/server/auth/businessRole';
 import { requireAuthPro } from '@/server/auth/requireAuthPro';
 import { assertSameOrigin, jsonNoStore, withNoStore } from '@/server/security/csrf';
@@ -28,22 +29,39 @@ function serializeProject(project: {
   businessId: bigint;
   clientId: bigint | null;
   name: string;
-  status: string;
+  status: ProjectStatus;
+  quoteStatus: ProjectQuoteStatus;
+  depositStatus: ProjectDepositStatus;
+  startedAt: Date | null;
+  archivedAt: Date | null;
   startDate: Date | null;
   endDate: Date | null;
   createdAt: Date;
   updatedAt: Date;
-  client?: { name: string | null } | null;
+  client?: { id: bigint; name: string | null } | null;
+  _count?: { tasks: number; projectServices: number; interactions: number };
 }) {
   return {
     id: project.id.toString(),
     businessId: project.businessId.toString(),
     clientId: project.clientId ? project.clientId.toString() : null,
     clientName: project.client?.name ?? null,
+    client: project.client ? { id: project.client.id.toString(), name: project.client.name } : null,
     name: project.name,
     status: project.status,
+    quoteStatus: project.quoteStatus,
+    depositStatus: project.depositStatus,
+    startedAt: project.startedAt ? project.startedAt.toISOString() : null,
+    archivedAt: project.archivedAt ? project.archivedAt.toISOString() : null,
     startDate: project.startDate ? project.startDate.toISOString() : null,
     endDate: project.endDate ? project.endDate.toISOString() : null,
+    counts: project._count
+      ? {
+          tasks: project._count.tasks,
+          projectServices: project._count.projectServices,
+          interactions: project._count.interactions,
+        }
+      : undefined,
     createdAt: project.createdAt.toISOString(),
     updatedAt: project.updatedAt.toISOString(),
   };
@@ -53,14 +71,8 @@ function withIdNoStore(res: NextResponse, requestId: string) {
   return withNoStore(withRequestId(res, requestId));
 }
 
-function isValidStatus(status: unknown): status is string {
-  return (
-    status === 'PLANNED' ||
-    status === 'ACTIVE' ||
-    status === 'ON_HOLD' ||
-    status === 'COMPLETED' ||
-    status === 'CANCELLED'
-  );
+function isValidStatus(status: unknown): status is ProjectStatus {
+  return typeof status === 'string' && Object.values(ProjectStatus).includes(status as ProjectStatus);
 }
 
 // GET /api/pro/businesses/{businessId}/projects/{projectId}
@@ -89,7 +101,10 @@ export async function GET(
 
   const project = await prisma.project.findFirst({
     where: { id: projectIdBigInt, businessId: businessIdBigInt },
-    include: { client: true },
+    include: {
+      client: { select: { id: true, name: true } },
+      _count: { select: { tasks: true, projectServices: true, interactions: true } },
+    },
   });
 
   if (!project) {
@@ -127,7 +142,7 @@ export async function PATCH(
 
   const project = await prisma.project.findFirst({
     where: { id: projectIdBigInt, businessId: businessIdBigInt },
-    include: { client: true },
+    include: { client: { select: { id: true, name: true } } },
   });
   if (!project) {
     return withIdNoStore(notFound('Projet introuvable.'), requestId);
@@ -140,6 +155,10 @@ export async function PATCH(
 
   const data: Record<string, unknown> = {};
 
+  if ('startedAt' in body || 'archivedAt' in body) {
+    return withIdNoStore(badRequest('startedAt/archivedAt ne peuvent pas être modifiés ici.'), requestId);
+  }
+
   if ('name' in body) {
     if (typeof body.name !== 'string') return withIdNoStore(badRequest('Nom invalide.'), requestId);
     const trimmed = body.name.trim();
@@ -151,7 +170,29 @@ export async function PATCH(
     if (!isValidStatus(body.status)) {
       return withIdNoStore(badRequest('Statut invalide.'), requestId);
     }
-    data.status = body.status;
+    data.status = body.status as ProjectStatus;
+  }
+
+  if ('quoteStatus' in body) {
+    const quoteStatus = (body as { quoteStatus?: unknown }).quoteStatus;
+    if (
+      typeof quoteStatus !== 'string' ||
+      !Object.values(ProjectQuoteStatus).includes(quoteStatus as ProjectQuoteStatus)
+    ) {
+      return withIdNoStore(badRequest('quoteStatus invalide.'), requestId);
+    }
+    data.quoteStatus = quoteStatus as ProjectQuoteStatus;
+  }
+
+  if ('depositStatus' in body) {
+    const depositStatus = (body as { depositStatus?: unknown }).depositStatus;
+    if (
+      typeof depositStatus !== 'string' ||
+      !Object.values(ProjectDepositStatus).includes(depositStatus as ProjectDepositStatus)
+    ) {
+      return withIdNoStore(badRequest('depositStatus invalide.'), requestId);
+    }
+    data.depositStatus = depositStatus as ProjectDepositStatus;
   }
 
   if ('clientId' in body) {
@@ -201,7 +242,10 @@ export async function PATCH(
   const updated = await prisma.project.update({
     where: { id: projectIdBigInt },
     data,
-    include: { client: true },
+    include: {
+      client: { select: { id: true, name: true } },
+      _count: { select: { tasks: true, projectServices: true, interactions: true } },
+    },
   });
 
   return withIdNoStore(jsonNoStore({ item: serializeProject(updated) }), requestId);

@@ -5,6 +5,7 @@ import { assertSameOrigin, jsonNoStore } from '@/server/security/csrf';
 import { rateLimit } from '@/server/security/rateLimit';
 import { requireAuthPro } from '@/server/auth/requireAuthPro';
 import { badRequest, getRequestId, unauthorized, withRequestId } from '@/server/http/apiUtils';
+import { ClientStatus, LeadSource } from '@/generated/prisma/client';
 
 function forbidden() {
   return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -44,6 +45,8 @@ function isValidPhone(s: string) {
   return digits.length >= 7 && digits.length <= 15;
 }
 
+const STATUS_VALUES = new Set<ClientStatus>(['ACTIVE', 'PAUSED', 'FORMER']);
+
 // GET /api/pro/businesses/{businessId}/clients
 export async function GET(
   request: NextRequest,
@@ -72,7 +75,10 @@ export async function GET(
   if (!membership) return forbidden();
 
   const { searchParams } = new URL(request.url);
-  const search = searchParams.get('search')?.trim();
+  const search = searchParams.get('q')?.trim() ?? searchParams.get('search')?.trim();
+  const status = searchParams.get('status') as ClientStatus | null;
+  const sector = searchParams.get('sector')?.trim();
+  const origin = searchParams.get('origin')?.trim();
 
   const clients = await prisma.client.findMany({
     where: {
@@ -82,6 +88,9 @@ export async function GET(
             name: { contains: search, mode: 'insensitive' },
           }
         : {}),
+      ...(status && STATUS_VALUES.has(status) ? { status } : {}),
+      ...(sector ? { sector: { contains: sector, mode: 'insensitive' } } : {}),
+      ...(origin ? { leadSource: origin as LeadSource } : {}),
     },
     orderBy: { name: 'asc' },
   });
@@ -94,6 +103,9 @@ export async function GET(
       email: c.email,
       phone: c.phone,
       notes: c.notes,
+      sector: c.sector,
+      status: c.status,
+      leadSource: c.leadSource,
       createdAt: c.createdAt.toISOString(),
       updatedAt: c.updatedAt.toISOString(),
     })),
@@ -166,6 +178,20 @@ export async function POST(
     return withRequestId(badRequest('Notes trop longues (max 2000).'), requestId);
   }
 
+  const sector = normalizeStr(body.sector);
+  const status =
+    typeof body.status === 'string' && STATUS_VALUES.has(body.status as ClientStatus)
+      ? (body.status as ClientStatus)
+      : undefined;
+  const leadSourceRaw = normalizeStr(body.leadSource);
+  const leadSource =
+    leadSourceRaw && Object.values(LeadSource).includes(leadSourceRaw as LeadSource)
+      ? (leadSourceRaw as LeadSource)
+      : undefined;
+  if (leadSourceRaw && !leadSource) {
+    return withRequestId(badRequest('leadSource invalide.'), requestId);
+  }
+
   const client = await prisma.client.create({
     data: {
       businessId: businessIdBigInt,
@@ -173,6 +199,9 @@ export async function POST(
       email,
       phone,
       notes,
+      sector: sector || undefined,
+      status: status ?? undefined,
+      leadSource,
     },
   });
 
@@ -184,6 +213,9 @@ export async function POST(
       email: client.email,
       phone: client.phone,
       notes: client.notes,
+      sector: client.sector,
+      status: client.status,
+      leadSource: client.leadSource,
       createdAt: client.createdAt.toISOString(),
       updatedAt: client.updatedAt.toISOString(),
     },

@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/server/db/client';
+import { ProspectStatus } from '@/generated/prisma/client';
 import { requireAuthPro } from '@/server/auth/requireAuthPro';
 import { requireBusinessRole } from '@/server/auth/businessRole';
-import { assertSameOrigin, jsonNoStore } from '@/server/security/csrf';
+import { assertSameOrigin, jsonNoStore, withNoStore } from '@/server/security/csrf';
 import {
   badRequest,
   forbidden,
@@ -22,8 +23,32 @@ function parseId(param: string | undefined) {
   }
 }
 
+function withIdNoStore(res: NextResponse, requestId: string) {
+  return withNoStore(withRequestId(res, requestId));
+}
+
+function ensureProspectDelegate(requestId: string) {
+  if (!(prisma as { prospect?: unknown }).prospect) {
+    return withIdNoStore(
+      NextResponse.json(
+        { error: 'Prisma client not generated / wrong import (prospect delegate absent).' },
+        { status: 500 }
+      ),
+      requestId
+    );
+  }
+  return null;
+}
+
 function normalizeStr(v: unknown) {
   return String(v ?? '').trim();
+}
+
+function parseDate(value: unknown): Date | null {
+  if (value === null || value === undefined || value === '') return null;
+  if (typeof value !== 'string') return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
 const VALID_STATUS = new Set<ProspectPipelineStatus>([
@@ -38,6 +63,7 @@ type ProspectLike = {
   id: bigint;
   businessId: bigint;
   name: string;
+  title: string | null;
   contactName: string | null;
   contactEmail: string | null;
   contactPhone: string | null;
@@ -46,8 +72,12 @@ type ProspectLike = {
   qualificationLevel: QualificationLevel | null;
   projectIdea: string | null;
   estimatedBudget: number | null;
+  origin: string | null;
+  probability: number;
+  nextActionDate: Date | null;
   firstContactAt: Date | null;
   pipelineStatus: ProspectPipelineStatus;
+  status: ProspectStatus;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -57,6 +87,7 @@ function serializeProspect(p: ProspectLike) {
     id: p.id.toString(),
     businessId: p.businessId.toString(),
     name: p.name,
+    title: p.title,
     contactName: p.contactName,
     contactEmail: p.contactEmail,
     contactPhone: p.contactPhone,
@@ -65,8 +96,12 @@ function serializeProspect(p: ProspectLike) {
     qualificationLevel: p.qualificationLevel ?? null,
     projectIdea: p.projectIdea,
     estimatedBudget: p.estimatedBudget,
+    origin: p.origin,
+    probability: p.probability,
+    nextActionDate: p.nextActionDate ? p.nextActionDate.toISOString() : null,
     firstContactAt: p.firstContactAt ? p.firstContactAt.toISOString() : null,
     pipelineStatus: p.pipelineStatus,
+    status: p.status,
     createdAt: p.createdAt.toISOString(),
     updatedAt: p.updatedAt.toISOString(),
   };
@@ -82,35 +117,44 @@ export async function GET(
     try {
       ({ userId } = await requireAuthPro(request));
     } catch {
-      return withRequestId(unauthorized(), requestId);
+      return withIdNoStore(unauthorized(), requestId);
     }
+
+    const delegateError = ensureProspectDelegate(requestId);
+    if (delegateError) return delegateError;
 
     const { businessId, prospectId } = await context.params;
     const businessIdBigInt = parseId(businessId);
     const prospectIdBigInt = parseId(prospectId);
     if (!businessIdBigInt || !prospectIdBigInt) {
-      return withRequestId(badRequest('Paramètres invalides.'), requestId);
+      return withIdNoStore(badRequest('Paramètres invalides.'), requestId);
     }
 
     const business = await prisma.business.findUnique({ where: { id: businessIdBigInt } });
     if (!business) {
-      return withRequestId(NextResponse.json({ error: 'Entreprise introuvable.' }, { status: 404 }), requestId);
+      return withIdNoStore(
+        NextResponse.json({ error: 'Entreprise introuvable.' }, { status: 404 }),
+        requestId
+      );
     }
 
     const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'VIEWER');
-    if (!membership) return withRequestId(forbidden(), requestId);
+    if (!membership) return withIdNoStore(forbidden(), requestId);
 
     const prospect = await prisma.prospect.findFirst({
       where: { id: prospectIdBigInt, businessId: businessIdBigInt },
     });
     if (!prospect) {
-      return withRequestId(NextResponse.json({ error: 'Prospect introuvable.' }, { status: 404 }), requestId);
+      return withIdNoStore(
+        NextResponse.json({ error: 'Prospect introuvable.' }, { status: 404 }),
+        requestId
+      );
     }
 
-    return jsonNoStore(serializeProspect(prospect));
+    return withIdNoStore(jsonNoStore(serializeProspect(prospect)), requestId);
   } catch (err) {
     console.error({ err, route: '/api/pro/businesses/[businessId]/prospects/[prospectId]' });
-    return withRequestId(NextResponse.json({ error: 'Erreur serveur' }, { status: 500 }), requestId);
+    return withIdNoStore(NextResponse.json({ error: 'Erreur serveur' }, { status: 500 }), requestId);
   }
 }
 
@@ -120,48 +164,60 @@ export async function PATCH(
 ) {
   const requestId = getRequestId(request);
   const csrf = assertSameOrigin(request);
-  if (csrf) return csrf;
+  if (csrf) return withIdNoStore(csrf, requestId);
 
   let userId: string;
   try {
     ({ userId } = await requireAuthPro(request));
   } catch {
-    return withRequestId(unauthorized(), requestId);
+    return withIdNoStore(unauthorized(), requestId);
   }
+
+  const delegateError = ensureProspectDelegate(requestId);
+  if (delegateError) return delegateError;
 
   const { businessId, prospectId } = await context.params;
   const businessIdBigInt = parseId(businessId);
   const prospectIdBigInt = parseId(prospectId);
   if (!businessIdBigInt || !prospectIdBigInt) {
-    return withRequestId(badRequest('Paramètres invalides.'), requestId);
+    return withIdNoStore(badRequest('Paramètres invalides.'), requestId);
   }
 
   const business = await prisma.business.findUnique({ where: { id: businessIdBigInt } });
   if (!business) {
-    return withRequestId(NextResponse.json({ error: 'Entreprise introuvable.' }, { status: 404 }), requestId);
+    return withIdNoStore(
+      NextResponse.json({ error: 'Entreprise introuvable.' }, { status: 404 }),
+      requestId
+    );
   }
 
   const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'ADMIN');
-  if (!membership) return withRequestId(forbidden(), requestId);
+  if (!membership) return withIdNoStore(forbidden(), requestId);
 
   const body = await request.json().catch(() => null);
   if (!isRecord(body)) {
-    return withRequestId(badRequest('Payload invalide.'), requestId);
+    return withIdNoStore(badRequest('Payload invalide.'), requestId);
   }
 
   const data: Record<string, unknown> = {};
 
   if ('name' in body) {
     const name = normalizeStr((body as { name?: unknown }).name);
-    if (!name) return withRequestId(badRequest('Le nom est requis.'), requestId);
-    if (name.length > 120) return withRequestId(badRequest('Nom trop long (max 120).'), requestId);
+    if (!name) return withIdNoStore(badRequest('Le nom est requis.'), requestId);
+    if (name.length > 120) return withIdNoStore(badRequest('Nom trop long (max 120).'), requestId);
     data.name = name;
+  }
+
+  if ('title' in body) {
+    const title = normalizeStr((body as { title?: unknown }).title);
+    if (title.length > 120) return withIdNoStore(badRequest('Titre trop long (max 120).'), requestId);
+    data.title = title || null;
   }
 
   if ('contactName' in body) {
     const contactName = normalizeStr((body as { contactName?: unknown }).contactName);
     if (contactName && contactName.length > 120) {
-      return withRequestId(badRequest('Contact trop long (max 120).'), requestId);
+      return withIdNoStore(badRequest('Contact trop long (max 120).'), requestId);
     }
     data.contactName = contactName || null;
   }
@@ -169,7 +225,7 @@ export async function PATCH(
   if ('contactEmail' in body) {
     const email = normalizeStr((body as { contactEmail?: unknown }).contactEmail);
     if (email && (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))) {
-      return withRequestId(badRequest('Email invalide.'), requestId);
+      return withIdNoStore(badRequest('Email invalide.'), requestId);
     }
     data.contactEmail = email || null;
   }
@@ -177,7 +233,7 @@ export async function PATCH(
   if ('contactPhone' in body) {
     const phone = normalizeStr((body as { contactPhone?: unknown }).contactPhone);
     if (phone && phone.length > 32) {
-      return withRequestId(badRequest('Téléphone invalide.'), requestId);
+      return withIdNoStore(badRequest('Téléphone invalide.'), requestId);
     }
     data.contactPhone = phone || null;
   }
@@ -209,21 +265,52 @@ export async function PATCH(
   }
 
   if ('firstContactAt' in body) {
-    const val = (body as { firstContactAt?: unknown }).firstContactAt;
-    const d = val ? new Date(String(val)) : null;
-    data.firstContactAt = d && !Number.isNaN(d.getTime()) ? d : null;
+    const d = parseDate((body as { firstContactAt?: unknown }).firstContactAt);
+    data.firstContactAt = d;
   }
 
   if ('pipelineStatus' in body) {
     const status = (body as { pipelineStatus?: ProspectPipelineStatus | null }).pipelineStatus;
     if (status && !VALID_STATUS.has(status)) {
-      return withRequestId(badRequest('Statut pipeline invalide.'), requestId);
+      return withIdNoStore(badRequest('Statut pipeline invalide.'), requestId);
     }
     data.pipelineStatus = status ?? undefined;
   }
 
+  if ('probability' in body) {
+    const probRaw = (body as { probability?: unknown }).probability;
+    if (typeof probRaw !== 'number' || !Number.isFinite(probRaw)) {
+      return withIdNoStore(badRequest('Probabilité invalide.'), requestId);
+    }
+    data.probability = Math.min(100, Math.max(0, Math.trunc(probRaw)));
+  }
+
+  if ('nextActionDate' in body) {
+    const parsed = parseDate((body as { nextActionDate?: unknown }).nextActionDate);
+    if ((body as { nextActionDate?: unknown }).nextActionDate && !parsed) {
+      return withIdNoStore(badRequest('Prochaine action invalide.'), requestId);
+    }
+    data.nextActionDate = parsed;
+  }
+
+  if ('status' in body) {
+    const st = (body as { status?: unknown }).status;
+    if (typeof st !== 'string' || !Object.values(ProspectStatus).includes(st as ProspectStatus)) {
+      return withIdNoStore(badRequest('Statut invalide.'), requestId);
+    }
+    data.status = st as ProspectStatus;
+  }
+
+  if ('origin' in body) {
+    const origin = normalizeStr((body as { origin?: unknown }).origin);
+    if (origin.length > 120) {
+      return withIdNoStore(badRequest('Origine trop longue (max 120).'), requestId);
+    }
+    data.origin = origin || null;
+  }
+
   if (Object.keys(data).length === 0) {
-    return withRequestId(badRequest('Aucun champ à mettre à jour.'), requestId);
+    return withIdNoStore(badRequest('Aucun champ à mettre à jour.'), requestId);
   }
 
   const updated = await prisma.prospect.updateMany({
@@ -232,14 +319,17 @@ export async function PATCH(
   });
 
   if (updated.count === 0) {
-    return withRequestId(NextResponse.json({ error: 'Prospect introuvable.' }, { status: 404 }), requestId);
+    return withIdNoStore(
+      NextResponse.json({ error: 'Prospect introuvable.' }, { status: 404 }),
+      requestId
+    );
   }
 
   const prospect = await prisma.prospect.findFirst({
     where: { id: prospectIdBigInt, businessId: businessIdBigInt },
   });
 
-  return jsonNoStore(serializeProspect(prospect!));
+  return withIdNoStore(jsonNoStore(serializeProspect(prospect!)), requestId);
 }
 
 export async function DELETE(
@@ -248,37 +338,46 @@ export async function DELETE(
 ) {
   const requestId = getRequestId(request);
   const csrf = assertSameOrigin(request);
-  if (csrf) return csrf;
+  if (csrf) return withIdNoStore(csrf, requestId);
 
   let userId: string;
   try {
     ({ userId } = await requireAuthPro(request));
   } catch {
-    return withRequestId(unauthorized(), requestId);
+    return withIdNoStore(unauthorized(), requestId);
   }
+
+  const delegateError = ensureProspectDelegate(requestId);
+  if (delegateError) return delegateError;
 
   const { businessId, prospectId } = await context.params;
   const businessIdBigInt = parseId(businessId);
   const prospectIdBigInt = parseId(prospectId);
   if (!businessIdBigInt || !prospectIdBigInt) {
-    return withRequestId(badRequest('Paramètres invalides.'), requestId);
+    return withIdNoStore(badRequest('Paramètres invalides.'), requestId);
   }
 
   const business = await prisma.business.findUnique({ where: { id: businessIdBigInt } });
   if (!business) {
-    return withRequestId(NextResponse.json({ error: 'Entreprise introuvable.' }, { status: 404 }), requestId);
+    return withIdNoStore(
+      NextResponse.json({ error: 'Entreprise introuvable.' }, { status: 404 }),
+      requestId
+    );
   }
 
   const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'ADMIN');
-  if (!membership) return withRequestId(forbidden(), requestId);
+  if (!membership) return withIdNoStore(forbidden(), requestId);
 
   const deleted = await prisma.prospect.deleteMany({
     where: { id: prospectIdBigInt, businessId: businessIdBigInt },
   });
 
   if (deleted.count === 0) {
-    return withRequestId(NextResponse.json({ error: 'Prospect introuvable.' }, { status: 404 }), requestId);
+    return withIdNoStore(
+      NextResponse.json({ error: 'Prospect introuvable.' }, { status: 404 }),
+      requestId
+    );
   }
 
-  return NextResponse.json({ deleted: deleted.count });
+  return withIdNoStore(jsonNoStore({ deleted: deleted.count }), requestId);
 }

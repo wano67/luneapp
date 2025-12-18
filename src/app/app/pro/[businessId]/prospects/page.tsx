@@ -1,44 +1,61 @@
 // src/app/app/pro/[businessId]/prospects/page.tsx
 'use client';
 
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import Link from 'next/link';
-import { useEffect, useRef, useState, type FormEvent, type ChangeEvent } from 'react';
-import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Modal } from '@/components/ui/modal';
+import { Select } from '@/components/ui/select';
+import { Table, TableBody, TableCell, TableEmpty, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 
+type ProspectStatus = 'NEW' | 'FOLLOW_UP' | 'WON' | 'LOST';
 type ProspectPipelineStatus = 'NEW' | 'IN_DISCUSSION' | 'OFFER_SENT' | 'FOLLOW_UP' | 'CLOSED';
-type LeadSource = 'UNKNOWN' | 'OUTBOUND' | 'INBOUND' | 'REFERRAL' | 'OTHER';
-type QualificationLevel = 'COLD' | 'WARM' | 'HOT';
 
 type Prospect = {
   id: string;
   businessId: string;
   name: string;
+  title: string | null;
   contactName: string | null;
   contactEmail: string | null;
   contactPhone: string | null;
-  source: LeadSource | null;
-  interestNote: string | null;
-  qualificationLevel: QualificationLevel | null;
-  projectIdea: string | null;
-  estimatedBudget: number | null;
-  firstContactAt: string | null;
   pipelineStatus: ProspectPipelineStatus;
+  status: ProspectStatus;
+  probability: number;
+  nextActionDate: string | null;
   createdAt: string;
   updatedAt: string;
 };
 
-type ProspectListResponse = {
-  items: Prospect[];
+type ProspectListResponse = { items: Prospect[] };
+
+type ProspectForm = {
+  name: string;
+  title: string;
+  contactName: string;
+  contactEmail: string;
+  contactPhone: string;
+  probability: string;
+  nextActionDate: string;
 };
 
-const statusOptions: { value: ProspectPipelineStatus | 'ALL'; label: string }[] = [
-  { value: 'ALL', label: 'Tous' },
+const emptyForm: ProspectForm = {
+  name: '',
+  title: '',
+  contactName: '',
+  contactEmail: '',
+  contactPhone: '',
+  probability: '',
+  nextActionDate: '',
+};
+
+const pipelineOptions: { value: ProspectPipelineStatus | 'ALL'; label: string }[] = [
+  { value: 'ALL', label: 'Tous les statuts' },
   { value: 'NEW', label: 'Nouveau' },
   { value: 'IN_DISCUSSION', label: 'En discussion' },
   { value: 'OFFER_SENT', label: 'Devis envoyé' },
@@ -46,104 +63,53 @@ const statusOptions: { value: ProspectPipelineStatus | 'ALL'; label: string }[] 
   { value: 'CLOSED', label: 'Fermé' },
 ];
 
-function statusLabel(status: ProspectPipelineStatus) {
-  switch (status) {
-    case 'NEW':
-      return 'Nouveau';
-    case 'IN_DISCUSSION':
-      return 'En discussion';
-    case 'OFFER_SENT':
-      return 'Devis envoyé';
-    case 'FOLLOW_UP':
-      return 'Relance';
-    case 'CLOSED':
-      return 'Fermé';
-    default:
-      return status;
-  }
-}
+const statusOptions: { value: ProspectStatus | 'ALL'; label: string }[] = [
+  { value: 'ALL', label: 'Tous' },
+  { value: 'NEW', label: 'Nouveau' },
+  { value: 'FOLLOW_UP', label: 'Suivi' },
+  { value: 'WON', label: 'Gagné' },
+  { value: 'LOST', label: 'Perdu' },
+];
 
-function sourceLabel(source: LeadSource | null) {
-  if (!source) return 'Inconnu';
-  switch (source) {
-    case 'OUTBOUND':
-      return 'Outbound';
-    case 'INBOUND':
-      return 'Inbound';
-    case 'REFERRAL':
-      return 'Recommandation';
-    case 'OTHER':
-      return 'Autre';
-    case 'UNKNOWN':
-    default:
-      return 'Inconnu';
-  }
-}
-
-function qualificationLabel(level: QualificationLevel | null) {
-  if (!level) return '—';
-  switch (level) {
-    case 'COLD':
-      return 'Cold';
-    case 'WARM':
-      return 'Warm';
-    case 'HOT':
-      return 'Hot';
-    default:
-      return level;
-  }
-}
-
-function formatCurrency(value: number | null) {
-  if (value == null) return '—';
+function formatDate(value: string | null) {
+  if (!value) return '—';
   try {
-    return new Intl.NumberFormat('fr-FR', {
-      style: 'currency',
-      currency: 'EUR',
-      maximumFractionDigits: 0,
-    }).format(value);
+    return new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(value));
   } catch {
-    return `${value} €`;
+    return value;
   }
+}
+
+function probabilityLabel(value: number | null | undefined) {
+  if (value == null) return '—';
+  return `${value}%`;
 }
 
 export default function BusinessProspectsPage() {
   const params = useParams();
-  const router = useRouter();
-  const searchParams = useSearchParams();
-
   const businessId = (params?.businessId ?? '') as string;
 
   const [prospects, setProspects] = useState<Prospect[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [requestId, setRequestId] = useState<string | null>(null);
 
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<ProspectPipelineStatus | 'ALL'>('ALL');
+  const [pipelineFilter, setPipelineFilter] = useState<ProspectPipelineStatus | 'ALL'>('ALL');
+  const [statusFilter, setStatusFilter] = useState<ProspectStatus | 'ALL'>('ALL');
+  const [probabilityMin, setProbabilityMin] = useState<string>('');
+  const [nextActionBefore, setNextActionBefore] = useState<string>('');
 
   const [createOpen, setCreateOpen] = useState(false);
+  const [form, setForm] = useState<ProspectForm>(emptyForm);
+  const [formError, setFormError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
-  const [createError, setCreateError] = useState<string | null>(null);
-  const [name, setName] = useState('');
-  const [contactName, setContactName] = useState('');
-  const [contactEmail, setContactEmail] = useState('');
-  const [contactPhone, setContactPhone] = useState('');
 
   const fetchController = useRef<AbortController | null>(null);
-
-  const filteredCount = prospects.length;
-
-  useEffect(() => {
-    if (searchParams?.get('new') === '1') {
-      setCreateOpen(true);
-      router.replace(`/app/pro/${businessId}/prospects`);
-    }
-  }, [businessId, router, searchParams]);
 
   async function loadProspects(signal?: AbortSignal) {
     const controller = signal ? null : new AbortController();
     const effectiveSignal = signal ?? controller?.signal;
-
     if (controller) {
       fetchController.current?.abort();
       fetchController.current = controller;
@@ -152,20 +118,23 @@ export default function BusinessProspectsPage() {
     try {
       setLoading(true);
       setError(null);
+      setRequestId(null);
 
-      const paramsQuery = new URLSearchParams();
-      if (search.trim()) paramsQuery.set('search', search.trim());
-      if (statusFilter !== 'ALL') paramsQuery.set('status', statusFilter);
+      const qs = new URLSearchParams();
+      if (search.trim()) qs.set('q', search.trim());
+      if (pipelineFilter !== 'ALL') qs.set('pipelineStatus', pipelineFilter);
+      if (statusFilter !== 'ALL') qs.set('status', statusFilter);
+      if (probabilityMin.trim()) qs.set('probabilityMin', probabilityMin.trim());
+      if (nextActionBefore) qs.set('nextActionBefore', new Date(nextActionBefore).toISOString());
 
       const res = await fetchJson<ProspectListResponse>(
-        `/api/pro/businesses/${businessId}/prospects${
-          paramsQuery.toString() ? `?${paramsQuery.toString()}` : ''
-        }`,
+        `/api/pro/businesses/${businessId}/prospects${qs.toString() ? `?${qs.toString()}` : ''}`,
         {},
         effectiveSignal
       );
 
       if (effectiveSignal?.aborted) return;
+      setRequestId(res.requestId);
 
       if (res.status === 401) {
         const from = window.location.pathname + window.location.search;
@@ -174,9 +143,8 @@ export default function BusinessProspectsPage() {
       }
 
       if (!res.ok || !res.data) {
-        const ref = res.requestId;
         const msg = res.error ?? 'Impossible de charger les prospects.';
-        setError(ref ? `${msg} (Ref: ${ref})` : msg);
+        setError(res.requestId ? `${msg} (Ref: ${res.requestId})` : msg);
         setProspects([]);
         return;
       }
@@ -195,240 +163,251 @@ export default function BusinessProspectsPage() {
     void loadProspects();
     return () => fetchController.current?.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [businessId, statusFilter]);
+  }, [businessId, pipelineFilter, statusFilter]);
 
-  async function handleSearchSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    await loadProspects();
-  }
+  async function handleCreate(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setFormError(null);
+    setCreating(true);
 
-  async function handleCreateProspect(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setCreateError(null);
+    const payload: Record<string, unknown> = {
+      name: form.name.trim(),
+    };
+    if (!payload.name) {
+      setFormError("Le nom du prospect est requis.");
+      setCreating(false);
+      return;
+    }
+    if (form.title.trim()) payload.title = form.title.trim();
+    if (form.contactName.trim()) payload.contactName = form.contactName.trim();
+    if (form.contactEmail.trim()) payload.contactEmail = form.contactEmail.trim();
+    if (form.contactPhone.trim()) payload.contactPhone = form.contactPhone.trim();
+    if (form.probability.trim()) payload.probability = Number(form.probability);
+    if (form.nextActionDate) payload.nextActionDate = new Date(form.nextActionDate).toISOString();
 
-    const trimmedName = name.trim();
-    if (!trimmedName) {
-      setCreateError("Merci d'indiquer un nom de prospect.");
+    const res = await fetchJson<Prospect>(`/api/pro/businesses/${businessId}/prospects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    setRequestId(res.requestId);
+
+    if (!res.ok || !res.data) {
+      const msg = res.error ?? 'Impossible de créer le prospect.';
+      setFormError(res.requestId ? `${msg} (Ref: ${res.requestId})` : msg);
+      setCreating(false);
       return;
     }
 
-    try {
-      setCreating(true);
-      const body: Record<string, unknown> = {
-        name: trimmedName,
-      };
-
-      if (contactName.trim()) body.contactName = contactName.trim();
-      if (contactEmail.trim()) body.contactEmail = contactEmail.trim();
-      if (contactPhone.trim()) body.contactPhone = contactPhone.trim();
-
-      const res = await fetchJson<Prospect>(`/api/pro/businesses/${businessId}/prospects`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-
-      if (!res.ok || !res.data) {
-        const ref = res.requestId;
-        const msg = res.error ?? 'Impossible de créer le prospect.';
-        setCreateError(ref ? `${msg} (Ref: ${ref})` : msg);
-        return;
-      }
-
-      setName('');
-      setContactName('');
-      setContactEmail('');
-      setContactPhone('');
-      setCreateOpen(false);
-      await loadProspects();
-    } catch (err) {
-      console.error(err);
-      setCreateError(getErrorMessage(err));
-    } finally {
-      setCreating(false);
-    }
+    setCreateOpen(false);
+    setForm(emptyForm);
+    setCreating(false);
+    await loadProspects();
   }
 
   return (
     <div className="space-y-5">
       <Card className="space-y-4 p-5">
-        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-          <div>
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div className="space-y-1">
             <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-[var(--text-secondary)]">
               Pro · Prospects
             </p>
-            <h1 className="text-lg font-semibold text-[var(--text-primary)]">Pipeline prospects</h1>
+            <h1 className="text-xl font-semibold text-[var(--text-primary)]">Pipeline prospects</h1>
             <p className="text-sm text-[var(--text-secondary)]">
-              Explore, filtre et passe en revue tes leads avant conversion.
+              Un coup d’œil sur les leads et la prochaine action à mener.
             </p>
           </div>
-          <Button onClick={() => setCreateOpen(true)}>Créer un prospect</Button>
+          <Button onClick={() => setCreateOpen(true)}>Ajouter un prospect</Button>
         </div>
 
-        <form
-          onSubmit={handleSearchSubmit}
-          className="grid gap-3 md:grid-cols-[1fr,auto] md:items-end"
-        >
-          <Input
-            label="Recherche"
-            placeholder="Rechercher par nom..."
-            value={search}
-            onChange={(e: ChangeEvent<HTMLInputElement>) => setSearch(e.target.value)}
-          />
-          <div className="flex flex-wrap gap-2">
-            <div className="flex flex-wrap gap-2">
-              {statusOptions.map((opt) => (
-                <Button
-                  key={opt.value}
-                  type="button"
-                  size="sm"
-                  variant={statusFilter === opt.value ? 'primary' : 'outline'}
-                  onClick={() => setStatusFilter(opt.value)}
-                >
-                  {opt.label}
-                </Button>
-              ))}
-            </div>
-            <Button type="submit" size="sm" className="md:self-center">
+        <div className="grid gap-3 md:grid-cols-2">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              void loadProspects();
+            }}
+            className="flex flex-col gap-2 md:flex-row"
+          >
+            <Input
+              placeholder="Rechercher (nom, contact)…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+            <Button type="submit" variant="outline" className="whitespace-nowrap">
               Filtrer
             </Button>
+          </form>
+          <div className="grid gap-2 md:grid-cols-2">
+            <Select
+              label="Pipeline"
+              value={pipelineFilter}
+              onChange={(e) => setPipelineFilter(e.target.value as ProspectPipelineStatus | 'ALL')}
+            >
+              {pipelineOptions.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </Select>
+            <Select
+              label="Statut"
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as ProspectStatus | 'ALL')}
+            >
+              {statusOptions.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </Select>
           </div>
-        </form>
-      </Card>
+          <div className="grid gap-2 md:grid-cols-2">
+            <Input
+              label="Proba min (%)"
+              type="number"
+              inputMode="numeric"
+              value={probabilityMin}
+              onChange={(e) => setProbabilityMin(e.target.value)}
+              placeholder="40"
+            />
+            <Input
+              label="Action avant le"
+              type="date"
+              value={nextActionBefore}
+              onChange={(e) => setNextActionBefore(e.target.value)}
+            />
+          </div>
+        </div>
 
-      <Card className="p-5">
         {loading ? (
           <p className="text-sm text-[var(--text-secondary)]">Chargement des prospects…</p>
         ) : error ? (
-          <div className="space-y-2">
-            <p className="text-sm text-rose-400">{error}</p>
-            <Button type="button" size="sm" variant="outline" onClick={() => loadProspects()}>
-              Réessayer
-            </Button>
-          </div>
-        ) : filteredCount === 0 ? (
-          <div className="space-y-3">
+          <p className="text-sm font-semibold text-rose-500">{error}</p>
+        ) : prospects.length === 0 ? (
+          <Card className="flex flex-col gap-3 border-dashed border-[var(--border)] bg-transparent p-4">
             <p className="text-sm text-[var(--text-secondary)]">
-              Aucun prospect pour le moment. Crée un lead ou ajuste les filtres.
+              Crée ton premier prospect pour suivre ton pipeline.
             </p>
-            <Button size="sm" onClick={() => setCreateOpen(true)}>
-              Créer un prospect
-            </Button>
-          </div>
+            <Button onClick={() => setCreateOpen(true)}>Ajouter un prospect</Button>
+          </Card>
         ) : (
-          <div className="space-y-3">
-            <div className="hidden grid-cols-[2fr,1.5fr,1.5fr,1fr,1fr] gap-3 text-xs font-semibold uppercase tracking-wide text-[var(--text-secondary)] md:grid">
-              <span>Prospect</span>
-              <span>Contact</span>
-              <span>Source & qualification</span>
-              <span>Pipeline</span>
-              <span>Budget est.</span>
-            </div>
-
-            <div className="space-y-2">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Entreprise</TableHead>
+                <TableHead>Contact</TableHead>
+                <TableHead>Statut</TableHead>
+                <TableHead>Proba</TableHead>
+                <TableHead>Prochaine action</TableHead>
+                <TableHead>Créé</TableHead>
+                <TableHead className="text-right">Ouvrir</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {prospects.map((p) => (
-                <div
-                  key={p.id}
-                  className="grid gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface)]/70 p-3 text-sm md:grid-cols-[2fr,1.5fr,1.5fr,1fr,1fr]"
-                >
-                  <div className="space-y-1">
-                    <Link
-                      className="font-semibold text-[var(--text-primary)] hover:underline"
-                      href={`/app/pro/${businessId}/prospects/${p.id}`}
-                    >
-                      {p.name}
-                    </Link>
-                    {p.projectIdea ? (
-                      <p className="text-xs text-[var(--text-secondary)] line-clamp-2">
-                        {p.projectIdea}
-                      </p>
+                <TableRow key={p.id}>
+                  <TableCell className="space-y-1">
+                    <div className="font-semibold text-[var(--text-primary)]">{p.name}</div>
+                    {p.title ? (
+                      <div className="text-xs text-[var(--text-secondary)]">{p.title}</div>
                     ) : null}
-                  </div>
-
-                  <div className="space-y-1">
-                    {p.contactName ? (
-                      <p className="text-[var(--text-primary)]">{p.contactName}</p>
-                    ) : (
-                      <p className="text-xs text-[var(--text-secondary)]">Contact inconnu</p>
-                    )}
-                    <p className="text-xs text-[var(--text-secondary)]">
-                      {p.contactEmail || p.contactPhone || '—'}
-                    </p>
-                  </div>
-
-                  <div className="space-y-1">
-                    <p className="text-xs text-[var(--text-secondary)]">
-                      Source : {sourceLabel(p.source)}
-                    </p>
-                    <p className="text-xs text-[var(--text-secondary)]">
-                      Qualification : {qualificationLabel(p.qualificationLevel)}
-                    </p>
-                  </div>
-
-                  <div className="flex items-center">
-                    <Badge variant="neutral" className="text-[11px]">
-                      {statusLabel(p.pipelineStatus)}
-                    </Badge>
-                  </div>
-
-                  <div className="flex items-center text-xs text-[var(--text-primary)]">
-                    {formatCurrency(p.estimatedBudget)}
-                  </div>
-                </div>
+                  </TableCell>
+                  <TableCell className="space-y-1">
+                    <div className="text-sm">{p.contactName ?? '—'}</div>
+                    <div className="text-xs text-[var(--text-secondary)]">{p.contactEmail ?? p.contactPhone ?? ''}</div>
+                  </TableCell>
+                  <TableCell className="space-x-1">
+                    <Badge variant="neutral">{p.pipelineStatus}</Badge>
+                    <Badge variant="neutral">{p.status}</Badge>
+                  </TableCell>
+                  <TableCell>{probabilityLabel(p.probability)}</TableCell>
+                  <TableCell>{formatDate(p.nextActionDate)}</TableCell>
+                  <TableCell className="text-xs text-[var(--text-secondary)]">{formatDate(p.createdAt)}</TableCell>
+                  <TableCell className="text-right">
+                    <Button variant="outline" size="sm" asChild>
+                      <Link href={`/app/pro/${businessId}/prospects/${p.id}`}>Ouvrir</Link>
+                    </Button>
+                  </TableCell>
+                </TableRow>
               ))}
-            </div>
-          </div>
+              {prospects.length === 0 ? <TableEmpty>Aucun prospect.</TableEmpty> : null}
+            </TableBody>
+          </Table>
         )}
+        {requestId ? (
+          <p className="text-[10px] text-[var(--text-faint)]">Req: {requestId}</p>
+        ) : null}
       </Card>
 
       <Modal
         open={createOpen}
-        onCloseAction={() => (!creating ? setCreateOpen(false) : null)}
-        title="Créer un prospect"
-        description="Ajoute rapidement un lead dans le pipeline."
+        onCloseAction={() => {
+          if (creating) return;
+          setCreateOpen(false);
+        }}
+        title="Ajouter un prospect"
+        description="Crée un nouveau contact dans le pipeline."
       >
-        <form onSubmit={handleCreateProspect} className="space-y-4">
-          <Input
-            label="Nom du prospect *"
-            value={name}
-            onChange={(e: ChangeEvent<HTMLInputElement>) => setName(e.target.value)}
-            placeholder="Entreprise ou personne"
-            error={createError ?? undefined}
-          />
+        <form onSubmit={handleCreate} className="space-y-4">
           <div className="grid gap-3 md:grid-cols-2">
             <Input
-              label="Contact (nom)"
-              value={contactName}
-              onChange={(e: ChangeEvent<HTMLInputElement>) => setContactName(e.target.value)}
-              placeholder="Nom du contact"
+              label="Nom de l’entreprise"
+              required
+              value={form.name}
+              onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
+              placeholder="Acme"
             />
             <Input
-              label="Téléphone"
-              value={contactPhone}
-              onChange={(e: ChangeEvent<HTMLInputElement>) => setContactPhone(e.target.value)}
-              placeholder="+33..."
+              label="Titre / rôle"
+              value={form.title}
+              onChange={(e) => setForm((prev) => ({ ...prev, title: e.target.value }))}
+              placeholder="CMO / CTO…"
+            />
+            <Input
+              label="Contact"
+              value={form.contactName}
+              onChange={(e) => setForm((prev) => ({ ...prev, contactName: e.target.value }))}
+              placeholder="Nom du contact"
             />
             <Input
               label="Email"
               type="email"
-              value={contactEmail}
-              onChange={(e: ChangeEvent<HTMLInputElement>) => setContactEmail(e.target.value)}
-              placeholder="contact@exemple.com"
-              className="md:col-span-2"
+              value={form.contactEmail}
+              onChange={(e) => setForm((prev) => ({ ...prev, contactEmail: e.target.value }))}
+              placeholder="contact@acme.test"
+            />
+            <Input
+              label="Téléphone"
+              value={form.contactPhone}
+              onChange={(e) => setForm((prev) => ({ ...prev, contactPhone: e.target.value }))}
+              placeholder="+33…"
+            />
+            <Input
+              label="Probabilité (%)"
+              type="number"
+              inputMode="numeric"
+              value={form.probability}
+              onChange={(e) => setForm((prev) => ({ ...prev, probability: e.target.value }))}
+              placeholder="50"
+            />
+            <Input
+              label="Prochaine action"
+              type="datetime-local"
+              value={form.nextActionDate}
+              onChange={(e) => setForm((prev) => ({ ...prev, nextActionDate: e.target.value }))}
             />
           </div>
 
-          <div className="flex justify-end gap-2">
-            <Button
-              variant="outline"
-              type="button"
-              onClick={() => setCreateOpen(false)}
-              disabled={creating}
-            >
+          {formError ? <p className="text-sm font-semibold text-rose-500">{formError}</p> : null}
+
+          <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+            <Button type="button" variant="outline" onClick={() => setCreateOpen(false)} disabled={creating}>
               Annuler
             </Button>
             <Button type="submit" disabled={creating}>
-              {creating ? 'Création…' : 'Créer'}
+              {creating ? 'En cours…' : 'Ajouter le prospect'}
             </Button>
           </div>
         </form>

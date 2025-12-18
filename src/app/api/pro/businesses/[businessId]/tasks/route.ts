@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/server/db/client';
-import { TaskStatus } from '@/generated/prisma/client';
+import { TaskPhase, TaskStatus } from '@/generated/prisma/client';
 import { requireBusinessRole } from '@/server/auth/businessRole';
 import { requireAuthPro } from '@/server/auth/requireAuthPro';
 import { assertSameOrigin, jsonNoStore, withNoStore } from '@/server/security/csrf';
@@ -46,8 +46,12 @@ function serializeTask(task: {
   projectId: bigint | null;
   assigneeUserId: bigint | null;
   title: string;
+  phase: TaskPhase | null;
   status: TaskStatus;
+  progress: number;
   dueDate: Date | null;
+  completedAt: Date | null;
+  notes: string | null;
   createdAt: Date;
   updatedAt: Date;
   project?: { name: string | null } | null;
@@ -62,8 +66,12 @@ function serializeTask(task: {
     assigneeEmail: task.assignee?.email ?? null,
     assigneeName: task.assignee?.name ?? null,
     title: task.title,
+    phase: task.phase,
     status: task.status,
+    progress: task.progress,
     dueDate: task.dueDate ? task.dueDate.toISOString() : null,
+    completedAt: task.completedAt ? task.completedAt.toISOString() : null,
+    notes: task.notes,
     createdAt: task.createdAt.toISOString(),
     updatedAt: task.updatedAt.toISOString(),
   };
@@ -105,11 +113,26 @@ export async function GET(
   const { searchParams } = new URL(request.url);
   const statusParam = searchParams.get('status') as TaskStatus | null;
   const statusFilter = statusParam && isValidStatus(statusParam) ? statusParam : null;
+  const projectParam = searchParams.get('projectId');
+  const projectIdFilter = projectParam ? parseId(projectParam) : null;
+  if (projectParam && !projectIdFilter) {
+    return withIdNoStore(badRequest('projectId invalide.'), requestId);
+  }
+  const phaseParam = searchParams.get('phase');
+  const phaseFilter =
+    phaseParam && Object.values(TaskPhase).includes(phaseParam as TaskPhase)
+      ? (phaseParam as TaskPhase)
+      : null;
+  const assigneeParam = searchParams.get('assignee');
+  const assigneeFilter = assigneeParam === 'me' ? BigInt(userId) : null;
 
   const tasks = await prisma.task.findMany({
     where: {
       businessId: businessIdBigInt,
       ...(statusFilter ? { status: statusFilter } : {}),
+      ...(projectIdFilter ? { projectId: projectIdFilter } : {}),
+      ...(phaseFilter ? { phase: phaseFilter } : {}),
+      ...(assigneeFilter ? { assigneeUserId: assigneeFilter } : {}),
     },
     orderBy: [{ dueDate: 'asc' }, { createdAt: 'desc' }],
     include: {
@@ -233,6 +256,8 @@ export async function POST(
       assigneeUserId,
       title,
       status,
+      progress: status === TaskStatus.DONE ? 100 : undefined,
+      completedAt: status === TaskStatus.DONE ? new Date() : undefined,
       dueDate,
     },
     include: {

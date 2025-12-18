@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/server/db/client';
-import { ProjectStatus } from '@/generated/prisma/client';
+import { ProjectStatus, ProjectQuoteStatus, ProjectDepositStatus } from '@/generated/prisma/client';
 import { requireBusinessRole } from '@/server/auth/businessRole';
 import { assertSameOrigin, jsonNoStore, withNoStore } from '@/server/security/csrf';
 import { rateLimit } from '@/server/security/rateLimit';
@@ -41,7 +41,7 @@ export async function GET(
   try {
     ({ userId } = await requireAuthPro(request));
   } catch {
-    return withRequestId(unauthorized(), requestId);
+    return withIdNoStore(unauthorized(), requestId);
   }
 
   const businessIdBigInt = parseId(businessId);
@@ -54,16 +54,31 @@ export async function GET(
   if (!membership) return withIdNoStore(forbidden(), requestId);
 
   const { searchParams } = new URL(request.url);
-  const status = searchParams.get('status') as ProjectStatus | null;
+  const statusParam = searchParams.get('status');
+  const status =
+    statusParam && Object.values(ProjectStatus).includes(statusParam as ProjectStatus)
+      ? (statusParam as ProjectStatus)
+      : null;
+  const archivedParam = searchParams.get('archived');
+  const clientIdParam = searchParams.get('clientId');
+  const q = searchParams.get('q')?.trim();
+
+  const archivedFilter =
+    archivedParam === 'true' ? { archivedAt: { not: null } } : archivedParam === 'false' ? { archivedAt: null } : {};
+  const clientId =
+    clientIdParam && /^\d+$/.test(clientIdParam) ? BigInt(clientIdParam) : null;
 
   const projects = await prisma.project.findMany({
     where: {
       businessId: businessIdBigInt,
       ...(status ? { status } : {}),
+      ...(clientId ? { clientId } : {}),
+      ...archivedFilter,
+      ...(q ? { name: { contains: q, mode: 'insensitive' } } : {}),
     },
     orderBy: { createdAt: 'desc' },
     include: {
-      client: true,
+      client: { select: { id: true, name: true } },
     },
   });
 
@@ -76,6 +91,10 @@ export async function GET(
         clientName: p.client?.name ?? null,
         name: p.name,
         status: p.status,
+        quoteStatus: p.quoteStatus,
+        depositStatus: p.depositStatus,
+        startedAt: p.startedAt ? p.startedAt.toISOString() : null,
+        archivedAt: p.archivedAt ? p.archivedAt.toISOString() : null,
         startDate: p.startDate ? p.startDate.toISOString() : null,
         endDate: p.endDate ? p.endDate.toISOString() : null,
         createdAt: p.createdAt.toISOString(),
@@ -143,12 +162,17 @@ export async function POST(
   }
 
   const status: ProjectStatus =
-    typeof body.status === 'string' &&
-    ['PLANNED', 'ACTIVE', 'ON_HOLD', 'COMPLETED', 'CANCELLED'].includes(
-      body.status
-    )
+    typeof body.status === 'string' && Object.values(ProjectStatus).includes(body.status as ProjectStatus)
       ? (body.status as ProjectStatus)
       : ProjectStatus.PLANNED;
+  const quoteStatus: ProjectQuoteStatus =
+    typeof body.quoteStatus === 'string' && Object.values(ProjectQuoteStatus).includes(body.quoteStatus as ProjectQuoteStatus)
+      ? (body.quoteStatus as ProjectQuoteStatus)
+      : ProjectQuoteStatus.DRAFT;
+  const depositStatus: ProjectDepositStatus =
+    typeof body.depositStatus === 'string' && Object.values(ProjectDepositStatus).includes(body.depositStatus as ProjectDepositStatus)
+      ? (body.depositStatus as ProjectDepositStatus)
+      : ProjectDepositStatus.PENDING;
 
   const project = await prisma.project.create({
     data: {
@@ -156,6 +180,8 @@ export async function POST(
       clientId,
       name,
       status,
+      quoteStatus,
+      depositStatus,
       startDate:
         typeof body.startDate === 'string'
           ? new Date(body.startDate)
@@ -173,6 +199,10 @@ export async function POST(
         clientId: project.clientId ? project.clientId.toString() : null,
         name: project.name,
         status: project.status,
+        quoteStatus: project.quoteStatus,
+        depositStatus: project.depositStatus,
+        startedAt: project.startedAt ? project.startedAt.toISOString() : null,
+        archivedAt: project.archivedAt ? project.archivedAt.toISOString() : null,
         startDate: project.startDate ? project.startDate.toISOString() : null,
         endDate: project.endDate ? project.endDate.toISOString() : null,
         createdAt: project.createdAt.toISOString(),

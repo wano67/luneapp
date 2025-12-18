@@ -119,24 +119,58 @@ export async function GET(
   const { searchParams } = new URL(request.url);
   const typeParam = searchParams.get('type');
   const typeFilter = isValidType(typeParam) ? typeParam : null;
-  const fromParam = searchParams.get('from');
-  const toParam = searchParams.get('to');
-  const fromDate = fromParam ? parseDate(fromParam) : null;
-  const toDate = toParam ? parseDate(toParam) : null;
+  const projectParam = searchParams.get('projectId');
+  const projectIdFilter = projectParam ? parseId(projectParam) : null;
+  if (projectParam && !projectIdFilter) {
+    return withIdNoStore(badRequest('projectId invalide.'), requestId);
+  }
+  const startParam = searchParams.get('periodStart') ?? searchParams.get('from');
+  const endParam = searchParams.get('periodEnd') ?? searchParams.get('to');
+  const fromDate = startParam ? parseDate(startParam) : null;
+  const toDate = endParam ? parseDate(endParam) : null;
+  if (startParam && !fromDate) {
+    return withIdNoStore(badRequest('periodStart invalide.'), requestId);
+  }
+  if (endParam && !toDate) {
+    return withIdNoStore(badRequest('periodEnd invalide.'), requestId);
+  }
+  const aggregate = searchParams.get('aggregate') === '1';
+
+  const where = {
+    businessId: businessIdBigInt,
+    ...(typeFilter ? { type: typeFilter } : {}),
+    ...(projectIdFilter ? { projectId: projectIdFilter } : {}),
+    ...(fromDate || toDate
+      ? {
+          date: {
+            ...(fromDate ? { gte: fromDate } : {}),
+            ...(toDate ? { lte: toDate } : {}),
+          },
+        }
+      : {}),
+  } as const;
+
+  if (aggregate) {
+    const sums = await prisma.finance.groupBy({
+      by: ['type'],
+      _sum: { amountCents: true },
+      where,
+    });
+    const income = sums.find((s) => s.type === FinanceType.INCOME)?._sum.amountCents ?? BigInt(0);
+    const expense = sums.find((s) => s.type === FinanceType.EXPENSE)?._sum.amountCents ?? BigInt(0);
+
+    return withIdNoStore(
+      jsonNoStore({
+        incomeCents: income.toString(),
+        expenseCents: expense.toString(),
+        netCents: (income - expense).toString(),
+      }),
+      requestId
+    );
+  }
 
   const finances = await prisma.finance.findMany({
-    where: {
-      businessId: businessIdBigInt,
-      ...(typeFilter ? { type: typeFilter } : {}),
-      ...(fromDate || toDate
-        ? {
-            date: {
-              ...(fromDate ? { gte: fromDate } : {}),
-              ...(toDate ? { lte: toDate } : {}),
-            },
-          }
-        : {}),
-    },
+    where,
     orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
     include: {
       project: { select: { name: true } },
