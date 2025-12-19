@@ -736,7 +736,7 @@ components:
     # --- Invites ---
     BusinessInviteStatus:
       type: string
-      enum: [PENDING, ACCEPTED, REVOKED]
+      enum: [PENDING, ACCEPTED, REVOKED, EXPIRED]
 
     BusinessInvite:
       type: object
@@ -752,9 +752,6 @@ components:
           $ref: '#/components/schemas/BusinessRole'
         status:
           $ref: '#/components/schemas/BusinessInviteStatus'
-        token:
-          type: string
-          description: Token d'invitation (peut être utilisé dans l'URL d'acceptation)
         createdAt:
           type: string
           format: date-time
@@ -762,6 +759,14 @@ components:
           type: string
           format: date-time
           nullable: true
+        inviteLink:
+          type: string
+          nullable: true
+          description: Lien direct d'invitation (présent uniquement pour les invitations en attente)
+        tokenPreview:
+          type: string
+          nullable: true
+          description: 4-6 derniers caractères du token pour l'identification
 
     BusinessInviteListResponse:
       type: object

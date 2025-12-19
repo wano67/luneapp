@@ -1,5 +1,10 @@
 import ProDashboard from '@/components/pro/ProDashboard';
 
-export default function BusinessDashboardPage({ params }: { params: { businessId: string } }) {
-  return <ProDashboard businessId={params.businessId} />;
+type BusinessDashboardPageProps = {
+  params: Promise<{ businessId: string }>;
+};
+
+export default async function BusinessDashboardPage({ params }: BusinessDashboardPageProps) {
+  const { businessId } = await params;
+  return <ProDashboard businessId={businessId} />;
 }

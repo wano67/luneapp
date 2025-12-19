@@ -61,7 +61,7 @@ function centsToEUR(centsStr: string) {
 
 export default function AccountDetailPage() {
   const params = useParams<{ accountId: string }>();
-  const accountId = params.accountId;
+  const accountId = params?.accountId ?? '';
 
   const [loading, setLoading] = useState(true);
   const [account, setAccount] = useState<Account | null>(null);

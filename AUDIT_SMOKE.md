@@ -2,11 +2,12 @@
 
 ```
 lsof -ti tcp:3000 | xargs -r kill -9
-rm -rf .next
+rm -rf .next-dev .next-build
 pnpm install
 pnpm prisma generate
 ENABLE_DEV_SEED=1 pnpm seed:dev
-APP_URL=http://localhost:3000 NEXT_PUBLIC_APP_URL=http://localhost:3000 pnpm start --port 3000
+APP_URL=http://localhost:3000 NEXT_PUBLIC_APP_URL=http://localhost:3000 NEXT_DIST_DIR=.next-build pnpm build
+APP_URL=http://localhost:3000 NEXT_PUBLIC_APP_URL=http://localhost:3000 NEXT_DIST_DIR=.next-build pnpm start --port 3000
 ```
 
 ## Sessions

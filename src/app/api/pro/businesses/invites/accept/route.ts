@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import crypto from 'crypto';
 import { prisma } from '@/server/db/client';
 import { BusinessInviteStatus } from '@/generated/prisma/client';
 import { assertSameOrigin, jsonNoStore, withNoStore } from '@/server/security/csrf';
@@ -8,6 +9,10 @@ import { badRequest, getRequestId, notFound, unauthorized, withRequestId } from 
 
 function withIdNoStore(res: NextResponse, requestId: string) {
   return withNoStore(withRequestId(res, requestId));
+}
+
+function hashToken(raw: string) {
+  return crypto.createHash('sha256').update(raw).digest('base64url');
 }
 
 export async function POST(request: NextRequest) {
@@ -40,8 +45,10 @@ export async function POST(request: NextRequest) {
   const token = body.token.trim();
   if (!token) return withIdNoStore(badRequest('Token invalide.'), requestId);
 
-  const invite = await prisma.businessInvite.findUnique({
-    where: { token },
+  const tokenHash = hashToken(token);
+
+  const invite = await prisma.businessInvite.findFirst({
+    where: { OR: [{ token }, { token: tokenHash }] },
     include: { business: true },
   });
 

@@ -325,9 +325,6 @@ export default function ClientDetailPage() {
         <Button variant="outline" size="sm" asChild>
           <Link href={`/app/pro/${businessId}/clients`}>Retour à la liste</Link>
         </Button>
-        <p className="text-[10px] text-[var(--text-secondary)]">
-          TODO: GET /api/pro/businesses/{businessId}/clients/{clientId} pour une récupération directe.
-        </p>
       </Card>
     );
   }
@@ -347,7 +344,6 @@ export default function ClientDetailPage() {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Badge variant="neutral">Statut: stub</Badge>
             <Badge variant="neutral">ID {client.id}</Badge>
           </div>
         </div>

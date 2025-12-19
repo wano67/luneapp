@@ -35,7 +35,7 @@ function getBusinessIdFromPathname(pathname: string): string | null {
 }
 
 export default function AppShell({ children }: { children: ReactNode }) {
-  const pathname = usePathname();
+  const pathname = usePathname() ?? '';
   const router = useRouter();
 
   const space = getCurrentSpace(pathname);

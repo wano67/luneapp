@@ -9,6 +9,13 @@
 - Observabilité: no-store + x-request-id présents sur pro + perso critiques.
 - Priorité: clarifier lecture seule, masquer placeholders, guider l’onboarding (hub + prochaines étapes projet) et documenter runbook CSRF/dev.
 
+### MàJ 2024-12-19 (stabilité build + invitations)
+- Build webpack ok en Node 20 via distDir `.next-build` (scripts `build/start`), dev isolé en `.next-dev` ; plus d’ENOENT `pages-manifest` même si un `next dev` tourne en parallèle.
+- Tests exécutés : `pnpm lint`, `pnpm typecheck`, `pnpm build` (Node 20 via `npx node@20`, env `DATABASE_URL` mock, `AUTH_SECRET` défini).
+- Invitations : token signé avec randomBytes + hash; baseUrl reconstruit via x-forwarded-proto/host ou APP_ORIGINS; GET renvoie désormais `inviteLink` + `tokenPreview` pour les PENDING + expiration auto. UI ajoute boutons “Copier”.
+- Smoke scripts : `scripts/smoke-dev-routes.ts` (routes publiques/protégées + API dashboard/clients/invites) et `scripts/smoke-invites.ts` (création + accept + membership + second accept attendu en échec).
+- Documentation : README/AUDIT_SMOKE mis à jour (Node 20, distDir séparés, commandes build/start).
+
 ## Ce qui marche (perso + pro)
 - Pro (admin): catalogue services + templates (CRUD/seed), pipeline prospects (création), conversion en client/projet, ajout services vendus, mise à jour devis/acompte, start projet (tâches générées), interactions client/projet, archive/unarchive, tasks globales (lecture).
 - Perso: comptes/transactions/summary avec headers no-store + request-id; création compte test OK.

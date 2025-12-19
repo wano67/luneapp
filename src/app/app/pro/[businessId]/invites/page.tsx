@@ -20,6 +20,7 @@ type Invite = {
   createdAt: string;
   expiresAt: string | null;
   inviteLink?: string;
+   tokenPreview?: string;
 };
 
 type InviteListResponse = {
@@ -27,6 +28,7 @@ type InviteListResponse = {
 };
 
 type InviteCreateResponse = Invite;
+type InviteCreateResponseWithLink = InviteCreateResponse & { inviteLink?: string; tokenPreview?: string };
 
 const ROLE_LABELS: Record<Invite['role'], string> = {
   OWNER: 'Owner',
@@ -60,6 +62,8 @@ export default function InvitesPage() {
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [lastInviteLink, setLastInviteLink] = useState<string | null>(null);
+  const [lastTokenPreview, setLastTokenPreview] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [revokingId, setRevokingId] = useState<string | null>(null);
   const [form, setForm] = useState<{ email: string; role: Invite['role'] }>({
@@ -138,7 +142,7 @@ export default function InvitesPage() {
 
     try {
       setCreating(true);
-      const res = await fetchJson<InviteCreateResponse>(`/api/pro/businesses/${businessId}/invites`, {
+      const res = await fetchJson<InviteCreateResponseWithLink>(`/api/pro/businesses/${businessId}/invites`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, role: form.role }),
@@ -151,10 +155,14 @@ export default function InvitesPage() {
 
       if (!res.ok || !res.data) {
         setFormError(formatError(res.error, res.requestId, 'Invitation impossible.'));
+        setLastInviteLink(null);
+        setLastTokenPreview(null);
         return;
       }
 
-      setSuccess('Invitation envoyée.');
+      setSuccess('Invitation envoyée. Copie le lien ci-dessous.');
+      setLastInviteLink(res.data.inviteLink ?? null);
+      setLastTokenPreview(res.data.tokenPreview ?? null);
       setForm({ email: '', role: form.role });
       await loadInvites();
     } catch (err) {
@@ -162,6 +170,17 @@ export default function InvitesPage() {
       setFormError(getErrorMessage(err));
     } finally {
       setCreating(false);
+    }
+  }
+
+  async function copyLink(value: string, label?: string) {
+    try {
+      await navigator.clipboard.writeText(value);
+      setSuccess(label ?? 'Lien copié dans le presse-papier.');
+      setActionError(null);
+      setFormError(null);
+    } catch {
+      setActionError('Impossible de copier automatiquement. Copie manuelle nécessaire.');
     }
   }
 
@@ -248,6 +267,22 @@ export default function InvitesPage() {
 
             {formError ? <p className="text-xs text-rose-500">{formError}</p> : null}
             {success ? <p className="text-xs text-emerald-500">{success}</p> : null}
+            {lastInviteLink ? (
+              <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)]/70 p-3">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-[var(--text-secondary)]">
+                  Lien d&apos;invitation à copier
+                </p>
+                <p className="break-all text-xs text-[var(--accent)]">{lastInviteLink}</p>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <p className="text-[10px] text-[var(--text-secondary)]">
+                    Token: ****{lastTokenPreview ?? '••••'}
+                  </p>
+                  <Button size="sm" variant="outline" type="button" onClick={() => copyLink(lastInviteLink!)}>
+                    Copier le lien
+                  </Button>
+                </div>
+              </div>
+            ) : null}
           </form>
         ) : (
           <p className="text-xs text-[var(--text-secondary)]">
@@ -298,8 +333,25 @@ export default function InvitesPage() {
                           Créée le {formatDate(invite.createdAt)} · Expire le {formatDate(invite.expiresAt)}
                         </p>
                         {invite.inviteLink ? (
-                          <p className="break-all text-[10px] text-[var(--accent)]">{invite.inviteLink}</p>
-                        ) : null}
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="break-all text-[10px] text-[var(--accent)]">{invite.inviteLink}</p>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              type="button"
+                              onClick={() => copyLink(invite.inviteLink!, 'Lien copié.')}
+                            >
+                              Copier
+                            </Button>
+                            <p className="text-[10px] text-[var(--text-secondary)]">
+                              Token: ****{invite.tokenPreview ?? '••••'}
+                            </p>
+                          </div>
+                        ) : (
+                          <p className="text-[10px] text-[var(--text-secondary)]">
+                            Lien non disponible, régénère l&apos;invitation si besoin.
+                          </p>
+                        )}
                       </div>
                       <div className="flex items-center gap-2">
                         <Badge variant="neutral">{invite.role}</Badge>

@@ -35,6 +35,33 @@ function withIdNoStore(res: NextResponse, requestId: string) {
   return withNoStore(withRequestId(res, requestId));
 }
 
+function hashToken(raw: string) {
+  return crypto.createHash('sha256').update(raw).digest('base64url');
+}
+
+function buildBaseUrl(request: NextRequest) {
+  const forwardedProto = request.headers.get('x-forwarded-proto')?.split(',')[0]?.trim();
+  const forwardedHost =
+    request.headers.get('x-forwarded-host')?.split(',')[0]?.trim() || request.headers.get('host');
+  if (forwardedHost) {
+    const proto = forwardedProto || 'https';
+    try {
+      return new URL(`${proto}://${forwardedHost}`).origin;
+    } catch {
+      // fall through
+    }
+  }
+
+  const allowed = getAllowedOrigins();
+  if (allowed.length > 0) return allowed[0];
+
+  try {
+    return new URL(request.url).origin;
+  } catch {
+    return 'http://localhost:3000';
+  }
+}
+
 // GET /api/pro/businesses/{businessId}/invites
 export async function GET(
   request: NextRequest,
@@ -66,25 +93,44 @@ export async function GET(
     orderBy: { createdAt: 'desc' },
   });
 
+  const baseUrl = buildBaseUrl(request);
   const now = Date.now();
+  const expiredIds: bigint[] = [];
+  const items = invites.map((inv) => {
+    const expired = inv.expiresAt ? inv.expiresAt.getTime() < now : false;
+    const status =
+      expired && inv.status === BusinessInviteStatus.PENDING ? BusinessInviteStatus.EXPIRED : inv.status;
+
+    if (status === BusinessInviteStatus.EXPIRED && inv.status !== BusinessInviteStatus.EXPIRED) {
+      expiredIds.push(inv.id);
+    }
+
+    const inviteLink =
+      status === BusinessInviteStatus.PENDING
+        ? `${baseUrl}/app/pro?join=1&token=${encodeURIComponent(inv.token)}`
+        : undefined;
+
+    return {
+      id: inv.id.toString(),
+      businessId: inv.businessId.toString(),
+      email: inv.email,
+      role: inv.role,
+      status,
+      createdAt: inv.createdAt.toISOString(),
+      expiresAt: inv.expiresAt ? inv.expiresAt.toISOString() : null,
+      ...(inviteLink ? { inviteLink, tokenPreview: inv.token.slice(-6) } : {}),
+    };
+  });
+
+  if (expiredIds.length > 0) {
+    await prisma.businessInvite.updateMany({
+      where: { id: { in: expiredIds } },
+      data: { status: BusinessInviteStatus.EXPIRED },
+    });
+  }
 
   return withIdNoStore(
-    jsonNoStore({
-      items: invites.map((inv) => {
-        const expired = inv.expiresAt ? inv.expiresAt.getTime() < now : false;
-        const status =
-          expired && inv.status === BusinessInviteStatus.PENDING ? BusinessInviteStatus.EXPIRED : inv.status;
-        return {
-          id: inv.id.toString(),
-          businessId: inv.businessId.toString(),
-          email: inv.email,
-          role: inv.role,
-          status,
-          createdAt: inv.createdAt.toISOString(),
-          expiresAt: inv.expiresAt ? inv.expiresAt.toISOString() : null,
-        };
-      }),
-    }),
+    jsonNoStore({ items }),
     requestId
   );
 }
@@ -171,6 +217,12 @@ export async function POST(
     }
   }
 
+  const rawToken = crypto.randomBytes(32).toString('base64url');
+  const tokenHash = hashToken(rawToken);
+  const expiresAt = new Date();
+  expiresAt.setDate(expiresAt.getDate() + 7); // 7 jours
+  const baseUrl = buildBaseUrl(request);
+
   const existingInvite = await prisma.businessInvite.findFirst({
     where: {
       businessId: businessIdBigInt,
@@ -179,37 +231,38 @@ export async function POST(
     },
   });
 
-  if (existingInvite) {
-    const now = new Date();
-    if (existingInvite.expiresAt && existingInvite.expiresAt < now) {
-      await prisma.businessInvite.update({
-        where: { id: existingInvite.id },
-        data: { status: BusinessInviteStatus.EXPIRED },
-      });
-    } else {
-      return withIdNoStore(
-        jsonNoStore({ error: 'Une invitation en attente existe déjà pour cet email.' }, { status: 409 }),
-        requestId
-      );
-    }
+  const now = new Date();
+  if (existingInvite && existingInvite.expiresAt && existingInvite.expiresAt < now) {
+    await prisma.businessInvite.update({
+      where: { id: existingInvite.id },
+      data: { status: BusinessInviteStatus.EXPIRED },
+    });
   }
-
-  const token = crypto.randomUUID();
-  const expiresAt = new Date();
-  expiresAt.setDate(expiresAt.getDate() + 7); // 7 jours
 
   let invite;
   try {
-    invite = await prisma.businessInvite.create({
-      data: {
-        businessId: businessIdBigInt,
-        email,
-        role,
-        token,
-        status: BusinessInviteStatus.PENDING,
-        expiresAt,
-      },
-    });
+    if (existingInvite && existingInvite.status === BusinessInviteStatus.PENDING) {
+      invite = await prisma.businessInvite.update({
+        where: { id: existingInvite.id },
+        data: {
+          role,
+          token: tokenHash,
+          expiresAt,
+          status: BusinessInviteStatus.PENDING,
+        },
+      });
+    } else {
+      invite = await prisma.businessInvite.create({
+        data: {
+          businessId: businessIdBigInt,
+          email,
+          role,
+          token: tokenHash,
+          status: BusinessInviteStatus.PENDING,
+          expiresAt,
+        },
+      });
+    }
   } catch (error) {
     console.error({ requestId, route: '/api/pro/businesses/[businessId]/invites', error });
     return withIdNoStore(serverError(), requestId);
@@ -217,11 +270,7 @@ export async function POST(
 
   // TODO: envoyer un email avec le lien d'invitation
 
-  const allowed = getAllowedOrigins();
-  const inviteLink =
-    allowed.length > 0
-      ? `${allowed[0]}/app/pro?join=1&token=${encodeURIComponent(invite.token)}`
-      : undefined;
+  const inviteLink = `${baseUrl}/app/pro?join=1&token=${encodeURIComponent(rawToken)}`;
 
   return withIdNoStore(
     jsonNoStore(
@@ -233,7 +282,7 @@ export async function POST(
         status: invite.status,
         createdAt: invite.createdAt.toISOString(),
         expiresAt: invite.expiresAt ? invite.expiresAt.toISOString() : null,
-        ...(inviteLink ? { inviteLink } : {}),
+        ...(inviteLink ? { inviteLink, tokenPreview: rawToken.slice(-6) } : { tokenPreview: rawToken.slice(-6) }),
       },
       { status: 201 }
     ),

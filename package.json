@@ -3,15 +3,22 @@
   "version": "0.1.0",
   "private": true,
   "packageManager": "pnpm@10.21.0",
+  "engines": {
+    "node": ">=20 <23"
+  },
   "scripts": {
-    "dev": "next dev",
-    "dev:stable": "NEXT_DISABLE_TURBOPACK=1 next dev",
-    "build": "next build",
-    "start": "next start",
+    "clean": "node -e \"const dir=process.env.NEXT_DIST_DIR||'.next';require('fs').rmSync(dir,{recursive:true,force:true});\"",
+    "dev": "NEXT_DIST_DIR=.next-dev NEXT_DISABLE_TURBOPACK=1 next dev --webpack",
+    "dev:stable": "NEXT_DIST_DIR=.next-dev NEXT_DISABLE_TURBOPACK=1 next dev --webpack",
+    "build": "NEXT_DIST_DIR=.next-build pnpm clean && NEXT_DIST_DIR=.next-build NEXT_DISABLE_TURBOPACK=1 next build --webpack",
+    "start": "NEXT_DIST_DIR=.next-build next start -p 8080",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "typecheck": "tsc --noEmit",
     "seed:dev": "ENABLE_DEV_SEED=1 pnpm tsx scripts/seed-dev.ts",
+    "smoke:wiring": "pnpm tsx scripts/smoke-wiring.ts",
+    "smoke:dev-routes": "pnpm tsx scripts/smoke-dev-routes.ts",
+    "smoke:invites": "pnpm tsx scripts/smoke-invites.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {
