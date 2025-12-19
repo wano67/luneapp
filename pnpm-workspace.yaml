@@ -1,2 +1,6 @@
 onlyBuiltDependencies:
   - esbuild
+  - prisma
+  - "@prisma/engines"
+  - sharp
+  - unrs-resolver
