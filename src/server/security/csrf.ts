@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
 function forbidden() {
-  return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  return NextResponse.json({ error: 'Forbidden (CSRF origin)' }, { status: 403 });
 }
 
 function normalizeOrigin(value: string): string | null {
@@ -32,7 +32,7 @@ export function getAllowedOrigins(): string[] {
   if (process.env.NODE_ENV === 'production' && normalized.length === 0 && !warnedMissingOrigins) {
     warnedMissingOrigins = true;
     console.warn(
-      '[csrf] APP_URL / NEXT_PUBLIC_APP_URL / APP_ORIGINS non configurés : toutes les mutations seront refusées en production'
+      '[csrf] No allowed origins configured; all mutations will be blocked in production. Set APP_URL / NEXT_PUBLIC_APP_URL / APP_ORIGINS.'
     );
   }
   return [...new Set(normalized)];

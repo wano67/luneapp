@@ -2,12 +2,16 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { prisma } from '@/server/db/client';
 import { requireAuthAsync } from '@/server/auth/requireAuth';
-import { assertSameOrigin, jsonNoStore } from '@/server/security/csrf';
+import { assertSameOrigin, jsonNoStore, withNoStore } from '@/server/security/csrf';
 import { rateLimit } from '@/server/security/rateLimit';
 import { getRequestId, withRequestId, badRequest, unauthorized } from '@/server/http/apiUtils';
 
 function toStrId(v: bigint) {
   return v.toString();
+}
+
+function withIdNoStore(res: NextResponse, requestId: string) {
+  return withNoStore(withRequestId(res, requestId));
 }
 
 async function readJson(req: NextRequest): Promise<unknown> {
@@ -80,40 +84,43 @@ export async function GET(req: NextRequest) {
     const d30Map = new Map<string, bigint>();
     for (const row of sums30) d30Map.set(toStrId(row.accountId), row._sum.amountCents ?? BigInt(0));
 
-    return jsonNoStore({
-      items: accounts.map((a) => {
-        const txAll = allMap.get(toStrId(a.id)) ?? BigInt(0);
-        const balanceCents = a.initialCents + txAll;
-        const delta30Cents = d30Map.get(toStrId(a.id)) ?? BigInt(0);
+    return withRequestId(
+      jsonNoStore({
+        items: accounts.map((a) => {
+          const txAll = allMap.get(toStrId(a.id)) ?? BigInt(0);
+          const balanceCents = a.initialCents + txAll;
+          const delta30Cents = d30Map.get(toStrId(a.id)) ?? BigInt(0);
 
-        return {
-          id: toStrId(a.id),
-          name: a.name,
-          type: a.type,
-          currency: a.currency,
-          institution: a.institution,
-          iban: a.iban,
-          initialCents: a.initialCents.toString(),
-          balanceCents: balanceCents.toString(),
-          delta30Cents: delta30Cents.toString(),
-          createdAt: a.createdAt.toISOString(),
-          updatedAt: a.updatedAt.toISOString(),
-        };
+          return {
+            id: toStrId(a.id),
+            name: a.name,
+            type: a.type,
+            currency: a.currency,
+            institution: a.institution,
+            iban: a.iban,
+            initialCents: a.initialCents.toString(),
+            balanceCents: balanceCents.toString(),
+            delta30Cents: delta30Cents.toString(),
+            createdAt: a.createdAt.toISOString(),
+            updatedAt: a.updatedAt.toISOString(),
+          };
+        }),
       }),
-    });
+      requestId
+    );
   } catch (e: unknown) {
     if (e instanceof Error && e.message === 'UNAUTHORIZED') {
-      return withRequestId(unauthorized(), requestId);
+      return withIdNoStore(unauthorized(), requestId);
     }
     console.error(e);
-    return withRequestId(NextResponse.json({ error: 'Failed' }, { status: 500 }), requestId);
+    return withIdNoStore(NextResponse.json({ error: 'Failed' }, { status: 500 }), requestId);
   }
 }
 
 export async function POST(req: NextRequest) {
   const requestId = getRequestId(req);
   const csrf = assertSameOrigin(req);
-  if (csrf) return csrf;
+  if (csrf) return withIdNoStore(csrf, requestId);
 
   try {
     const { userId } = await requireAuthAsync(req);
@@ -122,10 +129,10 @@ export async function POST(req: NextRequest) {
       limit: 120,
       windowMs: 10 * 60 * 1000,
     });
-    if (limited) return limited;
+    if (limited) return withIdNoStore(limited, requestId);
 
     const body = await readJson(req);
-    if (!isRecord(body)) return withRequestId(badRequest('Invalid JSON'), requestId);
+    if (!isRecord(body)) return withIdNoStore(badRequest('Invalid JSON'), requestId);
 
     const name = typeof body.name === 'string' ? body.name.trim() : '';
     const type =
@@ -146,14 +153,14 @@ export async function POST(req: NextRequest) {
         ? body.initialCents
         : '0';
 
-    if (!name) return withRequestId(badRequest('name required'), requestId);
-    if (name.length > 120) return withRequestId(badRequest('name too long'), requestId);
-    if (currency.length > 8) return withRequestId(badRequest('currency too long'), requestId);
+    if (!name) return withIdNoStore(badRequest('name required'), requestId);
+    if (name.length > 120) return withIdNoStore(badRequest('name too long'), requestId);
+    if (currency.length > 8) return withIdNoStore(badRequest('currency too long'), requestId);
     if (institution && institution.length > 120) {
-      return withRequestId(badRequest('institution too long'), requestId);
+      return withIdNoStore(badRequest('institution too long'), requestId);
     }
     if (iban && iban.length > 34) {
-      return withRequestId(badRequest('iban too long'), requestId);
+      return withIdNoStore(badRequest('iban too long'), requestId);
     }
 
     const initialCents = BigInt(
@@ -174,15 +181,15 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    return NextResponse.json(
-      { account: { id: created.id.toString(), name: created.name } },
-      { status: 201 }
+    return withRequestId(
+      jsonNoStore({ account: { id: created.id.toString(), name: created.name } }, { status: 201 }),
+      requestId
     );
   } catch (e: unknown) {
     if (e instanceof Error && e.message === 'UNAUTHORIZED') {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return withIdNoStore(unauthorized(), requestId);
     }
     console.error(e);
-    return NextResponse.json({ error: 'Failed' }, { status: 500 });
+    return withIdNoStore(NextResponse.json({ error: 'Failed' }, { status: 500 }), requestId);
   }
 }

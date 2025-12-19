@@ -75,6 +75,9 @@ export default function ProHomeClient() {
   const [draft, setDraft] = useState<CreateBusinessDraft>({
     name: '',
   });
+  const [seedMessage, setSeedMessage] = useState<string | null>(null);
+  const [seedError, setSeedError] = useState<string | null>(null);
+  const [seeding, setSeeding] = useState(false);
 
   /* ---------- JOIN MODAL ---------- */
   const [joinOpen, setJoinOpen] = useState(false);
@@ -296,6 +299,26 @@ export default function ProHomeClient() {
     }
   }
 
+  async function triggerDevSeed() {
+    setSeedMessage(null);
+    setSeedError(null);
+    setSeeding(true);
+    const res = await fetchJson<{ ok: boolean; result: { businessId: string } }>('/api/dev/seed', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    setSeeding(false);
+    if (!res.ok) {
+      const msg = res.error ?? 'Seed dev indisponible.';
+      setSeedError(res.requestId ? `${msg} (Ref: ${res.requestId})` : msg);
+      return;
+    }
+    setSeedMessage('Compte admin dev prêt. Identifiants: admin@local.test / admintest');
+    if (res.data?.result?.businessId) {
+      await refreshBusinesses();
+    }
+  }
+
   const continueBusiness = useMemo(() => {
     if (items.length === 0) return null;
     if (lastVisitedId) {
@@ -352,6 +375,22 @@ export default function ProHomeClient() {
           </div>
         </div>
       </Card>
+
+      {process.env.NODE_ENV !== 'production' ? (
+        <Card className="flex flex-col gap-2 border-dashed border-[var(--border)] bg-transparent p-4">
+          <p className="text-sm font-semibold text-[var(--text-primary)]">Mode dev</p>
+          <p className="text-xs text-[var(--text-secondary)]">
+            Crée un compte admin local + business demo (admin@local.test / admintest).
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" onClick={triggerDevSeed} disabled={seeding}>
+              {seeding ? 'Seed en cours…' : 'Créer un compte admin de test'}
+            </Button>
+          </div>
+          {seedMessage ? <p className="text-xs text-emerald-500">{seedMessage}</p> : null}
+          {seedError ? <p className="text-xs text-rose-500">{seedError}</p> : null}
+        </Card>
+      ) : null}
 
       {activeId ? (
         <Card className="p-5">

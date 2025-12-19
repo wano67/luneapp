@@ -67,6 +67,10 @@ function makeCursor(t: { date: Date; id: bigint }) {
   return `${t.date.toISOString()}|${t.id.toString()}`;
 }
 
+function withIdNoStore(res: NextResponse, requestId: string) {
+  return withNoStore(withRequestId(res, requestId));
+}
+
 export async function GET(req: NextRequest) {
   const requestId = getRequestId(req);
   try {
@@ -84,18 +88,18 @@ export async function GET(req: NextRequest) {
 
     const limit = Math.min(200, Math.max(1, Number(limitRaw ?? 50) || 50));
 
-    if (accountId && !isNumericId(accountId)) return withRequestId(badRequest('Invalid accountId'), requestId);
+    if (accountId && !isNumericId(accountId)) return withIdNoStore(badRequest('Invalid accountId'), requestId);
 
     const type: TxType | undefined = typeRaw ? (isTxnType(typeRaw) ? typeRaw : undefined) : undefined;
-    if (typeRaw && !type) return withRequestId(badRequest('Invalid type'), requestId);
+    if (typeRaw && !type) return withIdNoStore(badRequest('Invalid type'), requestId);
 
     const from = fromRaw ? new Date(fromRaw) : undefined;
     const to = toRaw ? new Date(toRaw) : undefined;
-    if (fromRaw && Number.isNaN(from!.getTime())) return withRequestId(badRequest('Invalid from'), requestId);
-    if (toRaw && Number.isNaN(to!.getTime())) return withRequestId(badRequest('Invalid to'), requestId);
+    if (fromRaw && Number.isNaN(from!.getTime())) return withIdNoStore(badRequest('Invalid from'), requestId);
+    if (toRaw && Number.isNaN(to!.getTime())) return withIdNoStore(badRequest('Invalid to'), requestId);
 
     const cursor = cursorRaw ? parseCursor(cursorRaw) : null;
-    if (cursorRaw && !cursor) return withRequestId(badRequest('Invalid cursor'), requestId);
+    if (cursorRaw && !cursor) return withIdNoStore(badRequest('Invalid cursor'), requestId);
 
     // Pagination stable: order by date desc, id desc
     const cursorWhere: Prisma.PersonalTransactionWhereInput =
@@ -134,35 +138,38 @@ export async function GET(req: NextRequest) {
         ? makeCursor({ date: page[page.length - 1].date, id: page[page.length - 1].id })
         : null;
 
-    return withNoStore(
-      NextResponse.json({
-        items: page.map((t) => ({
-          id: toStrId(t.id),
-          type: t.type,
-          date: t.date.toISOString(),
-          amountCents: t.amountCents.toString(),
-          currency: t.currency,
-          label: t.label,
-          note: t.note,
-          account: { id: toStrId(t.accountId), name: t.account.name },
-          category: t.category ? { id: toStrId(t.categoryId!), name: t.category.name } : null,
-        })),
-        nextCursor,
-      })
+    return withRequestId(
+      withNoStore(
+        NextResponse.json({
+          items: page.map((t) => ({
+            id: toStrId(t.id),
+            type: t.type,
+            date: t.date.toISOString(),
+            amountCents: t.amountCents.toString(),
+            currency: t.currency,
+            label: t.label,
+            note: t.note,
+            account: { id: toStrId(t.accountId), name: t.account.name },
+            category: t.category ? { id: toStrId(t.categoryId!), name: t.category.name } : null,
+          })),
+          nextCursor,
+        })
+      ),
+      requestId
     );
   } catch (e: unknown) {
     if (getErrorMessage(e) === 'UNAUTHORIZED') {
-      return withRequestId(unauthorized(), requestId);
+      return withIdNoStore(unauthorized(), requestId);
     }
     console.error(e);
-    return withRequestId(NextResponse.json({ error: 'Failed' }, { status: 500 }), requestId);
+    return withIdNoStore(NextResponse.json({ error: 'Failed' }, { status: 500 }), requestId);
   }
 }
 
 export async function POST(req: NextRequest) {
   const requestId = getRequestId(req);
   const csrf = assertSameOrigin(req);
-  if (csrf) return csrf;
+  if (csrf) return withIdNoStore(csrf, requestId);
 
   try {
     const { userId } = await requireAuthAsync(req);
@@ -172,10 +179,10 @@ export async function POST(req: NextRequest) {
       limit: 120,
       windowMs: 10 * 60 * 1000,
     });
-    if (limited) return limited;
+    if (limited) return withIdNoStore(limited, requestId);
 
     const body: unknown = await req.json().catch(() => null);
-    if (!isRecord(body)) return badRequest('Invalid JSON');
+    if (!isRecord(body)) return withIdNoStore(badRequest('Invalid JSON'), requestId);
 
     const accountIdRaw = body.accountId;
     const categoryIdRaw = body.categoryId;
@@ -188,11 +195,11 @@ export async function POST(req: NextRequest) {
 
     // accountId
     const accountIdStr = String(accountIdRaw ?? '').trim();
-    if (!isNumericId(accountIdStr)) return badRequest('Invalid accountId');
+    if (!isNumericId(accountIdStr)) return withIdNoStore(badRequest('Invalid accountId'), requestId);
     const accountId = BigInt(accountIdStr);
 
     // type
-    if (!isTxnType(typeRaw)) return badRequest('Invalid type');
+    if (!isTxnType(typeRaw)) return withIdNoStore(badRequest('Invalid type'), requestId);
     const type: TxType = typeRaw;
 
     // date
@@ -203,13 +210,13 @@ export async function POST(req: NextRequest) {
     try {
       amountCents = parseBigIntLike(amountRaw, 'amountCents');
     } catch {
-      return badRequest('Invalid amountCents');
+      return withIdNoStore(badRequest('Invalid amountCents'), requestId);
     }
 
     // label
     const label = String(labelRaw ?? '').trim();
-    if (!label) return badRequest('Invalid label');
-    if (label.length > 160) return badRequest('Label too long');
+    if (!label) return withIdNoStore(badRequest('Invalid label'), requestId);
+    if (label.length > 160) return withIdNoStore(badRequest('Label too long'), requestId);
 
     // note
     const note =
@@ -220,20 +227,21 @@ export async function POST(req: NextRequest) {
       where: { id: accountId, userId: BigInt(userId) },
       select: { id: true, name: true, currency: true },
     });
-    if (!account) return withRequestId(NextResponse.json({ error: 'Account not found' }, { status: 404 }), requestId);
+    if (!account) return withIdNoStore(NextResponse.json({ error: 'Account not found' }, { status: 404 }), requestId);
 
     // category (optional) must belong to user
     let categoryId: bigint | null = null;
     if (categoryIdRaw !== null && categoryIdRaw !== undefined && String(categoryIdRaw).trim() !== '') {
       const catStr = String(categoryIdRaw).trim();
-      if (!isNumericId(catStr)) return badRequest('Invalid categoryId');
+      if (!isNumericId(catStr)) return withIdNoStore(badRequest('Invalid categoryId'), requestId);
       const catId = BigInt(catStr);
 
       const category = await prisma.personalCategory.findFirst({
         where: { id: catId, userId: BigInt(userId) },
         select: { id: true },
       });
-      if (!category) return NextResponse.json({ error: 'Category not found' }, { status: 404 });
+      if (!category)
+        return withIdNoStore(NextResponse.json({ error: 'Category not found' }, { status: 404 }), requestId);
 
       categoryId = catId;
     }
@@ -243,7 +251,7 @@ export async function POST(req: NextRequest) {
       typeof currencyRaw === 'string' && currencyRaw.trim()
         ? currencyRaw.trim()
         : account.currency || 'EUR';
-    if (currency.length > 8) return badRequest('Invalid currency');
+    if (currency.length > 8) return withIdNoStore(badRequest('Invalid currency'), requestId);
 
     const created = await prisma.personalTransaction.create({
       data: {
@@ -260,32 +268,37 @@ export async function POST(req: NextRequest) {
       include: { account: true, category: true },
     });
 
-    return NextResponse.json({
-      item: {
-        id: toStrId(created.id),
-        type: created.type,
-        date: created.date.toISOString(),
-        amountCents: created.amountCents.toString(),
-        currency: created.currency,
-        label: created.label,
-        note: created.note,
-        account: { id: toStrId(created.accountId), name: created.account.name },
-        category: created.category
-          ? { id: toStrId(created.categoryId!), name: created.category.name }
-          : null,
-      },
-    });
+    return withRequestId(
+      withNoStore(
+        NextResponse.json({
+          item: {
+            id: toStrId(created.id),
+            type: created.type,
+            date: created.date.toISOString(),
+            amountCents: created.amountCents.toString(),
+            currency: created.currency,
+            label: created.label,
+            note: created.note,
+            account: { id: toStrId(created.accountId), name: created.account.name },
+            category: created.category
+              ? { id: toStrId(created.categoryId!), name: created.category.name }
+              : null,
+          },
+        })
+      ),
+      requestId
+    );
   } catch (e: unknown) {
     const msg = getErrorMessage(e);
 
     if (msg === 'UNAUTHORIZED') {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return withIdNoStore(unauthorized(), requestId);
     }
     if (msg.startsWith('INVALID_')) {
-      return NextResponse.json({ error: 'Invalid payload' }, { status: 400 });
+      return withIdNoStore(NextResponse.json({ error: 'Invalid payload' }, { status: 400 }), requestId);
     }
 
     console.error(e);
-    return NextResponse.json({ error: 'Failed' }, { status: 500 });
+    return withIdNoStore(NextResponse.json({ error: 'Failed' }, { status: 500 }), requestId);
   }
 }

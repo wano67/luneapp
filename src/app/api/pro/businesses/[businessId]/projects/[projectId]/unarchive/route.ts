@@ -9,6 +9,10 @@ function forbidden() {
   return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 }
 
+function withIdNoStore(res: NextResponse, requestId: string) {
+  return withNoStore(withRequestId(res, requestId));
+}
+
 function parseId(param: string | undefined) {
   if (!param || !/^\d+$/.test(param)) return null;
   try {
@@ -24,30 +28,30 @@ export async function POST(
 ) {
   const requestId = getRequestId(request);
   const csrf = assertSameOrigin(request);
-  if (csrf) return csrf;
+  if (csrf) return withIdNoStore(csrf, requestId);
 
   let userId: string;
   try {
     ({ userId } = await requireAuthPro(request));
   } catch {
-    return withRequestId(unauthorized(), requestId);
+    return withIdNoStore(unauthorized(), requestId);
   }
 
   const { businessId, projectId } = await context.params;
   const businessIdBigInt = parseId(businessId);
   const projectIdBigInt = parseId(projectId);
   if (!businessIdBigInt || !projectIdBigInt) {
-    return withRequestId(badRequest('Ids invalides.'), requestId);
+    return withIdNoStore(badRequest('Ids invalides.'), requestId);
   }
 
   const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'ADMIN');
-  if (!membership) return forbidden();
+  if (!membership) return withIdNoStore(forbidden(), requestId);
 
   const project = await prisma.project.findFirst({
     where: { id: projectIdBigInt, businessId: businessIdBigInt },
   });
   if (!project) {
-    return withRequestId(NextResponse.json({ error: 'Projet introuvable.' }, { status: 404 }), requestId);
+    return withIdNoStore(NextResponse.json({ error: 'Projet introuvable.' }, { status: 404 }), requestId);
   }
 
   const updated = await prisma.project.update({

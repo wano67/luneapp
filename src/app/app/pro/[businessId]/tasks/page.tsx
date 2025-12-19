@@ -13,6 +13,7 @@ import { Select } from '@/components/ui/select';
 import { Modal } from '@/components/ui/modal';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import { useActiveBusiness } from '../../ActiveBusinessProvider';
+import RoleBanner from '@/components/RoleBanner';
 
 type TaskStatus = 'TODO' | 'IN_PROGRESS' | 'DONE';
 
@@ -55,6 +56,7 @@ export default function TasksPage() {
   const activeCtx = useActiveBusiness({ optional: true });
   const actorRole = activeCtx?.activeBusiness?.role ?? null;
   const isAdmin = actorRole === 'OWNER' || actorRole === 'ADMIN';
+  const readOnlyMessage = 'Action réservée aux admins/owners.';
 
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
@@ -78,6 +80,7 @@ export default function TasksPage() {
   const [deleteModal, setDeleteModal] = useState<Task | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const fetchController = useRef<AbortController | null>(null);
+  const [readOnlyInfo, setReadOnlyInfo] = useState<string | null>(null);
 
   const filteredTasks = useMemo(() => {
     return statusFilter === 'ALL' ? tasks : tasks.filter((t) => t.status === statusFilter);
@@ -164,6 +167,11 @@ export default function TasksPage() {
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (!isAdmin) {
+      setActionError(readOnlyMessage);
+      setReadOnlyInfo(readOnlyMessage);
+      return;
+    }
     setActionError(null);
     setInfo(null);
     setCreating(true);
@@ -212,6 +220,11 @@ export default function TasksPage() {
 
   async function confirmDelete() {
     if (!deleteModal) return;
+    if (!isAdmin) {
+      setDeleteError(readOnlyMessage);
+      setReadOnlyInfo(readOnlyMessage);
+      return;
+    }
     setDeleteError(null);
     const res = await fetchJson<null>(
       `/api/pro/businesses/${businessId}/tasks/${deleteModal.id}`,
@@ -236,6 +249,7 @@ export default function TasksPage() {
 
   return (
     <div className="space-y-5">
+      <RoleBanner role={actorRole} />
       <Card className="space-y-2 p-5">
         <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-[var(--text-secondary)]">
           Tâches
@@ -247,9 +261,23 @@ export default function TasksPage() {
               Base unique des tâches liées aux projets pour suivre charge et urgences.
             </p>
           </div>
-          {isAdmin ? (
-            <Button onClick={openCreate}>Nouvelle tâche</Button>
-          ) : null}
+          <div className="flex flex-col items-start gap-1">
+            <Button
+              onClick={() => {
+                if (!isAdmin) {
+                  setReadOnlyInfo(readOnlyMessage);
+                  return;
+                }
+                openCreate();
+              }}
+              disabled={!isAdmin}
+            >
+              Nouvelle tâche
+            </Button>
+            {!isAdmin ? (
+              <p className="text-[11px] text-[var(--text-secondary)]">Lecture seule : création réservée aux admins.</p>
+            ) : null}
+          </div>
         </div>
         {requestId ? (
           <p className="text-[10px] text-[var(--text-secondary)]">Request ID: {requestId}</p>
@@ -272,6 +300,7 @@ export default function TasksPage() {
           </div>
           {info ? <span className="text-xs text-emerald-500">{info}</span> : null}
           {error ? <span className="text-xs text-rose-500">{error}</span> : null}
+          {readOnlyInfo ? <span className="text-xs text-[var(--text-secondary)]">{readOnlyInfo}</span> : null}
         </div>
 
         {loading ? (
@@ -285,7 +314,7 @@ export default function TasksPage() {
                 <TableHead>Assignee</TableHead>
                 <TableHead>Échéance</TableHead>
                 <TableHead>Statut</TableHead>
-                {isAdmin ? <TableHead>Actions</TableHead> : null}
+                <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -319,18 +348,38 @@ export default function TasksPage() {
                         {STATUS_OPTIONS.find((s) => s.value === task.status)?.label ?? task.status}
                       </Badge>
                     </TableCell>
-                    {isAdmin ? (
-                      <TableCell>
-                        <div className="flex flex-wrap gap-2">
-                          <Button size="sm" variant="outline" onClick={() => openEdit(task)}>
-                            Modifier
-                          </Button>
-                          <Button size="sm" variant="outline" onClick={() => setDeleteModal(task)}>
-                            Supprimer
-                          </Button>
-                        </div>
-                      </TableCell>
-                    ) : null}
+                    <TableCell>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            if (!isAdmin) {
+                              setReadOnlyInfo(readOnlyMessage);
+                              return;
+                            }
+                            openEdit(task);
+                          }}
+                          disabled={!isAdmin}
+                        >
+                          Modifier
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            if (!isAdmin) {
+                              setReadOnlyInfo(readOnlyMessage);
+                              return;
+                            }
+                            setDeleteModal(task);
+                          }}
+                          disabled={!isAdmin}
+                        >
+                          Supprimer
+                        </Button>
+                      </div>
+                    </TableCell>
                   </TableRow>
                 ))
               )}
@@ -376,13 +425,13 @@ export default function TasksPage() {
               placeholder="ID projet (même business)"
             />
             <Input
-              label="Assignee userId (optionnel)"
-              value={form.assigneeUserId}
-              onChange={(e: ChangeEvent<HTMLInputElement>) =>
-                handleChange('assigneeUserId', e.target.value)
-              }
-              placeholder="ID membre business"
-            />
+            label="Assignee userId (optionnel)"
+            value={form.assigneeUserId}
+            onChange={(e: ChangeEvent<HTMLInputElement>) =>
+              handleChange('assigneeUserId', e.target.value)
+            }
+            placeholder="ID membre business"
+          />
           </div>
           <Input
             label="Échéance (optionnel)"
@@ -392,11 +441,14 @@ export default function TasksPage() {
           />
           <div className="flex items-center justify-between">
             {actionError ? <p className="text-xs text-rose-500">{actionError}</p> : null}
+            {!isAdmin ? (
+              <p className="text-[11px] text-[var(--text-secondary)]">Lecture seule : création/édition bloquée.</p>
+            ) : null}
             <div className="flex gap-2">
               <Button variant="outline" type="button" onClick={() => setModalOpen(false)} disabled={creating}>
                 Annuler
               </Button>
-              <Button type="submit" disabled={creating}>
+              <Button type="submit" disabled={creating || !isAdmin}>
                 {creating ? 'Enregistrement…' : editing ? 'Mettre à jour' : 'Créer'}
               </Button>
             </div>
@@ -415,11 +467,14 @@ export default function TasksPage() {
             Action définitive. Les liens projet/assignee seront perdus.
           </p>
           {deleteError ? <p className="text-xs text-rose-500">{deleteError}</p> : null}
+          {!isAdmin ? (
+            <p className="text-[11px] text-[var(--text-secondary)]">Suppression réservée aux admins/owners.</p>
+          ) : null}
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => setDeleteModal(null)}>
               Annuler
             </Button>
-            <Button variant="danger" onClick={confirmDelete}>
+            <Button variant="danger" onClick={confirmDelete} disabled={!isAdmin}>
               Supprimer
             </Button>
           </div>

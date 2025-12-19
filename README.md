@@ -12,6 +12,13 @@ Dev : `pnpm dev` (Turbopack) ou `pnpm dev:stable` (désactive Turbopack en cas d
 - Start : `pnpm start`.
 - Sécurité : si `APP_URL`/`NEXT_PUBLIC_APP_URL`/`APP_ORIGINS` manquent en prod, toutes les mutations seront refusées (CSRF fail-closed).
 
+### Railway – Variables d’environnement requises
+- `APP_URL` : origin primaire côté serveur (https, sans slash final), ex. `https://luneapp.up.railway.app` ou domaine custom `https://app.mondomaine.com`.
+- `NEXT_PUBLIC_APP_URL` : origin attendue côté client (généralement identique à `APP_URL`), même format.
+- `APP_ORIGINS` : liste optionnelle d’origins supplémentaires, séparées par des virgules, pour supporter un domaine custom + le sous-domaine Railway, ex. `https://app.mondomaine.com,https://luneapp.up.railway.app`.
+- Comportement : en production, si aucune origin n’est fournie, la protection CSRF bloque toutes les mutations. En dev, l’absence d’origins n’est pas bloquante.
+- Ne pas inclure de slash final ni de chemins ; uniquement les origins (`scheme://host[:port]`).
+
 ### Vérifs middleware (dev)
 - Sans cookie : GET `/app` → redirige vers `/login?from=/app`
 - Sans cookie : GET `/api/pro/businesses` → 401 JSON + `Cache-Control: no-store`

@@ -58,6 +58,22 @@ export async function fetchJson<T>(
       };
     }
 
+    if (res.status === 401 && typeof window !== 'undefined') {
+      const from = window.location.pathname + window.location.search;
+      window.location.href = `/login?from=${encodeURIComponent(from)}`;
+      return { ok: false, status: res.status, data: null, requestId, error: 'Unauthorized' };
+    }
+
+    if (res.status === 403) {
+      return {
+        ok: false,
+        status: res.status,
+        data: (data as T) ?? null,
+        requestId,
+        error: isApiErrorShape(data) ? data.error : 'Action réservée aux admins/owners.',
+      };
+    }
+
     return {
       ok: false,
       status: res.status,

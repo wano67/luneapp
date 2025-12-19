@@ -151,17 +151,17 @@ export async function GET(
   try {
     ({ userId } = await requireAuthPro(request));
   } catch {
-    return withRequestId(unauthorized(), requestId);
+    return withIdNoStore(unauthorized(), requestId);
   }
   const { businessId } = await context.params;
   const businessIdBigInt = parseId(businessId);
-  if (!businessIdBigInt) return withRequestId(badRequest('businessId invalide.'), requestId);
+  if (!businessIdBigInt) return withIdNoStore(badRequest('businessId invalide.'), requestId);
 
   const delegateError = ensureServiceDelegate(requestId);
   if (delegateError) return delegateError;
 
   const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'VIEWER');
-  if (!membership) return forbidden();
+  if (!membership) return withIdNoStore(forbidden(), requestId);
 
   const { searchParams } = new URL(request.url);
   const q = searchParams.get('q')?.trim();
@@ -182,24 +182,29 @@ export async function GET(
       ...(type ? { type: { equals: type, mode: 'insensitive' } } : {}),
     },
     orderBy: [{ createdAt: 'desc' }],
+    include: { _count: { select: { taskTemplates: true } } },
   });
 
-  return jsonNoStore({
-    items: services.map((s) => ({
-      id: s.id.toString(),
-      businessId: s.businessId.toString(),
-      code: s.code,
-      name: s.name,
-      type: s.type,
-      description: s.description,
-      defaultPriceCents: s.defaultPriceCents?.toString() ?? null,
-      tjmCents: s.tjmCents?.toString() ?? null,
-      durationHours: s.durationHours,
-      vatRate: s.vatRate,
-      createdAt: s.createdAt.toISOString(),
-      updatedAt: s.updatedAt.toISOString(),
-    })),
-  });
+  return withIdNoStore(
+    jsonNoStore({
+      items: services.map((s) => ({
+        id: s.id.toString(),
+        businessId: s.businessId.toString(),
+        code: s.code,
+        name: s.name,
+        type: s.type,
+        description: s.description,
+        defaultPriceCents: s.defaultPriceCents?.toString() ?? null,
+        tjmCents: s.tjmCents?.toString() ?? null,
+        durationHours: s.durationHours,
+        vatRate: s.vatRate,
+        templateCount: s._count?.taskTemplates ?? 0,
+        createdAt: s.createdAt.toISOString(),
+        updatedAt: s.updatedAt.toISOString(),
+      })),
+    }),
+    requestId
+  );
 }
 
 // POST /api/pro/businesses/{businessId}/services
@@ -209,21 +214,21 @@ export async function POST(
 ) {
   const requestId = getRequestId(request);
   const csrf = assertSameOrigin(request);
-  if (csrf) return csrf;
+  if (csrf) return withIdNoStore(csrf, requestId);
 
   let userId: string;
   try {
     ({ userId } = await requireAuthPro(request));
   } catch {
-    return withRequestId(unauthorized(), requestId);
+    return withIdNoStore(unauthorized(), requestId);
   }
 
   const { businessId } = await context.params;
   const businessIdBigInt = parseId(businessId);
-  if (!businessIdBigInt) return withRequestId(badRequest('businessId invalide.'), requestId);
+  if (!businessIdBigInt) return withIdNoStore(badRequest('businessId invalide.'), requestId);
 
   const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'ADMIN');
-  if (!membership) return forbidden();
+  if (!membership) return withIdNoStore(forbidden(), requestId);
 
   const delegateError = ensureServiceDelegate(requestId);
   if (delegateError) return delegateError;
@@ -233,11 +238,11 @@ export async function POST(
     limit: 120,
     windowMs: 60 * 60 * 1000,
   });
-  if (limited) return limited;
+  if (limited) return withIdNoStore(limited, requestId);
 
   const body = await request.json().catch(() => null);
   const parsed = validateServiceBody(body);
-  if ('error' in parsed) return withRequestId(badRequest(parsed.error), requestId);
+  if ('error' in parsed) return withIdNoStore(badRequest(parsed.error), requestId);
 
   try {
     const created = await prisma.service.create({
@@ -265,32 +270,36 @@ export async function POST(
       include: { taskTemplates: true },
     });
 
-    return NextResponse.json(
-      {
-        id: created.id.toString(),
-        businessId: created.businessId.toString(),
-        code: created.code,
-        name: created.name,
-        type: created.type,
-        description: created.description,
-        defaultPriceCents: created.defaultPriceCents?.toString() ?? null,
-        tjmCents: created.tjmCents?.toString() ?? null,
-        durationHours: created.durationHours,
-        vatRate: created.vatRate,
-        taskTemplates: created.taskTemplates.map((tpl) => ({
-          id: tpl.id.toString(),
-          phase: tpl.phase,
-          title: tpl.title,
-          defaultAssigneeRole: tpl.defaultAssigneeRole,
-          defaultDueOffsetDays: tpl.defaultDueOffsetDays,
-        })),
-        createdAt: created.createdAt.toISOString(),
-        updatedAt: created.updatedAt.toISOString(),
-      },
-      { status: 201 }
+    return withIdNoStore(
+      NextResponse.json(
+        {
+          id: created.id.toString(),
+          businessId: created.businessId.toString(),
+          code: created.code,
+          name: created.name,
+          type: created.type,
+          description: created.description,
+          defaultPriceCents: created.defaultPriceCents?.toString() ?? null,
+          tjmCents: created.tjmCents?.toString() ?? null,
+          durationHours: created.durationHours,
+          vatRate: created.vatRate,
+          templateCount: created.taskTemplates.length,
+          taskTemplates: created.taskTemplates.map((tpl) => ({
+            id: tpl.id.toString(),
+            phase: tpl.phase,
+            title: tpl.title,
+            defaultAssigneeRole: tpl.defaultAssigneeRole,
+            defaultDueOffsetDays: tpl.defaultDueOffsetDays,
+          })),
+          createdAt: created.createdAt.toISOString(),
+          updatedAt: created.updatedAt.toISOString(),
+        },
+        { status: 201 }
+      ),
+      requestId
     );
   } catch (err) {
     console.error(err);
-    return withRequestId(badRequest('Création impossible.'), requestId);
+    return withIdNoStore(badRequest('Création impossible.'), requestId);
   }
 }

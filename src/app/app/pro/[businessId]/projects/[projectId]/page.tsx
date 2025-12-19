@@ -12,6 +12,7 @@ import { Modal } from '@/components/ui/modal';
 import { Select } from '@/components/ui/select';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import { useActiveBusiness } from '../../../ActiveBusinessProvider';
+import RoleBanner from '@/components/RoleBanner';
 
 type ProjectStatus = 'PLANNED' | 'ACTIVE' | 'ON_HOLD' | 'COMPLETED' | 'CANCELLED';
 type ProjectQuoteStatus = 'DRAFT' | 'SENT' | 'ACCEPTED' | 'SIGNED';
@@ -66,7 +67,29 @@ type TaskItem = {
   assigneeName: string | null;
 };
 
-type ServiceOption = { id: string; code: string; name: string; type: string | null; defaultPriceCents?: string | null };
+type ServiceOption = {
+  id: string;
+  code: string;
+  name: string;
+  type: string | null;
+  defaultPriceCents?: string | null;
+  templateCount?: number;
+};
+
+type InteractionType = 'CALL' | 'MEETING' | 'EMAIL' | 'NOTE' | 'MESSAGE';
+
+type Interaction = {
+  id: string;
+  businessId: string;
+  clientId: string | null;
+  projectId: string | null;
+  type: InteractionType;
+  content: string;
+  happenedAt: string;
+  nextActionDate: string | null;
+  createdAt: string;
+  createdByUserId: string | null;
+};
 
 const STATUS_LABELS: Record<ProjectStatus, string> = {
   PLANNED: 'Planifié',
@@ -110,6 +133,15 @@ function formatCurrency(amount: number) {
   );
 }
 
+function formatDateTime(value: string | null | undefined) {
+  if (!value) return '—';
+  try {
+    return new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
+  } catch {
+    return value ?? '—';
+  }
+}
+
 function computeProgress(summary?: Project['tasksSummary'], tasks?: TaskItem[]) {
   if (summary) return summary;
   if (!tasks || tasks.length === 0) return { total: 0, open: 0, done: 0, progressPct: 0 };
@@ -148,12 +180,30 @@ function phaseLabel(phase: TaskPhase) {
   }
 }
 
+function interactionTypeLabel(value: InteractionType) {
+  switch (value) {
+    case 'CALL':
+      return 'Appel';
+    case 'MEETING':
+      return 'Réunion';
+    case 'EMAIL':
+      return 'Email';
+    case 'NOTE':
+      return 'Note';
+    case 'MESSAGE':
+      return 'Message';
+    default:
+      return value;
+  }
+}
+
 export default function ProjectDetailPage() {
   const params = useParams();
   const businessId = (params?.businessId ?? '') as string;
   const projectId = (params?.projectId ?? '') as string;
   const activeCtx = useActiveBusiness({ optional: true });
   const isAdmin = activeCtx?.activeBusiness?.role === 'OWNER' || activeCtx?.activeBusiness?.role === 'ADMIN';
+  const readOnlyMessage = 'Action réservée aux admins/owners.';
 
   const [project, setProject] = useState<Project | null>(null);
   const [services, setServices] = useState<ProjectServiceItem[]>([]);
@@ -184,6 +234,24 @@ export default function ProjectDetailPage() {
   const [depositStatusValue, setDepositStatusValue] = useState<ProjectDepositStatus>('PENDING');
   const [savingCommercial, setSavingCommercial] = useState(false);
   const [commercialMessage, setCommercialMessage] = useState<string | null>(null);
+  const [archiveAction, setArchiveAction] = useState<'archive' | 'unarchive' | null>(null);
+  const [archiveLoading, setArchiveLoading] = useState(false);
+  const [archiveError, setArchiveError] = useState<string | null>(null);
+  const [archiveRequestId, setArchiveRequestId] = useState<string | null>(null);
+  const [readOnlyInfo, setReadOnlyInfo] = useState<string | null>(null);
+
+  const interactionsControllerRef = useRef<AbortController | null>(null);
+  const [interactions, setInteractions] = useState<Interaction[]>([]);
+  const [interactionsLoading, setInteractionsLoading] = useState(true);
+  const [interactionsError, setInteractionsError] = useState<string | null>(null);
+  const [interactionRequestId, setInteractionRequestId] = useState<string | null>(null);
+  const [interactionType, setInteractionType] = useState<InteractionType>('CALL');
+  const [interactionContent, setInteractionContent] = useState('');
+  const [interactionDate, setInteractionDate] = useState<string>(() => new Date().toISOString().slice(0, 16));
+  const [interactionNextAction, setInteractionNextAction] = useState('');
+  const [interactionInfo, setInteractionInfo] = useState<string | null>(null);
+  const [savingInteraction, setSavingInteraction] = useState(false);
+  const [editingInteraction, setEditingInteraction] = useState<Interaction | null>(null);
 
   function resetServiceForm() {
     setEditingService(null);
@@ -192,6 +260,94 @@ export default function ProjectDetailPage() {
     setPriceCents('');
     setNotes('');
     setServiceError(null);
+  }
+
+  async function loadInteractions(signal?: AbortSignal) {
+    const controller = signal ? null : new AbortController();
+    const effectiveSignal = signal ?? controller?.signal;
+    if (controller) {
+      interactionsControllerRef.current?.abort();
+      interactionsControllerRef.current = controller;
+    }
+
+    try {
+      setInteractionsLoading(true);
+      setInteractionsError(null);
+      setInteractionRequestId(null);
+
+      const res = await fetchJson<{ items: Interaction[] }>(
+        `/api/pro/businesses/${businessId}/interactions?projectId=${projectId}&limit=10`,
+        {},
+        effectiveSignal
+      );
+      if (effectiveSignal?.aborted) return;
+      setInteractionRequestId(res.requestId);
+
+      if (res.status === 401) {
+        const from = window.location.pathname + window.location.search;
+        window.location.href = `/login?from=${encodeURIComponent(from)}`;
+        return;
+      }
+
+      if (!res.ok || !res.data) {
+        const msg = res.error ?? 'Impossible de charger les interactions.';
+        setInteractionsError(res.requestId ? `${msg} (Ref: ${res.requestId})` : msg);
+        setInteractions([]);
+        return;
+      }
+
+      setInteractions(res.data.items);
+    } catch (err) {
+      if (effectiveSignal?.aborted) return;
+      console.error(err);
+      setInteractionsError(getErrorMessage(err));
+      setInteractions([]);
+    } finally {
+      if (!effectiveSignal?.aborted) setInteractionsLoading(false);
+    }
+  }
+
+  function startEditInteraction(interaction: Interaction) {
+    setEditingInteraction(interaction);
+    setInteractionType(interaction.type);
+    setInteractionContent(interaction.content);
+    setInteractionDate(interaction.happenedAt.slice(0, 16));
+    setInteractionNextAction(interaction.nextActionDate ? interaction.nextActionDate.slice(0, 16) : '');
+    setInteractionInfo(null);
+    setInteractionsError(null);
+  }
+
+  async function deleteInteraction(interaction: Interaction) {
+    if (!isAdmin) {
+      setInteractionsError(readOnlyMessage);
+      return;
+    }
+    if (!window.confirm('Supprimer cette interaction ?')) return;
+    setInteractionsError(null);
+    setInteractionInfo(null);
+    const res = await fetchJson<{ ok: boolean }>(
+      `/api/pro/businesses/${businessId}/interactions/${interaction.id}`,
+      { method: 'DELETE' }
+    );
+    setInteractionRequestId(res.requestId);
+    if (res.status === 401) {
+      const from = window.location.pathname + window.location.search;
+      window.location.href = `/login?from=${encodeURIComponent(from)}`;
+      return;
+    }
+    if (!res.ok) {
+      const msg = res.error ?? 'Suppression impossible.';
+      setInteractionsError(res.requestId ? `${msg} (Ref: ${res.requestId})` : msg);
+      return;
+    }
+    if (editingInteraction?.id === interaction.id) {
+      setEditingInteraction(null);
+      setInteractionType('CALL');
+      setInteractionContent('');
+      setInteractionNextAction('');
+      setInteractionDate(new Date().toISOString().slice(0, 16));
+    }
+    await loadInteractions();
   }
 
   async function loadProject(signal?: AbortSignal) {
@@ -267,7 +423,11 @@ export default function ProjectDetailPage() {
   useEffect(() => {
     void loadProject();
     void loadTasks();
-    return () => controllerRef.current?.abort();
+    void loadInteractions();
+    return () => {
+      controllerRef.current?.abort();
+      interactionsControllerRef.current?.abort();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [businessId, projectId]);
 
@@ -280,12 +440,31 @@ export default function ProjectDetailPage() {
     }, 0);
   }, [services]);
 
+  const nextAction = useMemo(() => {
+    const upcoming = interactions
+      .filter((i) => i.nextActionDate)
+      .sort(
+        (a, b) => new Date(a.nextActionDate ?? '').getTime() - new Date(b.nextActionDate ?? '').getTime()
+      );
+    return upcoming.length ? upcoming[0] : null;
+  }, [interactions]);
+
   async function openServiceModal(existing?: ProjectServiceItem) {
+    if (!isAdmin) {
+      setActionMessage(readOnlyMessage);
+      setReadOnlyInfo(readOnlyMessage);
+      return;
+    }
+    if (project?.archivedAt) {
+      setActionMessage('Projet archivé : modification des services désactivée.');
+      return;
+    }
     if (!serviceOptions.length) {
       const res = await fetchJson<{ items: ServiceOption[] }>(
         `/api/pro/businesses/${businessId}/services`
       );
-      if (res.ok && res.data) setServiceOptions(res.data.items);
+      if (res.ok && res.data)
+        setServiceOptions(res.data.items.map((item) => ({ ...item, templateCount: item.templateCount ?? 0 })));
     }
     if (existing) {
       setEditingService(existing);
@@ -301,6 +480,10 @@ export default function ProjectDetailPage() {
 
   async function submitService(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (!isAdmin) {
+      setServiceError(readOnlyMessage);
+      return;
+    }
     if (!serviceId) {
       setServiceError('Choisis un service.');
       return;
@@ -342,6 +525,14 @@ export default function ProjectDetailPage() {
   }
 
   async function deleteService(item: ProjectServiceItem) {
+    if (!isAdmin) {
+      setActionMessage(readOnlyMessage);
+      return;
+    }
+    if (project?.archivedAt) {
+      setActionMessage('Projet archivé : suppression bloquée.');
+      return;
+    }
     if (!window.confirm(`Supprimer ${item.service.code} ?`)) return;
     setActionMessage(null);
     const res = await fetchJson<{ ok: boolean }>(
@@ -358,8 +549,37 @@ export default function ProjectDetailPage() {
     await loadProject();
   }
 
+  async function performArchive(action: 'archive' | 'unarchive') {
+    if (!isAdmin) {
+      setArchiveError(readOnlyMessage);
+      setReadOnlyInfo(readOnlyMessage);
+      return;
+    }
+    setArchiveLoading(true);
+    setArchiveError(null);
+    setArchiveRequestId(null);
+    const res = await fetchJson<{ id: string; archivedAt: string | null }>(
+      `/api/pro/businesses/${businessId}/projects/${projectId}/${action === 'archive' ? 'archive' : 'unarchive'}`,
+      { method: 'POST' }
+    );
+    setArchiveRequestId(res.requestId);
+    if (!res.ok || !res.data) {
+      const msg = res.error ?? 'Action impossible.';
+      setArchiveError(res.requestId ? `${msg} (Ref: ${res.requestId})` : msg);
+      setArchiveLoading(false);
+      return;
+    }
+    setArchiveAction(null);
+    setArchiveLoading(false);
+    await loadProject();
+  }
+
   async function startProject() {
-    if (!project || project.startedAt) return;
+    if (!isAdmin) {
+      setActionMessage(readOnlyMessage);
+      return;
+    }
+    if (!project || project.startedAt || project.archivedAt) return;
     setStartLoading(true);
     setActionMessage(null);
     const res = await fetchJson<{ startedAt: string; tasksCreated: number }>(
@@ -378,8 +598,86 @@ export default function ProjectDetailPage() {
     setStartLoading(false);
   }
 
+  async function submitInteraction(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!isAdmin) {
+      setInteractionsError(readOnlyMessage);
+      return;
+    }
+    setSavingInteraction(true);
+    setInteractionsError(null);
+    setInteractionInfo(null);
+    const isEdit = Boolean(editingInteraction);
+
+    const content = interactionContent.trim();
+    if (!content) {
+      setInteractionsError('Contenu requis.');
+      setSavingInteraction(false);
+      return;
+    }
+    const happenedAtValue = interactionDate ? new Date(interactionDate) : new Date();
+    if (Number.isNaN(happenedAtValue.getTime())) {
+      setInteractionsError('Date invalide.');
+      setSavingInteraction(false);
+      return;
+    }
+    const nextActionValue = interactionNextAction ? new Date(interactionNextAction) : null;
+    if (nextActionValue && Number.isNaN(nextActionValue.getTime())) {
+      setInteractionsError('Prochaine action invalide.');
+      setSavingInteraction(false);
+      return;
+    }
+
+    const payload: Record<string, unknown> = {
+      projectId,
+      type: interactionType,
+      content,
+      happenedAt: happenedAtValue.toISOString(),
+    };
+    if (project?.clientId) payload.clientId = project.clientId;
+    if (nextActionValue) payload.nextActionDate = nextActionValue.toISOString();
+    else if (isEdit && !interactionNextAction) payload.nextActionDate = null;
+
+    const endpoint = isEdit
+      ? `/api/pro/businesses/${businessId}/interactions/${editingInteraction?.id}`
+      : `/api/pro/businesses/${businessId}/interactions`;
+    const res = await fetchJson<Interaction>(endpoint, {
+      method: isEdit ? 'PATCH' : 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    setInteractionRequestId(res.requestId);
+
+    if (res.status === 401) {
+      const from = window.location.pathname + window.location.search;
+      window.location.href = `/login?from=${encodeURIComponent(from)}`;
+      setSavingInteraction(false);
+      return;
+    }
+
+    if (!res.ok || !res.data) {
+      const msg = res.error ?? 'Création impossible.';
+      setInteractionsError(res.requestId ? `${msg} (Ref: ${res.requestId})` : msg);
+      setSavingInteraction(false);
+      return;
+    }
+
+    setInteractionInfo(isEdit ? 'Interaction mise à jour.' : 'Interaction ajoutée.');
+    setEditingInteraction(null);
+    setInteractionType('CALL');
+    setInteractionContent('');
+    setInteractionNextAction('');
+    setInteractionDate(new Date().toISOString().slice(0, 16));
+    await loadInteractions();
+    setSavingInteraction(false);
+  }
+
   async function updateTask(task: TaskItem, updates: Partial<TaskItem>) {
-    if (!isAdmin) return;
+    if (!isAdmin) {
+      setTaskError(readOnlyMessage);
+      return;
+    }
     setTaskActionId(task.id);
     setTaskError(null);
     const res = await fetchJson<TaskItem>(`/api/pro/businesses/${businessId}/tasks/${task.id}`, {
@@ -403,7 +701,10 @@ export default function ProjectDetailPage() {
   }
 
   async function saveCommercial() {
-    if (!project || !isAdmin) return;
+    if (!project || !isAdmin) {
+      setCommercialMessage(readOnlyMessage);
+      return;
+    }
     setSavingCommercial(true);
     setCommercialMessage(null);
     const res = await fetchJson<ProjectDetailResponse>(
@@ -449,11 +750,13 @@ export default function ProjectDetailPage() {
 
   const canStart =
     !project.startedAt &&
+    !project.archivedAt &&
     (project.quoteStatus === 'SIGNED' || project.quoteStatus === 'ACCEPTED') &&
     (project.depositStatus === 'PAID' || project.depositStatus === 'NOT_REQUIRED');
 
   return (
     <div className="space-y-5">
+      <RoleBanner role={activeCtx?.activeBusiness?.role} />
       <Card className="space-y-3 p-5">
         <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
           <div className="space-y-1">
@@ -463,13 +766,48 @@ export default function ProjectDetailPage() {
             <h1 className="text-xl font-semibold text-[var(--text-primary)]">{project.name}</h1>
             <p className="text-sm text-[var(--text-secondary)]">Client : {project.clientName ?? 'Non assigné'}</p>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <Badge variant="neutral">{STATUS_LABELS[project.status]}</Badge>
-            <Badge variant="neutral">Devis {QUOTE_LABELS[project.quoteStatus]}</Badge>
-            <Badge variant="neutral">Acompte {DEPOSIT_LABELS[project.depositStatus]}</Badge>
-            {project.startedAt ? <Badge variant="neutral">Démarré {formatDate(project.startedAt)}</Badge> : null}
-            <Badge variant="neutral">ID {project.id}</Badge>
-            {requestId ? <Badge variant="neutral">Ref {requestId}</Badge> : null}
+          <div className="flex flex-col items-end gap-2">
+            <div className="flex flex-wrap justify-end gap-2">
+              <Badge variant="neutral">{STATUS_LABELS[project.status]}</Badge>
+              <Badge variant="neutral">Devis {QUOTE_LABELS[project.quoteStatus]}</Badge>
+              <Badge variant="neutral">Acompte {DEPOSIT_LABELS[project.depositStatus]}</Badge>
+              {project.startedAt ? <Badge variant="neutral">Démarré {formatDate(project.startedAt)}</Badge> : null}
+              {project.archivedAt ? <Badge variant="performance">Archivé</Badge> : null}
+              <Badge variant="neutral">ID {project.id}</Badge>
+              {requestId ? <Badge variant="neutral">Ref {requestId}</Badge> : null}
+            </div>
+            <div className="flex flex-wrap justify-end gap-2">
+              {project.archivedAt ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setArchiveAction('unarchive');
+                    setArchiveError(null);
+                  }}
+                  disabled={!isAdmin}
+                >
+                  Restaurer
+                </Button>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setArchiveAction('archive');
+                    setArchiveError(null);
+                  }}
+                  disabled={!isAdmin}
+                >
+                  Archiver
+                </Button>
+              )}
+            </div>
+            {!isAdmin ? (
+              <p className="text-[11px] text-[var(--text-secondary)]">
+                Lecture seule : archiver/restaurer nécessite ADMIN/OWNER.
+              </p>
+            ) : null}
           </div>
         </div>
 
@@ -499,6 +837,8 @@ export default function ProjectDetailPage() {
           </Card>
         </div>
       </Card>
+
+      {readOnlyInfo ? <p className="text-xs text-[var(--text-secondary)] px-1">{readOnlyInfo}</p> : null}
 
       <Card className="space-y-3 p-5">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -556,13 +896,17 @@ export default function ProjectDetailPage() {
           </div>
           {project.startedAt ? (
             <Badge variant="neutral">Démarré le {formatDate(project.startedAt)}</Badge>
+          ) : project.archivedAt ? (
+            <Badge variant="performance">Archivé</Badge>
           ) : (
             <Button onClick={startProject} disabled={!canStart || startLoading || !isAdmin} variant="primary">
               {startLoading ? 'Démarrage…' : 'Démarrer le projet'}
             </Button>
           )}
         </div>
-        {!canStart && !project.startedAt ? (
+        {project.archivedAt ? (
+          <p className="text-sm text-amber-600">Projet archivé : restaurer pour démarrer.</p>
+        ) : !canStart && !project.startedAt ? (
           <p className="text-sm text-amber-600">
             Pré-requis : devis SIGNED/ACCEPTED et acompte PAID ou NOT_REQUIRED.
           </p>
@@ -581,17 +925,23 @@ export default function ProjectDetailPage() {
               Quantités, prix et notes sont synchronisés avec le devis.
             </p>
           </div>
-          {isAdmin ? (
-            <div className="flex flex-wrap gap-2">
-              <Button size="sm" variant="ghost" asChild>
-                <Link href={`/app/pro/${businessId}/services`}>Gérer le catalogue</Link>
-              </Button>
-              <Button size="sm" onClick={() => openServiceModal()} variant="outline">
-                Ajouter un service
-              </Button>
-            </div>
-          ) : null}
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" variant="ghost" asChild disabled={!isAdmin}>
+              <Link href={`/app/pro/${businessId}/services`}>Gérer le catalogue</Link>
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => openServiceModal()}
+              variant="outline"
+              disabled={Boolean(project.archivedAt) || !isAdmin}
+            >
+              Ajouter un service
+            </Button>
+          </div>
         </div>
+        {project.archivedAt ? (
+          <p className="text-xs text-amber-600">Projet archivé : ajout/édition de services désactivés.</p>
+        ) : null}
 
         {services.length === 0 ? (
           <p className="text-sm text-[var(--text-secondary)]">Aucun service ajouté.</p>
@@ -614,16 +964,24 @@ export default function ProjectDetailPage() {
                     </p>
                     {item.notes ? <p className="text-xs text-[var(--text-secondary)]">{item.notes}</p> : null}
                   </div>
-                  {isAdmin ? (
-                    <div className="flex gap-2">
-                      <Button size="sm" variant="outline" onClick={() => openServiceModal(item)}>
-                        Éditer
-                      </Button>
-                      <Button size="sm" variant="outline" onClick={() => deleteService(item)}>
-                        Supprimer
-                      </Button>
-                    </div>
-                  ) : null}
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => openServiceModal(item)}
+                      disabled={Boolean(project.archivedAt) || !isAdmin}
+                    >
+                      Éditer
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => deleteService(item)}
+                      disabled={Boolean(project.archivedAt) || !isAdmin}
+                    >
+                      Supprimer
+                    </Button>
+                  </div>
                 </div>
               );
             })}
@@ -632,6 +990,147 @@ export default function ProjectDetailPage() {
             </p>
           </div>
         )}
+      </Card>
+
+      <Card className="space-y-3 p-5">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <p className="text-sm font-semibold text-[var(--text-primary)]">Interactions projet</p>
+            <p className="text-xs text-[var(--text-secondary)]">10 dernières interactions + prochaine action.</p>
+          </div>
+          {nextAction ? (
+            <Badge variant="personal">Next {formatDate(nextAction.nextActionDate)}</Badge>
+          ) : (
+            <Badge variant="neutral">Aucune prochaine action</Badge>
+          )}
+        </div>
+
+        {interactionsError ? <p className="text-xs font-semibold text-rose-500">{interactionsError}</p> : null}
+
+        {interactionsLoading ? (
+          <p className="text-sm text-[var(--text-secondary)]">Chargement des interactions…</p>
+        ) : interactions.length === 0 ? (
+          <Card className="space-y-2 border-dashed border-[var(--border)] bg-transparent p-3">
+            <p className="text-sm text-[var(--text-secondary)]">
+              Aucune interaction pour ce projet. Planifie le prochain point client pour sécuriser l’avancement.
+            </p>
+            <Button
+              size="sm"
+              onClick={() => document.getElementById('project-interaction-content')?.scrollIntoView()}
+              disabled={!isAdmin}
+            >
+              Ajouter une interaction
+            </Button>
+          </Card>
+        ) : (
+          <div className="space-y-2">
+            {interactions.map((interaction) => (
+              <div
+                key={interaction.id}
+                className="rounded-lg border border-[var(--border)] bg-[var(--surface)]/60 p-3"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant="pro">{interactionTypeLabel(interaction.type)}</Badge>
+                    {interaction.nextActionDate ? (
+                      <Badge variant="personal">Next {formatDate(interaction.nextActionDate)}</Badge>
+                    ) : null}
+                  </div>
+                  <p className="text-[11px] text-[var(--text-secondary)]">
+                    {formatDateTime(interaction.happenedAt)}
+                  </p>
+                </div>
+                <p className="text-sm text-[var(--text-primary)]">{interaction.content}</p>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => startEditInteraction(interaction)}
+                    disabled={!isAdmin}
+                  >
+                    Modifier
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => deleteInteraction(interaction)} disabled={!isAdmin}>
+                    Supprimer
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="space-y-2 rounded-xl border border-[var(--border)] bg-[var(--surface)]/60 p-4">
+          <p className="text-sm font-semibold text-[var(--text-primary)]">Ajouter une interaction</p>
+          {!isAdmin ? (
+            <p className="text-xs text-[var(--text-secondary)]">Lecture seule pour les rôles Viewer/Membre.</p>
+          ) : null}
+          <form onSubmit={submitInteraction} className="grid gap-3 md:grid-cols-2">
+            <Select
+              label="Type"
+              value={interactionType}
+              onChange={(e) => setInteractionType(e.target.value as InteractionType)}
+              disabled={!isAdmin || savingInteraction}
+            >
+              <option value="CALL">Appel</option>
+              <option value="MEETING">Réunion</option>
+              <option value="EMAIL">Email</option>
+              <option value="NOTE">Note</option>
+              <option value="MESSAGE">Message</option>
+            </Select>
+            <Input
+              label="Date"
+              type="datetime-local"
+              value={interactionDate}
+              onChange={(e) => setInteractionDate(e.target.value)}
+              disabled={!isAdmin || savingInteraction}
+            />
+            <Input
+              label="Prochaine action (optionnel)"
+              type="datetime-local"
+              value={interactionNextAction}
+              onChange={(e) => setInteractionNextAction(e.target.value)}
+              disabled={!isAdmin || savingInteraction}
+            />
+            <label className="flex w-full flex-col gap-1 md:col-span-2" id="project-interaction-content">
+              <span className="text-sm font-medium text-[var(--text-secondary)]">Contenu</span>
+              <textarea
+                className="w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-base text-[var(--text-primary)] placeholder:text-[var(--text-faint)] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
+                value={interactionContent}
+                onChange={(e) => setInteractionContent(e.target.value)}
+                rows={3}
+                disabled={!isAdmin || savingInteraction}
+                placeholder="Compte-rendu, décision, risques, prochaines étapes…"
+                required
+              />
+            </label>
+            <div className="flex items-center justify-end gap-2 md:col-span-2">
+              {interactionInfo ? <span className="text-xs text-emerald-500">{interactionInfo}</span> : null}
+              {editingInteraction ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setEditingInteraction(null);
+                    setInteractionType('CALL');
+                    setInteractionContent('');
+                    setInteractionNextAction('');
+                    setInteractionDate(new Date().toISOString().slice(0, 16));
+                  }}
+                  disabled={savingInteraction}
+                >
+                  Annuler l’édition
+                </Button>
+              ) : null}
+              <Button type="submit" disabled={!isAdmin || savingInteraction}>
+                {savingInteraction ? 'Enregistrement…' : editingInteraction ? 'Mettre à jour' : 'Ajouter une interaction'}
+              </Button>
+            </div>
+          </form>
+        </div>
+
+        {interactionRequestId ? (
+          <p className="text-[10px] text-[var(--text-faint)]">Req: {interactionRequestId}</p>
+        ) : null}
       </Card>
 
       <Card className="space-y-3 p-5">
@@ -649,9 +1148,22 @@ export default function ProjectDetailPage() {
           <p className="text-sm text-[var(--text-secondary)]">Chargement des tâches…</p>
         ) : tasks.length === 0 ? (
           <div className="space-y-2">
-            <p className="text-sm text-[var(--text-secondary)]">Aucune tâche pour ce projet.</p>
-            {!project.startedAt && isAdmin ? (
-              <Button size="sm" variant="outline" onClick={startProject} disabled={startLoading || !canStart}>
+            <p className="text-sm text-[var(--text-secondary)]">
+              {project.startedAt
+                ? 'Aucune tâche générée : aucun service vendu n’a de template.'
+                : 'Aucune tâche pour ce projet.'}
+            </p>
+            {project.startedAt ? (
+              <Button size="sm" variant="ghost" asChild>
+                <Link href={`/app/pro/${businessId}/services`}>Configurer templates dans le catalogue</Link>
+              </Button>
+            ) : !project.startedAt ? (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={startProject}
+                disabled={startLoading || !canStart || !isAdmin}
+              >
                 {startLoading ? 'Démarrage…' : 'Démarrer pour générer les tâches'}
               </Button>
             ) : null}
@@ -726,6 +1238,43 @@ export default function ProjectDetailPage() {
       </Card>
 
       <Modal
+        open={Boolean(archiveAction)}
+        onCloseAction={() => {
+          if (archiveLoading) return;
+          setArchiveAction(null);
+        }}
+        title={archiveAction === 'archive' ? 'Archiver le projet ?' : 'Restaurer le projet ?'}
+        description={
+          archiveAction === 'archive'
+            ? 'Le projet sera figé : démarrage et modification des services bloqués.'
+            : 'Le projet repasse en actif.'
+        }
+      >
+        <div className="space-y-4">
+          {archiveError ? <p className="text-sm font-semibold text-rose-500">{archiveError}</p> : null}
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setArchiveAction(null)} disabled={archiveLoading}>
+              Annuler
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => (archiveAction ? performArchive(archiveAction) : undefined)}
+              disabled={archiveLoading || !isAdmin}
+            >
+              {archiveLoading
+                ? 'Action…'
+                : archiveAction === 'archive'
+                  ? 'Archiver'
+                  : 'Restaurer'}
+            </Button>
+          </div>
+          {archiveRequestId ? (
+            <p className="text-[10px] text-[var(--text-faint)]">Req: {archiveRequestId}</p>
+          ) : null}
+        </div>
+      </Modal>
+
+      <Modal
         open={serviceModalOpen}
         onCloseAction={() => {
           if (savingService) return;
@@ -736,26 +1285,26 @@ export default function ProjectDetailPage() {
         description="Sélectionne un service du catalogue."
       >
         <form onSubmit={submitService} className="space-y-3">
-          <Select
-            label="Service"
-            value={serviceId}
-            onChange={(e) => setServiceId(e.target.value)}
-            disabled={savingService}
-          >
-            <option value="">— Choisir —</option>
-            {serviceOptions.map((opt) => (
-              <option key={opt.id} value={opt.id}>
-                {opt.code} · {opt.name}
-              </option>
-            ))}
-          </Select>
+            <Select
+              label="Service"
+              value={serviceId}
+              onChange={(e) => setServiceId(e.target.value)}
+              disabled={savingService || !isAdmin}
+            >
+              <option value="">— Choisir —</option>
+              {serviceOptions.map((opt) => (
+                <option key={opt.id} value={opt.id}>
+                  {opt.code} · {opt.name} (Templates: {opt.templateCount ?? 0})
+                </option>
+              ))}
+            </Select>
           <Input
             label="Quantité"
             type="number"
             min={1}
             value={quantity}
             onChange={(e: ChangeEvent<HTMLInputElement>) => setQuantity(Math.max(1, Number(e.target.value)))}
-            disabled={savingService}
+            disabled={savingService || !isAdmin}
           />
           <Input
             label="Prix unitaire (centimes) — optionnel"
@@ -763,7 +1312,7 @@ export default function ProjectDetailPage() {
             min={0}
             value={priceCents}
             onChange={(e: ChangeEvent<HTMLInputElement>) => setPriceCents(e.target.value)}
-            disabled={savingService}
+            disabled={savingService || !isAdmin}
           />
           <label className="flex w-full flex-col gap-1">
             <span className="text-sm font-medium text-[var(--text-secondary)]">Notes</span>
@@ -771,16 +1320,21 @@ export default function ProjectDetailPage() {
               className="w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-base text-[var(--text-primary)] placeholder:text-[var(--text-faint)] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              disabled={savingService}
+              disabled={savingService || !isAdmin}
               rows={3}
             />
           </label>
+          {!isAdmin ? (
+            <p className="text-xs text-[var(--text-secondary)]">
+              Ajout/édition de services réservé aux admins/owners.
+            </p>
+          ) : null}
           {serviceError ? <p className="text-xs text-rose-500">{serviceError}</p> : null}
           <div className="flex justify-end gap-2">
             <Button type="button" variant="outline" onClick={() => setServiceModalOpen(false)} disabled={savingService}>
               Annuler
             </Button>
-            <Button type="submit" disabled={savingService}>
+            <Button type="submit" disabled={savingService || !isAdmin}>
               {savingService ? 'Enregistrement…' : editingService ? 'Mettre à jour' : 'Ajouter'}
             </Button>
           </div>

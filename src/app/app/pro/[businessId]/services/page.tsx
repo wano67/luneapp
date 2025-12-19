@@ -9,7 +9,10 @@ import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableEmpty, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Modal } from '@/components/ui/modal';
+import { Badge } from '@/components/ui/badge';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
+import RoleBanner from '@/components/RoleBanner';
+import { useActiveBusiness } from '../../ActiveBusinessProvider';
 
 type Service = {
   id: string;
@@ -24,10 +27,32 @@ type Service = {
   vatRate: number | null;
   createdAt: string;
   updatedAt: string;
+  templateCount?: number;
 };
 
 type ServiceListResponse = { items: Service[] };
 type ServiceItemResponse = { item: Service };
+
+type TaskPhase = 'CADRAGE' | 'UX' | 'DESIGN' | 'DEV' | 'SEO' | 'LAUNCH' | 'FOLLOW_UP' | null;
+
+type ServiceTemplate = {
+  id: string;
+  serviceId: string;
+  phase: TaskPhase;
+  title: string;
+  defaultAssigneeRole: string | null;
+  defaultDueOffsetDays: number | null;
+  createdAt: string;
+};
+
+type TemplateListResponse = { items: ServiceTemplate[] };
+
+type TemplateFormState = {
+  title: string;
+  phase: string;
+  defaultAssigneeRole: string;
+  defaultDueOffsetDays: string;
+};
 
 type ServiceFormState = {
   code: string;
@@ -38,6 +63,13 @@ type ServiceFormState = {
   durationHours: string;
   vatRate: string;
   description: string;
+};
+
+const emptyTemplateForm: TemplateFormState = {
+  title: '',
+  phase: '',
+  defaultAssigneeRole: '',
+  defaultDueOffsetDays: '',
 };
 
 const emptyForm: ServiceFormState = {
@@ -79,9 +111,36 @@ function formatDate(value: string) {
   }
 }
 
+const PHASE_ORDER: TaskPhase[] = ['CADRAGE', 'UX', 'DESIGN', 'DEV', 'SEO', 'LAUNCH', 'FOLLOW_UP', null];
+
+function phaseLabel(phase: TaskPhase) {
+  switch (phase) {
+    case 'CADRAGE':
+      return 'Cadrage';
+    case 'UX':
+      return 'UX';
+    case 'DESIGN':
+      return 'Design';
+    case 'DEV':
+      return 'Dev';
+    case 'SEO':
+      return 'SEO';
+    case 'LAUNCH':
+      return 'Lancement';
+    case 'FOLLOW_UP':
+      return 'Suivi';
+    default:
+      return 'Sans phase';
+  }
+}
+
 export default function ServicesPage() {
   const params = useParams();
   const businessId = (params?.businessId ?? '') as string;
+  const activeCtx = useActiveBusiness({ optional: true });
+  const role = activeCtx?.activeBusiness?.role ?? null;
+  const isAdmin = role === 'OWNER' || role === 'ADMIN';
+  const readOnlyMessage = 'Action réservée aux admins/owners.';
 
   const [services, setServices] = useState<Service[]>([]);
   const [loading, setLoading] = useState(true);
@@ -100,7 +159,23 @@ export default function ServicesPage() {
   const [info, setInfo] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
+  const [templatesModalOpen, setTemplatesModalOpen] = useState(false);
+  const [templatesService, setTemplatesService] = useState<Service | null>(null);
+  const [templates, setTemplates] = useState<ServiceTemplate[]>([]);
+  const [templatesLoading, setTemplatesLoading] = useState(false);
+  const [templateError, setTemplateError] = useState<string | null>(null);
+  const [templateRequestId, setTemplateRequestId] = useState<string | null>(null);
+  const [templateFormVisible, setTemplateFormVisible] = useState(false);
+  const [templateForm, setTemplateForm] = useState<TemplateFormState>(emptyTemplateForm);
+  const [editingTemplate, setEditingTemplate] = useState<ServiceTemplate | null>(null);
+  const [templateSaving, setTemplateSaving] = useState(false);
+  const [templateFormError, setTemplateFormError] = useState<string | null>(null);
+  const [seedMessage, setSeedMessage] = useState<string | null>(null);
+  const [seedingTemplates, setSeedingTemplates] = useState(false);
+  const [readOnlyInfo, setReadOnlyInfo] = useState<string | null>(null);
+
   const fetchController = useRef<AbortController | null>(null);
+  const templateFetchController = useRef<AbortController | null>(null);
 
   const typeOptions = useMemo(() => {
     const values = new Set<string>();
@@ -109,6 +184,18 @@ export default function ServicesPage() {
     });
     return Array.from(values);
   }, [services]);
+
+  function sortTemplates(list: ServiceTemplate[]) {
+    const order = (phase: TaskPhase) => {
+      const idx = PHASE_ORDER.findIndex((p) => p === phase);
+      return idx === -1 ? PHASE_ORDER.length : idx;
+    };
+    return [...list].sort((a, b) => {
+      const diff = order(a.phase) - order(b.phase);
+      if (diff !== 0) return diff;
+      return a.title.localeCompare(b.title);
+    });
+  }
 
   async function loadServices(signal?: AbortSignal) {
     const controller = signal ? null : new AbortController();
@@ -148,7 +235,12 @@ export default function ServicesPage() {
         return;
       }
 
-      setServices(res.data.items);
+      setServices(
+        res.data.items.map((item) => ({
+          ...item,
+          templateCount: item.templateCount ?? 0,
+        }))
+      );
     } catch (err) {
       if (effectiveSignal?.aborted) return;
       console.error(err);
@@ -158,14 +250,276 @@ export default function ServicesPage() {
     }
   }
 
+  async function loadTemplates(service: Service, signal?: AbortSignal) {
+    const controller = signal ? null : new AbortController();
+    const effectiveSignal = signal ?? controller?.signal;
+    if (controller) {
+      templateFetchController.current?.abort();
+      templateFetchController.current = controller;
+    }
+
+    try {
+      setTemplatesLoading(true);
+      setTemplateError(null);
+      setTemplateRequestId(null);
+
+      const res = await fetchJson<TemplateListResponse>(
+        `/api/pro/businesses/${businessId}/services/${service.id}/templates`,
+        {},
+        effectiveSignal
+      );
+      if (effectiveSignal?.aborted) return;
+      setTemplateRequestId(res.requestId);
+
+      if (res.status === 401) {
+        const from = window.location.pathname + window.location.search;
+        window.location.href = `/login?from=${encodeURIComponent(from)}`;
+        return;
+      }
+
+      if (!res.ok || !res.data) {
+        const msg = res.error ?? 'Impossible de charger les templates.';
+        setTemplateError(res.requestId ? `${msg} (Ref: ${res.requestId})` : msg);
+        setTemplates([]);
+        return;
+      }
+
+      const sorted = sortTemplates(res.data.items);
+      setTemplates(sorted);
+      setSeedMessage(null);
+      setTemplateFormVisible(sorted.length === 0);
+      setServices((prev) =>
+        prev.map((s) => (s.id === service.id ? { ...s, templateCount: sorted.length } : s))
+      );
+    } catch (err) {
+      if (effectiveSignal?.aborted) return;
+      console.error(err);
+      setTemplateError(getErrorMessage(err));
+      setTemplates([]);
+    } finally {
+      if (!effectiveSignal?.aborted) setTemplatesLoading(false);
+    }
+  }
+
+  function openTemplates(service: Service) {
+    setTemplatesService(service);
+    setTemplatesModalOpen(true);
+    setTemplateForm(emptyTemplateForm);
+    setTemplateFormError(null);
+    setSeedMessage(null);
+    setTemplateError(null);
+    setTemplateRequestId(null);
+    setEditingTemplate(null);
+    setTemplateFormVisible(false);
+    void loadTemplates(service);
+  }
+
+  function closeTemplates() {
+    if (templateSaving || seedingTemplates) return;
+    templateFetchController.current?.abort();
+    setTemplatesModalOpen(false);
+    setTemplatesService(null);
+    setTemplates([]);
+    setEditingTemplate(null);
+    setTemplateFormVisible(false);
+    setTemplateForm(emptyTemplateForm);
+    setTemplateFormError(null);
+    setTemplateError(null);
+    setSeedMessage(null);
+  }
+
+  function startCreateTemplate() {
+    if (!isAdmin) {
+      setTemplateFormError(readOnlyMessage);
+      return;
+    }
+    setEditingTemplate(null);
+    setTemplateForm(emptyTemplateForm);
+    setTemplateFormError(null);
+    setTemplateFormVisible(true);
+  }
+
+  function startEditTemplate(template: ServiceTemplate) {
+    if (!isAdmin) {
+      setTemplateFormError(readOnlyMessage);
+      return;
+    }
+    setEditingTemplate(template);
+    setTemplateForm({
+      title: template.title,
+      phase: template.phase ?? '',
+      defaultAssigneeRole: template.defaultAssigneeRole ?? '',
+      defaultDueOffsetDays: template.defaultDueOffsetDays != null ? String(template.defaultDueOffsetDays) : '',
+    });
+    setTemplateFormError(null);
+    setTemplateFormVisible(true);
+  }
+
+  async function submitTemplate(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!isAdmin) {
+      setTemplateFormError(readOnlyMessage);
+      return;
+    }
+    if (!templatesService) return;
+    setTemplateFormError(null);
+    setTemplateSaving(true);
+    setSeedMessage(null);
+
+    const title = templateForm.title.trim();
+    if (!title) {
+      setTemplateFormError('Titre requis.');
+      setTemplateSaving(false);
+      return;
+    }
+
+    const offsetStr = templateForm.defaultDueOffsetDays.trim();
+    let offsetVal: number | null = null;
+    if (offsetStr) {
+      const parsed = Number(offsetStr);
+      if (Number.isNaN(parsed) || parsed < 0 || parsed > 365 || !Number.isInteger(parsed)) {
+        setTemplateFormError('Offset jours entre 0 et 365 (entier).');
+        setTemplateSaving(false);
+        return;
+      }
+      offsetVal = parsed;
+    }
+
+    const payload: Record<string, unknown> = {
+      title,
+      phase: templateForm.phase || null,
+      defaultAssigneeRole: templateForm.defaultAssigneeRole.trim() || null,
+      defaultDueOffsetDays: offsetStr ? offsetVal : null,
+    };
+
+    const isEdit = Boolean(editingTemplate);
+    const endpoint = isEdit
+      ? `/api/pro/businesses/${businessId}/services/${templatesService.id}/templates/${editingTemplate?.id}`
+      : `/api/pro/businesses/${businessId}/services/${templatesService.id}/templates`;
+
+    const res = await fetchJson<ServiceTemplate>(endpoint, {
+      method: isEdit ? 'PATCH' : 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    setTemplateRequestId(res.requestId);
+
+    if (res.status === 401) {
+      const from = window.location.pathname + window.location.search;
+      window.location.href = `/login?from=${encodeURIComponent(from)}`;
+      setTemplateSaving(false);
+      return;
+    }
+
+    if (!res.ok || !res.data) {
+      const msg = res.error ?? 'Impossible de sauvegarder le template.';
+      setTemplateFormError(res.requestId ? `${msg} (Ref: ${res.requestId})` : msg);
+      setTemplateSaving(false);
+      return;
+    }
+
+    setTemplates((prev) => {
+      const updated = isEdit ? prev.map((tpl) => (tpl.id === res.data!.id ? res.data! : tpl)) : [...prev, res.data!];
+      const sorted = sortTemplates(updated);
+      setServices((prevServices) =>
+        prevServices.map((s) =>
+          s.id === templatesService.id ? { ...s, templateCount: sorted.length } : s
+        )
+      );
+      return sorted;
+    });
+    setEditingTemplate(null);
+    setTemplateForm(emptyTemplateForm);
+    setTemplateFormVisible(!isEdit);
+    setTemplateSaving(false);
+    setTemplateFormError(null);
+  }
+
+  async function deleteTemplate(template: ServiceTemplate) {
+    if (!templatesService) return;
+    if (!isAdmin) {
+      setTemplateError(readOnlyMessage);
+      return;
+    }
+    if (!window.confirm(`Supprimer "${template.title}" ?`)) return;
+    setTemplateError(null);
+    const res = await fetchJson<{ ok: boolean }>(
+      `/api/pro/businesses/${businessId}/services/${templatesService.id}/templates/${template.id}`,
+      { method: 'DELETE' }
+    );
+    setTemplateRequestId(res.requestId);
+    if (res.status === 401) {
+      const from = window.location.pathname + window.location.search;
+      window.location.href = `/login?from=${encodeURIComponent(from)}`;
+      return;
+    }
+    if (!res.ok) {
+      const msg = res.error ?? 'Suppression impossible.';
+      setTemplateError(res.requestId ? `${msg} (Ref: ${res.requestId})` : msg);
+      return;
+    }
+    setTemplates((prev) => {
+      const updated = prev.filter((tpl) => tpl.id !== template.id);
+      setServices((prevServices) =>
+        prevServices.map((s) =>
+          s.id === templatesService.id ? { ...s, templateCount: updated.length } : s
+        )
+      );
+      if (updated.length === 0) setTemplateFormVisible(true);
+      return updated;
+    });
+  }
+
+  async function seedTemplates() {
+    if (!templatesService) return;
+    if (!isAdmin) {
+      setTemplateError(readOnlyMessage);
+      return;
+    }
+    setTemplateFormError(null);
+    setTemplateError(null);
+    setSeedMessage(null);
+    setSeedingTemplates(true);
+    const res = await fetchJson<{ createdCount: number; skippedCount: number }>(
+      `/api/pro/businesses/${businessId}/services/${templatesService.id}/templates/seed`,
+      { method: 'POST' }
+    );
+    setTemplateRequestId(res.requestId);
+    if (res.status === 401) {
+      const from = window.location.pathname + window.location.search;
+      window.location.href = `/login?from=${encodeURIComponent(from)}`;
+      setSeedingTemplates(false);
+      return;
+    }
+    if (!res.ok || !res.data) {
+      const msg = res.error ?? 'Seed impossible.';
+      setTemplateError(res.requestId ? `${msg} (Ref: ${res.requestId})` : msg);
+      setSeedingTemplates(false);
+      return;
+    }
+    setSeedMessage(`Pack appliqué : +${res.data.createdCount} · ${res.data.skippedCount} déjà présents.`);
+    await loadTemplates(templatesService);
+    setSeedingTemplates(false);
+  }
+
   useEffect(() => {
     void loadServices();
-    return () => fetchController.current?.abort();
+    return () => {
+      fetchController.current?.abort();
+      templateFetchController.current?.abort();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [businessId, typeFilter]);
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (!isAdmin) {
+      setFormError(readOnlyMessage);
+      setSaving(false);
+      setInfo(readOnlyMessage);
+      return;
+    }
     setFormError(null);
     setSaving(true);
     setInfo(null);
@@ -227,6 +581,10 @@ export default function ServicesPage() {
   }
 
   function openCreate() {
+    if (!isAdmin) {
+      setReadOnlyInfo(readOnlyMessage);
+      return;
+    }
     setForm(emptyForm);
     setEditing(null);
     setFormError(null);
@@ -235,6 +593,10 @@ export default function ServicesPage() {
   }
 
   function openEdit(service: Service) {
+    if (!isAdmin) {
+      setReadOnlyInfo(readOnlyMessage);
+      return;
+    }
     setEditing(service);
     setForm({
       code: service.code,
@@ -253,6 +615,10 @@ export default function ServicesPage() {
 
   async function confirmDelete() {
     if (!deleteTarget) return;
+    if (!isAdmin) {
+      setDeleteError(readOnlyMessage);
+      return;
+    }
     setDeleteError(null);
     const res = await fetchJson<null>(
       `/api/pro/businesses/${businessId}/services/${deleteTarget.id}`,
@@ -283,6 +649,7 @@ export default function ServicesPage() {
 
   return (
     <div className="space-y-5">
+      <RoleBanner role={role} />
       <Card className="space-y-4 p-5">
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
           <div className="space-y-1">
@@ -296,7 +663,16 @@ export default function ServicesPage() {
               Structure tes offres : code clair, prix et durée pour les proposer dans les projets.
             </p>
           </div>
-          <Button onClick={openCreate}>Créer un service</Button>
+          <div className="flex flex-col items-start gap-1">
+            <Button onClick={openCreate} disabled={!isAdmin}>
+              Créer un service
+            </Button>
+            {!isAdmin ? (
+              <p className="text-[11px] text-[var(--text-secondary)]">
+                Lecture seule : nécessite ADMIN/OWNER pour créer ou éditer.
+              </p>
+            ) : null}
+          </div>
         </div>
 
         <div className="grid gap-3 md:grid-cols-3">
@@ -335,7 +711,9 @@ export default function ServicesPage() {
             <p className="text-sm text-[var(--text-secondary)]">
               Crée ton premier service pour le vendre dans tes projets.
             </p>
-            <Button onClick={openCreate}>Créer un service</Button>
+            <Button onClick={openCreate} disabled={!isAdmin}>
+              Créer un service
+            </Button>
           </Card>
         ) : (
           <Table>
@@ -347,6 +725,7 @@ export default function ServicesPage() {
                 <TableHead>Prix défaut</TableHead>
                 <TableHead>TJM</TableHead>
                 <TableHead>Durée</TableHead>
+                <TableHead>Templates</TableHead>
                 <TableHead>Mis à jour</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
@@ -360,14 +739,38 @@ export default function ServicesPage() {
                   <TableCell>{formatMoney(service.defaultPriceCents)}</TableCell>
                   <TableCell>{formatMoney(service.tjmCents)}</TableCell>
                   <TableCell>{formatHours(service.durationHours)}</TableCell>
+                  <TableCell>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-sm text-[var(--text-primary)]">{service.templateCount ?? 0}</span>
+                      <Button variant="ghost" size="sm" onClick={() => openTemplates(service)}>
+                        Gérer
+                      </Button>
+                    </div>
+                  </TableCell>
                   <TableCell className="text-xs text-[var(--text-secondary)]">
                     {formatDate(service.updatedAt)}
                   </TableCell>
                   <TableCell className="text-right space-x-2">
-                    <Button variant="outline" size="sm" onClick={() => openEdit(service)}>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => openEdit(service)}
+                      disabled={!isAdmin}
+                    >
                       Éditer
                     </Button>
-                    <Button variant="ghost" size="sm" onClick={() => setDeleteTarget(service)}>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        if (!isAdmin) {
+                          setReadOnlyInfo(readOnlyMessage);
+                          return;
+                        }
+                        setDeleteTarget(service);
+                      }}
+                      disabled={!isAdmin}
+                    >
                       Supprimer
                     </Button>
                   </TableCell>
@@ -379,10 +782,186 @@ export default function ServicesPage() {
         )}
 
         {info ? <p className="text-sm text-emerald-500">{info}</p> : null}
+        {readOnlyInfo ? <p className="text-xs text-[var(--text-secondary)]">{readOnlyInfo}</p> : null}
         {requestId ? (
           <p className="text-[10px] text-[var(--text-faint)]">Req: {requestId}</p>
         ) : null}
       </Card>
+
+      <Modal
+        open={templatesModalOpen}
+        onCloseAction={closeTemplates}
+        title={`Gérer templates ${templatesService ? `· ${templatesService.code}` : ''}`}
+        description="Ces templates deviennent les tâches générées automatiquement au démarrage d’un projet."
+      >
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="text-sm font-semibold text-[var(--text-primary)]">Templates de tâches</p>
+              <p className="text-xs text-[var(--text-secondary)]">
+                Phase, délai par défaut et rôle attendu pour guider l’équipe.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {!templateFormVisible ? (
+                <Button size="sm" onClick={startCreateTemplate} disabled={!isAdmin}>
+                  Ajouter un template
+                </Button>
+              ) : null}
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={seedTemplates}
+                disabled={seedingTemplates || !isAdmin}
+              >
+                {seedingTemplates ? 'Ajout du pack…' : 'Ajouter pack standard (7)'}
+              </Button>
+            </div>
+          </div>
+
+          {templateError ? <p className="text-xs font-semibold text-rose-500">{templateError}</p> : null}
+          {seedMessage ? <p className="text-xs text-emerald-500">{seedMessage}</p> : null}
+          {!isAdmin ? (
+            <p className="text-[11px] text-[var(--text-secondary)]">
+              Lecture seule : modification des templates réservée aux admins/owners.
+            </p>
+          ) : null}
+
+          {templatesLoading ? (
+            <p className="text-sm text-[var(--text-secondary)]">Chargement des templates…</p>
+          ) : templates.length === 0 ? (
+            <Card className="space-y-3 border-dashed border-[var(--border)] bg-transparent p-4">
+              <p className="text-sm text-[var(--text-secondary)]">
+                Aucun template → ce service ne génèrera pas de tâches au démarrage d’un projet.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={seedTemplates}
+                  disabled={seedingTemplates || !isAdmin}
+                >
+                  {seedingTemplates ? 'Ajout du pack…' : 'Ajouter le pack standard'}
+                </Button>
+                {!templateFormVisible ? (
+                  <Button size="sm" onClick={startCreateTemplate} disabled={!isAdmin}>
+                    Ajouter un template
+                  </Button>
+                ) : null}
+              </div>
+            </Card>
+          ) : (
+            <div className="space-y-2">
+              {templates.map((tpl) => (
+                <div
+                  key={tpl.id}
+                  className="flex flex-col gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface)]/60 p-3 md:flex-row md:items-center md:justify-between"
+                >
+                  <div className="space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant="neutral">{phaseLabel(tpl.phase)}</Badge>
+                      <p className="text-sm font-semibold text-[var(--text-primary)]">{tpl.title}</p>
+                    </div>
+                    <p className="text-[11px] text-[var(--text-secondary)]">
+                      {tpl.defaultDueOffsetDays != null ? `J+${tpl.defaultDueOffsetDays}` : 'Pas d’échéance auto'}
+                      {tpl.defaultAssigneeRole ? ` · ${tpl.defaultAssigneeRole}` : ''}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => startEditTemplate(tpl)}
+                      disabled={!isAdmin}
+                    >
+                      Modifier
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => deleteTemplate(tpl)}
+                      disabled={!isAdmin}
+                    >
+                      Supprimer
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {templateFormVisible ? (
+            <form
+              onSubmit={submitTemplate}
+              className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--surface)]/60 p-4"
+            >
+              <Input
+                label="Titre du template"
+                required
+                value={templateForm.title}
+                onChange={(e) => setTemplateForm((prev) => ({ ...prev, title: e.target.value }))}
+                placeholder="Ex: Kickoff & objectifs"
+                disabled={!isAdmin}
+              />
+              <div className="grid gap-3 md:grid-cols-2">
+                <Select
+                  label="Phase"
+                  value={templateForm.phase}
+                  onChange={(e) => setTemplateForm((prev) => ({ ...prev, phase: e.target.value }))}
+                  disabled={!isAdmin}
+                >
+                  <option value="">Sans phase</option>
+                  {PHASE_ORDER.filter(Boolean).map((phase) => (
+                    <option key={phase ?? 'none'} value={phase ?? ''}>
+                      {phaseLabel(phase)}
+                    </option>
+                  ))}
+                </Select>
+                <Input
+                  label="Rôle assigné (optionnel)"
+                  value={templateForm.defaultAssigneeRole}
+                  onChange={(e) => setTemplateForm((prev) => ({ ...prev, defaultAssigneeRole: e.target.value }))}
+                  placeholder="PM / UX / Tech lead…"
+                  disabled={!isAdmin}
+                />
+              </div>
+              <Input
+                label="Échéance relative (J+)"
+                type="number"
+                inputMode="numeric"
+                min={0}
+                max={365}
+                value={templateForm.defaultDueOffsetDays}
+                onChange={(e) => setTemplateForm((prev) => ({ ...prev, defaultDueOffsetDays: e.target.value }))}
+                placeholder="0 = le jour du start"
+                disabled={!isAdmin}
+              />
+              {templateFormError ? <p className="text-xs font-semibold text-rose-500">{templateFormError}</p> : null}
+              <div className="flex justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setTemplateFormVisible(false);
+                    setEditingTemplate(null);
+                    setTemplateForm(emptyTemplateForm);
+                  }}
+                  disabled={templateSaving}
+                >
+                  Fermer
+                </Button>
+                <Button type="submit" disabled={templateSaving || !isAdmin}>
+                  {templateSaving ? 'Enregistrement…' : editingTemplate ? 'Mettre à jour' : 'Ajouter un template'}
+                </Button>
+              </div>
+            </form>
+          ) : null}
+
+          {templateRequestId ? (
+            <p className="text-[10px] text-[var(--text-faint)]">Req: {templateRequestId}</p>
+          ) : null}
+        </div>
+      </Modal>
 
       <Modal
         open={modalOpen}
@@ -469,12 +1048,17 @@ export default function ServicesPage() {
           </div>
 
           {formError ? <p className="text-sm font-semibold text-rose-500">{formError}</p> : null}
+          {!isAdmin ? (
+            <p className="text-xs text-[var(--text-secondary)]">
+              Lecture seule : passe en ADMIN/OWNER pour créer ou modifier un service.
+            </p>
+          ) : null}
 
           <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
             <Button type="button" variant="outline" onClick={() => setModalOpen(false)} disabled={saving}>
               Annuler
             </Button>
-            <Button type="submit" disabled={saving}>
+            <Button type="submit" disabled={saving || !isAdmin}>
               {saving ? 'Enregistrement…' : editing ? 'Mettre à jour' : 'Créer le service'}
             </Button>
           </div>
@@ -492,11 +1076,16 @@ export default function ServicesPage() {
             {deleteTarget ? `${deleteTarget.name} (${deleteTarget.code})` : ''}
           </p>
           {deleteError ? <p className="text-sm font-semibold text-rose-500">{deleteError}</p> : null}
+          {!isAdmin ? (
+            <p className="text-xs text-[var(--text-secondary)]">
+              Suppression réservée aux rôles ADMIN/OWNER.
+            </p>
+          ) : null}
           <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
             <Button variant="outline" onClick={() => setDeleteTarget(null)}>
               Annuler
             </Button>
-            <Button variant="ghost" onClick={confirmDelete}>
+            <Button variant="ghost" onClick={confirmDelete} disabled={!isAdmin}>
               Supprimer
             </Button>
           </div>

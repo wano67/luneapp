@@ -12,6 +12,7 @@ import { Modal } from '@/components/ui/modal';
 import { Select } from '@/components/ui/select';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import { useActiveBusiness } from '../../ActiveBusinessProvider';
+import RoleBanner from '@/components/RoleBanner';
 
 type ProjectStatus = 'PLANNED' | 'ACTIVE' | 'ON_HOLD' | 'COMPLETED' | 'CANCELLED';
 type ProjectQuoteStatus = 'DRAFT' | 'SENT' | 'ACCEPTED' | 'SIGNED';
@@ -99,6 +100,7 @@ export default function ProjectsPage() {
   const [endDate, setEndDate] = useState('');
   const [editing, setEditing] = useState<Project | null>(null);
   const [deleting, setDeleting] = useState<Project | null>(null);
+  const [readOnlyInfo, setReadOnlyInfo] = useState<string | null>(null);
 
   const fetchController = useRef<AbortController | null>(null);
 
@@ -175,6 +177,11 @@ export default function ProjectsPage() {
 
   async function handleCreate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (!isAdmin) {
+      setCreateError('Action réservée aux admins/owners.');
+      setReadOnlyInfo('Lecture seule : demande un rôle admin pour créer ou modifier des projets.');
+      return;
+    }
     setCreateError(null);
     setActionError(null);
     setSuccess(null);
@@ -226,6 +233,10 @@ export default function ProjectsPage() {
   }
 
   function openEdit(project: Project) {
+    if (!isAdmin) {
+      setReadOnlyInfo('Action réservée aux admins/owners.');
+      return;
+    }
     setEditing(project);
     setName(project.name);
     setClientId(project.clientId ?? '');
@@ -241,6 +252,11 @@ export default function ProjectsPage() {
   async function handleUpdate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!editing) return;
+    if (!isAdmin) {
+      setCreateError('Action réservée aux admins/owners.');
+      setReadOnlyInfo('Lecture seule : demande un rôle admin pour modifier des projets.');
+      return;
+    }
     setCreateError(null);
     setActionError(null);
     setSuccess(null);
@@ -295,6 +311,11 @@ export default function ProjectsPage() {
 
   async function confirmDelete() {
     if (!deleting) return;
+    if (!isAdmin) {
+      setActionError('Action réservée aux admins/owners.');
+      setReadOnlyInfo('Lecture seule : suppression réservée aux admins.');
+      return;
+    }
     setActionError(null);
     setSuccess(null);
     try {
@@ -326,6 +347,7 @@ export default function ProjectsPage() {
 
   return (
     <div className="space-y-5">
+      <RoleBanner role={activeCtx?.activeBusiness?.role} />
       <Card className="space-y-3 p-5">
         <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
           <div>
@@ -337,9 +359,23 @@ export default function ProjectsPage() {
               Suis l’avancement et crée de nouveaux projets clients.
             </p>
           </div>
-          {isAdmin ? (
-            <Button onClick={() => setCreateOpen(true)}>Nouveau projet</Button>
-          ) : null}
+          <div className="flex flex-col items-start gap-1">
+            <Button
+              onClick={() => {
+                if (!isAdmin) {
+                  setReadOnlyInfo('Lecture seule : demande un rôle admin pour créer ou modifier des projets.');
+                  return;
+                }
+                setCreateOpen(true);
+              }}
+              disabled={!isAdmin}
+            >
+              Nouveau projet
+            </Button>
+            {!isAdmin ? (
+              <p className="text-[11px] text-[var(--text-secondary)]">Lecture seule : création réservée aux admins.</p>
+            ) : null}
+          </div>
         </div>
 
         <div className="flex flex-wrap gap-2">
@@ -380,6 +416,7 @@ export default function ProjectsPage() {
           </Button>
         </div>
         {success ? <p className="text-xs font-semibold text-emerald-500">{success}</p> : null}
+        {readOnlyInfo ? <p className="text-xs text-[var(--text-secondary)]">{readOnlyInfo}</p> : null}
         {loading ? (
           <p className="text-sm text-[var(--text-secondary)]">Chargement des projets…</p>
         ) : error ? (
@@ -394,11 +431,19 @@ export default function ProjectsPage() {
             <p className="text-sm text-[var(--text-secondary)]">
               Aucun projet pour le moment. Crée ton premier projet.
             </p>
-            {isAdmin ? (
-              <Button size="sm" onClick={() => setCreateOpen(true)}>
-                Créer un projet
-              </Button>
-            ) : null}
+            <Button
+              size="sm"
+              onClick={() => {
+                if (!isAdmin) {
+                  setReadOnlyInfo('Lecture seule : demande un rôle admin pour créer un projet.');
+                  return;
+                }
+                setCreateOpen(true);
+              }}
+              disabled={!isAdmin}
+            >
+              Créer un projet
+            </Button>
           </div>
         ) : (
           <div className="space-y-2">
@@ -429,20 +474,23 @@ export default function ProjectsPage() {
                     <Badge variant="neutral">{QUOTE_LABELS[project.quoteStatus]}</Badge>
                     <Badge variant="neutral">{DEPOSIT_LABELS[project.depositStatus]}</Badge>
                     {project.archivedAt ? <Badge variant="neutral">Archivé</Badge> : null}
-                    {isAdmin ? (
-                      <>
-                        <Button size="sm" variant="outline" onClick={() => openEdit(project)}>
-                          Modifier
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => setDeleting(project)}
-                        >
-                          Supprimer
-                        </Button>
-                      </>
-                    ) : null}
+                    <Button size="sm" variant="outline" onClick={() => openEdit(project)} disabled={!isAdmin}>
+                      Modifier
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        if (!isAdmin) {
+                          setReadOnlyInfo('Lecture seule : suppression réservée aux admins.');
+                          return;
+                        }
+                        setDeleting(project);
+                      }}
+                      disabled={!isAdmin}
+                    >
+                      Supprimer
+                    </Button>
                   </div>
                 </div>
               ))}
@@ -490,19 +538,24 @@ export default function ProjectsPage() {
               value={startDate}
               onChange={(e: ChangeEvent<HTMLInputElement>) => setStartDate(e.target.value)}
             />
-            <Input
-              label="Fin (optionnel)"
-              type="date"
-              value={endDate}
-              onChange={(e: ChangeEvent<HTMLInputElement>) => setEndDate(e.target.value)}
-            />
-          </div>
+          <Input
+            label="Fin (optionnel)"
+            type="date"
+            value={endDate}
+            onChange={(e: ChangeEvent<HTMLInputElement>) => setEndDate(e.target.value)}
+          />
+        </div>
+          {!isAdmin ? (
+            <p className="text-xs text-[var(--text-secondary)]">
+              Lecture seule : rôle ADMIN/OWNER requis pour créer ou modifier un projet.
+            </p>
+          ) : null}
 
           <div className="flex justify-end gap-2">
             <Button variant="outline" type="button" onClick={() => setCreateOpen(false)} disabled={creating}>
               Annuler
             </Button>
-            <Button type="submit" disabled={creating}>
+            <Button type="submit" disabled={creating || !isAdmin}>
               {creating ? (editing ? 'Mise à jour…' : 'Création…') : editing ? 'Mettre à jour' : 'Créer'}
             </Button>
           </div>
@@ -523,7 +576,7 @@ export default function ProjectsPage() {
             <Button variant="outline" onClick={() => setDeleting(null)}>
               Annuler
             </Button>
-            <Button variant="danger" onClick={confirmDelete}>
+            <Button variant="danger" onClick={confirmDelete} disabled={!isAdmin}>
               Supprimer
             </Button>
           </div>

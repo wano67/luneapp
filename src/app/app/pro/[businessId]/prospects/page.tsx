@@ -12,6 +12,8 @@ import { Modal } from '@/components/ui/modal';
 import { Select } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableEmpty, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
+import { useActiveBusiness } from '../../ActiveBusinessProvider';
+import RoleBanner from '@/components/RoleBanner';
 
 type ProspectStatus = 'NEW' | 'FOLLOW_UP' | 'WON' | 'LOST';
 type ProspectPipelineStatus = 'NEW' | 'IN_DISCUSSION' | 'OFFER_SENT' | 'FOLLOW_UP' | 'CLOSED';
@@ -88,6 +90,10 @@ function probabilityLabel(value: number | null | undefined) {
 export default function BusinessProspectsPage() {
   const params = useParams();
   const businessId = (params?.businessId ?? '') as string;
+  const activeCtx = useActiveBusiness({ optional: true });
+  const role = activeCtx?.activeBusiness?.role ?? null;
+  const isAdmin = role === 'ADMIN' || role === 'OWNER';
+  const readOnlyMessage = 'Action réservée aux admins/owners.';
 
   const [prospects, setProspects] = useState<Prospect[]>([]);
   const [loading, setLoading] = useState(true);
@@ -104,6 +110,7 @@ export default function BusinessProspectsPage() {
   const [form, setForm] = useState<ProspectForm>(emptyForm);
   const [formError, setFormError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [readOnlyInfo, setReadOnlyInfo] = useState<string | null>(null);
 
   const fetchController = useRef<AbortController | null>(null);
 
@@ -168,6 +175,12 @@ export default function BusinessProspectsPage() {
   async function handleCreate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setFormError(null);
+    if (!isAdmin) {
+      setFormError(readOnlyMessage);
+      setReadOnlyInfo(readOnlyMessage);
+      setCreating(false);
+      return;
+    }
     setCreating(true);
 
     const payload: Record<string, unknown> = {
@@ -208,6 +221,7 @@ export default function BusinessProspectsPage() {
 
   return (
     <div className="space-y-5">
+      <RoleBanner role={role} />
       <Card className="space-y-4 p-5">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div className="space-y-1">
@@ -219,7 +233,23 @@ export default function BusinessProspectsPage() {
               Un coup d’œil sur les leads et la prochaine action à mener.
             </p>
           </div>
-          <Button onClick={() => setCreateOpen(true)}>Ajouter un prospect</Button>
+          <div className="flex flex-col items-start gap-1">
+            <Button
+              onClick={() => {
+                if (!isAdmin) {
+                  setReadOnlyInfo(readOnlyMessage);
+                  return;
+                }
+                setCreateOpen(true);
+              }}
+              disabled={!isAdmin}
+            >
+              Ajouter un prospect
+            </Button>
+            {!isAdmin ? (
+              <p className="text-[11px] text-[var(--text-secondary)]">Lecture seule : création réservée aux admins.</p>
+            ) : null}
+          </div>
         </div>
 
         <div className="grid gap-3 md:grid-cols-2">
@@ -290,7 +320,18 @@ export default function BusinessProspectsPage() {
             <p className="text-sm text-[var(--text-secondary)]">
               Crée ton premier prospect pour suivre ton pipeline.
             </p>
-            <Button onClick={() => setCreateOpen(true)}>Ajouter un prospect</Button>
+            <Button
+              onClick={() => {
+                if (!isAdmin) {
+                  setReadOnlyInfo(readOnlyMessage);
+                  return;
+                }
+                setCreateOpen(true);
+              }}
+              disabled={!isAdmin}
+            >
+              Ajouter un prospect
+            </Button>
           </Card>
         ) : (
           <Table>
@@ -339,6 +380,7 @@ export default function BusinessProspectsPage() {
         {requestId ? (
           <p className="text-[10px] text-[var(--text-faint)]">Req: {requestId}</p>
         ) : null}
+        {readOnlyInfo ? <p className="text-xs text-[var(--text-secondary)]">{readOnlyInfo}</p> : null}
       </Card>
 
       <Modal
@@ -401,12 +443,15 @@ export default function BusinessProspectsPage() {
           </div>
 
           {formError ? <p className="text-sm font-semibold text-rose-500">{formError}</p> : null}
+          {!isAdmin ? (
+            <p className="text-xs text-[var(--text-secondary)]">Lecture seule : demande un rôle admin pour créer.</p>
+          ) : null}
 
           <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
             <Button type="button" variant="outline" onClick={() => setCreateOpen(false)} disabled={creating}>
               Annuler
             </Button>
-            <Button type="submit" disabled={creating}>
+            <Button type="submit" disabled={creating || !isAdmin}>
               {creating ? 'En cours…' : 'Ajouter le prospect'}
             </Button>
           </div>

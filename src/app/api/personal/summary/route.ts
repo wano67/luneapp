@@ -3,13 +3,19 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { prisma } from '@/server/db/client';
 import { requireAuthAsync } from '@/server/auth/requireAuth';
-import { jsonNoStore } from '@/server/security/csrf';
+import { jsonNoStore, withNoStore } from '@/server/security/csrf';
+import { getRequestId, withRequestId } from '@/server/http/apiUtils';
 
 function toStrId(v: bigint) {
   return v.toString();
 }
 
+function withIdNoStore(res: NextResponse, requestId: string) {
+  return withNoStore(withRequestId(res, requestId));
+}
+
 export async function GET(req: NextRequest) {
+  const requestId = getRequestId(req);
   try {
     const { userId } = await requireAuthAsync(req);
 
@@ -120,31 +126,34 @@ export async function GET(req: NextRequest) {
       include: { account: true, category: true },
     });
 
-    return jsonNoStore({
-      kpis: {
-        totalBalanceCents: totalBalanceCents.toString(),
-        monthNetCents: monthNetCents.toString(),
-        monthIncomeCents: monthIncomeCents.toString(),
-        monthExpenseCents: monthExpenseCents.toString(),
-      },
-      accounts: accountsWithBalance,
-      latestTransactions: latest.map((t) => ({
-        id: toStrId(t.id),
-        type: t.type,
-        date: t.date.toISOString(),
-        amountCents: t.amountCents.toString(),
-        currency: t.currency,
-        label: t.label,
-        note: t.note,
-        account: { id: toStrId(t.accountId), name: t.account.name },
-        category: t.category ? { id: toStrId(t.categoryId!), name: t.category.name } : null,
-      })),
-    });
+    return withRequestId(
+      jsonNoStore({
+        kpis: {
+          totalBalanceCents: totalBalanceCents.toString(),
+          monthNetCents: monthNetCents.toString(),
+          monthIncomeCents: monthIncomeCents.toString(),
+          monthExpenseCents: monthExpenseCents.toString(),
+        },
+        accounts: accountsWithBalance,
+        latestTransactions: latest.map((t) => ({
+          id: toStrId(t.id),
+          type: t.type,
+          date: t.date.toISOString(),
+          amountCents: t.amountCents.toString(),
+          currency: t.currency,
+          label: t.label,
+          note: t.note,
+          account: { id: toStrId(t.accountId), name: t.account.name },
+          category: t.category ? { id: toStrId(t.categoryId!), name: t.category.name } : null,
+        })),
+      }),
+      requestId
+    );
   } catch (e: unknown) {
     if (e instanceof Error && e.message === 'UNAUTHORIZED') {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return withIdNoStore(NextResponse.json({ error: 'Unauthorized' }, { status: 401 }), requestId);
     }
     console.error(e);
-    return NextResponse.json({ error: 'Failed' }, { status: 500 });
+    return withIdNoStore(NextResponse.json({ error: 'Failed' }, { status: 500 }), requestId);
   }
 }

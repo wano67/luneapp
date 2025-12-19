@@ -10,6 +10,8 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Modal } from '@/components/ui/modal';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
+import RoleBanner from '@/components/RoleBanner';
+import { useActiveBusiness } from '../../ActiveBusinessProvider';
 
 type Client = {
   id: string;
@@ -29,6 +31,10 @@ type ClientListResponse = {
 export default function ClientsPage() {
   const params = useParams();
   const businessId = (params?.businessId ?? '') as string;
+  const activeCtx = useActiveBusiness({ optional: true });
+  const role = activeCtx?.activeBusiness?.role ?? null;
+  const isAdmin = role === 'ADMIN' || role === 'OWNER';
+  const readOnlyMessage = 'Action réservée aux admins/owners.';
 
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
@@ -43,6 +49,7 @@ export default function ClientsPage() {
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [notes, setNotes] = useState('');
+  const [readOnlyInfo, setReadOnlyInfo] = useState<string | null>(null);
 
   const fetchController = useRef<AbortController | null>(null);
 
@@ -113,6 +120,11 @@ export default function ClientsPage() {
   async function handleCreate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setCreateError(null);
+    if (!isAdmin) {
+      setCreateError(readOnlyMessage);
+      setReadOnlyInfo(readOnlyMessage);
+      return;
+    }
 
     const trimmedName = name.trim();
     if (!trimmedName) {
@@ -156,6 +168,7 @@ export default function ClientsPage() {
 
   return (
     <div className="space-y-5">
+      <RoleBanner role={role} />
       <Card className="space-y-3 p-5">
         <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
           <div>
@@ -167,7 +180,23 @@ export default function ClientsPage() {
               Centralise tes clients pour lier projets et facturation.
             </p>
           </div>
-          <Button onClick={() => setCreateOpen(true)}>Ajouter un client</Button>
+          <div className="flex flex-col items-start gap-1">
+            <Button
+              onClick={() => {
+                if (!isAdmin) {
+                  setReadOnlyInfo(readOnlyMessage);
+                  return;
+                }
+                setCreateOpen(true);
+              }}
+              disabled={!isAdmin}
+            >
+              Ajouter un client
+            </Button>
+            {!isAdmin ? (
+              <p className="text-[11px] text-[var(--text-secondary)]">Lecture seule : demande un rôle admin.</p>
+            ) : null}
+          </div>
         </div>
 
         <form onSubmit={handleSearch} className="flex flex-col gap-2 md:flex-row md:items-center">
@@ -198,7 +227,17 @@ export default function ClientsPage() {
             <p className="text-sm text-[var(--text-secondary)]">
               Aucun client pour le moment. Ajoute-en un pour commencer.
             </p>
-            <Button size="sm" onClick={() => setCreateOpen(true)}>
+            <Button
+              size="sm"
+              onClick={() => {
+                if (!isAdmin) {
+                  setReadOnlyInfo(readOnlyMessage);
+                  return;
+                }
+                setCreateOpen(true);
+              }}
+              disabled={!isAdmin}
+            >
               Ajouter un client
             </Button>
           </div>
@@ -278,12 +317,13 @@ export default function ClientsPage() {
               placeholder="Observations, attentes, historique…"
             />
           </label>
+          {readOnlyInfo ? <p className="text-xs text-[var(--text-secondary)]">{readOnlyInfo}</p> : null}
 
           <div className="flex justify-end gap-2">
             <Button variant="outline" type="button" onClick={() => setCreateOpen(false)} disabled={creating}>
               Annuler
             </Button>
-            <Button type="submit" disabled={creating}>
+            <Button type="submit" disabled={creating || !isAdmin}>
               {creating ? 'Création…' : 'Créer'}
             </Button>
           </div>

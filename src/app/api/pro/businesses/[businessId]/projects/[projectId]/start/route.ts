@@ -59,6 +59,10 @@ export async function POST(
     return withIdNoStore(NextResponse.json({ error: 'Projet introuvable.' }, { status: 404 }), requestId);
   }
 
+  if (project.archivedAt) {
+    return withIdNoStore(NextResponse.json({ error: 'Projet archivé : démarrage impossible.' }, { status: 400 }), requestId);
+  }
+
   if (project.startedAt) {
     return withNoStore(
       withRequestId(

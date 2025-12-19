@@ -11,6 +11,8 @@ import { Input } from '@/components/ui/input';
 import { Modal } from '@/components/ui/modal';
 import { Select } from '@/components/ui/select';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
+import RoleBanner from '@/components/RoleBanner';
+import { useActiveBusiness } from '../../../ActiveBusinessProvider';
 
 type ProspectStatus = 'NEW' | 'FOLLOW_UP' | 'WON' | 'LOST';
 type ProspectPipelineStatus = 'NEW' | 'IN_DISCUSSION' | 'OFFER_SENT' | 'FOLLOW_UP' | 'CLOSED';
@@ -72,6 +74,10 @@ export default function ProspectDetailPage() {
 
   const businessId = (params?.businessId ?? '') as string;
   const prospectId = (params?.prospectId ?? '') as string;
+  const activeCtx = useActiveBusiness({ optional: true });
+  const role = activeCtx?.activeBusiness?.role ?? null;
+  const isAdmin = role === 'OWNER' || role === 'ADMIN';
+  const readOnlyMessage = 'Action réservée aux admins/owners.';
 
   const [prospect, setProspect] = useState<Prospect | null>(null);
   const [loading, setLoading] = useState(true);
@@ -96,6 +102,7 @@ export default function ProspectDetailPage() {
   const [convertLoading, setConvertLoading] = useState(false);
   const [convertError, setConvertError] = useState<string | null>(null);
   const [projectName, setProjectName] = useState('');
+  const [readOnlyInfo, setReadOnlyInfo] = useState<string | null>(null);
 
   const fetchController = useRef<AbortController | null>(null);
 
@@ -168,6 +175,11 @@ export default function ProspectDetailPage() {
   async function handleSave(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!prospect) return;
+    if (!isAdmin) {
+      setFormError(readOnlyMessage);
+      setReadOnlyInfo(readOnlyMessage);
+      return;
+    }
     setSaving(true);
     setFormError(null);
     setRequestId(null);
@@ -206,6 +218,11 @@ export default function ProspectDetailPage() {
   }
 
   async function handleConvert() {
+    if (!isAdmin) {
+      setConvertError(readOnlyMessage);
+      setReadOnlyInfo(readOnlyMessage);
+      return;
+    }
     setConvertLoading(true);
     setConvertError(null);
     const payload: Record<string, unknown> = {};
@@ -261,6 +278,7 @@ export default function ProspectDetailPage() {
 
   return (
     <div className="space-y-5">
+      <RoleBanner role={role} />
       <Card className="space-y-4 p-5">
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
           <div className="space-y-1">
@@ -278,7 +296,18 @@ export default function ProspectDetailPage() {
             </div>
           </div>
           <div className="flex flex-col gap-2 md:items-end">
-            <Button onClick={() => setConvertOpen(true)}>Convertir en client</Button>
+            <Button
+              onClick={() => {
+                if (!isAdmin) {
+                  setReadOnlyInfo(readOnlyMessage);
+                  return;
+                }
+                setConvertOpen(true);
+              }}
+              disabled={!isAdmin}
+            >
+              Convertir en client
+            </Button>
             <p className="text-[10px] text-[var(--text-secondary)]">
               Prochaine action : {formatDate(prospect.nextActionDate)}
             </p>
@@ -375,8 +404,9 @@ export default function ProspectDetailPage() {
             />
           </div>
           {formError ? <p className="text-sm font-semibold text-rose-500">{formError}</p> : null}
+          {readOnlyInfo ? <p className="text-xs text-[var(--text-secondary)]">{readOnlyInfo}</p> : null}
           <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
-            <Button type="submit" variant="outline" disabled={saving}>
+            <Button type="submit" variant="outline" disabled={saving || !isAdmin}>
               {saving ? 'Enregistrement…' : 'Mettre à jour'}
             </Button>
           </div>
@@ -407,7 +437,7 @@ export default function ProspectDetailPage() {
             <Button variant="outline" onClick={() => setConvertOpen(false)} disabled={convertLoading}>
               Annuler
             </Button>
-            <Button onClick={handleConvert} disabled={convertLoading}>
+            <Button onClick={handleConvert} disabled={convertLoading || !isAdmin}>
               {convertLoading ? 'Conversion…' : 'Convertir en client'}
             </Button>
           </div>
