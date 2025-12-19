@@ -13,9 +13,9 @@ Dev : `pnpm dev` (webpack, Turbopack désactivé par défaut pour la stabilité)
 - Sécurité : si `APP_URL`/`NEXT_PUBLIC_APP_URL`/`APP_ORIGINS` manquent en prod, toutes les mutations seront refusées (CSRF fail-closed).
 
 ### Node version requise
-- Utiliser Node 20.x (ex. `20.11.1`). Un `.nvmrc` est fourni.  
-- Commandes nvm : `nvm use` ou `nvm install 20.11.1`  
-- engines (package.json) : `>=20 <23` (Node 24 provoquait des ENOENT manifests avec Next 16).
+- Utiliser Node 20.x (ex. `20.19.1`). Un `.nvmrc` est fourni.  
+- Commandes nvm : `nvm use` ou `nvm install 20.19.1`  
+- engines (package.json) : `>=20.19 <23` (Node 24 provoquait des ENOENT manifests avec Next 16).
 
 ### Dossiers `.next` dédiés (stabilité dev/build)
 - Les scripts `dev/dev:stable` écrivent dans `.next-dev` (env `NEXT_DIST_DIR`), `build/start` dans `.next-build`.  
