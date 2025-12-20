@@ -1,7 +1,7 @@
 // src/app/app/pro/[businessId]/finances/payments/page.tsx
 'use client';
 
-import { useMemo, useState, type ChangeEvent, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from 'react';
 import { useParams } from 'next/navigation';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -13,13 +13,12 @@ import { Table, TableBody, TableCell, TableEmpty, TableHead, TableHeader, TableR
 import {
   formatCurrency,
   formatDate,
-  getMockPayments,
   paginate,
   type PaymentMethod,
   type PaymentRow,
   type PaymentStatus,
 } from '../../../pro-data';
-import { usePersistentState } from '../../../usePersistentState';
+import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import { KpiCard } from '@/components/ui/kpi-card';
 
 type SortKey = 'date' | 'amount' | 'status';
@@ -41,14 +40,41 @@ function buildPaymentDate(p: PaymentRow) {
   return new Date(p.receivedAt || p.expectedAt);
 }
 
+type FinanceApiItem = {
+  id: string;
+  businessId: string;
+  amountCents: string;
+  amount: number;
+  date: string;
+  type: 'INCOME' | 'EXPENSE';
+  category: string;
+  note?: string | null;
+  projectName?: string | null;
+  metadata?: Partial<{
+    clientName: string;
+    project: string;
+    invoiceId: string;
+    method: string;
+    status: string;
+    expectedAt: string;
+    receivedAt: string;
+    currency: string;
+    note: string;
+  }>;
+};
+
+type FinanceListResponse = {
+  items: FinanceApiItem[];
+};
+
 export default function PaymentsPage() {
   const params = useParams();
   const businessId = (params?.businessId ?? '') as string;
 
-  const [payments, setPayments] = usePersistentState<PaymentRow[]>(
-    `payments:${businessId}`,
-    getMockPayments()
-  );
+  const [payments, setPayments] = useState<PaymentRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [requestId, setRequestId] = useState<string | null>(null);
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<PaymentStatus | 'ALL'>('ALL');
@@ -80,6 +106,61 @@ export default function PaymentsPage() {
   });
   const [formError, setFormError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
+
+  function toPaymentRow(item: FinanceApiItem): PaymentRow {
+    const meta = item.metadata ?? {};
+    const receivedAt = meta.receivedAt || item.date;
+    const expectedAt = meta.expectedAt || item.date;
+    const status = (meta.status as PaymentStatus) || (meta.receivedAt ? 'PAID' : 'PENDING');
+    const method = (meta.method as PaymentMethod) || 'VIREMENT';
+    const currency = meta.currency || 'EUR';
+    const clientName = meta.clientName || 'Client';
+
+    return {
+      id: item.id,
+      businessId: item.businessId,
+      invoiceId: meta.invoiceId,
+      clientName,
+      project: meta.project || item.projectName || undefined,
+      amount: Number(item.amountCents) / 100,
+      currency,
+      receivedAt,
+      expectedAt,
+      method,
+      status,
+      note: meta.note || item.note || undefined,
+    };
+  }
+
+  async function loadPayments() {
+    try {
+      setLoading(true);
+      setError(null);
+      setRequestId(null);
+      const res = await fetchJson<FinanceListResponse>(
+        `/api/pro/businesses/${businessId}/finances?type=INCOME&category=PAYMENT`
+      );
+
+      setRequestId(res.requestId);
+      if (!res.ok || !res.data) {
+        setError(res.requestId ? `${res.error ?? 'Chargement impossible.'} (Ref: ${res.requestId})` : res.error ?? 'Chargement impossible.');
+        setPayments([]);
+        return;
+      }
+      setPayments(res.data.items.map(toPaymentRow));
+    } catch (err) {
+      setError(getErrorMessage(err));
+      setPayments([]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!businessId) return;
+    void loadPayments();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [businessId]);
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -155,7 +236,7 @@ export default function PaymentsPage() {
     setFormError(null);
   }
 
-  function handleCreate(e: FormEvent<HTMLFormElement>) {
+  async function handleCreate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setFormError(null);
     setInfo(null);
@@ -174,30 +255,51 @@ export default function PaymentsPage() {
       return;
     }
 
-    const newPayment: PaymentRow = {
-      id: `pay-${Date.now()}`,
-      businessId,
-      clientName: form.clientName.trim(),
-      project: form.project.trim() || undefined,
-      invoiceId: undefined,
-      amount,
-      currency: 'EUR',
-      receivedAt: form.receivedAt ? new Date(form.receivedAt).toISOString() : '',
-      expectedAt: form.expectedAt
-        ? new Date(form.expectedAt).toISOString()
-        : form.receivedAt
-          ? new Date(form.receivedAt).toISOString()
-          : new Date().toISOString(),
-      method: form.method,
-      status: form.status,
-      note: form.note.trim() || undefined,
-    };
+    const receivedAt = form.receivedAt ? new Date(form.receivedAt).toISOString() : '';
+    const expectedAt = form.expectedAt
+      ? new Date(form.expectedAt).toISOString()
+      : receivedAt || new Date().toISOString();
+    const dateForFinance = receivedAt || expectedAt;
 
-    setPayments([...payments, newPayment]);
-    setSelectedId(newPayment.id);
-    setInfo('Paiement ajouté.');
-    setCreateOpen(false);
-    resetForm();
+    try {
+      const res = await fetchJson<{ item: FinanceApiItem }>(
+        `/api/pro/businesses/${businessId}/finances`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: 'INCOME',
+            amount,
+            category: 'PAYMENT',
+            date: dateForFinance,
+            metadata: {
+              clientName: form.clientName.trim(),
+              project: form.project.trim() || undefined,
+              method: form.method,
+              status: form.status,
+              expectedAt,
+              receivedAt,
+              currency: 'EUR',
+              note: form.note.trim() || undefined,
+            },
+          }),
+        }
+      );
+
+      setRequestId(res.requestId);
+      if (!res.ok || !res.data) {
+        setFormError(res.requestId ? `${res.error ?? 'Création impossible.'} (Ref: ${res.requestId})` : res.error ?? 'Création impossible.');
+        return;
+      }
+
+      setInfo('Paiement ajouté.');
+      setCreateOpen(false);
+      resetForm();
+      await loadPayments();
+      setSelectedId(res.data.item.id);
+    } catch (err) {
+      setFormError(getErrorMessage(err));
+    }
   }
 
   return (
@@ -210,6 +312,8 @@ export default function PaymentsPage() {
         <p className="text-sm text-[var(--text-secondary)]">
           Suis les encaissements et les retards pour Business #{businessId}.
         </p>
+        {error ? <p className="text-xs text-rose-500">{error}</p> : null}
+        {requestId ? <p className="text-[10px] text-[var(--text-secondary)]">Req: {requestId}</p> : null}
       </Card>
 
       <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-5">
@@ -297,7 +401,9 @@ export default function PaymentsPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {pageItems.length === 0 ? (
+            {loading ? (
+              <TableEmpty>Chargement des paiements…</TableEmpty>
+            ) : pageItems.length === 0 ? (
               <TableEmpty>Aucun paiement ne correspond au filtre.</TableEmpty>
             ) : (
               pageItems.map((payment) => (

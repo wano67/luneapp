@@ -58,6 +58,50 @@ function parseDate(value: unknown): Date | null {
   return date;
 }
 
+const PAYMENT_METADATA_KEYS = [
+  'clientName',
+  'project',
+  'invoiceId',
+  'method',
+  'status',
+  'expectedAt',
+  'receivedAt',
+  'currency',
+  'note',
+] as const;
+
+type PaymentMetadata = Partial<Record<(typeof PAYMENT_METADATA_KEYS)[number], string>>;
+
+function parseMetadataFromNote(note: string | null | undefined): PaymentMetadata | null {
+  if (!note) return null;
+  try {
+    const parsed = JSON.parse(note);
+    if (!parsed || typeof parsed !== 'object') return null;
+    const meta: PaymentMetadata = {};
+    for (const key of PAYMENT_METADATA_KEYS) {
+      const value = (parsed as Record<string, unknown>)[key];
+      if (typeof value === 'string' && value.trim()) {
+        meta[key] = value.trim();
+      }
+    }
+    return Object.keys(meta).length > 0 ? meta : null;
+  } catch {
+    return null;
+  }
+}
+
+function sanitizeMetadata(raw: unknown): PaymentMetadata | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const meta: PaymentMetadata = {};
+  for (const key of PAYMENT_METADATA_KEYS) {
+    const value = (raw as Record<string, unknown>)[key];
+    if (typeof value === 'string' && value.trim()) {
+      meta[key] = value.trim();
+    }
+  }
+  return Object.keys(meta).length > 0 ? meta : null;
+}
+
 function serializeFinance(finance: {
   id: bigint;
   businessId: bigint;
@@ -71,6 +115,8 @@ function serializeFinance(finance: {
   updatedAt: Date;
   project?: { name: string | null } | null;
 }) {
+  const metadata = parseMetadataFromNote(finance.note);
+
   return {
     id: finance.id.toString(),
     businessId: finance.businessId.toString(),
@@ -84,6 +130,7 @@ function serializeFinance(finance: {
     note: finance.note,
     createdAt: finance.createdAt.toISOString(),
     updatedAt: finance.updatedAt.toISOString(),
+    ...(metadata ? { metadata } : {}),
   };
 }
 
@@ -135,11 +182,13 @@ export async function GET(
     return withIdNoStore(badRequest('periodEnd invalide.'), requestId);
   }
   const aggregate = searchParams.get('aggregate') === '1';
+  const categoryParam = searchParams.get('category')?.trim();
 
   const where = {
     businessId: businessIdBigInt,
     ...(typeFilter ? { type: typeFilter } : {}),
     ...(projectIdFilter ? { projectId: projectIdFilter } : {}),
+    ...(categoryParam ? { category: categoryParam } : {}),
     ...(fromDate || toDate
       ? {
           date: {
@@ -271,6 +320,9 @@ export async function POST(
       ? (body as { note?: string }).note!.trim() || null
       : null;
 
+  const metadata = sanitizeMetadata((body as { metadata?: unknown }).metadata);
+  const noteToStore = metadata ? JSON.stringify(metadata) : note;
+
   const finance = await prisma.finance.create({
     data: {
       businessId: businessIdBigInt,
@@ -279,7 +331,7 @@ export async function POST(
       amountCents,
       category,
       date: dateParsed,
-      note,
+      note: noteToStore,
     },
     include: {
       project: { select: { name: true } },

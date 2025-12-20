@@ -59,6 +59,50 @@ function parseDate(value: unknown): Date | null {
   return date;
 }
 
+const PAYMENT_METADATA_KEYS = [
+  'clientName',
+  'project',
+  'invoiceId',
+  'method',
+  'status',
+  'expectedAt',
+  'receivedAt',
+  'currency',
+  'note',
+] as const;
+
+type PaymentMetadata = Partial<Record<(typeof PAYMENT_METADATA_KEYS)[number], string>>;
+
+function parseMetadataFromNote(note: string | null | undefined): PaymentMetadata | null {
+  if (!note) return null;
+  try {
+    const parsed = JSON.parse(note);
+    if (!parsed || typeof parsed !== 'object') return null;
+    const meta: PaymentMetadata = {};
+    for (const key of PAYMENT_METADATA_KEYS) {
+      const value = (parsed as Record<string, unknown>)[key];
+      if (typeof value === 'string' && value.trim()) {
+        meta[key] = value.trim();
+      }
+    }
+    return Object.keys(meta).length > 0 ? meta : null;
+  } catch {
+    return null;
+  }
+}
+
+function sanitizeMetadata(raw: unknown): PaymentMetadata | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const meta: PaymentMetadata = {};
+  for (const key of PAYMENT_METADATA_KEYS) {
+    const value = (raw as Record<string, unknown>)[key];
+    if (typeof value === 'string' && value.trim()) {
+      meta[key] = value.trim();
+    }
+  }
+  return Object.keys(meta).length > 0 ? meta : null;
+}
+
 function serializeFinance(finance: {
   id: bigint;
   businessId: bigint;
@@ -72,6 +116,8 @@ function serializeFinance(finance: {
   updatedAt: Date;
   project?: { name: string | null } | null;
 }) {
+  const metadata = parseMetadataFromNote(finance.note);
+
   return {
     id: finance.id.toString(),
     businessId: finance.businessId.toString(),
@@ -85,6 +131,7 @@ function serializeFinance(finance: {
     note: finance.note,
     createdAt: finance.createdAt.toISOString(),
     updatedAt: finance.updatedAt.toISOString(),
+    ...(metadata ? { metadata } : {}),
   };
 }
 
@@ -198,6 +245,11 @@ export async function PATCH(
     if (noteRaw === null || noteRaw === undefined || noteRaw === '') data.note = null;
     else if (typeof noteRaw === 'string') data.note = noteRaw.trim();
     else return withIdNoStore(badRequest('note invalide.'), requestId);
+  }
+
+  const metadata = sanitizeMetadata((body as { metadata?: unknown }).metadata);
+  if (metadata) {
+    data.note = JSON.stringify(metadata);
   }
 
   if ('projectId' in body) {

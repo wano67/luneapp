@@ -91,6 +91,79 @@ type Interaction = {
   createdByUserId: string | null;
 };
 
+type PricingItem = {
+  serviceId: string | null;
+  label: string;
+  quantity: number;
+  unitPriceCents: string;
+  totalCents: string;
+};
+
+type Pricing = {
+  businessId: string;
+  projectId: string;
+  clientId: string | null;
+  currency: string;
+  depositPercent: number;
+  totalCents: string;
+  depositCents: string;
+  balanceCents: string;
+  items: PricingItem[];
+};
+
+type QuoteStatus = 'DRAFT' | 'SENT' | 'SIGNED' | 'CANCELLED' | 'EXPIRED';
+
+type Quote = {
+  id: string;
+  businessId: string;
+  projectId: string;
+  clientId: string | null;
+  status: QuoteStatus;
+  depositPercent: number;
+  currency: string;
+  totalCents: string;
+  depositCents: string;
+  balanceCents: string;
+  note: string | null;
+  issuedAt: string | null;
+  expiresAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  items?: PricingItem[];
+};
+
+type InvoiceStatus = 'DRAFT' | 'SENT' | 'PAID' | 'CANCELLED';
+
+type Invoice = {
+  id: string;
+  businessId: string;
+  projectId: string;
+  clientId: string | null;
+  quoteId: string | null;
+  status: InvoiceStatus;
+  depositPercent: number;
+  currency: string;
+  totalCents: string;
+  depositCents: string;
+  balanceCents: string;
+  issuedAt: string | null;
+  dueAt: string | null;
+  paidAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type FinanceLine = {
+  id: string;
+  businessId: string;
+  projectId: string | null;
+  type: 'INCOME' | 'EXPENSE';
+  amountCents: string;
+  category: string;
+  date: string;
+  note: string | null;
+};
+
 const STATUS_LABELS: Record<ProjectStatus, string> = {
   PLANNED: 'Planifié',
   ACTIVE: 'En cours',
@@ -112,6 +185,21 @@ const DEPOSIT_LABELS: Record<ProjectDepositStatus, string> = {
   PAID: 'Payé',
 };
 
+const QUOTE_STATUS_LABELS: Record<QuoteStatus, string> = {
+  DRAFT: 'Brouillon',
+  SENT: 'Envoyé',
+  SIGNED: 'Signé',
+  CANCELLED: 'Annulé',
+  EXPIRED: 'Expiré',
+};
+
+const INVOICE_STATUS_LABELS: Record<InvoiceStatus, string> = {
+  DRAFT: 'Brouillon',
+  SENT: 'Envoyée',
+  PAID: 'Payée',
+  CANCELLED: 'Annulée',
+};
+
 const TASK_STATUS_OPTIONS: { value: TaskStatus; label: string }[] = [
   { value: 'TODO', label: 'À faire' },
   { value: 'IN_PROGRESS', label: 'En cours' },
@@ -130,6 +218,18 @@ function formatDate(value: string | null | undefined) {
 function formatCurrency(amount: number) {
   return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(
     amount
+  );
+}
+
+function centsToNumber(value: string | null | undefined) {
+  const num = Number(value ?? 0);
+  if (!Number.isFinite(num)) return 0;
+  return num / 100;
+}
+
+function formatCents(value: string | null | undefined, currency = 'EUR') {
+  return new Intl.NumberFormat('fr-FR', { style: 'currency', currency, maximumFractionDigits: 0 }).format(
+    centsToNumber(value ?? '0')
   );
 }
 
@@ -253,6 +353,15 @@ export default function ProjectDetailPage() {
   const [savingInteraction, setSavingInteraction] = useState(false);
   const [editingInteraction, setEditingInteraction] = useState<Interaction | null>(null);
 
+  const [pricing, setPricing] = useState<Pricing | null>(null);
+  const [billingRequestId, setBillingRequestId] = useState<string | null>(null);
+  const [quotes, setQuotes] = useState<Quote[]>([]);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [finances, setFinances] = useState<FinanceLine[]>([]);
+  const [billingLoading, setBillingLoading] = useState(true);
+  const [billingError, setBillingError] = useState<string | null>(null);
+  const [billingInfo, setBillingInfo] = useState<string | null>(null);
+
   function resetServiceForm() {
     setEditingService(null);
     setServiceId('');
@@ -305,6 +414,161 @@ export default function ProjectDetailPage() {
     } finally {
       if (!effectiveSignal?.aborted) setInteractionsLoading(false);
     }
+  }
+
+  async function loadBilling() {
+    try {
+      setBillingLoading(true);
+      setBillingError(null);
+      setBillingInfo(null);
+      const [pricingRes, quotesRes, invoicesRes, financesRes] = await Promise.all([
+        fetchJson<{ pricing: Pricing }>(
+          `/api/pro/businesses/${businessId}/projects/${projectId}/pricing`,
+          { cache: 'no-store' }
+        ),
+        fetchJson<{ items: Quote[] }>(
+          `/api/pro/businesses/${businessId}/projects/${projectId}/quotes`,
+          { cache: 'no-store' }
+        ),
+        fetchJson<{ items: Invoice[] }>(
+          `/api/pro/businesses/${businessId}/projects/${projectId}/invoices`,
+          { cache: 'no-store' }
+        ),
+        fetchJson<{ items: FinanceLine[] }>(
+          `/api/pro/businesses/${businessId}/finances?projectId=${projectId}`,
+          { cache: 'no-store' }
+        ),
+      ]);
+
+      setBillingRequestId(
+        pricingRes.requestId ||
+          quotesRes.requestId ||
+          invoicesRes.requestId ||
+          financesRes.requestId ||
+          null
+      );
+
+      if (pricingRes.ok && pricingRes.data?.pricing) setPricing(pricingRes.data.pricing);
+      else if (!pricingRes.ok) setBillingError(pricingRes.error ?? 'Pricing indisponible.');
+
+      if (quotesRes.ok && quotesRes.data?.items) setQuotes(quotesRes.data.items);
+      else if (!quotesRes.ok) setBillingError(quotesRes.error ?? 'Devis indisponibles.');
+
+      if (invoicesRes.ok && invoicesRes.data?.items) setInvoices(invoicesRes.data.items);
+      else if (!invoicesRes.ok) setBillingError(invoicesRes.error ?? 'Factures indisponibles.');
+
+      if (financesRes.ok && financesRes.data?.items) {
+        setFinances(financesRes.data.items.slice(0, 5));
+      } else if (!financesRes.ok) {
+        setBillingError(financesRes.error ?? 'Finances indisponibles.');
+      }
+    } catch (err) {
+      setBillingError(getErrorMessage(err));
+    } finally {
+      setBillingLoading(false);
+    }
+  }
+
+  async function createQuote() {
+    if (!isAdmin) {
+      setBillingError(readOnlyMessage);
+      return;
+    }
+    setBillingError(null);
+    setBillingInfo(null);
+    const res = await fetchJson<{ quote: Quote }>(
+      `/api/pro/businesses/${businessId}/projects/${projectId}/quotes`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      }
+    );
+    setBillingRequestId(res.requestId);
+    if (!res.ok || !res.data?.quote) {
+      setBillingError(
+        res.requestId ? `${res.error ?? 'Création impossible.'} (Ref: ${res.requestId})` : res.error ?? 'Création impossible.'
+      );
+      return;
+    }
+    setBillingInfo('Devis créé.');
+    await loadBilling();
+  }
+
+  async function updateQuoteStatus(quoteIdValue: string, status: QuoteStatus) {
+    if (!isAdmin) {
+      setBillingError(readOnlyMessage);
+      return;
+    }
+    setBillingError(null);
+    setBillingInfo(null);
+    const res = await fetchJson<{ quote: Quote }>(
+      `/api/pro/businesses/${businessId}/quotes/${quoteIdValue}`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status }),
+      }
+    );
+    setBillingRequestId(res.requestId);
+    if (!res.ok || !res.data?.quote) {
+      setBillingError(
+        res.requestId ? `${res.error ?? 'Mise à jour impossible.'} (Ref: ${res.requestId})` : res.error ?? 'Mise à jour impossible.'
+      );
+      return;
+    }
+    setBillingInfo('Statut devis mis à jour.');
+    await loadBilling();
+  }
+
+  async function createInvoiceFromQuote(quoteIdValue: string) {
+    if (!isAdmin) {
+      setBillingError(readOnlyMessage);
+      return;
+    }
+    setBillingError(null);
+    setBillingInfo(null);
+    const res = await fetchJson<{ invoice: Invoice }>(
+      `/api/pro/businesses/${businessId}/quotes/${quoteIdValue}/invoices`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      }
+    );
+    setBillingRequestId(res.requestId);
+    if (!res.ok || !res.data?.invoice) {
+      setBillingError(
+        res.requestId ? `${res.error ?? 'Création facture impossible.'} (Ref: ${res.requestId})` : res.error ?? 'Création facture impossible.'
+      );
+      return;
+    }
+    setBillingInfo('Facture créée.');
+    await loadBilling();
+  }
+
+  async function updateInvoiceStatus(invoiceIdValue: string, status: InvoiceStatus) {
+    if (!isAdmin) {
+      setBillingError(readOnlyMessage);
+      return;
+    }
+    setBillingError(null);
+    setBillingInfo(null);
+    const res = await fetchJson<{ invoice: Invoice }>(
+      `/api/pro/businesses/${businessId}/invoices/${invoiceIdValue}`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status }),
+      }
+    );
+    setBillingRequestId(res.requestId);
+    if (!res.ok || !res.data?.invoice) {
+      setBillingError(
+        res.requestId ? `${res.error ?? 'Mise à jour facture impossible.'} (Ref: ${res.requestId})` : res.error ?? 'Mise à jour facture impossible.'
+      );
+      return;
+    }
+    setBillingInfo('Statut facture mis à jour.');
+    await loadBilling();
   }
 
   function startEditInteraction(interaction: Interaction) {
@@ -424,6 +688,7 @@ export default function ProjectDetailPage() {
     void loadProject();
     void loadTasks();
     void loadInteractions();
+    void loadBilling();
     return () => {
       controllerRef.current?.abort();
       interactionsControllerRef.current?.abort();
@@ -434,11 +699,12 @@ export default function ProjectDetailPage() {
   const progress = useMemo(() => computeProgress(project?.tasksSummary, tasks), [project, tasks]);
 
   const servicesTotal = useMemo(() => {
+    if (pricing) return Number(pricing.totalCents);
     return services.reduce((acc, s) => {
       const unit = s.priceCents ? Number(s.priceCents) : s.service.defaultPriceCents ? Number(s.service.defaultPriceCents) : 0;
       return acc + unit * s.quantity;
     }, 0);
-  }, [services]);
+  }, [pricing, services]);
 
   const nextAction = useMemo(() => {
     const upcoming = interactions
@@ -448,6 +714,10 @@ export default function ProjectDetailPage() {
       );
     return upcoming.length ? upcoming[0] : null;
   }, [interactions]);
+
+  const eligibleQuoteForInvoice = useMemo(() => {
+    return quotes.find((q) => q.status === 'SIGNED') ?? quotes.find((q) => q.status === 'SENT') ?? null;
+  }, [quotes]);
 
   async function openServiceModal(existing?: ProjectServiceItem) {
     if (!isAdmin) {
@@ -517,6 +787,7 @@ export default function ProjectDetailPage() {
       resetServiceForm();
       setActionMessage(editingService ? 'Service mis à jour.' : 'Service ajouté.');
       await loadProject();
+      await loadBilling();
     } catch (err) {
       setServiceError(getErrorMessage(err));
     } finally {
@@ -547,6 +818,7 @@ export default function ProjectDetailPage() {
     }
     setActionMessage('Service supprimé.');
     await loadProject();
+    await loadBilling();
   }
 
   async function performArchive(action: 'archive' | 'unarchive') {
@@ -988,6 +1260,249 @@ export default function ProjectDetailPage() {
             <p className="text-sm font-semibold text-[var(--text-primary)]">
               Total services : {formatCurrency(servicesTotal / 100)}
             </p>
+          </div>
+        )}
+      </Card>
+
+      <Card className="space-y-3 p-5">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <p className="text-sm font-semibold text-[var(--text-primary)]">Facturation (devis & factures)</p>
+            <p className="text-xs text-[var(--text-secondary)]">
+              Total, acompte 30%, PDF et suivi paiement. Actions réservées aux admins.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {billingInfo ? <span className="text-[11px] text-emerald-600">{billingInfo}</span> : null}
+            {billingError ? <span className="text-[11px] text-rose-600">{billingError}</span> : null}
+            {billingRequestId ? (
+              <span className="text-[10px] text-[var(--text-secondary)]">Req: {billingRequestId}</span>
+            ) : null}
+          </div>
+        </div>
+
+        {billingLoading ? (
+          <p className="text-sm text-[var(--text-secondary)]">Chargement facturation…</p>
+        ) : (
+          <div className="space-y-3">
+            <div className="grid gap-2 md:grid-cols-3">
+              <Card className="border-dashed border-[var(--border)] bg-transparent p-3">
+                <p className="text-xs text-[var(--text-secondary)]">Total</p>
+                <p className="text-lg font-semibold text-[var(--text-primary)]">
+                  {formatCents(pricing?.totalCents)}
+                </p>
+              </Card>
+              <Card className="border-dashed border-[var(--border)] bg-transparent p-3">
+                <p className="text-xs text-[var(--text-secondary)]">Acompte (30%)</p>
+                <p className="text-lg font-semibold text-[var(--text-primary)]">
+                  {formatCents(pricing?.depositCents)}
+                </p>
+              </Card>
+              <Card className="border-dashed border-[var(--border)] bg-transparent p-3">
+                <p className="text-xs text-[var(--text-secondary)]">Solde</p>
+                <p className="text-lg font-semibold text-[var(--text-primary)]">
+                  {formatCents(pricing?.balanceCents)}
+                </p>
+              </Card>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" onClick={createQuote} disabled={!isAdmin || billingLoading}>
+                Créer un devis
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => loadBilling()}
+                variant="outline"
+                disabled={billingLoading}
+              >
+                Rafraîchir
+              </Button>
+              {eligibleQuoteForInvoice ? (
+                <Button
+                  size="sm"
+                  variant="primary"
+                  onClick={() => createInvoiceFromQuote(eligibleQuoteForInvoice.id)}
+                  disabled={!isAdmin || billingLoading}
+                >
+                  Créer facture (devis {eligibleQuoteForInvoice.id})
+                </Button>
+              ) : (
+                <Button size="sm" variant="outline" disabled>
+                  Facture: aucun devis signé
+                </Button>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--text-secondary)]">
+                Devis du projet
+              </p>
+              {quotes.length === 0 ? (
+                <p className="text-sm text-[var(--text-secondary)]">
+                  Aucun devis. Ajoute des services puis crée un devis pour ce projet.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {quotes.map((quote) => (
+                    <div
+                      key={quote.id}
+                      className="flex flex-col gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface)]/60 p-3 md:flex-row md:items-center md:justify-between"
+                    >
+                      <div>
+                        <p className="text-sm font-semibold text-[var(--text-primary)]">
+                          Devis #{quote.id} · {formatCents(quote.totalCents)}
+                        </p>
+                        <p className="text-[11px] text-[var(--text-secondary)]">
+                          {quote.items?.length ?? 0} lignes · Acompte {formatCents(quote.depositCents)} · Solde{' '}
+                          {formatCents(quote.balanceCents)}
+                        </p>
+                        {quote.issuedAt ? (
+                          <p className="text-[10px] text-[var(--text-secondary)]">
+                            Émis le {formatDate(quote.issuedAt)} · Expire {quote.expiresAt ? formatDate(quote.expiresAt) : '—'}
+                          </p>
+                        ) : null}
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <Badge variant="neutral">{QUOTE_STATUS_LABELS[quote.status]}</Badge>
+                        <Button size="sm" variant="ghost" asChild>
+                          <Link
+                            href={`/api/pro/businesses/${businessId}/quotes/${quote.id}/pdf`}
+                            target="_blank"
+                          >
+                            PDF
+                          </Link>
+                        </Button>
+                        {quote.status === 'DRAFT' ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => updateQuoteStatus(quote.id, 'SENT')}
+                            disabled={!isAdmin}
+                          >
+                            Marquer envoyé
+                          </Button>
+                        ) : null}
+                        {quote.status === 'SENT' ? (
+                          <Button
+                            size="sm"
+                            variant="primary"
+                            onClick={() => updateQuoteStatus(quote.id, 'SIGNED')}
+                            disabled={!isAdmin}
+                          >
+                            Marquer signé
+                          </Button>
+                        ) : null}
+                        {quote.status !== 'CANCELLED' && quote.status !== 'SIGNED' ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => updateQuoteStatus(quote.id, 'CANCELLED')}
+                            disabled={!isAdmin}
+                          >
+                            Annuler
+                          </Button>
+                        ) : null}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--text-secondary)]">
+                Factures du projet
+              </p>
+              {invoices.length === 0 ? (
+                <p className="text-sm text-[var(--text-secondary)]">Aucune facture pour l’instant.</p>
+              ) : (
+                <div className="space-y-2">
+                  {invoices.map((invoice) => (
+                    <div
+                      key={invoice.id}
+                      className="flex flex-col gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface)]/60 p-3 md:flex-row md:items-center md:justify-between"
+                    >
+                      <div>
+                        <p className="text-sm font-semibold text-[var(--text-primary)]">
+                          Facture #{invoice.id} · {formatCents(invoice.totalCents)}
+                        </p>
+                        <p className="text-[11px] text-[var(--text-secondary)]">
+                          Acompte {formatCents(invoice.depositCents)} · Solde {formatCents(invoice.balanceCents)}
+                        </p>
+                        <p className="text-[10px] text-[var(--text-secondary)]">
+                          Échéance {invoice.dueAt ? formatDate(invoice.dueAt) : '—'} · Statut {INVOICE_STATUS_LABELS[invoice.status]}
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <Badge variant="neutral">{INVOICE_STATUS_LABELS[invoice.status]}</Badge>
+                        <Button size="sm" variant="ghost" asChild>
+                          <Link
+                            href={`/api/pro/businesses/${businessId}/invoices/${invoice.id}/pdf`}
+                            target="_blank"
+                          >
+                            PDF
+                          </Link>
+                        </Button>
+                        {invoice.status === 'DRAFT' ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => updateInvoiceStatus(invoice.id, 'SENT')}
+                            disabled={!isAdmin}
+                          >
+                            Marquer envoyée
+                          </Button>
+                        ) : null}
+                        {invoice.status === 'SENT' ? (
+                          <Button
+                            size="sm"
+                            variant="primary"
+                            onClick={() => updateInvoiceStatus(invoice.id, 'PAID')}
+                            disabled={!isAdmin}
+                          >
+                            Marquer payée
+                          </Button>
+                        ) : null}
+                        {invoice.status !== 'CANCELLED' && invoice.status !== 'PAID' ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => updateInvoiceStatus(invoice.id, 'CANCELLED')}
+                            disabled={!isAdmin}
+                          >
+                            Annuler
+                          </Button>
+                        ) : null}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--text-secondary)]">
+                Finances liées au projet
+              </p>
+              {finances.length === 0 ? (
+                <p className="text-sm text-[var(--text-secondary)]">Aucune ligne Finance pour ce projet.</p>
+              ) : (
+                <div className="space-y-1">
+                  {finances.map((f) => (
+                    <div key={f.id} className="flex items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--surface)]/60 px-3 py-2">
+                      <div>
+                        <p className="text-sm font-semibold text-[var(--text-primary)]">{f.category}</p>
+                        <p className="text-[10px] text-[var(--text-secondary)]">{formatDate(f.date)} · {f.note ?? ''}</p>
+                      </div>
+                      <p className={f.type === 'INCOME' ? 'text-emerald-600 text-sm font-semibold' : 'text-rose-600 text-sm font-semibold'}>
+                        {formatCents(f.amountCents)}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         )}
       </Card>

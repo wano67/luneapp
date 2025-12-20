@@ -16,6 +16,36 @@
 - Smoke scripts : `scripts/smoke-dev-routes.ts` (routes publiques/protégées + API dashboard/clients/invites) et `scripts/smoke-invites.ts` (création + accept + membership + second accept attendu en échec).
 - Documentation : README/AUDIT_SMOKE mis à jour (Node 20, distDir séparés, commandes build/start).
 
+### Wiring map (UI ↔ API ↔ Prisma)
+| Route UI | Data source | API/SSR | Prisma models | Cache mode |
+|---|---|---|---|---|
+| /app/pro/[bid]/dashboard | Fetch `/api/pro/businesses/[bid]/dashboard` | route | Client, Project, Task, Interaction, Finance | no-store |
+| /app/pro/[bid]/finances/payments | Fetch `/api/pro/businesses/[bid]/finances?type=INCOME&category=PAYMENT`, POST same | route | Finance | no-store |
+| /app/pro/[bid]/finances | placeholder redirect | — | — | — |
+| /app/pro/[bid]/finances/expenses, /vat, /treasury, /forecasting | stub/mock | — | — | — |
+| /app/pro/[bid]/clients, /clients/[cid] | Fetch `/api/pro/businesses/[bid]/clients[/cid]` | route | Client, Interaction | no-store |
+| /app/pro/[bid]/projects, /tasks, /prospects, /services | Fetch respective `/api/pro/businesses/...` | routes | Project, Task, Prospect, Service | no-store |
+| /app/pro/[bid]/invites | Fetch `/api/pro/businesses/[bid]/invites` | route | BusinessInvite | no-store |
+
+Orphans/stubs: finance subpages (expenses/treasury/vat/forecasting) are placeholders; invoices not wired. Payments previously mock; now uses Finance API.
+
+### Risques principaux
+- Finance: incohérence possible si d’autres pages lisent des mocks (expenses/vat). Pas de pagination/filtre serveur.
+- Invites: dépend des env APP_URL/ORIGINS pour CSRF; sans config prod, mutations bloquées.
+- No tests e2e automatisés hors smokes; DB-required scripts nécessitent creds/seed.
+
+### Plan P0/P1/P2 (courant)
+- P0: Payments → Finance Prisma (done). Dashboard reflète les paiements via même source. Smoke finance ajouté.
+- P1: Mutualiser une fonction d’agrégation finance (income/expense/net + séries) partagée entre dashboard et finance API; ajouter pagination/filtrage par catégorie/projet.
+- P2: Brancher les autres sous-pages finance (expenses/treasury/vat/forecasting) ou afficher clairement “à venir”; ajouter tags/revalidate si cache taguée un jour.
+
+## Billing & Finance wiring (2025-01)
+- Pricing actuel: ProjectService (quantity, priceCents override) + Service.defaultPriceCents; pas d’endpoint de pricing ni de total/acompte exposé. quoteStatus/depositStatus sont des champs Project mais purement manuels.
+- Finance table (INCOME/EXPENSE, amountCents BigInt, category, date, projectId?, note JSON) alimente dashboard (MTD/series) et `/app/pro/[bid]/finances` + `/finances/payments` (filtre type=INCOME&category=PAYMENT). Payments UI crée des Finance avec metadata JSON (invoiceId/method/status…). Aucun lien devis/facture.
+- Facturation absente: pas de modèles Quote/Invoice/Payment, pas d’API ni PDF; pages invoices/expenses stubs; treasury/vat/forecasting utilisent des mocks localStorage.
+- Sécurité/conventions: requireAuthPro + requireBusinessRole (VIEWER read, ADMIN mutations), assertSameOrigin sur POST/PATCH/DELETE, jsonNoStore/withNoStore + x-request-id, BigInt sérialisés en string, rateLimit helper dispo.
+- P0 attendu: pricing projet expose total/acompte/solde (30%), création devis (snapshot services) + PDF, statut SIGNED débloque facture, facture PDF, marquer facture PAID crée Finance INCOME category PAYMENT liée au projet/quote/invoice → dashboard MTD income augmente; smoke billing passe.
+
 ## Ce qui marche (perso + pro)
 - Pro (admin): catalogue services + templates (CRUD/seed), pipeline prospects (création), conversion en client/projet, ajout services vendus, mise à jour devis/acompte, start projet (tâches générées), interactions client/projet, archive/unarchive, tasks globales (lecture).
 - Perso: comptes/transactions/summary avec headers no-store + request-id; création compte test OK.
