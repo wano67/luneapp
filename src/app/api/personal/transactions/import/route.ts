@@ -4,6 +4,8 @@ import { prisma } from '@/server/db/client';
 import { requireAuthAsync } from '@/server/auth/requireAuth';
 import { assertSameOrigin, jsonNoStore } from '@/server/security/csrf';
 import { rateLimit } from '@/server/security/rateLimit';
+import { getRequestId, withRequestId } from '@/server/http/apiUtils';
+import { withNoStore } from '@/server/security/csrf';
 
 type ParsedRow = {
   rowNumber: number;
@@ -185,9 +187,10 @@ function centsFromAmount(amount: string) {
 }
 
 export async function POST(req: NextRequest) {
+  const requestId = getRequestId(req);
   try {
     const csrf = assertSameOrigin(req);
-    if (csrf) return csrf;
+    if (csrf) return withNoStore(withRequestId(csrf, requestId));
 
     const { userId } = await requireAuthAsync(req);
 
@@ -196,7 +199,7 @@ export async function POST(req: NextRequest) {
       limit: 10,
       windowMs: 60 * 60 * 1000,
     });
-    if (limited) return limited;
+    if (limited) return withNoStore(withRequestId(limited, requestId));
 
     const form = await req.formData();
     const file = form.get('file');
@@ -204,20 +207,26 @@ export async function POST(req: NextRequest) {
     const dryRun = String(form.get('dryRun') ?? 'false') === 'true';
 
     if (!file || typeof file === 'string') {
-      return NextResponse.json({ error: 'Missing file' }, { status: 400 });
+      return withNoStore(withRequestId(NextResponse.json({ error: 'Missing file' }, { status: 400 }), requestId));
     }
     const fileSize = typeof (file as { size?: unknown }).size === 'number' ? (file as { size: number }).size : null;
     if (fileSize !== null && fileSize > 2 * 1024 * 1024) {
-      return NextResponse.json({ error: 'File too large (max 2MB)' }, { status: 400 });
+      return withNoStore(
+        withRequestId(NextResponse.json({ error: 'File too large (max 2MB)' }, { status: 400 }), requestId)
+      );
     }
     const mime = typeof (file as { type?: unknown }).type === 'string'
       ? ((file as { type: string }).type.toLowerCase?.() ?? (file as { type: string }).type.toLowerCase())
       : undefined;
     if (mime && mime !== 'text/csv' && mime !== 'application/vnd.ms-excel') {
-      return NextResponse.json({ error: 'Invalid file type' }, { status: 400 });
+      return withNoStore(
+        withRequestId(NextResponse.json({ error: 'Invalid file type' }, { status: 400 }), requestId)
+      );
     }
     if (!accountId || !/^\d+$/.test(accountId)) {
-      return NextResponse.json({ error: 'Missing or invalid accountId' }, { status: 400 });
+      return withNoStore(
+        withRequestId(NextResponse.json({ error: 'Missing or invalid accountId' }, { status: 400 }), requestId)
+      );
     }
 
     // ensure account belongs to user
@@ -225,17 +234,20 @@ export async function POST(req: NextRequest) {
       where: { id: BigInt(accountId), userId: BigInt(userId) },
       select: { id: true, currency: true },
     });
-    if (!acc) return NextResponse.json({ error: 'Account not found' }, { status: 404 });
+    if (!acc)
+      return withNoStore(withRequestId(NextResponse.json({ error: 'Account not found' }, { status: 404 }), requestId));
 
     const text = await file.text();
     const delimiter = guessDelimiter(text);
     const table = parseCSV(text, delimiter);
 
     if (table.length < 2) {
-      return NextResponse.json({ error: 'CSV seems empty' }, { status: 400 });
+      return withNoStore(withRequestId(NextResponse.json({ error: 'CSV seems empty' }, { status: 400 }), requestId));
     }
     if (table.length - 1 > 5000) {
-      return NextResponse.json({ error: 'Too many rows (max 5000)' }, { status: 400 });
+      return withNoStore(
+        withRequestId(NextResponse.json({ error: 'Too many rows (max 5000)' }, { status: 400 }), requestId)
+      );
     }
 
     const headers = table[0].map((h) => normalizeHeader(h));
@@ -250,13 +262,18 @@ export async function POST(req: NextRequest) {
     const iCategory = idx('category');
 
     if (iDate === -1 || iLabel === -1 || iAmount === -1) {
-      return NextResponse.json(
-        {
-          error: 'Invalid headers. Required: date,label,amount. Optional: currency,note,category.',
-          got: table[0],
-          delimiter,
-        },
-        { status: 400 }
+      return withNoStore(
+        withRequestId(
+          NextResponse.json(
+            {
+              error: 'Invalid headers. Required: date,label,amount. Optional: currency,note,category.',
+              got: table[0],
+              delimiter,
+            },
+            { status: 400 }
+          ),
+          requestId
+        )
       );
     }
 
@@ -308,14 +325,17 @@ export async function POST(req: NextRequest) {
     }
 
     if (dryRun) {
-      return jsonNoStore({
-        delimiter,
-        totalRows: table.length - 1,
-        validRows: parsed.length,
-        invalidRows: errors.length,
-        errors: errors.slice(0, 25),
-        preview: parsed.slice(0, 10),
-      });
+      return withRequestId(
+        jsonNoStore({
+          delimiter,
+          totalRows: table.length - 1,
+          validRows: parsed.length,
+          invalidRows: errors.length,
+          errors: errors.slice(0, 25),
+          preview: parsed.slice(0, 10),
+        }),
+        requestId
+      );
     }
 
     const parsedWithType: ParsedValid[] = [];
@@ -408,23 +428,26 @@ export async function POST(req: NextRequest) {
       createdCount += r.count;
     }
 
-    return jsonNoStore({
-      imported: createdCount,
-      invalidRows: errors.length,
-      errors: errors.slice(0, 25),
-      summary: {
-        accountId: accountId, // already string
-        fromDateIso: minDate ? minDate.toISOString() : null,
-        toDateIso: maxDate ? maxDate.toISOString() : null,
-        incomeCents: sumPos.toString(),
-        expenseAbsCents: sumNegAbs.toString(),
-      },
-    });
+    return withRequestId(
+      jsonNoStore({
+        imported: createdCount,
+        invalidRows: errors.length,
+        errors: errors.slice(0, 25),
+        summary: {
+          accountId: accountId, // already string
+          fromDateIso: minDate ? minDate.toISOString() : null,
+          toDateIso: maxDate ? maxDate.toISOString() : null,
+          incomeCents: sumPos.toString(),
+          expenseAbsCents: sumNegAbs.toString(),
+        },
+      }),
+      requestId
+    );
   } catch (e: unknown) {
     if (e instanceof Error && e.message === 'UNAUTHORIZED') {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return withNoStore(withRequestId(NextResponse.json({ error: 'Unauthorized' }, { status: 401 }), requestId));
     }
     console.error(e);
-    return NextResponse.json({ error: 'Failed' }, { status: 500 });
+    return withNoStore(withRequestId(NextResponse.json({ error: 'Failed' }, { status: 500 }), requestId));
   }
 }
