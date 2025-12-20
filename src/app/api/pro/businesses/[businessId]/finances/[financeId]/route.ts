@@ -4,6 +4,7 @@ import { FinanceType } from '@/generated/prisma/client';
 import { requireAuthPro } from '@/server/auth/requireAuthPro';
 import { requireBusinessRole } from '@/server/auth/businessRole';
 import { assertSameOrigin, jsonNoStore, withNoStore } from '@/server/security/csrf';
+import { rateLimit } from '@/server/security/rateLimit';
 import {
   badRequest,
   forbidden,
@@ -200,6 +201,13 @@ export async function PATCH(
   const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'ADMIN');
   if (!membership) return withIdNoStore(forbidden(), requestId);
 
+  const limited = rateLimit(request, {
+    key: `pro:finances:update:${businessIdBigInt}:${userId}`,
+    limit: 120,
+    windowMs: 60 * 60 * 1000,
+  });
+  if (limited) return withIdNoStore(limited, requestId);
+
   const existing = await prisma.finance.findFirst({
     where: { id: financeIdBigInt, businessId: businessIdBigInt },
     include: { project: { select: { name: true } } },
@@ -309,6 +317,13 @@ export async function DELETE(
 
   const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'ADMIN');
   if (!membership) return withIdNoStore(forbidden(), requestId);
+
+  const limited = rateLimit(request, {
+    key: `pro:finances:delete:${businessIdBigInt}:${userId}`,
+    limit: 60,
+    windowMs: 60 * 60 * 1000,
+  });
+  if (limited) return withIdNoStore(limited, requestId);
 
   const finance = await prisma.finance.findFirst({
     where: { id: financeIdBigInt, businessId: businessIdBigInt },

@@ -3,6 +3,7 @@ import { prisma } from '@/server/db/client';
 import { requireAuthPro } from '@/server/auth/requireAuthPro';
 import { requireBusinessRole } from '@/server/auth/businessRole';
 import { assertSameOrigin } from '@/server/security/csrf';
+import { rateLimit, makeIpKey } from '@/server/security/rateLimit';
 import { badRequest, forbidden, getRequestId, unauthorized, withRequestId } from '@/server/http/apiUtils';
 
 function parseId(param: string | undefined) {
@@ -20,7 +21,7 @@ export async function POST(
 ) {
   const requestId = getRequestId(request);
   const csrf = assertSameOrigin(request);
-  if (csrf) return csrf;
+  if (csrf) return withRequestId(csrf, requestId);
 
   const { businessId: businessIdParam } = await context.params;
   const businessIdBigInt = parseId(businessIdParam);
@@ -35,6 +36,15 @@ export async function POST(
 
   const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'VIEWER');
   if (!membership) return withRequestId(forbidden(), requestId);
+
+  const limited = rateLimit(request, {
+    key: userId
+      ? `pro:businesses:leave:${businessIdBigInt}:${userId}`
+      : makeIpKey(request, `pro:businesses:leave:${businessIdBigInt}`),
+    limit: 60,
+    windowMs: 60 * 60 * 1000,
+  });
+  if (limited) return withRequestId(limited, requestId);
   if (membership.role === 'OWNER') {
     return withRequestId(NextResponse.json({ error: 'Un OWNER doit supprimer le business.' }, { status: 400 }), requestId);
   }

@@ -3,6 +3,7 @@ import { prisma } from '@/server/db/client';
 import { requireAuthPro } from '@/server/auth/requireAuthPro';
 import { requireBusinessRole } from '@/server/auth/businessRole';
 import { assertSameOrigin, jsonNoStore, withNoStore } from '@/server/security/csrf';
+import { rateLimit } from '@/server/security/rateLimit';
 import {
   badRequest,
   forbidden,
@@ -82,6 +83,13 @@ export async function PATCH(
   if (!actorMembership) {
     return withIdNoStore(forbidden(), requestId);
   }
+
+  const limited = rateLimit(request, {
+    key: `pro:members:update:${businessIdBigInt}:${actorId}`,
+    limit: 120,
+    windowMs: 60 * 60 * 1000,
+  });
+  if (limited) return withIdNoStore(limited, requestId);
 
   const targetMembership = await prisma.businessMembership.findUnique({
     where: { businessId_userId: { businessId: businessIdBigInt, userId: targetUserId } },
@@ -168,6 +176,13 @@ export async function DELETE(
   if (!actorMembership) {
     return withIdNoStore(forbidden(), requestId);
   }
+
+  const limited = rateLimit(request, {
+    key: `pro:members:delete:${businessIdBigInt}:${actorId}`,
+    limit: 60,
+    windowMs: 60 * 60 * 1000,
+  });
+  if (limited) return withIdNoStore(limited, requestId);
 
   const targetMembership = await prisma.businessMembership.findUnique({
     where: { businessId_userId: { businessId: businessIdBigInt, userId: targetUserId } },

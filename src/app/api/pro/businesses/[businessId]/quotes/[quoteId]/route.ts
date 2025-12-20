@@ -4,6 +4,7 @@ import { QuoteStatus } from '@/generated/prisma/client';
 import { requireAuthPro } from '@/server/auth/requireAuthPro';
 import { requireBusinessRole } from '@/server/auth/businessRole';
 import { assertSameOrigin, jsonNoStore, withNoStore } from '@/server/security/csrf';
+import { rateLimit } from '@/server/security/rateLimit';
 import {
   badRequest,
   forbidden,
@@ -130,6 +131,13 @@ export async function PATCH(
 
   const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'ADMIN');
   if (!membership) return withIdNoStore(forbidden(), requestId);
+
+  const limited = rateLimit(request, {
+    key: `pro:quotes:update:${businessIdBigInt}:${userId}`,
+    limit: 120,
+    windowMs: 60 * 60 * 1000,
+  });
+  if (limited) return withIdNoStore(limited, requestId);
 
   const body = await request.json().catch(() => null);
   if (!body || typeof body !== 'object') {

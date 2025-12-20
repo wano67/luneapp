@@ -4,6 +4,7 @@ import { requireAuthPro } from '@/server/auth/requireAuthPro';
 import { requireBusinessRole } from '@/server/auth/businessRole';
 import { assertSameOrigin, jsonNoStore, withNoStore } from '@/server/security/csrf';
 import { badRequest, getRequestId, unauthorized, withRequestId } from '@/server/http/apiUtils';
+import { rateLimit } from '@/server/security/rateLimit';
 
 function forbidden() {
   return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -105,6 +106,13 @@ export async function POST(
 
   const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'ADMIN');
   if (!membership) return withIdNoStore(forbidden(), requestId);
+
+  const limited = rateLimit(request, {
+    key: `pro:project-services:create:${businessIdBigInt}:${userId}`,
+    limit: 120,
+    windowMs: 60 * 60 * 1000,
+  });
+  if (limited) return withIdNoStore(limited, requestId);
 
   const project = await prisma.project.findFirst({
     where: { id: projectIdBigInt, businessId: businessIdBigInt },

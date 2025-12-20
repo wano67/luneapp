@@ -3,6 +3,7 @@ import { prisma } from '@/server/db/client';
 import { requireAuthPro } from '@/server/auth/requireAuthPro';
 import { requireBusinessRole } from '@/server/auth/businessRole';
 import { assertSameOrigin, withNoStore } from '@/server/security/csrf';
+import { rateLimit } from '@/server/security/rateLimit';
 import { badRequest, getRequestId, unauthorized, withRequestId } from '@/server/http/apiUtils';
 
 function forbidden() {
@@ -46,6 +47,13 @@ export async function POST(
 
   const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'ADMIN');
   if (!membership) return withIdNoStore(forbidden(), requestId);
+
+  const limited = rateLimit(request, {
+    key: `pro:projects:archive:${businessIdBigInt}:${userId}`,
+    limit: 60,
+    windowMs: 60 * 60 * 1000,
+  });
+  if (limited) return withIdNoStore(limited, requestId);
 
   const project = await prisma.project.findFirst({
     where: { id: projectIdBigInt, businessId: businessIdBigInt },
