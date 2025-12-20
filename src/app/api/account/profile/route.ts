@@ -26,7 +26,7 @@ function buildName(firstName?: string | null, lastName?: string | null) {
 export async function PATCH(req: NextRequest) {
   const requestId = getRequestId(req);
   const csrf = assertSameOrigin(req);
-  if (csrf) return csrf;
+  if (csrf) return withRequestId(csrf, requestId);
 
   const { userId } = await requireAuthAsync(req).catch(() => ({ userId: null }));
   if (!userId) return withRequestId(unauthorized(), requestId);
@@ -57,14 +57,17 @@ export async function PATCH(req: NextRequest) {
       },
     });
 
-    return jsonNoStore({
-      user: {
-        id: updated.id.toString(),
-        email: updated.email,
-        name: updated.name,
-        updatedAt: updated.updatedAt.toISOString(),
-      },
-    });
+    return withRequestId(
+      jsonNoStore({
+        user: {
+          id: updated.id.toString(),
+          email: updated.email,
+          name: updated.name,
+          updatedAt: updated.updatedAt.toISOString(),
+        },
+      }),
+      requestId
+    );
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
       return withRequestId(NextResponse.json({ error: 'Cet email est déjà utilisé.' }, { status: 409 }), requestId);

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/server/db/client';
 import type { Business, BusinessRole } from '@/generated/prisma/client';
-import { assertSameOrigin, withNoStore } from '@/server/security/csrf';
+import { assertSameOrigin, jsonNoStore } from '@/server/security/csrf';
 import { rateLimit } from '@/server/security/rateLimit';
 import { requireAuthPro } from '@/server/auth/requireAuthPro';
 import { badRequest, getErrorMessage, getRequestId, unauthorized, withRequestId } from '@/server/http/apiUtils';
@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
       role: membership.role,
     }));
 
-    return withNoStore(NextResponse.json({ items }));
+    return withRequestId(jsonNoStore({ items }), requestId);
   } catch (error) {
     console.error({ requestId, route: '/api/pro/businesses', error });
     return withRequestId(
@@ -95,12 +95,15 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    return NextResponse.json(
-      {
-        business: serializeBusiness(business),
-        role: 'OWNER' as BusinessRole,
-      },
-      { status: 201 }
+    return withRequestId(
+      jsonNoStore(
+        {
+          business: serializeBusiness(business),
+          role: 'OWNER' as BusinessRole,
+        },
+        { status: 201 }
+      ),
+      requestId
     );
   } catch (error) {
     console.error({ requestId, route: '/api/pro/businesses', error: getErrorMessage(error) });

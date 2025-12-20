@@ -3,6 +3,7 @@ import type { NextRequest } from 'next/server';
 import { prisma } from '@/server/db/client';
 import { requireAuthAsync } from '@/server/auth/requireAuth';
 import { jsonNoStore } from '@/server/security/csrf';
+import { getRequestId, withRequestId } from '@/server/http/apiUtils';
 
 function startOfDayUTC(d: Date) {
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 0, 0, 0));
@@ -12,12 +13,13 @@ export async function GET(
   req: NextRequest,
   ctx: { params: Promise<{ accountId: string }> }
 ) {
+  const requestId = getRequestId(req);
   try {
     const { userId } = await requireAuthAsync(req);
     const { accountId } = await ctx.params;
 
     if (!/^\d+$/.test(accountId)) {
-      return NextResponse.json({ error: 'Invalid accountId' }, { status: 400 });
+      return withRequestId(NextResponse.json({ error: 'Invalid accountId' }, { status: 400 }), requestId);
     }
 
     const account = await prisma.personalAccount.findFirst({
@@ -57,26 +59,29 @@ export async function GET(
     const delta30 = sum30._sum.amountCents ?? BigInt(0);
     const balance = account.initialCents + txAll;
 
-    return jsonNoStore({
-      account: {
-        id: account.id.toString(),
-        name: account.name,
-        type: account.type,
-        currency: account.currency,
-        institution: account.institution,
-        iban: account.iban,
-        initialCents: account.initialCents.toString(),
-        balanceCents: balance.toString(),
-        delta30Cents: delta30.toString(),
-        createdAt: account.createdAt.toISOString(),
-        updatedAt: account.updatedAt.toISOString(),
-      },
-    });
+    return withRequestId(
+      jsonNoStore({
+        account: {
+          id: account.id.toString(),
+          name: account.name,
+          type: account.type,
+          currency: account.currency,
+          institution: account.institution,
+          iban: account.iban,
+          initialCents: account.initialCents.toString(),
+          balanceCents: balance.toString(),
+          delta30Cents: delta30.toString(),
+          createdAt: account.createdAt.toISOString(),
+          updatedAt: account.updatedAt.toISOString(),
+        },
+      }),
+      requestId
+    );
   } catch (e: unknown) {
     if (e instanceof Error && e.message === 'UNAUTHORIZED') {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return withRequestId(NextResponse.json({ error: 'Unauthorized' }, { status: 401 }), requestId);
     }
     console.error(e);
-    return NextResponse.json({ error: 'Failed' }, { status: 500 });
+    return withRequestId(NextResponse.json({ error: 'Failed' }, { status: 500 }), requestId);
   }
 }

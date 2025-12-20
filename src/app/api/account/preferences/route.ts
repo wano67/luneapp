@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
   const requestId = getRequestId(req);
   const { userId } = await requireAuthAsync(req).catch(() => ({ userId: null }));
   if (!userId) return withRequestId(unauthorized(), requestId);
-  return jsonNoStore(readPrefs(req));
+  return withRequestId(jsonNoStore(readPrefs(req)), requestId);
 }
 
 export async function PATCH(req: NextRequest) {
@@ -49,7 +49,7 @@ export async function PATCH(req: NextRequest) {
       : 'system';
 
   const prefs: Prefs = { language, theme };
-  const res = jsonNoStore(prefs);
+  const res = withRequestId(jsonNoStore(prefs), requestId);
 
   res.cookies.set('pref_language', language, { sameSite: 'lax', path: '/' });
   res.cookies.set('pref_theme', theme, { sameSite: 'lax', path: '/' });

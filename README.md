@@ -63,6 +63,8 @@ NEXT_DIST_DIR=.next-build pnpm build
 - `pnpm smoke:dev-routes` (BASE_URL, TEST_EMAIL/PASSWORD facultatifs) pour vérifier les pages principales.
 - `pnpm smoke:wiring` (TEST_EMAIL/PASSWORD requis) pour l’API de base.
 - `pnpm smoke:invites` (ADMIN_EMAIL/PASSWORD + INVITEE_EMAIL/PASSWORD) pour tester le flux d’invitation.
+- `pnpm tsx scripts/smoke-finance-wiring.ts` (BASE_URL + TEST_EMAIL/TEST_PASSWORD) : crée un paiement (Finance INCOME/PAYMENT) et vérifie que le dashboard augmente (MTD income).
+- `pnpm smoke:billing` (BASE_URL + TEST_EMAIL/TEST_PASSWORD) : pricing projet → devis (PDF) → facture (PDF) → marquer payée → dashboard MTD income augmente.
 
 ## Prisma & migrations
 - Schéma : `prisma/schema.prisma` (datasource alimentée par `prisma.config.ts`)
@@ -78,7 +80,8 @@ DATABASE_URL="postgresql://USER:PASSWORD@HOST:PORT/DB" npx prisma migrate dev --
 - `POST /api/auth/login` : authentifie et émet le cookie
 - `POST /api/auth/logout` : supprime le cookie
 
-Spéc OpenAPI : `openapi.yaml` (bases health + auth).
+Spéc OpenAPI : `openapi.yaml` (bases health + auth).  
+Swagger UI unique : `/api-docs.html` (consomme `/openapi.yaml`).
 
 ## Front
 - `/` : landing publique (CTA vers login/register/app)

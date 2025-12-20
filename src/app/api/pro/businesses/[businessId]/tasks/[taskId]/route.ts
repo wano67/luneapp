@@ -4,6 +4,7 @@ import { TaskPhase, TaskStatus } from '@/generated/prisma/client';
 import { requireAuthPro } from '@/server/auth/requireAuthPro';
 import { requireBusinessRole } from '@/server/auth/businessRole';
 import { assertSameOrigin, jsonNoStore, withNoStore } from '@/server/security/csrf';
+import { rateLimit } from '@/server/security/rateLimit';
 import {
   badRequest,
   forbidden,
@@ -148,6 +149,13 @@ export async function PATCH(
 
   const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'ADMIN');
   if (!membership) return withIdNoStore(forbidden(), requestId);
+
+  const limited = rateLimit(request, {
+    key: `pro:tasks:update:${businessIdBigInt}:${userId}`,
+    limit: 120,
+    windowMs: 60 * 60 * 1000,
+  });
+  if (limited) return withIdNoStore(limited, requestId);
 
   const existing = await prisma.task.findFirst({
     where: { id: taskIdBigInt, businessId: businessIdBigInt },
@@ -326,6 +334,13 @@ export async function DELETE(
 
   const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'ADMIN');
   if (!membership) return withIdNoStore(forbidden(), requestId);
+
+  const limited = rateLimit(request, {
+    key: `pro:tasks:delete:${businessIdBigInt}:${userId}`,
+    limit: 60,
+    windowMs: 60 * 60 * 1000,
+  });
+  if (limited) return withIdNoStore(limited, requestId);
 
   const task = await prisma.task.findFirst({
     where: { id: taskIdBigInt, businessId: businessIdBigInt },

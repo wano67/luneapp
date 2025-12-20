@@ -4,6 +4,7 @@ import { FinanceType } from '@/generated/prisma/client';
 import { requireAuthPro } from '@/server/auth/requireAuthPro';
 import { requireBusinessRole } from '@/server/auth/businessRole';
 import { assertSameOrigin, jsonNoStore, withNoStore } from '@/server/security/csrf';
+import { rateLimit } from '@/server/security/rateLimit';
 import {
   badRequest,
   forbidden,
@@ -59,6 +60,50 @@ function parseDate(value: unknown): Date | null {
   return date;
 }
 
+const PAYMENT_METADATA_KEYS = [
+  'clientName',
+  'project',
+  'invoiceId',
+  'method',
+  'status',
+  'expectedAt',
+  'receivedAt',
+  'currency',
+  'note',
+] as const;
+
+type PaymentMetadata = Partial<Record<(typeof PAYMENT_METADATA_KEYS)[number], string>>;
+
+function parseMetadataFromNote(note: string | null | undefined): PaymentMetadata | null {
+  if (!note) return null;
+  try {
+    const parsed = JSON.parse(note);
+    if (!parsed || typeof parsed !== 'object') return null;
+    const meta: PaymentMetadata = {};
+    for (const key of PAYMENT_METADATA_KEYS) {
+      const value = (parsed as Record<string, unknown>)[key];
+      if (typeof value === 'string' && value.trim()) {
+        meta[key] = value.trim();
+      }
+    }
+    return Object.keys(meta).length > 0 ? meta : null;
+  } catch {
+    return null;
+  }
+}
+
+function sanitizeMetadata(raw: unknown): PaymentMetadata | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const meta: PaymentMetadata = {};
+  for (const key of PAYMENT_METADATA_KEYS) {
+    const value = (raw as Record<string, unknown>)[key];
+    if (typeof value === 'string' && value.trim()) {
+      meta[key] = value.trim();
+    }
+  }
+  return Object.keys(meta).length > 0 ? meta : null;
+}
+
 function serializeFinance(finance: {
   id: bigint;
   businessId: bigint;
@@ -72,6 +117,8 @@ function serializeFinance(finance: {
   updatedAt: Date;
   project?: { name: string | null } | null;
 }) {
+  const metadata = parseMetadataFromNote(finance.note);
+
   return {
     id: finance.id.toString(),
     businessId: finance.businessId.toString(),
@@ -85,6 +132,7 @@ function serializeFinance(finance: {
     note: finance.note,
     createdAt: finance.createdAt.toISOString(),
     updatedAt: finance.updatedAt.toISOString(),
+    ...(metadata ? { metadata } : {}),
   };
 }
 
@@ -153,6 +201,13 @@ export async function PATCH(
   const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'ADMIN');
   if (!membership) return withIdNoStore(forbidden(), requestId);
 
+  const limited = rateLimit(request, {
+    key: `pro:finances:update:${businessIdBigInt}:${userId}`,
+    limit: 120,
+    windowMs: 60 * 60 * 1000,
+  });
+  if (limited) return withIdNoStore(limited, requestId);
+
   const existing = await prisma.finance.findFirst({
     where: { id: financeIdBigInt, businessId: businessIdBigInt },
     include: { project: { select: { name: true } } },
@@ -198,6 +253,11 @@ export async function PATCH(
     if (noteRaw === null || noteRaw === undefined || noteRaw === '') data.note = null;
     else if (typeof noteRaw === 'string') data.note = noteRaw.trim();
     else return withIdNoStore(badRequest('note invalide.'), requestId);
+  }
+
+  const metadata = sanitizeMetadata((body as { metadata?: unknown }).metadata);
+  if (metadata) {
+    data.note = JSON.stringify(metadata);
   }
 
   if ('projectId' in body) {
@@ -257,6 +317,13 @@ export async function DELETE(
 
   const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'ADMIN');
   if (!membership) return withIdNoStore(forbidden(), requestId);
+
+  const limited = rateLimit(request, {
+    key: `pro:finances:delete:${businessIdBigInt}:${userId}`,
+    limit: 60,
+    windowMs: 60 * 60 * 1000,
+  });
+  if (limited) return withIdNoStore(limited, requestId);
 
   const finance = await prisma.finance.findFirst({
     where: { id: financeIdBigInt, businessId: businessIdBigInt },

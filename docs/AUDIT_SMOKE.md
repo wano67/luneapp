@@ -48,3 +48,12 @@ Headers: toutes les réponses ci-dessus comportent `cache-control: no-store` et 
 - Start projet idempotent côté tâches (skip doublons).
 - Toutes mutations testées respectent CSRF (Origin fourni) et no-store + request-id.
 - Dev server doit être lancé avec APP_URL/NEXT_PUBLIC_APP_URL pour éviter 403 CSRF. Turbopack en dev posait des ENOENT; lancer en `pnpm start` (build) ou dev stable résout.
+
+## Smokes disponibles
+- `pnpm smoke:dev-routes`
+- `pnpm smoke:wiring`
+- `pnpm smoke:invites`
+- `pnpm smoke:finance` (BASE_URL + TEST_EMAIL/TEST_PASSWORD) : crée un paiement (Finance INCOME catégorie PAYMENT) et vérifie que le dashboard MTD income augmente.
+- `pnpm smoke:billing` (BASE_URL + TEST_EMAIL/TEST_PASSWORD) : pricing projet > devis (PDF) > facture (PDF) > paiement → MTD income dashboard doit augmenter.
+
+Docs: Swagger UI unique sur `/api-docs.html` (source `/openapi.yaml`).

@@ -2,6 +2,7 @@
 import { PrismaClient } from '@/generated/prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import pg from 'pg';
+import type { PoolConfig } from 'pg';
 
 const globalForPrisma = globalThis as unknown as {
   prisma?: PrismaClient;
@@ -37,7 +38,24 @@ function initPrisma() {
     return prismaInstance;
   }
 
-  const pool = new pg.Pool({ connectionString });
+  const poolConfig: PoolConfig = { connectionString };
+
+  try {
+    const url = new URL(connectionString);
+    const sslMode = url.searchParams.get('sslmode');
+    const sslAccept = url.searchParams.get('sslaccept');
+    const enableSsl = sslMode && sslMode !== 'disable';
+    const allowInvalidCerts = sslAccept === 'accept_invalid_certs';
+
+    if (enableSsl) {
+      // Allow explicitly opting into skipping CA validation for self-signed certs in dev.
+      poolConfig.ssl = { rejectUnauthorized: !allowInvalidCerts };
+    }
+  } catch (error) {
+    console.warn('Failed to parse DATABASE_URL for SSL options', error);
+  }
+
+  const pool = new pg.Pool(poolConfig);
   const adapter = new PrismaPg(pool);
 
   prismaInstance = new PrismaClient({

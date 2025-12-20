@@ -19,6 +19,8 @@
     "smoke:wiring": "pnpm tsx scripts/smoke-wiring.ts",
     "smoke:dev-routes": "pnpm tsx scripts/smoke-dev-routes.ts",
     "smoke:invites": "pnpm tsx scripts/smoke-invites.ts",
+    "smoke:finance": "pnpm tsx scripts/smoke-finance-wiring.ts",
+    "smoke:billing": "pnpm tsx scripts/smoke-billing-wiring.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {
@@ -28,6 +30,7 @@
     "dotenv": "^17.2.3",
     "jose": "^6.1.3",
     "next": "16.0.10",
+    "pdf-lib": "^1.17.1",
     "pg": "^8.16.3",
     "react": "19.2.1",
     "react-dom": "19.2.1",
