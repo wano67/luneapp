@@ -43,6 +43,37 @@ type Interaction = {
   createdByUserId: string | null;
 };
 
+type ProjectStatus = 'PLANNED' | 'ACTIVE' | 'ON_HOLD' | 'COMPLETED' | 'CANCELLED';
+
+type ProjectSummary = {
+  id: string;
+  businessId: string;
+  clientId: string | null;
+  clientName: string | null;
+  name: string;
+  status: ProjectStatus;
+  quoteStatus: 'DRAFT' | 'SENT' | 'SIGNED' | 'CANCELLED' | 'EXPIRED';
+  depositStatus: 'NOT_REQUIRED' | 'PENDING' | 'PAID';
+  startDate: string | null;
+  endDate: string | null;
+  startedAt: string | null;
+  archivedAt: string | null;
+  progress: number;
+};
+
+type FinanceLine = {
+  id: string;
+  businessId: string;
+  projectId: string | null;
+  projectName: string | null;
+  type: 'INCOME' | 'EXPENSE';
+  amountCents: string;
+  amount: number;
+  category: string;
+  date: string;
+  note: string | null;
+};
+
 export default function ClientDetailPage() {
   const params = useParams();
   const businessId = (params?.businessId ?? '') as string;
@@ -56,6 +87,8 @@ export default function ClientDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const fetchController = useRef<AbortController | null>(null);
   const interactionsController = useRef<AbortController | null>(null);
+  const projectsController = useRef<AbortController | null>(null);
+  const financesController = useRef<AbortController | null>(null);
 
   const [interactions, setInteractions] = useState<Interaction[]>([]);
   const [interactionsLoading, setInteractionsLoading] = useState(true);
@@ -68,6 +101,14 @@ export default function ClientDetailPage() {
   const [savingInteraction, setSavingInteraction] = useState(false);
   const [interactionInfo, setInteractionInfo] = useState<string | null>(null);
   const [editingInteraction, setEditingInteraction] = useState<Interaction | null>(null);
+  const [projects, setProjects] = useState<ProjectSummary[]>([]);
+  const [projectsLoading, setProjectsLoading] = useState(true);
+  const [projectsError, setProjectsError] = useState<string | null>(null);
+  const [projectsRequestId, setProjectsRequestId] = useState<string | null>(null);
+  const [financeLines, setFinanceLines] = useState<FinanceLine[]>([]);
+  const [financeLoading, setFinanceLoading] = useState(true);
+  const [financeError, setFinanceError] = useState<string | null>(null);
+  const [financeRequestId, setFinanceRequestId] = useState<string | null>(null);
 
   function formatDate(value: string) {
     try {
@@ -85,6 +126,14 @@ export default function ClientDetailPage() {
     }
   }
 
+  function formatCents(value: string | number | null | undefined, currency = 'EUR') {
+    const num = typeof value === 'number' ? value : Number(value ?? 0);
+    if (!Number.isFinite(num)) return '—';
+    return new Intl.NumberFormat('fr-FR', { style: 'currency', currency, maximumFractionDigits: 0 }).format(
+      num / 100
+    );
+  }
+
   function interactionTypeLabel(value: InteractionType) {
     switch (value) {
       case 'CALL':
@@ -99,6 +148,82 @@ export default function ClientDetailPage() {
         return 'Message';
       default:
         return value;
+    }
+  }
+
+  async function loadProjects(signal?: AbortSignal) {
+    const controller = signal ? null : new AbortController();
+    const effectiveSignal = signal ?? controller?.signal;
+    if (controller) {
+      projectsController.current?.abort();
+      projectsController.current = controller;
+    }
+
+    try {
+      setProjectsLoading(true);
+      setProjectsError(null);
+      setProjectsRequestId(null);
+      const res = await fetchJson<{ items: ProjectSummary[] }>(
+        `/api/pro/businesses/${businessId}/projects?clientId=${clientId}`,
+        {},
+        effectiveSignal
+      );
+      if (effectiveSignal?.aborted) return;
+      setProjectsRequestId(res.requestId);
+      if (!res.ok || !res.data) {
+        const msg = res.error ?? 'Impossible de charger les projets.';
+        setProjectsError(res.requestId ? `${msg} (Ref: ${res.requestId})` : msg);
+        setProjects([]);
+        return;
+      }
+      setProjects(res.data.items);
+    } catch (err) {
+      if (effectiveSignal?.aborted) return;
+      setProjectsError(getErrorMessage(err));
+      setProjects([]);
+    } finally {
+      if (!effectiveSignal?.aborted) setProjectsLoading(false);
+    }
+  }
+
+  async function loadFinanceLines(signal?: AbortSignal) {
+    if (projects.length === 0) {
+      setFinanceLines([]);
+      setFinanceLoading(false);
+      return;
+    }
+    const controller = signal ? null : new AbortController();
+    const effectiveSignal = signal ?? controller?.signal;
+    if (controller) {
+      financesController.current?.abort();
+      financesController.current = controller;
+    }
+    try {
+      setFinanceLoading(true);
+      setFinanceError(null);
+      setFinanceRequestId(null);
+      const res = await fetchJson<{ items: FinanceLine[] }>(
+        `/api/pro/businesses/${businessId}/finances`,
+        {},
+        effectiveSignal
+      );
+      if (effectiveSignal?.aborted) return;
+      setFinanceRequestId(res.requestId);
+      if (!res.ok || !res.data) {
+        const msg = res.error ?? 'Impossible de charger les finances.';
+        setFinanceError(res.requestId ? `${msg} (Ref: ${res.requestId})` : msg);
+        setFinanceLines([]);
+        return;
+      }
+      const projectIds = new Set(projects.map((p) => p.id));
+      const filtered = res.data.items.filter((line) => line.projectId && projectIds.has(line.projectId));
+      setFinanceLines(filtered);
+    } catch (err) {
+      if (effectiveSignal?.aborted) return;
+      setFinanceError(getErrorMessage(err));
+      setFinanceLines([]);
+    } finally {
+      if (!effectiveSignal?.aborted) setFinanceLoading(false);
     }
   }
 
@@ -306,9 +431,30 @@ export default function ClientDetailPage() {
     return () => {
       controller.abort();
       interactionsController.current?.abort();
+      projectsController.current?.abort();
+      financesController.current?.abort();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [businessId, clientId]);
+
+  useEffect(() => {
+    void loadProjects();
+    return () => projectsController.current?.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [businessId, clientId]);
+
+  useEffect(() => {
+    void loadFinanceLines();
+    return () => financesController.current?.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projects, businessId]);
+
+  const incomeTotalCents = financeLines
+    .filter((f) => f.type === 'INCOME')
+    .reduce((acc, f) => acc + Number(f.amountCents ?? 0), 0);
+  const expenseTotalCents = financeLines
+    .filter((f) => f.type === 'EXPENSE')
+    .reduce((acc, f) => acc + Number(f.amountCents ?? 0), 0);
 
   if (loading) {
     return (
@@ -339,9 +485,7 @@ export default function ClientDetailPage() {
               Client · Centre de pilotage
             </p>
             <h1 className="text-xl font-semibold text-[var(--text-primary)]">{client.name}</h1>
-            <p className="text-xs text-[var(--text-secondary)]">
-              Cockpit client — données live, blocs finances/projets à venir.
-            </p>
+            <p className="text-xs text-[var(--text-secondary)]">Cockpit client — données consolidées.</p>
           </div>
           <div className="flex flex-wrap gap-2">
             <Badge variant="neutral">ID {client.id}</Badge>
@@ -349,13 +493,13 @@ export default function ClientDetailPage() {
         </div>
 
         <div className="grid gap-3 md:grid-cols-2">
-          <Card className="space-y-1 border-dashed border-[var(--border)] bg-transparent p-3">
-            <p className="text-xs font-semibold text-[var(--text-primary)]">LTV (stub)</p>
+          <Card className="space-y-1 border-dashed border-[var(--border)] bg-[var(--surface)]/70 p-3">
+            <p className="text-xs font-semibold text-[var(--text-primary)]">Synthèse finances (projets liés)</p>
             <p className="text-sm text-[var(--text-secondary)]">
-              TODO: connecter revenu cumulé quand l’API finances sera prête.
+              Revenus: {formatCents(incomeTotalCents)} · Dépenses: {formatCents(expenseTotalCents)}
             </p>
           </Card>
-          <Card className="space-y-1 border-dashed border-[var(--border)] bg-transparent p-3">
+          <Card className="space-y-1 border-dashed border-[var(--border)] bg-[var(--surface)]/70 p-3">
             <p className="text-xs font-semibold text-[var(--text-primary)]">Créé le</p>
             <p className="text-sm text-[var(--text-secondary)]">{formatDate(client.createdAt)}</p>
           </Card>
@@ -514,33 +658,85 @@ export default function ClientDetailPage() {
       </Card>
 
       <Card className="space-y-3 p-5">
-        <div className="flex items-center justify-between">
-          <p className="text-sm font-semibold text-[var(--text-primary)]">Projets du client — stub</p>
-          <Badge variant="neutral">À venir</Badge>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-sm font-semibold text-[var(--text-primary)]">Projets du client</p>
+          <Badge variant="neutral">{projectsLoading ? 'Chargement…' : `${projects.length} projet(s)`}</Badge>
         </div>
-        <p className="text-sm text-[var(--text-secondary)]">
-          TODO: GET /api/pro/businesses/{businessId}/clients/{clientId}/projects pour lier les projets.
-        </p>
+        {projectsError ? <p className="text-xs font-semibold text-rose-500">{projectsError}</p> : null}
+        {projectsRequestId ? (
+          <p className="text-[10px] text-[var(--text-faint)]">Req: {projectsRequestId}</p>
+        ) : null}
+        {projectsLoading ? (
+          <p className="text-sm text-[var(--text-secondary)]">Chargement des projets…</p>
+        ) : projects.length === 0 ? (
+          <p className="text-sm text-[var(--text-secondary)]">Aucun projet lié pour le moment.</p>
+        ) : (
+          <div className="grid gap-3 md:grid-cols-2">
+            {projects.map((project) => (
+              <Card key={project.id} className="space-y-1 border border-[var(--border)] bg-[var(--surface)]/70 p-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-semibold text-[var(--text-primary)]">{project.name}</p>
+                  <Badge variant="neutral">{project.status}</Badge>
+                </div>
+                <p className="text-xs text-[var(--text-secondary)]">
+                  Quote: {project.quoteStatus} · Dépôt: {project.depositStatus} · Progress: {project.progress}%
+                </p>
+                <Button asChild size="sm" variant="outline">
+                  <Link href={`/app/pro/${businessId}/projects/${project.id}`}>Ouvrir</Link>
+                </Button>
+              </Card>
+            ))}
+          </div>
+        )}
       </Card>
 
       <Card className="space-y-3 p-5">
-        <div className="flex items-center justify-between">
-          <p className="text-sm font-semibold text-[var(--text-primary)]">Finances — stub</p>
-          <Badge variant="neutral">À venir</Badge>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-sm font-semibold text-[var(--text-primary)]">Finances du client</p>
+          <Badge variant="neutral">{financeLoading ? 'Chargement…' : `${financeLines.length} ligne(s)`}</Badge>
         </div>
-        <p className="text-sm text-[var(--text-secondary)]">
-          TODO: endpoints finances (factures, paiements, dépenses) pour calculer LTV et santé client.
-        </p>
-      </Card>
-
-      <Card className="space-y-3 p-5">
-        <div className="flex items-center justify-between">
-          <p className="text-sm font-semibold text-[var(--text-primary)]">Notes & upsell — stub</p>
-          <Badge variant="neutral">Bientôt</Badge>
-        </div>
-        <p className="text-sm text-[var(--text-secondary)]">
-          Prévoir un bloc notes interne et opportunités d’upsell.
-        </p>
+        {financeError ? <p className="text-xs font-semibold text-rose-500">{financeError}</p> : null}
+        {financeRequestId ? (
+          <p className="text-[10px] text-[var(--text-faint)]">Req: {financeRequestId}</p>
+        ) : null}
+        {financeLoading ? (
+          <p className="text-sm text-[var(--text-secondary)]">Chargement des mouvements…</p>
+        ) : financeLines.length === 0 ? (
+          <p className="text-sm text-[var(--text-secondary)]">
+            Aucun mouvement lié aux projets de ce client pour l’instant.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            <div className="flex flex-wrap gap-3 text-sm text-[var(--text-secondary)]">
+              <span>Total revenus: {formatCents(incomeTotalCents)}</span>
+              <span>Total dépenses: {formatCents(expenseTotalCents)}</span>
+            </div>
+            <div className="overflow-hidden rounded-xl border border-[var(--border)]">
+              <table className="min-w-full divide-y divide-[var(--border)]">
+                <thead className="bg-[var(--surface)]">
+                  <tr className="text-left text-xs uppercase tracking-wide text-[var(--text-secondary)]">
+                    <th className="px-4 py-3">Projet</th>
+                    <th className="px-4 py-3">Type</th>
+                    <th className="px-4 py-3">Montant</th>
+                    <th className="px-4 py-3">Catégorie</th>
+                    <th className="px-4 py-3">Date</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[var(--border)] bg-[var(--surface)]">
+                  {financeLines.slice(0, 10).map((line) => (
+                    <tr key={line.id} className="text-sm text-[var(--text-primary)]">
+                      <td className="px-4 py-3">{line.projectName ?? line.projectId ?? '—'}</td>
+                      <td className="px-4 py-3">{line.type === 'INCOME' ? 'Revenu' : 'Dépense'}</td>
+                      <td className="px-4 py-3">{formatCents(line.amountCents)}</td>
+                      <td className="px-4 py-3">{line.category}</td>
+                      <td className="px-4 py-3">{formatDate(line.date)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </Card>
     </div>
   );
