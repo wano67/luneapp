@@ -1,57 +1,58 @@
 openapi: 3.1.0
 info:
   title: Lune API
-  version: 0.2.0
+  version: 0.3.0
   description: >
-    API publique (landing + auth) et API app interne (PRO / PERSO / PERFORMANCE).
-    Cette version couvre l'auth, la santé, les entreprises PRO, les invitations,
-    les clients, les prospects et les projets.
-
+    API publique (auth, santé) et API app (PERSONAL / PRO). Toutes les IDs BigInt sont sérialisées en string.
+    Toutes les réponses mutables exigent CSRF (Origin) et renvoient `x-request-id` + `cache-control: no-store`.
 servers:
   - url: http://localhost:3000
     description: Développement local
   - url: https://diwanbg.work
     description: Production (Railway)
-
+security:
+  - cookieAuth: []
 tags:
   - name: Health
-    description: Vérification de l'état de l'API
   - name: Auth
-    description: Authentification et profil utilisateur
+  - name: Account
+  - name: Personal
   - name: Pro / Business
-    description: Entreprises PRO et memberships
-  - name: Pro / Invites
-    description: Invitations à rejoindre une entreprise PRO
   - name: Pro / Clients
-    description: Clients d'une entreprise PRO
   - name: Pro / Prospects
-    description: Prospects commerciaux et pipeline
   - name: Pro / Projects
-    description: Projets liés à une entreprise PRO
+  - name: Pro / Services
+  - name: Pro / Tasks
+  - name: Pro / Interactions
+  - name: Pro / Members
+  - name: Pro / Invites
+  - name: Pro / Finances
+  - name: Pro / Billing
 
 paths:
   /api/health:
     get:
       tags: [Health]
-      summary: Vérifie la connexion à la base
+      summary: Vérifie la connexion DB
       responses:
         '200':
-          description: Base joignable
+          description: OK
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HealthResponse'
+                type: object
+                properties:
+                  status: { type: string, example: ok }
 
   /api/auth/register:
     post:
       tags: [Auth]
-      summary: Crée un utilisateur et émet un cookie de session
+      summary: Crée un utilisateur et émet le cookie
       requestBody:
         required: true
         content:
           application/json:
-            schema:
-              $ref: '#/components/schemas/RegisterRequest'
+            schema: { $ref: '#/components/schemas/RegisterRequest' }
       responses:
         '201':
           description: Utilisateur créé
@@ -59,564 +60,1241 @@ paths:
             application/json:
               schema:
                 type: object
-                properties:
-                  user:
-                    $ref: '#/components/schemas/User'
-        '409':
-          description: Conflit (email déjà utilisé)
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
+                properties: { user: { $ref: '#/components/schemas/User' } }
+        '409': { $ref: '#/components/responses/Error' }
   /api/auth/login:
     post:
       tags: [Auth]
-      summary: Authentifie l'utilisateur et émet un cookie de session
+      summary: Authentifie et émet un cookie
       requestBody:
         required: true
         content:
           application/json:
-            schema:
-              $ref: '#/components/schemas/LoginRequest'
+            schema: { $ref: '#/components/schemas/LoginRequest' }
       responses:
         '200':
-          description: Authentification réussie
+          description: Auth OK
           content:
             application/json:
               schema:
                 type: object
-                properties:
-                  user:
-                    $ref: '#/components/schemas/User'
-        '401':
-          description: Identifiants invalides
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
+                properties: { user: { $ref: '#/components/schemas/User' } }
+        '401': { $ref: '#/components/responses/Error' }
   /api/auth/logout:
     post:
       tags: [Auth]
-      summary: Déconnecte l'utilisateur (supprime le cookie)
-      security:
-        - cookieAuth: []
+      summary: Supprime le cookie
+      security: [ { cookieAuth: [] } ]
       responses:
         '200':
-          description: Déconnexion réussie
+          description: Déconnecté
           content:
             application/json:
               schema:
                 type: object
-                properties:
-                  status:
-                    type: string
-                    example: logged_out
-
+                properties: { status: { type: string, example: logged_out } }
   /api/auth/me:
     get:
       tags: [Auth]
-      summary: Retourne l'utilisateur courant (session active)
-      security:
-        - cookieAuth: []
+      summary: Retourne l'utilisateur courant
+      security: [ { cookieAuth: [] } ]
       responses:
         '200':
           description: Utilisateur authentifié
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/MeResponse'
-        '401':
-          description: Non authentifié
+                type: object
+                properties:
+                  user: { $ref: '#/components/schemas/User' }
+        '401': { $ref: '#/components/responses/Error' }
+
+  /api/account/profile:
+    patch:
+      tags: [Account]
+      summary: Met à jour le profil (nom/email)
+      security: [ { cookieAuth: [] } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email: { type: string, format: email }
+                firstName: { type: string, nullable: true }
+                lastName: { type: string, nullable: true }
+      responses:
+        '200':
+          description: Profil mis à jour
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                type: object
+                properties:
+                  user: { $ref: '#/components/schemas/User' }
+        '401': { $ref: '#/components/responses/Error' }
+  /api/account/password:
+    patch:
+      tags: [Account]
+      summary: Change le mot de passe
+      security: [ { cookieAuth: [] } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [currentPassword, newPassword]
+              properties:
+                currentPassword: { type: string }
+                newPassword: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+        '400': { $ref: '#/components/responses/Error' }
+  /api/account/preferences:
+    get:
+      tags: [Account]
+      security: [ { cookieAuth: [] } ]
+      summary: Lit les préférences (langue, thème)
+      responses:
+        '200':
+          description: Préférences
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  language: { type: string, enum: [fr, en] }
+                  theme: { type: string, enum: [light, dark, system] }
+    patch:
+      tags: [Account]
+      security: [ { cookieAuth: [] } ]
+      summary: Met à jour les préférences
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                language: { type: string, enum: [fr, en] }
+                theme: { type: string, enum: [light, dark, system] }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+
+  /api/personal/accounts:
+    get:
+      tags: [Personal]
+      security: [ { cookieAuth: [] } ]
+      summary: Liste des comptes personnels
+      responses:
+        '200':
+          description: Liste
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/PersonalAccount' }
+    post:
+      tags: [Personal]
+      security: [ { cookieAuth: [] } ]
+      summary: Crée un compte personnel
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, type]
+              properties:
+                name: { type: string }
+                type: { type: string, enum: [CHECKING, SAVINGS, CASH] }
+      responses:
+        '201':
+          description: Créé
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { account: { $ref: '#/components/schemas/PersonalAccount' } }
+  /api/personal/accounts/{accountId}:
+    get:
+      tags: [Personal]
+      security: [ { cookieAuth: [] } ]
+      summary: Détail compte personnel
+      parameters:
+        - $ref: '#/components/parameters/AccountId'
+      responses:
+        '200':
+          description: Compte
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { account: { $ref: '#/components/schemas/PersonalAccountDetail' } }
+        '404': { $ref: '#/components/responses/Error' }
+  /api/personal/categories:
+    get:
+      tags: [Personal]
+      security: [ { cookieAuth: [] } ]
+      summary: Liste des catégories perso
+      responses:
+        '200':
+          description: Liste
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string }
+                        name: { type: string }
+  /api/personal/summary:
+    get:
+      tags: [Personal]
+      security: [ { cookieAuth: [] } ]
+      summary: Synthèse finances perso
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+  /api/personal/transactions:
+    get:
+      tags: [Personal]
+      security: [ { cookieAuth: [] } ]
+      summary: Liste paginée des transactions
+      parameters:
+        - in: query
+          name: limit
+          schema: { type: integer, default: 50 }
+      responses:
+        '200':
+          description: Liste
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/PersonalTransaction' }
+    post:
+      tags: [Personal]
+      security: [ { cookieAuth: [] } ]
+      summary: Crée une transaction
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PersonalTransactionCreate' }
+      responses:
+        '201':
+          description: Créé
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { item: { $ref: '#/components/schemas/PersonalTransaction' } }
+  /api/personal/transactions/{transactionId}:
+    patch:
+      tags: [Personal]
+      security: [ { cookieAuth: [] } ]
+      summary: Met à jour une transaction
+      parameters:
+        - $ref: '#/components/parameters/TransactionId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PersonalTransactionUpdate' }
+      responses:
+        '200':
+          description: Mis à jour
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { item: { $ref: '#/components/schemas/PersonalTransaction' } }
+    delete:
+      tags: [Personal]
+      security: [ { cookieAuth: [] } ]
+      summary: Supprime une transaction
+      parameters:
+        - $ref: '#/components/parameters/TransactionId'
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+  /api/personal/transactions/import:
+    post:
+      tags: [Personal]
+      security: [ { cookieAuth: [] } ]
+      summary: Import CSV de transactions
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                accountId:
+                  type: string
+                dryRun:
+                  type: string
+      responses:
+        '200':
+          description: Résultat import
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  imported: { type: integer }
+                  invalidRows: { type: integer }
+                  errors: { type: array, items: { type: object } }
+  /api/personal/transactions/bulk-delete:
+    post:
+      tags: [Personal]
+      security: [ { cookieAuth: [] } ]
+      summary: Suppression multiple de transactions
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                ids:
+                  type: array
+                  items: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
 
   /api/pro/businesses:
     get:
       tags: [Pro / Business]
-      summary: Liste les entreprises liées à l'utilisateur courant
-      security:
-        - cookieAuth: []
+      security: [ { cookieAuth: [] } ]
+      summary: Liste les businesses de l'utilisateur
       responses:
         '200':
-          description: Liste des entreprises
+          description: Liste memberships
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/BusinessListResponse'
-        '401':
-          description: Non authentifié
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        business: { $ref: '#/components/schemas/Business' }
+                        role: { $ref: '#/components/schemas/BusinessRole' }
     post:
       tags: [Pro / Business]
-      summary: Crée une nouvelle entreprise pour l'utilisateur (OWNER)
-      security:
-        - cookieAuth: []
+      security: [ { cookieAuth: [] } ]
+      summary: Crée un business
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/BusinessCreateRequest'
+              type: object
+              required: [name]
+              properties: { name: { type: string } }
       responses:
         '201':
-          description: Entreprise créée + rôle de l'utilisateur
+          description: Créé
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/BusinessMembershipSummary'
-        '400':
-          description: Données invalides
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '401':
-          description: Non authentifié
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
+                type: object
+                properties:
+                  business: { $ref: '#/components/schemas/Business' }
+                  role: { $ref: '#/components/schemas/BusinessRole' }
   /api/pro/businesses/{businessId}:
     get:
       tags: [Pro / Business]
-      summary: Récupère une entreprise spécifique (si membre)
-      security:
-        - cookieAuth: []
-      parameters:
-        - name: businessId
-          in: path
-          required: true
-          schema:
-            type: string
-          description: Identifiant interne de l'entreprise (BigInt sérialisé)
+      security: [ { cookieAuth: [] } ]
+      summary: Détail business
+      parameters: [ { $ref: '#/components/parameters/BusinessId' } ]
       responses:
         '200':
-          description: Détails de l'entreprise
+          description: Business
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/Business'
-        '401':
-          description: Non authentifié
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '403':
-          description: Non membre de l'entreprise
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '404':
-          description: Entreprise introuvable
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
-  /api/pro/businesses/{businessId}/invites:
-    get:
-      tags: [Pro / Invites]
-      summary: Liste les invitations d'une entreprise (admin / owner uniquement)
-      security:
-        - cookieAuth: []
-      parameters:
-        - name: businessId
-          in: path
-          required: true
-          schema:
-            type: string
-          description: Identifiant interne de l'entreprise
-      responses:
-        '200':
-          description: Liste des invitations
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/BusinessInviteListResponse'
-        '401':
-          description: Non authentifié
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '403':
-          description: Droit insuffisant (non admin/owner)
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-    post:
-      tags: [Pro / Invites]
-      summary: Crée une invitation pour rejoindre l'entreprise
-      security:
-        - cookieAuth: []
-      parameters:
-        - name: businessId
-          in: path
-          required: true
-          schema:
-            type: string
-          description: Identifiant interne de l'entreprise
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/BusinessInviteCreateRequest'
-      responses:
-        '201':
-          description: Invitation créée
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/BusinessInvite'
-        '400':
-          description: Données invalides
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '401':
-          description: Non authentifié
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '403':
-          description: Droit insuffisant (non admin/owner)
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
-  /api/pro/businesses/{businessId}/invites/{inviteId}:
+              schema: { $ref: '#/components/schemas/Business' }
     delete:
-      tags: [Pro / Invites]
-      summary: Révoque une invitation existante
-      security:
-        - cookieAuth: []
-      parameters:
-        - name: businessId
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: inviteId
-          in: path
-          required: true
-          schema:
-            type: string
+      tags: [Pro / Business]
+      security: [ { cookieAuth: [] } ]
+      summary: Supprime un business (owner)
+      parameters: [ { $ref: '#/components/parameters/BusinessId' } ]
       responses:
-        '204':
-          description: Invitation révoquée
-        '401':
-          description: Non authentifié
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '403':
-          description: Droit insuffisant
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '404':
-          description: Invitation introuvable
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
-  /api/pro/businesses/invites/accept:
-    post:
-      tags: [Pro / Invites]
-      summary: Accepte une invitation via un token
-      security:
-        - cookieAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/BusinessInviteAcceptRequest'
+        '200': { $ref: '#/components/responses/Ok' }
+  /api/pro/businesses/{businessId}/dashboard:
+    get:
+      tags: [Pro / Business]
+      security: [ { cookieAuth: [] } ]
+      summary: KPIs tableau de bord business
+      parameters: [ { $ref: '#/components/parameters/BusinessId' } ]
       responses:
-        '200':
-          description: Invitation acceptée, membership créé
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/BusinessInviteAcceptResponse'
-        '400':
-          description: Token invalide ou invitation non valide/expirée
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '401':
-          description: Non authentifié
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+        '200': { $ref: '#/components/responses/Ok' }
 
   /api/pro/businesses/{businessId}/clients:
     get:
       tags: [Pro / Clients]
-      summary: Liste les clients d'une entreprise
-      security:
-        - cookieAuth: []
-      parameters:
-        - name: businessId
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: search
-          in: query
-          required: false
-          schema:
-            type: string
-          description: Filtre par nom (recherche partielle, insensible à la casse)
+      security: [ { cookieAuth: [] } ]
+      summary: Liste des clients
+      parameters: [ { $ref: '#/components/parameters/BusinessId' } ]
       responses:
         '200':
-          description: Liste des clients
+          description: Liste
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ClientListResponse'
-        '401':
-          description: Non authentifié
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '403':
-          description: Non membre de l'entreprise
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Client' }
     post:
       tags: [Pro / Clients]
-      summary: Crée un client pour une entreprise
-      security:
-        - cookieAuth: []
-      parameters:
-        - name: businessId
-          in: path
-          required: true
-          schema:
-            type: string
+      security: [ { cookieAuth: [] } ]
+      summary: Crée un client
+      parameters: [ { $ref: '#/components/parameters/BusinessId' } ]
       requestBody:
         required: true
         content:
           application/json:
-            schema:
-              $ref: '#/components/schemas/ClientCreateRequest'
+            schema: { $ref: '#/components/schemas/ClientCreate' }
       responses:
         '201':
-          description: Client créé
+          description: Client
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/Client'
-        '400':
-          description: Données invalides
+              schema: { $ref: '#/components/schemas/Client' }
+  /api/pro/businesses/{businessId}/clients/{clientId}:
+    get:
+      tags: [Pro / Clients]
+      security: [ { cookieAuth: [] } ]
+      summary: Détail client
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+        - $ref: '#/components/parameters/ClientId'
+      responses:
+        '200':
+          description: Client
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '401':
-          description: Non authentifié
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '403':
-          description: Non membre de l'entreprise
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+              schema: { $ref: '#/components/schemas/Client' }
 
   /api/pro/businesses/{businessId}/prospects:
     get:
       tags: [Pro / Prospects]
-      summary: Liste les prospects d'une entreprise
-      security:
-        - cookieAuth: []
-      parameters:
-        - name: businessId
-          in: path
-          required: true
-          schema:
-            type: string
-          description: Identifiant de l'entreprise (BigInt sérialisé)
-        - name: search
-          in: query
-          required: false
-          schema:
-            type: string
-          description: Filtre par nom du prospect
-        - name: status
-          in: query
-          required: false
-          schema:
-            $ref: '#/components/schemas/ProspectPipelineStatus'
-          description: Filtre par statut dans le pipeline
+      security: [ { cookieAuth: [] } ]
+      summary: Liste des prospects
+      parameters: [ { $ref: '#/components/parameters/BusinessId' } ]
       responses:
-        '200':
-          description: Liste des prospects
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ProspectListResponse'
-        '401':
-          description: Non authentifié
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '403':
-          description: Non membre de l'entreprise
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+        '200': { $ref: '#/components/responses/Ok' }
     post:
       tags: [Pro / Prospects]
+      security: [ { cookieAuth: [] } ]
       summary: Crée un prospect
-      security:
-        - cookieAuth: []
-      parameters:
-        - name: businessId
-          in: path
-          required: true
-          schema:
-            type: string
-          description: Identifiant de l'entreprise (BigInt sérialisé)
+      parameters: [ { $ref: '#/components/parameters/BusinessId' } ]
       requestBody:
         required: true
         content:
           application/json:
-            schema:
-              $ref: '#/components/schemas/ProspectCreateRequest'
+            schema: { $ref: '#/components/schemas/ProspectCreate' }
       responses:
-        '201':
-          description: Prospect créé
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Prospect'
-        '400':
-          description: Données invalides
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '401':
-          description: Non authentifié
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '403':
-          description: Non membre de l'entreprise
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+        '201': { $ref: '#/components/responses/Ok' }
+  /api/pro/businesses/{businessId}/prospects/{prospectId}:
+    get:
+      tags: [Pro / Prospects]
+      security: [ { cookieAuth: [] } ]
+      summary: Détail prospect
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+        - $ref: '#/components/parameters/ProspectId'
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+    patch:
+      tags: [Pro / Prospects]
+      security: [ { cookieAuth: [] } ]
+      summary: Met à jour un prospect
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+        - $ref: '#/components/parameters/ProspectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProspectUpdate' }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+    delete:
+      tags: [Pro / Prospects]
+      security: [ { cookieAuth: [] } ]
+      summary: Supprime un prospect
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+        - $ref: '#/components/parameters/ProspectId'
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+  /api/pro/businesses/{businessId}/prospects/{prospectId}/convert:
+    post:
+      tags: [Pro / Prospects]
+      security: [ { cookieAuth: [] } ]
+      summary: Convertit un prospect en client/projet
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+        - $ref: '#/components/parameters/ProspectId'
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
 
   /api/pro/businesses/{businessId}/projects:
     get:
       tags: [Pro / Projects]
-      summary: Liste les projets d'une entreprise
-      security:
-        - cookieAuth: []
-      parameters:
-        - name: businessId
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: status
-          in: query
-          required: false
-          schema:
-            $ref: '#/components/schemas/ProjectStatus'
-          description: Filtre par statut du projet
+      security: [ { cookieAuth: [] } ]
+      summary: Liste des projets
+      parameters: [ { $ref: '#/components/parameters/BusinessId' } ]
       responses:
-        '200':
-          description: Liste des projets
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ProjectListResponse'
-        '401':
-          description: Non authentifié
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '403':
-          description: Non membre de l'entreprise
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+        '200': { $ref: '#/components/responses/Ok' }
     post:
       tags: [Pro / Projects]
-      summary: Crée un projet pour une entreprise
-      security:
-        - cookieAuth: []
-      parameters:
-        - name: businessId
-          in: path
-          required: true
-          schema:
-            type: string
+      security: [ { cookieAuth: [] } ]
+      summary: Crée un projet
+      parameters: [ { $ref: '#/components/parameters/BusinessId' } ]
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ProjectCreateRequest'
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+                clientId: { type: string, nullable: true }
+      responses:
+        '201': { $ref: '#/components/responses/Ok' }
+  /api/pro/businesses/{businessId}/projects/{projectId}:
+    get:
+      tags: [Pro / Projects]
+      security: [ { cookieAuth: [] } ]
+      summary: Détail projet
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+        - $ref: '#/components/parameters/ProjectId'
+      responses:
+        '200':
+          description: Projet
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { item: { $ref: '#/components/schemas/Project' } }
+    patch:
+      tags: [Pro / Projects]
+      security: [ { cookieAuth: [] } ]
+      summary: Met à jour un projet
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+        - $ref: '#/components/parameters/ProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProjectUpdate' }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+    delete:
+      tags: [Pro / Projects]
+      security: [ { cookieAuth: [] } ]
+      summary: Supprime un projet
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+        - $ref: '#/components/parameters/ProjectId'
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+  /api/pro/businesses/{businessId}/projects/{projectId}/services:
+    get:
+      tags: [Pro / Projects]
+      security: [ { cookieAuth: [] } ]
+      summary: Liste des services associés au projet
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+        - $ref: '#/components/parameters/ProjectId'
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+    post:
+      tags: [Pro / Projects]
+      security: [ { cookieAuth: [] } ]
+      summary: Ajoute un service au projet
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+        - $ref: '#/components/parameters/ProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [serviceId]
+              properties:
+                serviceId: { type: string }
+                quantity: { type: integer, minimum: 1 }
+      responses:
+        '201': { $ref: '#/components/responses/Ok' }
+  /api/pro/businesses/{businessId}/projects/{projectId}/services/{itemId}:
+    patch:
+      tags: [Pro / Projects]
+      security: [ { cookieAuth: [] } ]
+      summary: Met à jour un service projet
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+        - $ref: '#/components/parameters/ProjectId'
+        - name: itemId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                quantity: { type: integer }
+                priceCents: { type: integer }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+    delete:
+      tags: [Pro / Projects]
+      security: [ { cookieAuth: [] } ]
+      summary: Supprime un service projet
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+        - $ref: '#/components/parameters/ProjectId'
+        - name: itemId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+  /api/pro/businesses/{businessId}/projects/{projectId}/pricing:
+    get:
+      tags: [Pro / Projects]
+      security: [ { cookieAuth: [] } ]
+      summary: Calcule le pricing du projet
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+        - $ref: '#/components/parameters/ProjectId'
+      responses:
+        '200':
+          description: Pricing
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  totalCents: { type: string }
+                  depositCents: { type: string }
+                  balanceCents: { type: string }
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        serviceId: { type: string, nullable: true }
+                        label: { type: string }
+                        quantity: { type: integer }
+                        unitPriceCents: { type: string }
+                        totalCents: { type: string }
+  /api/pro/businesses/{businessId}/projects/{projectId}/quotes:
+    get:
+      tags: [Pro / Billing]
+      security: [ { cookieAuth: [] } ]
+      summary: Liste des devis du projet
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+        - $ref: '#/components/parameters/ProjectId'
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+    post:
+      tags: [Pro / Billing]
+      security: [ { cookieAuth: [] } ]
+      summary: Crée un devis depuis le pricing projet
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+        - $ref: '#/components/parameters/ProjectId'
       responses:
         '201':
-          description: Projet créé
+          description: Devis créé
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Project'
-        '400':
-          description: Données invalides
+                type: object
+                properties: { quote: { $ref: '#/components/schemas/Quote' } }
+  /api/pro/businesses/{businessId}/projects/{projectId}/invoices:
+    get:
+      tags: [Pro / Billing]
+      security: [ { cookieAuth: [] } ]
+      summary: Liste des factures du projet
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+        - $ref: '#/components/parameters/ProjectId'
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+
+  /api/pro/businesses/{businessId}/projects/{projectId}/archive:
+    post:
+      tags: [Pro / Projects]
+      security: [ { cookieAuth: [] } ]
+      summary: Archive le projet
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+        - $ref: '#/components/parameters/ProjectId'
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+  /api/pro/businesses/{businessId}/projects/{projectId}/start:
+    post:
+      tags: [Pro / Projects]
+      security: [ { cookieAuth: [] } ]
+      summary: Démarre le projet
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+        - $ref: '#/components/parameters/ProjectId'
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+  /api/pro/businesses/{businessId}/projects/{projectId}/unarchive:
+    post:
+      tags: [Pro / Projects]
+      security: [ { cookieAuth: [] } ]
+      summary: Désarchive le projet
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+        - $ref: '#/components/parameters/ProjectId'
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+
+  /api/pro/businesses/{businessId}/quotes/{quoteId}:
+    get:
+      tags: [Pro / Billing]
+      security: [ { cookieAuth: [] } ]
+      summary: Détail devis
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+        - $ref: '#/components/parameters/QuoteId'
+      responses:
+        '200':
+          description: Devis
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '401':
-          description: Non authentifié
+                type: object
+                properties: { quote: { $ref: '#/components/schemas/Quote' } }
+    patch:
+      tags: [Pro / Billing]
+      security: [ { cookieAuth: [] } ]
+      summary: Met à jour le statut du devis
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+        - $ref: '#/components/parameters/QuoteId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status:
+                  type: string
+                  enum: [DRAFT, SENT, SIGNED, CANCELLED, EXPIRED]
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+  /api/pro/businesses/{businessId}/quotes/{quoteId}/pdf:
+    get:
+      tags: [Pro / Billing]
+      security: [ { cookieAuth: [] } ]
+      summary: Télécharge le PDF du devis
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+        - $ref: '#/components/parameters/QuoteId'
+      responses:
+        '200':
+          description: PDF
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+  /api/pro/businesses/{businessId}/quotes/{quoteId}/invoices:
+    post:
+      tags: [Pro / Billing]
+      security: [ { cookieAuth: [] } ]
+      summary: Crée une facture depuis un devis signé
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+        - $ref: '#/components/parameters/QuoteId'
+      responses:
+        '201':
+          description: Facture
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '403':
-          description: Non membre de l'entreprise
+                type: object
+                properties: { invoice: { $ref: '#/components/schemas/Invoice' } }
+  /api/pro/businesses/{businessId}/invoices/{invoiceId}:
+    get:
+      tags: [Pro / Billing]
+      security: [ { cookieAuth: [] } ]
+      summary: Détail facture
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+        - $ref: '#/components/parameters/InvoiceId'
+      responses:
+        '200':
+          description: Facture
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                type: object
+                properties: { invoice: { $ref: '#/components/schemas/Invoice' } }
+    patch:
+      tags: [Pro / Billing]
+      security: [ { cookieAuth: [] } ]
+      summary: Met à jour le statut de facture
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+        - $ref: '#/components/parameters/InvoiceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status:
+                  type: string
+                  enum: [DRAFT, SENT, PAID, CANCELLED]
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+  /api/pro/businesses/{businessId}/invoices/{invoiceId}/pdf:
+    get:
+      tags: [Pro / Billing]
+      security: [ { cookieAuth: [] } ]
+      summary: Télécharge le PDF facture
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+        - $ref: '#/components/parameters/InvoiceId'
+      responses:
+        '200':
+          description: PDF
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+
+  /api/pro/businesses/{businessId}/tasks:
+    get:
+      tags: [Pro / Tasks]
+      security: [ { cookieAuth: [] } ]
+      summary: Liste des tâches
+      parameters: [ { $ref: '#/components/parameters/BusinessId' } ]
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+    post:
+      tags: [Pro / Tasks]
+      security: [ { cookieAuth: [] } ]
+      summary: Crée une tâche
+      parameters: [ { $ref: '#/components/parameters/BusinessId' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title]
+              properties:
+                title: { type: string }
+                projectId: { type: string, nullable: true }
+      responses:
+        '201': { $ref: '#/components/responses/Ok' }
+  /api/pro/businesses/{businessId}/tasks/{taskId}:
+    get:
+      tags: [Pro / Tasks]
+      security: [ { cookieAuth: [] } ]
+      summary: Détail tâche
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+        - name: taskId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Tâche
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { item: { $ref: '#/components/schemas/Task' } }
+    patch:
+      tags: [Pro / Tasks]
+      security: [ { cookieAuth: [] } ]
+      summary: Met à jour une tâche
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+        - name: taskId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+    delete:
+      tags: [Pro / Tasks]
+      security: [ { cookieAuth: [] } ]
+      summary: Supprime une tâche
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+        - name: taskId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+
+  /api/pro/businesses/{businessId}/interactions:
+    get:
+      tags: [Pro / Interactions]
+      security: [ { cookieAuth: [] } ]
+      summary: Liste des interactions
+      parameters: [ { $ref: '#/components/parameters/BusinessId' } ]
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+    post:
+      tags: [Pro / Interactions]
+      security: [ { cookieAuth: [] } ]
+      summary: Crée une interaction
+      parameters: [ { $ref: '#/components/parameters/BusinessId' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type, content]
+              properties:
+                type: { type: string }
+                content: { type: string }
+      responses:
+        '201': { $ref: '#/components/responses/Ok' }
+  /api/pro/businesses/{businessId}/interactions/{interactionId}:
+    patch:
+      tags: [Pro / Interactions]
+      security: [ { cookieAuth: [] } ]
+      summary: Met à jour une interaction
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+        - name: interactionId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+    delete:
+      tags: [Pro / Interactions]
+      security: [ { cookieAuth: [] } ]
+      summary: Supprime une interaction
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+        - name: interactionId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+
+  /api/pro/businesses/{businessId}/services:
+    get:
+      tags: [Pro / Services]
+      security: [ { cookieAuth: [] } ]
+      summary: Liste des services catalogue
+      parameters: [ { $ref: '#/components/parameters/BusinessId' } ]
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+    post:
+      tags: [Pro / Services]
+      security: [ { cookieAuth: [] } ]
+      summary: Crée un service catalogue
+      parameters: [ { $ref: '#/components/parameters/BusinessId' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+                type: { type: string }
+                defaultPriceCents: { type: integer }
+      responses:
+        '201': { $ref: '#/components/responses/Ok' }
+  /api/pro/businesses/{businessId}/services/{serviceId}:
+    get:
+      tags: [Pro / Services]
+      security: [ { cookieAuth: [] } ]
+      summary: Détail service
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+        - $ref: '#/components/parameters/ServiceId'
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+    patch:
+      tags: [Pro / Services]
+      security: [ { cookieAuth: [] } ]
+      summary: Met à jour un service
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+        - $ref: '#/components/parameters/ServiceId'
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+    delete:
+      tags: [Pro / Services]
+      security: [ { cookieAuth: [] } ]
+      summary: Supprime un service
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+        - $ref: '#/components/parameters/ServiceId'
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+  /api/pro/businesses/{businessId}/services/{serviceId}/templates:
+    get:
+      tags: [Pro / Services]
+      security: [ { cookieAuth: [] } ]
+      summary: Liste des templates de tâches
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+        - $ref: '#/components/parameters/ServiceId'
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+    post:
+      tags: [Pro / Services]
+      security: [ { cookieAuth: [] } ]
+      summary: Crée un template de tâche
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+        - $ref: '#/components/parameters/ServiceId'
+      responses:
+        '201': { $ref: '#/components/responses/Ok' }
+  /api/pro/businesses/{businessId}/services/{serviceId}/templates/{templateId}:
+    patch:
+      tags: [Pro / Services]
+      security: [ { cookieAuth: [] } ]
+      summary: Met à jour un template de tâche
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+        - $ref: '#/components/parameters/ServiceId'
+        - name: templateId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+    delete:
+      tags: [Pro / Services]
+      security: [ { cookieAuth: [] } ]
+      summary: Supprime un template de tâche
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+        - $ref: '#/components/parameters/ServiceId'
+        - name: templateId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+  /api/pro/businesses/{businessId}/services/{serviceId}/templates/seed:
+    post:
+      tags: [Pro / Services]
+      security: [ { cookieAuth: [] } ]
+      summary: Génère des templates par défaut
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+        - $ref: '#/components/parameters/ServiceId'
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+
+  /api/pro/businesses/{businessId}/members:
+    get:
+      tags: [Pro / Members]
+      security: [ { cookieAuth: [] } ]
+      summary: Liste des membres
+      parameters: [ { $ref: '#/components/parameters/BusinessId' } ]
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+  /api/pro/businesses/{businessId}/members/{userId}:
+    patch:
+      tags: [Pro / Members]
+      security: [ { cookieAuth: [] } ]
+      summary: Change le rôle d'un membre
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+        - name: userId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+    delete:
+      tags: [Pro / Members]
+      security: [ { cookieAuth: [] } ]
+      summary: Supprime un membre
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+        - name: userId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+
+  /api/pro/businesses/{businessId}/invites:
+    get:
+      tags: [Pro / Invites]
+      security: [ { cookieAuth: [] } ]
+      summary: Liste des invitations
+      parameters: [ { $ref: '#/components/parameters/BusinessId' } ]
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+    post:
+      tags: [Pro / Invites]
+      security: [ { cookieAuth: [] } ]
+      summary: Crée une invitation
+      parameters: [ { $ref: '#/components/parameters/BusinessId' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, role]
+              properties:
+                email: { type: string, format: email }
+                role: { $ref: '#/components/schemas/BusinessRole' }
+      responses:
+        '201': { $ref: '#/components/responses/Ok' }
+  /api/pro/businesses/{businessId}/invites/{inviteId}:
+    delete:
+      tags: [Pro / Invites]
+      security: [ { cookieAuth: [] } ]
+      summary: Révoque une invitation
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+        - name: inviteId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '204': { description: Révoqué }
+  /api/pro/businesses/invites/accept:
+    post:
+      tags: [Pro / Invites]
+      security: [ { cookieAuth: [] } ]
+      summary: Accepte une invitation par token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+
+  /api/pro/businesses/{businessId}/finances:
+    get:
+      tags: [Pro / Finances]
+      security: [ { cookieAuth: [] } ]
+      summary: Liste des opérations financières
+      parameters: [ { $ref: '#/components/parameters/BusinessId' } ]
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+    post:
+      tags: [Pro / Finances]
+      security: [ { cookieAuth: [] } ]
+      summary: Crée une opération financière
+      parameters: [ { $ref: '#/components/parameters/BusinessId' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/FinanceCreate' }
+      responses:
+        '201': { $ref: '#/components/responses/Ok' }
+  /api/pro/businesses/{businessId}/finances/{financeId}:
+    get:
+      tags: [Pro / Finances]
+      security: [ { cookieAuth: [] } ]
+      summary: Détail finance
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+        - name: financeId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Finance
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { item: { $ref: '#/components/schemas/Finance' } }
+    patch:
+      tags: [Pro / Finances]
+      security: [ { cookieAuth: [] } ]
+      summary: Met à jour une finance
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+        - name: financeId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+    delete:
+      tags: [Pro / Finances]
+      security: [ { cookieAuth: [] } ]
+      summary: Supprime une finance
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+        - name: financeId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+
+  /api/pro/businesses/{businessId}/leave:
+    post:
+      tags: [Pro / Business]
+      security: [ { cookieAuth: [] } ]
+      summary: Quitte un business
+      parameters: [ { $ref: '#/components/parameters/BusinessId' } ]
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
 
 components:
   securitySchemes:
@@ -625,431 +1303,262 @@ components:
       in: cookie
       name: auth_token
 
+  parameters:
+    BusinessId:
+      name: businessId
+      in: path
+      required: true
+      schema: { type: string }
+    ClientId:
+      name: clientId
+      in: path
+      required: true
+      schema: { type: string }
+    ProspectId:
+      name: prospectId
+      in: path
+      required: true
+      schema: { type: string }
+    ProjectId:
+      name: projectId
+      in: path
+      required: true
+      schema: { type: string }
+    QuoteId:
+      name: quoteId
+      in: path
+      required: true
+      schema: { type: string }
+    InvoiceId:
+      name: invoiceId
+      in: path
+      required: true
+      schema: { type: string }
+    AccountId:
+      name: accountId
+      in: path
+      required: true
+      schema: { type: string }
+    TransactionId:
+      name: transactionId
+      in: path
+      required: true
+      schema: { type: string }
+    ServiceId:
+      name: serviceId
+      in: path
+      required: true
+      schema: { type: string }
+
+  responses:
+    Error:
+      description: Erreur standard
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    Ok:
+      description: Opération réussie
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              ok: { type: boolean, example: true }
+
   schemas:
-    # --- Auth & user ---
+    ErrorResponse:
+      type: object
+      properties:
+        error: { type: string }
+        reason: { type: string, nullable: true }
     User:
       type: object
       properties:
-        id:
-          type: string
-          description: Identifiant interne (BigInt sérialisé)
-        email:
-          type: string
-          format: email
-        name:
-          type: string
-          nullable: true
-        role:
-          type: string
-          enum: [USER, ADMIN]
-        isActive:
-          type: boolean
-        createdAt:
-          type: string
-          format: date-time
-        updatedAt:
-          type: string
-          format: date-time
-
+        id: { type: string }
+        email: { type: string, format: email }
+        name: { type: string, nullable: true }
+        role: { type: string, enum: [USER, ADMIN] }
+        createdAt: { type: string, format: date-time }
     RegisterRequest:
       type: object
       required: [email, password]
       properties:
-        email:
-          type: string
-          format: email
-        password:
-          type: string
-          minLength: 8
-        name:
-          type: string
-          nullable: true
-
+        email: { type: string, format: email }
+        password: { type: string, minLength: 8 }
+        name: { type: string, nullable: true }
     LoginRequest:
       type: object
       required: [email, password]
       properties:
-        email:
-          type: string
-          format: email
-        password:
-          type: string
-          minLength: 8
-
-    MeResponse:
-      type: object
-      properties:
-        user:
-          $ref: '#/components/schemas/User'
-        memberships:
-          type: array
-          description: >
-            Pour l'instant, renvoyé vide (les entreprises viennent de /api/pro/businesses).
-          items:
-            $ref: '#/components/schemas/BusinessMembershipSummary'
-
-    # --- Business / PRO ---
-    BusinessRole:
-      type: string
-      enum: [OWNER, ADMIN, MEMBER, VIEWER]
-
+        email: { type: string, format: email }
+        password: { type: string }
     Business:
       type: object
       properties:
-        id:
-          type: string
-        name:
-          type: string
-        ownerId:
-          type: string
-        createdAt:
-          type: string
-          format: date-time
-        updatedAt:
-          type: string
-          format: date-time
-
-    BusinessCreateRequest:
-      type: object
-      required: [name]
-      properties:
-        name:
-          type: string
-          description: Nom de l'entreprise
-
-    BusinessMembershipSummary:
-      type: object
-      properties:
-        business:
-          $ref: '#/components/schemas/Business'
-        role:
-          $ref: '#/components/schemas/BusinessRole'
-
-    BusinessListResponse:
-      type: object
-      properties:
-        items:
-          type: array
-          items:
-            $ref: '#/components/schemas/BusinessMembershipSummary'
-
-    # --- Invites ---
-    BusinessInviteStatus:
+        id: { type: string }
+        name: { type: string }
+        ownerId: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    BusinessRole:
       type: string
-      enum: [PENDING, ACCEPTED, REVOKED, EXPIRED]
-
-    BusinessInvite:
-      type: object
-      properties:
-        id:
-          type: string
-        businessId:
-          type: string
-        email:
-          type: string
-          format: email
-        role:
-          $ref: '#/components/schemas/BusinessRole'
-        status:
-          $ref: '#/components/schemas/BusinessInviteStatus'
-        createdAt:
-          type: string
-          format: date-time
-        expiresAt:
-          type: string
-          format: date-time
-          nullable: true
-        inviteLink:
-          type: string
-          nullable: true
-          description: Lien direct d'invitation (présent uniquement pour les invitations en attente)
-        tokenPreview:
-          type: string
-          nullable: true
-          description: 4-6 derniers caractères du token pour l'identification
-
-    BusinessInviteListResponse:
-      type: object
-      properties:
-        items:
-          type: array
-          items:
-            $ref: '#/components/schemas/BusinessInvite'
-
-    BusinessInviteCreateRequest:
-      type: object
-      required: [email, role]
-      properties:
-        email:
-          type: string
-          format: email
-        role:
-          $ref: '#/components/schemas/BusinessRole'
-
-    BusinessInviteAcceptRequest:
-      type: object
-      required: [token]
-      properties:
-        token:
-          type: string
-          description: Token reçu par email
-
-    BusinessInviteAcceptResponse:
-      type: object
-      properties:
-        business:
-          $ref: '#/components/schemas/Business'
-        role:
-          $ref: '#/components/schemas/BusinessRole'
-
-    # --- Clients ---
+      enum: [OWNER, ADMIN, MEMBER, VIEWER]
     Client:
       type: object
       properties:
-        id:
-          type: string
-        businessId:
-          type: string
-        name:
-          type: string
-        email:
-          type: string
-          format: email
-          nullable: true
-        phone:
-          type: string
-          nullable: true
-        notes:
-          type: string
-          nullable: true
-        createdAt:
-          type: string
-          format: date-time
-        updatedAt:
-          type: string
-          format: date-time
-
-    ClientCreateRequest:
+        id: { type: string }
+        businessId: { type: string }
+        name: { type: string }
+        email: { type: string, nullable: true }
+        phone: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+    ClientCreate:
       type: object
       required: [name]
       properties:
-        name:
-          type: string
-        email:
-          type: string
-          format: email
-          nullable: true
-        phone:
-          type: string
-          nullable: true
-        notes:
-          type: string
-          nullable: true
-
-    ClientListResponse:
-      type: object
-      properties:
-        items:
-          type: array
-          items:
-            $ref: '#/components/schemas/Client'
-
-    # --- Prospects ---
+        name: { type: string }
+        email: { type: string, format: email, nullable: true }
+        phone: { type: string, nullable: true }
     Prospect:
       type: object
       properties:
-        id:
-          type: string
-        businessId:
-          type: string
-        name:
-          type: string
-        contactName:
-          type: string
-          nullable: true
-        contactEmail:
-          type: string
-          format: email
-          nullable: true
-        contactPhone:
-          type: string
-          nullable: true
-        source:
-          $ref: '#/components/schemas/LeadSource'
-        interestNote:
-          type: string
-          nullable: true
-        qualificationLevel:
-          $ref: '#/components/schemas/QualificationLevel'
-        projectIdea:
-          type: string
-          nullable: true
-        estimatedBudget:
-          type: integer
-          format: int32
-          nullable: true
-        firstContactAt:
-          type: string
-          format: date-time
-          nullable: true
-        pipelineStatus:
-          $ref: '#/components/schemas/ProspectPipelineStatus'
-        createdAt:
-          type: string
-          format: date-time
-        updatedAt:
-          type: string
-          format: date-time
-
-    ProspectCreateRequest:
+        id: { type: string }
+        businessId: { type: string }
+        name: { type: string }
+        status: { type: string }
+        createdAt: { type: string, format: date-time }
+    ProspectCreate:
       type: object
       required: [name]
       properties:
-        name:
-          type: string
-        contactName:
-          type: string
-          nullable: true
-        contactEmail:
-          type: string
-          format: email
-          nullable: true
-        contactPhone:
-          type: string
-          nullable: true
-        source:
-          $ref: '#/components/schemas/LeadSource'
-        interestNote:
-          type: string
-          nullable: true
-        qualificationLevel:
-          $ref: '#/components/schemas/QualificationLevel'
-        projectIdea:
-          type: string
-          nullable: true
-        estimatedBudget:
-          type: integer
-          format: int32
-          nullable: true
-        firstContactAt:
-          type: string
-          format: date-time
-          nullable: true
-        pipelineStatus:
-          $ref: '#/components/schemas/ProspectPipelineStatus'
-
-    ProspectListResponse:
+        name: { type: string }
+        contactEmail: { type: string, nullable: true }
+    ProspectUpdate:
       type: object
       properties:
-        items:
-          type: array
-          items:
-            $ref: '#/components/schemas/Prospect'
-
-    LeadSource:
-      type: string
-      enum:
-        - UNKNOWN
-        - OUTBOUND
-        - INBOUND
-        - REFERRAL
-        - OTHER
-
-    QualificationLevel:
-      type: string
-      enum:
-        - COLD
-        - WARM
-        - HOT
-
-    ProspectPipelineStatus:
-      type: string
-      enum:
-        - NEW
-        - IN_DISCUSSION
-        - OFFER_SENT
-        - FOLLOW_UP
-        - CLOSED
-
-    # --- Projects ---
-    ProjectStatus:
-      type: string
-      enum: [PLANNED, ACTIVE, ON_HOLD, COMPLETED, CANCELLED]
-
+        name: { type: string }
+        status: { type: string }
     Project:
       type: object
       properties:
-        id:
-          type: string
-        businessId:
-          type: string
-        clientId:
-          type: string
-          nullable: true
-        clientName:
-          type: string
-          nullable: true
-          description: Nom du client (convenance pour les listes)
-        name:
-          type: string
-        status:
-          $ref: '#/components/schemas/ProjectStatus'
-        startDate:
-          type: string
-          format: date-time
-          nullable: true
-        endDate:
-          type: string
-          format: date-time
-          nullable: true
-        createdAt:
-          type: string
-          format: date-time
-        updatedAt:
-          type: string
-          format: date-time
-
-    ProjectCreateRequest:
-      type: object
-      required: [name]
-      properties:
-        name:
-          type: string
-        clientId:
-          type: string
-          nullable: true
-        status:
-          $ref: '#/components/schemas/ProjectStatus'
-        startDate:
-          type: string
-          format: date-time
-          nullable: true
-        endDate:
-          type: string
-          format: date-time
-          nullable: true
-
-    ProjectListResponse:
+        id: { type: string }
+        businessId: { type: string }
+        clientId: { type: string, nullable: true }
+        name: { type: string }
+        status: { type: string }
+        quoteStatus: { type: string }
+        depositStatus: { type: string }
+        createdAt: { type: string, format: date-time }
+    ProjectUpdate:
       type: object
       properties:
-        items:
-          type: array
-          items:
-            $ref: '#/components/schemas/Project'
-
-    # --- Misc ---
-    HealthResponse:
+        name: { type: string }
+        status: { type: string }
+        startDate: { type: string, format: date-time, nullable: true }
+        endDate: { type: string, format: date-time, nullable: true }
+    Quote:
       type: object
       properties:
-        status:
-          type: string
-          example: ok
-
-    ErrorResponse:
+        id: { type: string }
+        businessId: { type: string }
+        projectId: { type: string }
+        status: { type: string, enum: [DRAFT, SENT, SIGNED, CANCELLED, EXPIRED] }
+        totalCents: { type: string }
+        depositCents: { type: string }
+        createdAt: { type: string, format: date-time }
+    Invoice:
       type: object
       properties:
-        error:
-          type: string
-        reason:
-          type: string
-          nullable: true
+        id: { type: string }
+        businessId: { type: string }
+        projectId: { type: string }
+        status: { type: string, enum: [DRAFT, SENT, PAID, CANCELLED] }
+        totalCents: { type: string }
+        depositCents: { type: string }
+        balanceCents: { type: string }
+        createdAt: { type: string, format: date-time }
+    Finance:
+      type: object
+      properties:
+        id: { type: string }
+        businessId: { type: string }
+        type: { type: string, enum: [INCOME, EXPENSE] }
+        amountCents: { type: string }
+        category: { type: string }
+        date: { type: string, format: date-time }
+        note: { type: string, nullable: true }
+    FinanceCreate:
+      type: object
+      required: [type, amountCents, date]
+      properties:
+        type: { type: string, enum: [INCOME, EXPENSE] }
+        amountCents: { type: integer }
+        category: { type: string }
+        date: { type: string, format: date-time }
+        note: { type: string, nullable: true }
+        projectId: { type: string, nullable: true }
+    Task:
+      type: object
+      properties:
+        id: { type: string }
+        businessId: { type: string }
+        projectId: { type: string, nullable: true }
+        title: { type: string }
+        status: { type: string }
+        progress: { type: integer }
+        dueDate: { type: string, format: date-time, nullable: true }
+        createdAt: { type: string, format: date-time }
+    Service:
+      type: object
+      properties:
+        id: { type: string }
+        code: { type: string }
+        name: { type: string }
+        type: { type: string }
+        defaultPriceCents: { type: string, nullable: true }
+    PersonalAccount:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        type: { type: string }
+        currency: { type: string }
+    PersonalAccountDetail:
+      allOf:
+        - $ref: '#/components/schemas/PersonalAccount'
+        - type: object
+          properties:
+            balanceCents: { type: string }
+            delta30Cents: { type: string }
+    PersonalTransaction:
+      type: object
+      properties:
+        id: { type: string }
+        type: { type: string, enum: [INCOME, EXPENSE, TRANSFER] }
+        amountCents: { type: string }
+        currency: { type: string }
+        label: { type: string }
+        note: { type: string, nullable: true }
+        date: { type: string, format: date-time }
+        accountId: { type: string }
+    PersonalTransactionCreate:
+      type: object
+      required: [accountId, type, amountCents, date, label]
+      properties:
+        accountId: { type: string }
+        type: { type: string, enum: [INCOME, EXPENSE, TRANSFER] }
+        amountCents: { type: integer }
+        date: { type: string, format: date-time }
+        label: { type: string }
+        note: { type: string, nullable: true }
+    PersonalTransactionUpdate:
+      type: object
+      properties:
+        label: { type: string }
+        note: { type: string, nullable: true }
+        currency: { type: string }
+        date: { type: string, format: date-time }
+        categoryId: { type: string, nullable: true }
+        accountId: { type: string }
+        amountCents: { type: string }
+        type: { type: string, enum: [INCOME, EXPENSE, TRANSFER] }
