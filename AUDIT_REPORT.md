@@ -8,6 +8,7 @@
 - Interactions client/projet fonctionnelles en API, UI partielle mais exploitable (lecture/ajout admin).
 - Observabilité: no-store + x-request-id présents sur pro + perso critiques.
 - Priorité: clarifier lecture seule, masquer placeholders, guider l’onboarding (hub + prochaines étapes projet) et documenter runbook CSRF/dev.
+- Swagger: point d’entrée unique recommandé `/api-docs.html` (source `public/openapi.yaml`).
 
 ### MàJ 2024-12-19 (stabilité build + invitations)
 - Build webpack ok en Node 20 via distDir `.next-build` (scripts `build/start`), dev isolé en `.next-dev` ; plus d’ENOENT `pages-manifest` même si un `next dev` tourne en parallèle.

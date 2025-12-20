@@ -80,7 +80,8 @@ DATABASE_URL="postgresql://USER:PASSWORD@HOST:PORT/DB" npx prisma migrate dev --
 - `POST /api/auth/login` : authentifie et émet le cookie
 - `POST /api/auth/logout` : supprime le cookie
 
-Spéc OpenAPI : `openapi.yaml` (bases health + auth).
+Spéc OpenAPI : `openapi.yaml` (bases health + auth).  
+Swagger UI unique : `/api-docs.html` (consomme `/openapi.yaml`).
 
 ## Front
 - `/` : landing publique (CTA vers login/register/app)

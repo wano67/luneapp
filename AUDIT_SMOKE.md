@@ -55,3 +55,5 @@ Headers: toutes les réponses ci-dessus comportent `cache-control: no-store` et 
 - `pnpm smoke:invites`
 - `pnpm smoke:finance` (BASE_URL + TEST_EMAIL/TEST_PASSWORD) : crée un paiement (Finance INCOME catégorie PAYMENT) et vérifie que le dashboard MTD income augmente.
 - `pnpm smoke:billing` (BASE_URL + TEST_EMAIL/TEST_PASSWORD) : pricing projet > devis (PDF) > facture (PDF) > paiement → MTD income dashboard doit augmenter.
+
+Docs: Swagger UI unique sur `/api-docs.html` (source `/openapi.yaml`).
