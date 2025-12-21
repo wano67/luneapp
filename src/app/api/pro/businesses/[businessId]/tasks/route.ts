@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/server/db/client';
-import { TaskPhase, TaskStatus } from '@/generated/prisma/client';
+import { BusinessReferenceType, TaskPhase, TaskStatus } from '@/generated/prisma/client';
 import { requireBusinessRole } from '@/server/auth/businessRole';
 import { requireAuthPro } from '@/server/auth/requireAuthPro';
 import { assertSameOrigin, jsonNoStore, withNoStore } from '@/server/security/csrf';
@@ -56,6 +56,9 @@ function serializeTask(task: {
   updatedAt: Date;
   project?: { name: string | null } | null;
   assignee?: { id: bigint; email: string; name: string | null } | null;
+  categoryReferenceId?: bigint | null;
+  categoryReference?: { id: bigint; name: string | null } | null;
+  tags?: Array<{ referenceId: bigint; reference: { id: bigint; name: string } }>;
 }) {
   return {
     id: task.id.toString(),
@@ -65,6 +68,14 @@ function serializeTask(task: {
     assigneeUserId: task.assigneeUserId ? task.assigneeUserId.toString() : null,
     assigneeEmail: task.assignee?.email ?? null,
     assigneeName: task.assignee?.name ?? null,
+    categoryReferenceId: task.categoryReferenceId ? task.categoryReferenceId.toString() : null,
+    categoryReferenceName: task.categoryReference?.name ?? null,
+    tagReferences: task.tags
+      ? task.tags.map((tag) => ({
+          id: tag.reference.id.toString(),
+          name: tag.reference.name,
+        }))
+      : [],
     title: task.title,
     phase: task.phase,
     status: task.status,
@@ -79,6 +90,44 @@ function serializeTask(task: {
 
 function isValidStatus(status: unknown): status is TaskStatus {
   return status === 'TODO' || status === 'IN_PROGRESS' || status === 'DONE';
+}
+
+async function validateCategoryAndTags(
+  businessId: bigint,
+  categoryReferenceId: bigint | null,
+  tagReferenceIds?: bigint[]
+): Promise<{ categoryId: bigint | null; tagIds: bigint[] } | { error: string }> {
+  if (categoryReferenceId) {
+    const category = await prisma.businessReference.findFirst({
+      where: {
+        id: categoryReferenceId,
+        businessId,
+        type: BusinessReferenceType.CATEGORY,
+        isArchived: false,
+      },
+      select: { id: true },
+    });
+    if (!category) return { error: 'categoryReferenceId invalide pour ce business.' };
+  }
+
+  let tagIds: bigint[] = [];
+  if (tagReferenceIds && tagReferenceIds.length) {
+    const tags = await prisma.businessReference.findMany({
+      where: {
+        id: { in: tagReferenceIds },
+        businessId,
+        type: BusinessReferenceType.TAG,
+        isArchived: false,
+      },
+      select: { id: true },
+    });
+    if (tags.length !== tagReferenceIds.length) {
+      return { error: 'tagReferenceIds invalides pour ce business.' };
+    }
+    tagIds = tags.map((t) => t.id);
+  }
+
+  return { categoryId: categoryReferenceId, tagIds };
 }
 
 // GET /api/pro/businesses/{businessId}/tasks
@@ -125,6 +174,16 @@ export async function GET(
       : null;
   const assigneeParam = searchParams.get('assignee');
   const assigneeFilter = assigneeParam === 'me' ? BigInt(userId) : null;
+  const categoryReferenceIdParam = searchParams.get('categoryReferenceId');
+  const categoryReferenceId = categoryReferenceIdParam ? parseId(categoryReferenceIdParam) : null;
+  if (categoryReferenceIdParam && !categoryReferenceId) {
+    return withIdNoStore(badRequest('categoryReferenceId invalide.'), requestId);
+  }
+  const tagReferenceIdParam = searchParams.get('tagReferenceId');
+  const tagReferenceId = tagReferenceIdParam ? parseId(tagReferenceIdParam) : null;
+  if (tagReferenceIdParam && !tagReferenceId) {
+    return withIdNoStore(badRequest('tagReferenceId invalide.'), requestId);
+  }
 
   const tasks = await prisma.task.findMany({
     where: {
@@ -133,11 +192,15 @@ export async function GET(
       ...(projectIdFilter ? { projectId: projectIdFilter } : {}),
       ...(phaseFilter ? { phase: phaseFilter } : {}),
       ...(assigneeFilter ? { assigneeUserId: assigneeFilter } : {}),
+      ...(categoryReferenceId ? { categoryReferenceId } : {}),
+      ...(tagReferenceId ? { tags: { some: { referenceId: tagReferenceId } } } : {}),
     },
     orderBy: [{ dueDate: 'asc' }, { createdAt: 'desc' }],
     include: {
       project: { select: { name: true } },
       assignee: { select: { id: true, email: true, name: true } },
+      categoryReference: { select: { id: true, name: true } },
+      tags: { include: { reference: { select: { id: true, name: true } } } },
     },
   });
 
@@ -249,6 +312,35 @@ export async function POST(
     dueDate = parsed;
   }
 
+  const categoryProvided = Object.prototype.hasOwnProperty.call(body, 'categoryReferenceId');
+  const categoryReferenceId =
+    categoryProvided && typeof (body as { categoryReferenceId?: unknown }).categoryReferenceId === 'string'
+      ? (() => {
+          const raw = (body as { categoryReferenceId: string }).categoryReferenceId;
+          return /^\d+$/.test(raw) ? BigInt(raw) : null;
+        })()
+      : categoryProvided
+        ? null
+        : undefined;
+
+  const tagProvided = Object.prototype.hasOwnProperty.call(body, 'tagReferenceIds');
+  const tagReferenceIds: bigint[] | undefined = tagProvided
+    ? Array.from(
+        new Set(
+          ((Array.isArray((body as { tagReferenceIds?: unknown }).tagReferenceIds)
+            ? (body as { tagReferenceIds: unknown[] }).tagReferenceIds
+            : []) as unknown[])
+            .filter((id): id is string => typeof id === 'string' && /^\d+$/.test(id))
+            .map((id) => BigInt(id))
+        )
+      )
+    : undefined;
+
+  const validated = await validateCategoryAndTags(businessIdBigInt, categoryReferenceId ?? null, tagReferenceIds);
+  if ('error' in validated) {
+    return withIdNoStore(badRequest(validated.error), requestId);
+  }
+
   const task = await prisma.task.create({
     data: {
       businessId: businessIdBigInt,
@@ -259,10 +351,19 @@ export async function POST(
       progress: status === TaskStatus.DONE ? 100 : undefined,
       completedAt: status === TaskStatus.DONE ? new Date() : undefined,
       dueDate,
+      categoryReferenceId: validated.categoryId ?? undefined,
+      tags:
+        validated.tagIds.length > 0
+          ? {
+              create: validated.tagIds.map((id) => ({ referenceId: id })),
+            }
+          : undefined,
     },
     include: {
       project: { select: { name: true } },
       assignee: { select: { id: true, email: true, name: true } },
+      categoryReference: { select: { id: true, name: true } },
+      tags: { include: { reference: { select: { id: true, name: true } } } },
     },
   });
 

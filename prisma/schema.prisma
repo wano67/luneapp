@@ -336,6 +336,7 @@ model Task {
   businessId     BigInt
   projectId      BigInt?
   assigneeUserId BigInt?
+  categoryReferenceId BigInt?
   title          String
   status         TaskStatus  @default(TODO)
   dueDate        DateTime?
@@ -347,12 +348,15 @@ model Task {
   business Business @relation(fields: [businessId], references: [id])
   project  Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
   assignee User?    @relation(fields: [assigneeUserId], references: [id], onDelete: SetNull)
+  categoryReference BusinessReference? @relation("TaskCategoryReference", fields: [categoryReferenceId], references: [id], onDelete: SetNull)
+  tags     TaskTag[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([businessId, status])
   @@index([businessId, projectId])
+  @@index([businessId, categoryReferenceId])
 }
 
 model Process {
@@ -527,9 +531,11 @@ model BusinessReference {
   projectCategories Project[] @relation("ProjectCategoryReference")
   serviceCategories Service[] @relation("ServiceCategoryReference")
   clientCategories  Client[]  @relation("ClientCategoryReference")
+  taskCategories    Task[]    @relation("TaskCategoryReference")
   projectTags       ProjectTag[] @relation("ProjectTagReference")
   serviceTags       ServiceTag[] @relation("ServiceTagReference")
   clientTags        ClientTag[] @relation("ClientTagReference")
+  taskTags          TaskTag[] @relation("TaskTagReference")
 
   @@unique([businessId, type, name])
   @@index([businessId, type])
@@ -546,6 +552,20 @@ model ClientTag {
   createdAt DateTime @default(now())
 
   @@unique([clientId, referenceId])
+  @@index([referenceId])
+}
+
+model TaskTag {
+  id          BigInt @id @default(autoincrement())
+  taskId      BigInt
+  referenceId BigInt
+
+  task      Task             @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  reference BusinessReference @relation("TaskTagReference", fields: [referenceId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([taskId, referenceId])
   @@index([referenceId])
 }
 

@@ -42,6 +42,7 @@ async function main() {
 
   let serviceId: string | null = null;
   let clientId: string | null = null;
+  let taskId: string | null = null;
   let categoryId: string | null = null;
   let tagId: string | null = null;
   try {
@@ -170,8 +171,67 @@ async function main() {
     const clientFound = (clientListJson as { items?: Array<{ id?: string }> })?.items?.find((c) => c.id === clientId);
     if (!clientFound) throw new Error('Filtered clients did not return the created client.');
 
+    console.log('Create task…');
+    const { res: taskRes, json: taskJson } = await request(
+      `/api/pro/businesses/${businessId}/tasks`,
+      {
+        method: 'POST',
+        body: {
+          title: `Task ${uniq}`,
+          categoryReferenceId: categoryId,
+          tagReferenceIds: tagId ? [tagId] : [],
+        },
+      }
+    );
+    if (!taskRes.ok) throw new Error(`Create task failed (${taskRes.status}) ref=${getLastRequestId()}`);
+    taskId =
+      (taskJson as { item?: { id?: string } })?.item?.id ??
+      (taskJson as { id?: string })?.id ??
+      null;
+    if (!taskId) throw new Error('Task created but no id.');
+
+    console.log('Patch task references…');
+    const { res: taskPatchRes } = await request(
+      `/api/pro/businesses/${businessId}/tasks/${taskId}`,
+      {
+        method: 'PATCH',
+        body: {
+          categoryReferenceId: categoryId,
+          tagReferenceIds: tagId ? [tagId] : [],
+        },
+      }
+    );
+    if (!taskPatchRes.ok) throw new Error(`Patch task failed (${taskPatchRes.status}) ref=${getLastRequestId()}`);
+
+    console.log('Get task detail…');
+    const { res: taskDetailRes, json: taskDetailJson } = await request(
+      `/api/pro/businesses/${businessId}/tasks/${taskId}`
+    );
+    if (!taskDetailRes.ok) throw new Error(`Task detail failed (${taskDetailRes.status}) ref=${getLastRequestId()}`);
+    const taskDetail =
+      (taskDetailJson as { item?: { categoryReferenceId?: string | null; tagReferences?: Array<{ id?: string }> } }).item ??
+      (taskDetailJson as { categoryReferenceId?: string | null; tagReferences?: Array<{ id?: string }> });
+    if (!taskDetail) throw new Error('Task detail missing payload.');
+    if ((categoryId && taskDetail.categoryReferenceId !== categoryId) || !taskDetail.tagReferences?.find((t) => t.id === tagId)) {
+      throw new Error('References not persisted on task detail.');
+    }
+
+    console.log('Filter tasks by tag…');
+    const { res: taskListRes, json: taskListJson } = await request(
+      `/api/pro/businesses/${businessId}/tasks?tagReferenceId=${tagId}`
+    );
+    if (!taskListRes.ok) throw new Error(`Task list filter failed (${taskListRes.status}) ref=${getLastRequestId()}`);
+    const taskFound = (taskListJson as { items?: Array<{ id?: string }> })?.items?.find((t) => t.id === taskId);
+    if (!taskFound) throw new Error('Filtered tasks did not return the created task.');
+
     console.log('Smoke references consumption OK.');
   } finally {
+    if (taskId) {
+      await request(`/api/pro/businesses/${businessId}/tasks/${taskId}`, {
+        method: 'DELETE',
+        allowError: true,
+      });
+    }
     if (serviceId) {
       await request(`/api/pro/businesses/${businessId}/services/${serviceId}`, {
         method: 'DELETE',

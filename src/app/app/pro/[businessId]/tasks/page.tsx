@@ -14,6 +14,7 @@ import { Modal } from '@/components/ui/modal';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import { useActiveBusiness } from '../../ActiveBusinessProvider';
 import RoleBanner from '@/components/RoleBanner';
+import { ReferencePicker } from '../references/ReferencePicker';
 
 type TaskStatus = 'TODO' | 'IN_PROGRESS' | 'DONE';
 
@@ -25,6 +26,9 @@ type Task = {
   assigneeUserId: string | null;
   assigneeEmail: string | null;
   assigneeName: string | null;
+  categoryReferenceId: string | null;
+  categoryReferenceName: string | null;
+  tagReferences: { id: string; name: string }[];
   title: string;
   status: TaskStatus;
   dueDate: string | null;
@@ -62,6 +66,12 @@ export default function TasksPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<TaskStatus | 'ALL'>('ALL');
+  const [categoryFilter, setCategoryFilter] = useState('');
+  const [tagFilter, setTagFilter] = useState('');
+  const [categoryOptions, setCategoryOptions] = useState<Array<{ id: string; name: string }>>([]);
+  const [tagOptions, setTagOptions] = useState<Array<{ id: string; name: string }>>([]);
+  const [referenceError, setReferenceError] = useState<string | null>(null);
+  const [referenceRequestId, setReferenceRequestId] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [requestId, setRequestId] = useState<string | null>(null);
@@ -75,6 +85,8 @@ export default function TasksPage() {
     projectId: '',
     assigneeUserId: '',
     dueDate: '',
+    categoryReferenceId: '',
+    tagReferenceIds: [] as string[],
   });
 
   const [deleteModal, setDeleteModal] = useState<Task | null>(null);
@@ -89,26 +101,30 @@ export default function TasksPage() {
   function openCreate() {
     setEditing(null);
     setForm({
-      title: '',
-      status: 'TODO',
-      projectId: '',
-      assigneeUserId: '',
-      dueDate: '',
-    });
-    setModalOpen(true);
-  }
+    title: '',
+    status: 'TODO',
+    projectId: '',
+    assigneeUserId: '',
+    dueDate: '',
+    categoryReferenceId: '',
+    tagReferenceIds: [],
+  });
+  setModalOpen(true);
+}
 
-  function openEdit(task: Task) {
-    setEditing(task);
-    setForm({
-      title: task.title,
-      status: task.status,
-      projectId: task.projectId ?? '',
-      assigneeUserId: task.assigneeUserId ?? '',
-      dueDate: task.dueDate ? task.dueDate.slice(0, 10) : '',
-    });
-    setModalOpen(true);
-  }
+function openEdit(task: Task) {
+  setEditing(task);
+  setForm({
+    title: task.title,
+    status: task.status,
+    projectId: task.projectId ?? '',
+    assigneeUserId: task.assigneeUserId ?? '',
+    dueDate: task.dueDate ? task.dueDate.slice(0, 10) : '',
+    categoryReferenceId: task.categoryReferenceId ?? '',
+    tagReferenceIds: task.tagReferences?.map((t) => t.id) ?? [],
+  });
+  setModalOpen(true);
+}
 
   async function loadTasks(signal?: AbortSignal) {
     const controller = signal ? null : new AbortController();
@@ -123,6 +139,8 @@ export default function TasksPage() {
       setError(null);
       const query = new URLSearchParams();
       if (statusFilter !== 'ALL') query.set('status', statusFilter);
+      if (categoryFilter) query.set('categoryReferenceId', categoryFilter);
+      if (tagFilter) query.set('tagReferenceId', tagFilter);
       const res = await fetchJson<TaskListResponse>(
         `/api/pro/businesses/${businessId}/tasks${query.toString() ? `?${query.toString()}` : ''}`,
         {},
@@ -145,7 +163,13 @@ export default function TasksPage() {
         setTasks([]);
         return;
       }
-      setTasks(res.data.items);
+      const normalized = res.data.items.map((item) => ({
+        ...item,
+        categoryReferenceId: item.categoryReferenceId ?? null,
+        categoryReferenceName: item.categoryReferenceName ?? null,
+        tagReferences: item.tagReferences ?? [],
+      }));
+      setTasks(normalized);
     } catch (err) {
       if (effectiveSignal?.aborted) return;
       console.error(err);
@@ -159,7 +183,40 @@ export default function TasksPage() {
     void loadTasks();
     return () => fetchController.current?.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [businessId, statusFilter]);
+  }, [businessId, statusFilter, categoryFilter, tagFilter]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    async function loadRefs() {
+      setReferenceError(null);
+      setReferenceRequestId(null);
+      const [catRes, tagRes] = await Promise.all([
+        fetchJson<{ items: Array<{ id: string; name: string }> }>(
+          `/api/pro/businesses/${businessId}/references?type=CATEGORY`,
+          {},
+          controller.signal
+        ),
+        fetchJson<{ items: Array<{ id: string; name: string }> }>(
+          `/api/pro/businesses/${businessId}/references?type=TAG`,
+          {},
+          controller.signal
+        ),
+      ]);
+      if (controller.signal.aborted) return;
+      setReferenceRequestId(catRes.requestId || tagRes.requestId || null);
+      if (!catRes.ok || !catRes.data || !tagRes.ok || !tagRes.data) {
+        const msg = catRes.error || tagRes.error || 'Impossible de charger les références.';
+        setReferenceError(
+          catRes.requestId || tagRes.requestId ? `${msg} (Ref: ${catRes.requestId || tagRes.requestId})` : msg
+        );
+        return;
+      }
+      setCategoryOptions(catRes.data.items);
+      setTagOptions(tagRes.data.items);
+    }
+    void loadRefs();
+    return () => controller.abort();
+  }, [businessId]);
 
   function handleChange<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -182,6 +239,8 @@ export default function TasksPage() {
       projectId: form.projectId.trim() || undefined,
       assigneeUserId: form.assigneeUserId.trim() || undefined,
       dueDate: form.dueDate ? new Date(form.dueDate).toISOString() : undefined,
+      categoryReferenceId: form.categoryReferenceId || null,
+      tagReferenceIds: form.tagReferenceIds,
     };
 
     const endpoint = editing
@@ -297,11 +356,43 @@ export default function TasksPage() {
                 {opt.label}
               </Button>
             ))}
+            <select
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value)}
+              className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm"
+            >
+              <option value="">Catégorie: toutes</option>
+              {categoryOptions.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+            <select
+              value={tagFilter}
+              onChange={(e) => setTagFilter(e.target.value)}
+              className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm"
+            >
+              <option value="">Tag: tous</option>
+              {tagOptions.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </select>
           </div>
           {info ? <span className="text-xs text-emerald-500">{info}</span> : null}
           {error ? <span className="text-xs text-rose-500">{error}</span> : null}
           {readOnlyInfo ? <span className="text-xs text-[var(--text-secondary)]">{readOnlyInfo}</span> : null}
         </div>
+        {referenceError ? (
+          <p className="text-xs text-rose-500">
+            {referenceError}
+            {referenceRequestId ? ` (Ref: ${referenceRequestId})` : ''}
+          </p>
+        ) : referenceRequestId ? (
+          <p className="text-[10px] text-[var(--text-secondary)]">Refs Req: {referenceRequestId}</p>
+        ) : null}
 
         {loading ? (
           <p className="text-sm text-[var(--text-secondary)]">Chargement des tâches…</p>
@@ -312,6 +403,7 @@ export default function TasksPage() {
                 <TableHead>Titre</TableHead>
                 <TableHead>Projet</TableHead>
                 <TableHead>Assignee</TableHead>
+                <TableHead>Références</TableHead>
                 <TableHead>Échéance</TableHead>
                 <TableHead>Statut</TableHead>
                 <TableHead>Actions</TableHead>
@@ -333,6 +425,20 @@ export default function TasksPage() {
                     </TableCell>
                     <TableCell>{task.projectName ?? '—'}</TableCell>
                     <TableCell>{task.assigneeEmail ?? task.assigneeName ?? '—'}</TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap gap-1">
+                        {task.categoryReferenceName ? (
+                          <Badge variant="neutral" className="bg-indigo-50 text-indigo-700">
+                            {task.categoryReferenceName}
+                          </Badge>
+                        ) : null}
+                        {task.tagReferences?.map((tag) => (
+                          <Badge key={tag.id} variant="neutral" className="bg-emerald-50 text-emerald-700">
+                            {tag.name}
+                          </Badge>
+                        ))}
+                      </div>
+                    </TableCell>
                     <TableCell>{formatDate(task.dueDate)}</TableCell>
                     <TableCell>
                       <Badge
@@ -438,6 +544,15 @@ export default function TasksPage() {
             type="date"
             value={form.dueDate}
             onChange={(e: ChangeEvent<HTMLInputElement>) => handleChange('dueDate', e.target.value)}
+          />
+          <ReferencePicker
+            businessId={businessId}
+            categoryId={form.categoryReferenceId || null}
+            tagIds={form.tagReferenceIds}
+            onCategoryChange={(id) => handleChange('categoryReferenceId', id ?? '')}
+            onTagsChange={(ids) => handleChange('tagReferenceIds', ids)}
+            disabled={!isAdmin || creating}
+            title="Références"
           />
           <div className="flex items-center justify-between">
             {actionError ? <p className="text-xs text-rose-500">{actionError}</p> : null}
