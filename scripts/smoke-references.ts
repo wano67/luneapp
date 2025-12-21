@@ -6,55 +6,22 @@
  * Fallback: ADMIN_EMAIL/ADMIN_PASSWORD si TEST_* absents.
  */
 
-type FetchOpts = {
-  method?: string;
-  headers?: Record<string, string>;
-  body?: unknown;
-};
+import { createRequester, getSmokeCreds, handleMissingCreds } from './smoke-utils';
 
 const baseUrl = process.env.BASE_URL?.trim() || 'http://localhost:3000';
-const email = process.env.TEST_EMAIL || process.env.ADMIN_EMAIL;
-const password = process.env.TEST_PASSWORD || process.env.ADMIN_PASSWORD;
-
-let cookie: string | null = null;
-let lastRequestId: string | null = null;
-
-function extractCookie(setCookie: string | null) {
-  if (!setCookie) return;
-  const auth = setCookie.split(',').find((c) => c.trim().startsWith('auth_token='));
-  if (auth) cookie = auth;
-}
-
-function getRequestId(res: Response) {
-  return res.headers.get('x-request-id')?.trim() || null;
-}
-
-async function request(path: string, opts: FetchOpts = {}) {
-  const res = await fetch(`${baseUrl}${path}`, {
-    method: opts.method ?? 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      Origin: baseUrl,
-      ...(cookie ? { Cookie: cookie } : {}),
-      ...(opts.headers ?? {}),
-    },
-    body: opts.body ? JSON.stringify(opts.body) : undefined,
-  });
-  extractCookie(res.headers.get('set-cookie'));
-  lastRequestId = getRequestId(res);
-  let json: unknown = null;
-  try {
-    json = await res.json();
-  } catch {
-    // ignore
-  }
-  return { res, json };
-}
+const { request, getLastRequestId } = createRequester(baseUrl);
 
 async function login(): Promise<void> {
+  let creds;
+  try {
+    creds = getSmokeCreds({ preferAdmin: true });
+  } catch (err) {
+    handleMissingCreds((err as Error).message);
+    return;
+  }
   const { res, json } = await request('/api/auth/login', {
     method: 'POST',
-    body: { email, password },
+    body: { email: creds.email, password: creds.password },
   });
   if (!res.ok) {
     throw new Error(`Login failed (${res.status}) ${JSON.stringify(json)}`);
@@ -62,25 +29,20 @@ async function login(): Promise<void> {
 }
 
 async function main() {
-  if (!email || !password) {
-    console.log('Skip references smoke (TEST_EMAIL/TEST_PASSWORD or ADMIN_EMAIL/ADMIN_PASSWORD required).');
-    return;
-  }
-
   console.log(`Base URL: ${baseUrl}`);
   console.log('Login…');
   await login();
 
   console.log('Fetch businesses…');
   const { res: bizRes, json: bizJson } = await request('/api/pro/businesses');
-  if (!bizRes.ok) throw new Error(`Businesses failed (${bizRes.status}) ref=${lastRequestId}`);
+  if (!bizRes.ok) throw new Error(`Businesses failed (${bizRes.status}) ref=${getLastRequestId()}`);
   const businessId =
     (bizJson as { items?: Array<{ business?: { id?: string } }> })?.items?.[0]?.business?.id;
   if (!businessId) throw new Error('No business found to run smoke.');
 
   console.log('List references (CATEGORY)…');
   const { res: listRes } = await request(`/api/pro/businesses/${businessId}/references?type=CATEGORY`);
-  if (!listRes.ok) throw new Error(`List failed (${listRes.status}) ref=${lastRequestId}`);
+  if (!listRes.ok) throw new Error(`List failed (${listRes.status}) ref=${getLastRequestId()}`);
 
   const uniq = `Smoke-${Date.now()}`;
 
@@ -92,7 +54,7 @@ async function main() {
       body: { type: 'CATEGORY', name: uniq, value: 'test' },
     }
   );
-  if (!createRes.ok) throw new Error(`Create failed (${createRes.status}) ref=${lastRequestId}`);
+  if (!createRes.ok) throw new Error(`Create failed (${createRes.status}) ref=${getLastRequestId()}`);
   const refId = (createJson as { item?: { id?: string } })?.item?.id;
   if (!refId) throw new Error('Create succeeded but no id returned.');
 
@@ -104,20 +66,20 @@ async function main() {
       body: { name: `${uniq}-updated`, value: 'updated' },
     }
   );
-  if (!patchRes.ok) throw new Error(`Patch failed (${patchRes.status}) ref=${lastRequestId}`);
+  if (!patchRes.ok) throw new Error(`Patch failed (${patchRes.status}) ref=${getLastRequestId()}`);
 
   console.log('Delete reference…');
   const { res: deleteRes } = await request(
     `/api/pro/businesses/${businessId}/references/${refId}`,
     { method: 'DELETE' }
   );
-  if (!deleteRes.ok) throw new Error(`Delete failed (${deleteRes.status}) ref=${lastRequestId}`);
+  if (!deleteRes.ok) throw new Error(`Delete failed (${deleteRes.status}) ref=${getLastRequestId()}`);
 
   console.log('Verify deletion…');
   const { res: finalList, json: finalJson } = await request(
     `/api/pro/businesses/${businessId}/references?type=CATEGORY&includeArchived=true`
   );
-  if (!finalList.ok) throw new Error(`Final list failed (${finalList.status}) ref=${lastRequestId}`);
+  if (!finalList.ok) throw new Error(`Final list failed (${finalList.status}) ref=${getLastRequestId()}`);
   const stillThere = (finalJson as { items?: Array<{ id?: string; name?: string }> })?.items?.find(
     (item) => item.id === refId
   );

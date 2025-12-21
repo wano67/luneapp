@@ -57,3 +57,18 @@ Headers: toutes les réponses ci-dessus comportent `cache-control: no-store` et 
 - `pnpm smoke:billing` (BASE_URL + TEST_EMAIL/TEST_PASSWORD) : pricing projet > devis (PDF) > facture (PDF) > paiement → MTD income dashboard doit augmenter.
 
 Docs: Swagger UI unique sur `/api-docs.html` (source `/openapi.yaml`).
+
+## Variables d’environnement smokes
+- `BASE_URL`: URL cible (ex: http://localhost:3000)
+- `APP_ORIGINS`: doit inclure l’origin envoyée par les smokes (par défaut BASE_URL)
+- `SMOKE_CREDS=admin|test`: force l’usage des creds ADMIN_* ou TEST_*. Par défaut: admin d’abord si dispo, sinon test.
+- `SMOKE_ORIGIN`: origin HTTP à envoyer (fallback BASE_URL)
+- `SMOKE_STRICT=1`: échouer si les creds requis sont absents (sinon skip)
+- Creds attendues: `ADMIN_EMAIL`/`ADMIN_PASSWORD`, `TEST_EMAIL`/`TEST_PASSWORD`
+
+### Exemples
+```
+SMOKE_CREDS=admin BASE_URL=http://localhost:3000 pnpm smoke:billing
+SMOKE_CREDS=test SMOKE_STRICT=1 BASE_URL=http://localhost:3000 pnpm smoke:dev-routes
+SMOKE_ORIGIN=http://localhost:3000 APP_ORIGINS=http://localhost:3000 SMOKE_CREDS=admin pnpm smoke:processes
+```

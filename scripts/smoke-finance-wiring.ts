@@ -14,55 +14,22 @@
  *  - Cleanup: DELETE finance created
  */
 
-type FetchOpts = {
-  method?: string;
-  headers?: Record<string, string>;
-  body?: unknown;
-};
+import { createRequester, getSmokeCreds, handleMissingCreds } from './smoke-utils';
 
 const baseUrl = process.env.BASE_URL?.trim() || 'http://localhost:3000';
-const email = process.env.TEST_EMAIL || process.env.ADMIN_EMAIL;
-const password = process.env.TEST_PASSWORD || process.env.ADMIN_PASSWORD;
-
-let cookie: string | null = null;
-let lastRequestId: string | null = null;
-
-function extractCookie(setCookie: string | null) {
-  if (!setCookie) return;
-  const auth = setCookie.split(',').find((c) => c.trim().startsWith('auth_token='));
-  if (auth) cookie = auth;
-}
-
-function getRequestId(res: Response) {
-  return res.headers.get('x-request-id')?.trim() || null;
-}
-
-async function request(path: string, opts: FetchOpts = {}) {
-  const res = await fetch(`${baseUrl}${path}`, {
-    method: opts.method ?? 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      Origin: baseUrl,
-      ...(cookie ? { Cookie: cookie } : {}),
-      ...(opts.headers ?? {}),
-    },
-    body: opts.body ? JSON.stringify(opts.body) : undefined,
-  });
-  extractCookie(res.headers.get('set-cookie'));
-  lastRequestId = getRequestId(res);
-  let json: unknown = null;
-  try {
-    json = await res.json();
-  } catch {
-    // ignore
-  }
-  return { res, json };
-}
+const { request, getLastRequestId } = createRequester(baseUrl);
 
 async function login(): Promise<void> {
+  let creds;
+  try {
+    creds = getSmokeCreds({ preferAdmin: true });
+  } catch (err) {
+    handleMissingCreds((err as Error).message);
+    return;
+  }
   const { res, json } = await request('/api/auth/login', {
     method: 'POST',
-    body: { email, password },
+    body: { email: creds.email, password: creds.password },
   });
   if (!res.ok) {
     throw new Error(`Login failed (${res.status}) ${JSON.stringify(json)}`);
@@ -70,18 +37,13 @@ async function login(): Promise<void> {
 }
 
 async function main() {
-  if (!email || !password) {
-    console.log('Skip finance smoke (TEST_EMAIL/TEST_PASSWORD or ADMIN_EMAIL/ADMIN_PASSWORD required).');
-    return;
-  }
-
   console.log(`Base URL: ${baseUrl}`);
   console.log('Login…');
   await login();
 
   console.log('Fetch businesses…');
   const { res: bizRes, json: bizJson } = await request('/api/pro/businesses');
-  if (!bizRes.ok) throw new Error(`Businesses failed (${bizRes.status}) ref=${lastRequestId}`);
+  if (!bizRes.ok) throw new Error(`Businesses failed (${bizRes.status}) ref=${getLastRequestId()}`);
   const businessId =
     (bizJson as { items?: Array<{ business?: { id?: string } }> })?.items?.[0]?.business?.id;
   if (!businessId) throw new Error('No business found to run smoke.');
@@ -92,7 +54,7 @@ async function main() {
   const { res: dashBeforeRes, json: dashBefore } = await request(
     `/api/pro/businesses/${businessId}/dashboard`
   );
-  if (!dashBeforeRes.ok) throw new Error(`Dashboard failed (${dashBeforeRes.status}) ref=${lastRequestId}`);
+  if (!dashBeforeRes.ok) throw new Error(`Dashboard failed (${dashBeforeRes.status}) ref=${getLastRequestId()}`);
   const beforeIncome = BigInt(
     (dashBefore as { kpis?: { mtdIncomeCents?: string } })?.kpis?.mtdIncomeCents ?? '0'
   );
@@ -120,14 +82,14 @@ async function main() {
       },
     }
   );
-  if (!createRes.ok) throw new Error(`Create finance failed (${createRes.status}) ref=${lastRequestId}`);
+  if (!createRes.ok) throw new Error(`Create finance failed (${createRes.status}) ref=${getLastRequestId()}`);
   const financeId = (createJson as { item?: { id?: string } })?.item?.id;
 
   console.log('Dashboard after…');
   const { res: dashAfterRes, json: dashAfter } = await request(
     `/api/pro/businesses/${businessId}/dashboard`
   );
-  if (!dashAfterRes.ok) throw new Error(`Dashboard failed (${dashAfterRes.status}) ref=${lastRequestId}`);
+  if (!dashAfterRes.ok) throw new Error(`Dashboard failed (${dashAfterRes.status}) ref=${getLastRequestId()}`);
   const afterIncome = BigInt(
     (dashAfter as { kpis?: { mtdIncomeCents?: string } })?.kpis?.mtdIncomeCents ?? '0'
   );
@@ -146,7 +108,7 @@ async function main() {
       { method: 'DELETE' }
     );
     if (!delRes.ok) {
-      console.warn(`Cleanup failed (${delRes.status}) ref=${lastRequestId}`);
+      console.warn(`Cleanup failed (${delRes.status}) ref=${getLastRequestId()}`);
     }
   }
 

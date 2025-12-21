@@ -16,60 +16,22 @@
  *  - Ping dashboard to ensure no regression
  */
 
-type FetchOpts = {
-  method?: string;
-  headers?: Record<string, string>;
-  body?: unknown;
-};
+import { createRequester, getSmokeCreds, handleMissingCreds } from './smoke-utils';
 
 const baseUrl = process.env.BASE_URL?.trim() || 'http://localhost:3000';
-const email = process.env.TEST_EMAIL || process.env.ADMIN_EMAIL;
-const password = process.env.TEST_PASSWORD || process.env.ADMIN_PASSWORD;
-
-let cookie: string | null = null;
-let lastRequestId: string | null = null;
-
-function extractCookie(setCookie: string | null) {
-  if (!setCookie) return;
-  const auth = setCookie.split(',').find((c) => c.trim().startsWith('auth_token='));
-  if (auth) cookie = auth;
-}
-
-function getRequestId(res: Response) {
-  const value = res.headers.get('x-request-id')?.trim() || null;
-  if (value) lastRequestId = value;
-  return value;
-}
-
-async function request(path: string, opts: FetchOpts = {}) {
-  const res = await fetch(`${baseUrl}${path}`, {
-    method: opts.method ?? 'GET',
-    headers: {
-      ...(opts.body ? { 'Content-Type': 'application/json' } : {}),
-      Origin: baseUrl,
-      ...(cookie ? { Cookie: cookie } : {}),
-      ...(opts.headers ?? {}),
-    },
-    body: opts.body ? JSON.stringify(opts.body) : undefined,
-  });
-  extractCookie(res.headers.get('set-cookie'));
-  getRequestId(res);
-  let json: unknown = null;
-  try {
-    json = await res.json();
-  } catch {
-    // ignore non-JSON
-  }
-  return { res, json };
-}
+const { request, getLastRequestId } = createRequester(baseUrl);
 
 async function login(): Promise<void> {
-  if (!email || !password) {
-    throw new Error('Missing TEST_EMAIL/TEST_PASSWORD or ADMIN_EMAIL/ADMIN_PASSWORD');
+  let creds;
+  try {
+    creds = getSmokeCreds({ preferAdmin: true });
+  } catch (err) {
+    handleMissingCreds((err as Error).message);
+    return;
   }
   const { res, json } = await request('/api/auth/login', {
     method: 'POST',
-    body: { email, password },
+    body: { email: creds.email, password: creds.password },
   });
   if (!res.ok) {
     throw new Error(`Login failed (${res.status}) ${JSON.stringify(json)}`);
@@ -83,7 +45,7 @@ async function main() {
 
   console.log('Fetch businesses…');
   const { res: bizRes, json: bizJson } = await request('/api/pro/businesses');
-  if (!bizRes.ok) throw new Error(`Businesses failed (${bizRes.status}) ref=${lastRequestId}`);
+  if (!bizRes.ok) throw new Error(`Businesses failed (${bizRes.status}) ref=${getLastRequestId()}`);
   const businessEntry = (bizJson as { items?: Array<{ business?: { id?: string }; role?: string }> })
     ?.items?.find((item) => item.role === 'OWNER' || item.role === 'ADMIN');
   const businessId = businessEntry?.business?.id;
@@ -102,7 +64,7 @@ async function main() {
         body: { name: processName, description: 'Smoke process auto' },
       }
     );
-    if (!createRes.ok) throw new Error(`Create process failed (${createRes.status}) ref=${lastRequestId}`);
+    if (!createRes.ok) throw new Error(`Create process failed (${createRes.status}) ref=${getLastRequestId()}`);
     processId = (createJson as { item?: { id?: string } })?.item?.id ?? null;
     if (!processId) throw new Error('Process ID missing after creation.');
 
@@ -114,7 +76,7 @@ async function main() {
         body: { title: 'Étape A', position: 1 },
       }
     );
-    if (!step1.res.ok) throw new Error(`Step1 failed (${step1.res.status}) ref=${lastRequestId}`);
+    if (!step1.res.ok) throw new Error(`Step1 failed (${step1.res.status}) ref=${getLastRequestId()}`);
     step1Id = (step1.json as { item?: { id?: string } })?.item?.id ?? null;
 
     console.log('Add step 2…');
@@ -125,13 +87,13 @@ async function main() {
         body: { title: 'Étape B', position: 2 },
       }
     );
-    if (!step2.res.ok) throw new Error(`Step2 failed (${step2.res.status}) ref=${lastRequestId}`);
+    if (!step2.res.ok) throw new Error(`Step2 failed (${step2.res.status}) ref=${getLastRequestId()}`);
 
     console.log('Fetch detail…');
     const { res: detailRes, json: detailJson } = await request(
       `/api/pro/businesses/${businessId}/processes/${processId}`
     );
-    if (!detailRes.ok) throw new Error(`Detail failed (${detailRes.status}) ref=${lastRequestId}`);
+    if (!detailRes.ok) throw new Error(`Detail failed (${detailRes.status}) ref=${getLastRequestId()}`);
     const steps = (detailJson as { item?: { steps?: Array<{ position?: number; id?: string }> } })?.item?.steps;
     if (!steps || steps.length < 2) throw new Error('Steps missing in detail.');
     const ordered = [...steps].sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
@@ -146,7 +108,7 @@ async function main() {
           body: { isDone: true },
         }
       );
-      if (!toggleRes.ok) throw new Error(`Toggle step failed (${toggleRes.status}) ref=${lastRequestId}`);
+      if (!toggleRes.ok) throw new Error(`Toggle step failed (${toggleRes.status}) ref=${getLastRequestId()}`);
     }
 
     console.log('Archive process…');
@@ -154,31 +116,35 @@ async function main() {
       `/api/pro/businesses/${businessId}/processes/${processId}`,
       { method: 'PATCH', body: { archived: true } }
     );
-    if (!archiveRes.ok) throw new Error(`Archive failed (${archiveRes.status}) ref=${lastRequestId}`);
+    if (!archiveRes.ok) throw new Error(`Archive failed (${archiveRes.status}) ref=${getLastRequestId()}`);
 
     console.log('Delete process (cleanup)…');
     const { res: delRes } = await request(
       `/api/pro/businesses/${businessId}/processes/${processId}`,
       { method: 'DELETE' }
     );
-    if (!delRes.ok) throw new Error(`Delete failed (${delRes.status}) ref=${lastRequestId}`);
+    if (!delRes.ok) throw new Error(`Delete failed (${delRes.status}) ref=${getLastRequestId()}`);
     processId = null;
 
     console.log('Dashboard ping…');
     const { res: dashRes } = await request(`/api/pro/businesses/${businessId}/dashboard`);
-    if (!dashRes.ok) throw new Error(`Dashboard failed (${dashRes.status}) ref=${lastRequestId}`);
+    if (!dashRes.ok) throw new Error(`Dashboard failed (${dashRes.status}) ref=${getLastRequestId()}`);
 
     console.log('Smoke processes OK.');
   } finally {
     if (processId) {
       console.log('Cleanup leftover process…');
-      await request(`/api/pro/businesses/${businessId}/processes/${processId}`, { method: 'DELETE' });
+      await request(`/api/pro/businesses/${businessId}/processes/${processId}`, {
+        method: 'DELETE',
+        allowError: true,
+      });
     }
   }
 }
 
 main().catch((err) => {
   console.error(err);
-  if (lastRequestId) console.error(`Last request id: ${lastRequestId}`);
+  const rid = getLastRequestId();
+  if (rid) console.error(`Last request id: ${rid}`);
   process.exit(1);
 });
