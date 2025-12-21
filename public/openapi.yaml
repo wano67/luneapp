@@ -456,7 +456,32 @@ paths:
       tags: [Pro / Clients]
       security: [ { cookieAuth: [] } ]
       summary: Liste des clients
-      parameters: [ { $ref: '#/components/parameters/BusinessId' } ]
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+        - in: query
+          name: search
+          required: false
+          schema: { type: string }
+        - in: query
+          name: status
+          required: false
+          schema: { type: string, enum: [ACTIVE, PAUSED, FORMER] }
+        - in: query
+          name: sector
+          required: false
+          schema: { type: string }
+        - in: query
+          name: origin
+          required: false
+          schema: { type: string }
+        - in: query
+          name: categoryReferenceId
+          required: false
+          schema: { type: string }
+        - in: query
+          name: tagReferenceId
+          required: false
+          schema: { type: string }
       responses:
         '200':
           description: Liste
@@ -497,7 +522,29 @@ paths:
           description: Client
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Client' }
+              schema:
+                type: object
+                properties: { item: { $ref: '#/components/schemas/Client' } }
+    patch:
+      tags: [Pro / Clients]
+      security: [ { cookieAuth: [] } ]
+      summary: Met à jour un client
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+        - $ref: '#/components/parameters/ClientId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ClientUpdate' }
+      responses:
+        '200':
+          description: Client
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { item: { $ref: '#/components/schemas/Client' } }
 
   /api/pro/businesses/{businessId}/prospects:
     get:
@@ -1872,7 +1919,20 @@ components:
         name: { type: string }
         email: { type: string, nullable: true }
         phone: { type: string, nullable: true }
+        notes: { type: string, nullable: true }
+        status: { type: string, enum: [ACTIVE, PAUSED, FORMER] }
+        leadSource: { type: string, nullable: true }
+        categoryReferenceId: { type: string, nullable: true }
+        categoryReferenceName: { type: string, nullable: true }
+        tagReferences:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              name: { type: string }
         createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
     ClientCreate:
       type: object
       required: [name]
@@ -1880,6 +1940,26 @@ components:
         name: { type: string }
         email: { type: string, format: email, nullable: true }
         phone: { type: string, nullable: true }
+        notes: { type: string, nullable: true }
+        status: { type: string, enum: [ACTIVE, PAUSED, FORMER], nullable: true }
+        leadSource: { type: string, nullable: true }
+        categoryReferenceId: { type: string, nullable: true }
+        tagReferenceIds:
+          type: array
+          items: { type: string }
+    ClientUpdate:
+      type: object
+      properties:
+        name: { type: string }
+        email: { type: string, format: email, nullable: true }
+        phone: { type: string, nullable: true }
+        notes: { type: string, nullable: true }
+        status: { type: string, enum: [ACTIVE, PAUSED, FORMER], nullable: true }
+        leadSource: { type: string, nullable: true }
+        categoryReferenceId: { type: string, nullable: true }
+        tagReferenceIds:
+          type: array
+          items: { type: string }
     Prospect:
       type: object
       properties:

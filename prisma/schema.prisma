@@ -269,6 +269,7 @@ enum BusinessReferenceType {
 model Client {
   id              BigInt       @id @default(autoincrement())
   businessId      BigInt
+  categoryReferenceId BigInt?
   name            String
   companyName     String?
   mainContactName String?
@@ -284,6 +285,8 @@ model Client {
   status          ClientStatus @default(ACTIVE)
 
   business Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  categoryReference BusinessReference? @relation("ClientCategoryReference", fields: [categoryReferenceId], references: [id], onDelete: SetNull)
+  tags       ClientTag[]
   projects Project[]
   interactions Interaction[]
   quotes    Quote[]
@@ -293,6 +296,7 @@ model Client {
   updatedAt DateTime @updatedAt
 
   @@index([businessId, name])
+  @@index([businessId, categoryReferenceId])
 }
 
 model Project {
@@ -522,11 +526,27 @@ model BusinessReference {
   business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
   projectCategories Project[] @relation("ProjectCategoryReference")
   serviceCategories Service[] @relation("ServiceCategoryReference")
+  clientCategories  Client[]  @relation("ClientCategoryReference")
   projectTags       ProjectTag[] @relation("ProjectTagReference")
   serviceTags       ServiceTag[] @relation("ServiceTagReference")
+  clientTags        ClientTag[] @relation("ClientTagReference")
 
   @@unique([businessId, type, name])
   @@index([businessId, type])
+}
+
+model ClientTag {
+  id          BigInt @id @default(autoincrement())
+  clientId    BigInt
+  referenceId BigInt
+
+  client    Client           @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  reference BusinessReference @relation("ClientTagReference", fields: [referenceId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([clientId, referenceId])
+  @@index([referenceId])
 }
 
 model BusinessSettings {

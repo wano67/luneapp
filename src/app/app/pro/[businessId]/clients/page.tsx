@@ -12,10 +12,14 @@ import { Modal } from '@/components/ui/modal';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import RoleBanner from '@/components/RoleBanner';
 import { useActiveBusiness } from '../../ActiveBusinessProvider';
+import { ReferencePicker } from '../references/ReferencePicker';
 
 type Client = {
   id: string;
   businessId: string;
+  categoryReferenceId: string | null;
+  categoryReferenceName: string | null;
+  tagReferences: { id: string; name: string }[];
   name: string;
   email: string | null;
   phone: string | null;
@@ -41,6 +45,12 @@ export default function ClientsPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [search, setSearch] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState<string>('');
+  const [tagFilter, setTagFilter] = useState<string>('');
+  const [categoryOptions, setCategoryOptions] = useState<Array<{ id: string; name: string }>>([]);
+  const [tagOptions, setTagOptions] = useState<Array<{ id: string; name: string }>>([]);
+  const [referenceError, setReferenceError] = useState<string | null>(null);
+  const [referenceRequestId, setReferenceRequestId] = useState<string | null>(null);
 
   const [createOpen, setCreateOpen] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -49,6 +59,8 @@ export default function ClientsPage() {
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [notes, setNotes] = useState('');
+  const [categoryReferenceId, setCategoryReferenceId] = useState<string>('');
+  const [tagReferenceIds, setTagReferenceIds] = useState<string[]>([]);
   const [readOnlyInfo, setReadOnlyInfo] = useState<string | null>(null);
 
   const fetchController = useRef<AbortController | null>(null);
@@ -75,6 +87,8 @@ export default function ClientsPage() {
 
       const query = new URLSearchParams();
       if (search.trim()) query.set('search', search.trim());
+      if (categoryFilter) query.set('categoryReferenceId', categoryFilter);
+      if (tagFilter) query.set('tagReferenceId', tagFilter);
 
       const res = await fetchJson<ClientListResponse>(
         `/api/pro/businesses/${businessId}/clients${query.toString() ? `?${query.toString()}` : ''}`,
@@ -96,7 +110,13 @@ export default function ClientsPage() {
         return;
       }
 
-      setClients(res.data.items);
+      const normalized = res.data.items.map((item) => ({
+        ...item,
+        categoryReferenceId: item.categoryReferenceId ?? null,
+        categoryReferenceName: item.categoryReferenceName ?? null,
+        tagReferences: item.tagReferences ?? [],
+      }));
+      setClients(normalized);
     } catch (err) {
       if (effectiveSignal?.aborted) return;
       console.error(err);
@@ -110,6 +130,37 @@ export default function ClientsPage() {
     void loadClients();
     return () => fetchController.current?.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [businessId, categoryFilter, tagFilter]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    async function loadRefs() {
+      setReferenceError(null);
+      setReferenceRequestId(null);
+      const [catRes, tagRes] = await Promise.all([
+        fetchJson<{ items: Array<{ id: string; name: string }> }>(
+          `/api/pro/businesses/${businessId}/references?type=CATEGORY`,
+          {},
+          controller.signal
+        ),
+        fetchJson<{ items: Array<{ id: string; name: string }> }>(
+          `/api/pro/businesses/${businessId}/references?type=TAG`,
+          {},
+          controller.signal
+        ),
+      ]);
+      if (controller.signal.aborted) return;
+      setReferenceRequestId(catRes.requestId || tagRes.requestId || null);
+      if (!catRes.ok || !tagRes.ok || !catRes.data || !tagRes.data) {
+        const msg = catRes.error || tagRes.error || 'Impossible de charger les références.';
+        setReferenceError(catRes.requestId || tagRes.requestId ? `${msg} (Ref: ${catRes.requestId || tagRes.requestId})` : msg);
+        return;
+      }
+      setCategoryOptions(catRes.data.items);
+      setTagOptions(tagRes.data.items);
+    }
+    void loadRefs();
+    return () => controller.abort();
   }, [businessId]);
 
   async function handleSearch(e: FormEvent<HTMLFormElement>) {
@@ -142,6 +193,8 @@ export default function ClientsPage() {
           email: email.trim() || undefined,
           phone: phone.trim() || undefined,
           notes: notes.trim() || undefined,
+          categoryReferenceId: categoryReferenceId || null,
+          tagReferenceIds,
         }),
       });
 
@@ -156,6 +209,8 @@ export default function ClientsPage() {
       setEmail('');
       setPhone('');
       setNotes('');
+      setCategoryReferenceId('');
+      setTagReferenceIds([]);
       setCreateOpen(false);
       await loadClients();
     } catch (err) {
@@ -210,6 +265,46 @@ export default function ClientsPage() {
             Filtrer
           </Button>
         </form>
+        <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-3">
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-semibold text-[var(--text-secondary)]">Catégorie</label>
+            <select
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value)}
+              className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm"
+            >
+              <option value="">Toutes</option>
+              {categoryOptions.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-semibold text-[var(--text-secondary)]">Tag</label>
+            <select
+              value={tagFilter}
+              onChange={(e) => setTagFilter(e.target.value)}
+              className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm"
+            >
+              <option value="">Tous</option>
+              {tagOptions.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          {referenceError ? (
+            <p className="text-xs text-rose-500">
+              {referenceError}
+              {referenceRequestId ? ` (Ref: ${referenceRequestId})` : ''}
+            </p>
+          ) : referenceRequestId ? (
+            <p className="text-[10px] text-[var(--text-secondary)]">Refs Req: {referenceRequestId}</p>
+          ) : null}
+        </div>
       </Card>
 
       <Card className="p-5">
@@ -263,6 +358,18 @@ export default function ClientsPage() {
                       {client.notes}
                     </p>
                   ) : null}
+                  <div className="flex flex-wrap gap-1">
+                    {client.categoryReferenceName ? (
+                      <Badge variant="neutral" className="bg-indigo-50 text-indigo-700">
+                        {client.categoryReferenceName}
+                      </Badge>
+                    ) : null}
+                    {client.tagReferences?.map((tag) => (
+                      <Badge key={tag.id} variant="neutral" className="bg-emerald-50 text-emerald-700">
+                        {tag.name}
+                      </Badge>
+                    ))}
+                  </div>
                 </div>
 
                 <div className="flex items-center gap-2">
@@ -317,6 +424,15 @@ export default function ClientsPage() {
               placeholder="Observations, attentes, historique…"
             />
           </label>
+          <ReferencePicker
+            businessId={businessId}
+            categoryId={categoryReferenceId || null}
+            tagIds={tagReferenceIds}
+            onCategoryChange={(id) => setCategoryReferenceId(id ?? '')}
+            onTagsChange={(ids) => setTagReferenceIds(ids)}
+            disabled={!isAdmin || creating}
+            title="Références"
+          />
           {readOnlyInfo ? <p className="text-xs text-[var(--text-secondary)]">{readOnlyInfo}</p> : null}
 
           <div className="flex justify-end gap-2">

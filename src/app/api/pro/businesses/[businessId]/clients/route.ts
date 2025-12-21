@@ -5,7 +5,7 @@ import { assertSameOrigin, jsonNoStore } from '@/server/security/csrf';
 import { rateLimit } from '@/server/security/rateLimit';
 import { requireAuthPro } from '@/server/auth/requireAuthPro';
 import { badRequest, getRequestId, unauthorized, withRequestId } from '@/server/http/apiUtils';
-import { ClientStatus, LeadSource } from '@/generated/prisma/client';
+import { BusinessReferenceType, ClientStatus, LeadSource } from '@/generated/prisma/client';
 
 function forbidden() {
   return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -47,6 +47,83 @@ function isValidPhone(s: string) {
 
 const STATUS_VALUES = new Set<ClientStatus>(['ACTIVE', 'PAUSED', 'FORMER']);
 
+async function validateCategoryAndTags(
+  businessId: bigint,
+  categoryReferenceId: bigint | null,
+  tagReferenceIds?: bigint[]
+): Promise<{ categoryId: bigint | null; tagIds: bigint[] } | { error: string }> {
+  if (categoryReferenceId) {
+    const category = await prisma.businessReference.findFirst({
+      where: {
+        id: categoryReferenceId,
+        businessId,
+        type: BusinessReferenceType.CATEGORY,
+        isArchived: false,
+      },
+      select: { id: true },
+    });
+    if (!category) return { error: 'categoryReferenceId invalide pour ce business.' };
+  }
+
+  let tagIds: bigint[] = [];
+  if (tagReferenceIds && tagReferenceIds.length) {
+    const tags = await prisma.businessReference.findMany({
+      where: {
+        id: { in: tagReferenceIds },
+        businessId,
+        type: BusinessReferenceType.TAG,
+        isArchived: false,
+      },
+      select: { id: true },
+    });
+    if (tags.length !== tagReferenceIds.length) {
+      return { error: 'tagReferenceIds invalides pour ce business.' };
+    }
+    tagIds = tags.map((t) => t.id);
+  }
+
+  return { categoryId: categoryReferenceId, tagIds };
+}
+
+function serializeClient(client: {
+  id: bigint;
+  businessId: bigint;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  notes: string | null;
+  sector: string | null;
+  status: ClientStatus;
+  leadSource: LeadSource | null;
+  categoryReferenceId?: bigint | null;
+  categoryReference?: { id: bigint; name: string | null } | null;
+  tags?: Array<{ referenceId: bigint; reference: { id: bigint; name: string } }>;
+  createdAt: Date;
+  updatedAt: Date;
+}) {
+  return {
+    id: client.id.toString(),
+    businessId: client.businessId.toString(),
+    categoryReferenceId: client.categoryReferenceId ? client.categoryReferenceId.toString() : null,
+    categoryReferenceName: client.categoryReference?.name ?? null,
+    tagReferences: client.tags
+      ? client.tags.map((tag) => ({
+          id: tag.reference.id.toString(),
+          name: tag.reference.name,
+        }))
+      : [],
+    name: client.name,
+    email: client.email,
+    phone: client.phone,
+    notes: client.notes,
+    sector: client.sector,
+    status: client.status,
+    leadSource: client.leadSource,
+    createdAt: client.createdAt.toISOString(),
+    updatedAt: client.updatedAt.toISOString(),
+  };
+}
+
 // GET /api/pro/businesses/{businessId}/clients
 export async function GET(
   request: NextRequest,
@@ -72,13 +149,23 @@ export async function GET(
   }
 
   const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'VIEWER');
-  if (!membership) return forbidden();
+  if (!membership) return withRequestId(forbidden(), requestId);
 
   const { searchParams } = new URL(request.url);
   const search = searchParams.get('q')?.trim() ?? searchParams.get('search')?.trim();
   const status = searchParams.get('status') as ClientStatus | null;
   const sector = searchParams.get('sector')?.trim();
   const origin = searchParams.get('origin')?.trim();
+  const categoryReferenceIdParam = searchParams.get('categoryReferenceId');
+  const tagReferenceIdParam = searchParams.get('tagReferenceId');
+  const categoryReferenceId = categoryReferenceIdParam ? parseId(categoryReferenceIdParam) : null;
+  if (categoryReferenceIdParam && !categoryReferenceId) {
+    return withRequestId(badRequest('categoryReferenceId invalide.'), requestId);
+  }
+  const tagReferenceId = tagReferenceIdParam ? parseId(tagReferenceIdParam) : null;
+  if (tagReferenceIdParam && !tagReferenceId) {
+    return withRequestId(badRequest('tagReferenceId invalide.'), requestId);
+  }
 
   const clients = await prisma.client.findMany({
     where: {
@@ -91,25 +178,22 @@ export async function GET(
       ...(status && STATUS_VALUES.has(status) ? { status } : {}),
       ...(sector ? { sector: { contains: sector, mode: 'insensitive' } } : {}),
       ...(origin ? { leadSource: origin as LeadSource } : {}),
+      ...(categoryReferenceId ? { categoryReferenceId } : {}),
+      ...(tagReferenceId ? { tags: { some: { referenceId: tagReferenceId } } } : {}),
     },
     orderBy: { name: 'asc' },
+    include: {
+      categoryReference: { select: { id: true, name: true } },
+      tags: { include: { reference: { select: { id: true, name: true } } } },
+    },
   });
 
-  return jsonNoStore({
-    items: clients.map((c) => ({
-      id: c.id.toString(),
-      businessId: c.businessId.toString(),
-      name: c.name,
-      email: c.email,
-      phone: c.phone,
-      notes: c.notes,
-      sector: c.sector,
-      status: c.status,
-      leadSource: c.leadSource,
-      createdAt: c.createdAt.toISOString(),
-      updatedAt: c.updatedAt.toISOString(),
-    })),
-  });
+  return withRequestId(
+    jsonNoStore({
+      items: clients.map((c) => serializeClient(c)),
+    }),
+    requestId
+  );
 }
 
 // POST /api/pro/businesses/{businessId}/clients
@@ -140,14 +224,14 @@ export async function POST(
   }
 
   const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'ADMIN');
-  if (!membership) return forbidden();
+  if (!membership) return withRequestId(forbidden(), requestId);
 
   const limited = rateLimit(request, {
     key: `pro:clients:create:${businessIdBigInt}:${userId.toString()}`,
     limit: 120,
     windowMs: 60 * 60 * 1000,
   });
-  if (limited) return limited;
+  if (limited) return withRequestId(limited, requestId);
 
   const body = await request.json().catch(() => null);
   if (!isRecord(body) || typeof body.name !== 'string') {
@@ -192,6 +276,34 @@ export async function POST(
     return withRequestId(badRequest('leadSource invalide.'), requestId);
   }
 
+  const categoryProvided = Object.prototype.hasOwnProperty.call(body, 'categoryReferenceId');
+  const categoryReferenceId =
+    categoryProvided && typeof body.categoryReferenceId === 'string' && /^\d+$/.test(body.categoryReferenceId)
+      ? BigInt(body.categoryReferenceId)
+      : categoryProvided
+        ? null
+        : undefined;
+
+  const tagProvided = Object.prototype.hasOwnProperty.call(body, 'tagReferenceIds');
+  const tagReferenceIds: bigint[] | undefined = tagProvided
+    ? Array.from(
+        new Set(
+          ((Array.isArray(body.tagReferenceIds) ? body.tagReferenceIds : []) as unknown[])
+            .filter((id): id is string => typeof id === 'string' && /^\d+$/.test(id))
+            .map((id) => BigInt(id))
+        )
+      )
+    : undefined;
+
+  const validated = await validateCategoryAndTags(
+    businessIdBigInt,
+    categoryReferenceId ?? null,
+    tagReferenceIds
+  );
+  if ('error' in validated) {
+    return withRequestId(badRequest(validated.error), requestId);
+  }
+
   const client = await prisma.client.create({
     data: {
       businessId: businessIdBigInt,
@@ -202,23 +314,19 @@ export async function POST(
       sector: sector || undefined,
       status: status ?? undefined,
       leadSource,
+      categoryReferenceId: validated.categoryId ?? undefined,
+      tags:
+        validated.tagIds.length > 0
+          ? {
+              create: validated.tagIds.map((id) => ({ referenceId: id })),
+            }
+          : undefined,
+    },
+    include: {
+      categoryReference: { select: { id: true, name: true } },
+      tags: { include: { reference: { select: { id: true, name: true } } } },
     },
   });
 
-  return NextResponse.json(
-    {
-      id: client.id.toString(),
-      businessId: client.businessId.toString(),
-      name: client.name,
-      email: client.email,
-      phone: client.phone,
-      notes: client.notes,
-      sector: client.sector,
-      status: client.status,
-      leadSource: client.leadSource,
-      createdAt: client.createdAt.toISOString(),
-      updatedAt: client.updatedAt.toISOString(),
-    },
-    { status: 201 }
-  );
+  return withRequestId(jsonNoStore(serializeClient(client), { status: 201 }), requestId);
 }

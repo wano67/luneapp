@@ -1,5 +1,5 @@
 /**
- * Smoke test: references wiring consumption (services with category + tags).
+ * Smoke test: references wiring consumption (services + clients with category + tags).
  *
  * Usage:
  *   BASE_URL=http://localhost:3000 TEST_EMAIL=... TEST_PASSWORD=... pnpm smoke:references-consumption
@@ -41,6 +41,7 @@ async function main() {
   console.log(`Business ${businessId}`);
 
   let serviceId: string | null = null;
+  let clientId: string | null = null;
   let categoryId: string | null = null;
   let tagId: string | null = null;
   try {
@@ -115,6 +116,59 @@ async function main() {
     if (!listRes.ok) throw new Error(`List filter failed (${listRes.status}) ref=${getLastRequestId()}`);
     const found = (listJson as { items?: Array<{ id?: string }> })?.items?.find((s) => s.id === serviceId);
     if (!found) throw new Error('Filtered services did not return the created service.');
+
+    console.log('Create client…');
+    const { res: clientRes, json: clientJson } = await request(
+      `/api/pro/businesses/${businessId}/clients`,
+      {
+        method: 'POST',
+        body: {
+          name: `Client ${uniq}`,
+          categoryReferenceId: categoryId,
+          tagReferenceIds: tagId ? [tagId] : [],
+        },
+      }
+    );
+    if (!clientRes.ok) throw new Error(`Create client failed (${clientRes.status}) ref=${getLastRequestId()}`);
+    clientId =
+      (clientJson as { id?: string; item?: { id?: string } })?.item?.id ??
+      (clientJson as { id?: string })?.id ??
+      null;
+    if (!clientId) throw new Error('Client created but no id.');
+
+    console.log('Patch client references…');
+    const { res: clientPatchRes } = await request(
+      `/api/pro/businesses/${businessId}/clients/${clientId}`,
+      {
+        method: 'PATCH',
+        body: {
+          categoryReferenceId: categoryId,
+          tagReferenceIds: tagId ? [tagId] : [],
+        },
+      }
+    );
+    if (!clientPatchRes.ok) throw new Error(`Patch client failed (${clientPatchRes.status}) ref=${getLastRequestId()}`);
+
+    console.log('Get client detail…');
+    const { res: clientDetailRes, json: clientDetailJson } = await request(
+      `/api/pro/businesses/${businessId}/clients/${clientId}`
+    );
+    if (!clientDetailRes.ok) throw new Error(`Client detail failed (${clientDetailRes.status}) ref=${getLastRequestId()}`);
+    const clientDetail =
+      (clientDetailJson as { item?: { categoryReferenceId?: string | null; tagReferences?: Array<{ id?: string }> } }).item ??
+      (clientDetailJson as { categoryReferenceId?: string | null; tagReferences?: Array<{ id?: string }> });
+    if (!clientDetail) throw new Error('Client detail missing payload.');
+    if ((categoryId && clientDetail.categoryReferenceId !== categoryId) || !clientDetail.tagReferences?.find((t) => t.id === tagId)) {
+      throw new Error('References not persisted on client detail.');
+    }
+
+    console.log('Filter clients by tag…');
+    const { res: clientListRes, json: clientListJson } = await request(
+      `/api/pro/businesses/${businessId}/clients?tagReferenceId=${tagId}`
+    );
+    if (!clientListRes.ok) throw new Error(`Client list filter failed (${clientListRes.status}) ref=${getLastRequestId()}`);
+    const clientFound = (clientListJson as { items?: Array<{ id?: string }> })?.items?.find((c) => c.id === clientId);
+    if (!clientFound) throw new Error('Filtered clients did not return the created client.');
 
     console.log('Smoke references consumption OK.');
   } finally {
