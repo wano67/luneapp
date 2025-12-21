@@ -120,6 +120,7 @@ model Business {
   quotes      Quote[]
   invoices    Invoice[]
   references  BusinessReference[]
+  processes   Process[]
   settings    BusinessSettings?
 
   createdAt DateTime @default(now())
@@ -245,6 +246,11 @@ enum FinanceType {
   EXPENSE
 }
 
+enum ProcessStatus {
+  ACTIVE
+  ARCHIVED
+}
+
 enum InteractionType {
   CALL
   MEETING
@@ -339,6 +345,38 @@ model Task {
 
   @@index([businessId, status])
   @@index([businessId, projectId])
+}
+
+model Process {
+  id          BigInt        @id @default(autoincrement())
+  businessId  BigInt
+  name        String
+  description String?
+  status      ProcessStatus @default(ACTIVE)
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  steps    ProcessStep[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([businessId])
+}
+
+model ProcessStep {
+  id          BigInt   @id @default(autoincrement())
+  processId   BigInt
+  title       String
+  description String?
+  position    Int
+  isDone      Boolean  @default(false)
+
+  process Process @relation(fields: [processId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([processId])
 }
 
 model Finance {
