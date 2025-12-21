@@ -26,6 +26,7 @@
     "smoke:settings": "pnpm tsx scripts/smoke-settings.ts",
     "smoke:finance-advanced": "pnpm tsx scripts/smoke-finance-advanced.ts",
     "smoke:processes": "pnpm tsx scripts/smoke-processes.ts",
+    "smoke:team": "pnpm tsx scripts/smoke-team-employees.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {

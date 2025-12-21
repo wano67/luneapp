@@ -88,7 +88,7 @@ async function main() {
       }
     );
     if (!createSvcRes.ok) throw new Error(`Create service failed (${createSvcRes.status}) ref=${getLastRequestId()}`);
-    serviceId = (createSvcJson as { id?: string })?.id ?? null;
+    serviceId = (createSvcJson as { id?: string })?.id;
     if (!serviceId) throw new Error('Service creation returned no id.');
   }
 
