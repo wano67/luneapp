@@ -128,16 +128,26 @@ async function main() {
   if (quotePdfBuf.byteLength < 1000) throw new Error('Quote PDF too small.');
 
   console.log('Mark quote SENT then SIGNED…');
-  const toSigned = await request(
+  const sentResp = await request(
     `/api/pro/businesses/${businessId}/quotes/${quoteId}`,
     { method: 'PATCH', body: { status: 'SENT' } }
   );
-  if (!toSigned.res.ok) throw new Error(`Quote SENT failed (${toSigned.res.status}) ref=${getLastRequestId()}`);
+  if (!sentResp.res.ok) throw new Error(`Quote SENT failed (${sentResp.res.status}) ref=${getLastRequestId()}`);
+  const quoteNumber =
+    (sentResp.json as { quote?: { number?: string | null } })?.quote?.number ?? null;
+  if (!quoteNumber || !/^[A-Za-z0-9_-]+-\d{4}-\d{4}$/.test(quoteNumber)) {
+    throw new Error(`Quote number format invalid (${quoteNumber}) ref=${getLastRequestId()}`);
+  }
   const toSigned2 = await request(
     `/api/pro/businesses/${businessId}/quotes/${quoteId}`,
     { method: 'PATCH', body: { status: 'SIGNED' } }
   );
   if (!toSigned2.res.ok) throw new Error(`Quote SIGNED failed (${toSigned2.res.status}) ref=${getLastRequestId()}`);
+  const signedNumber =
+    (toSigned2.json as { quote?: { number?: string | null } })?.quote?.number ?? null;
+  if (signedNumber !== quoteNumber) {
+    throw new Error(`Quote number changed after SIGNED (${quoteNumber} -> ${signedNumber}) ref=${getLastRequestId()}`);
+  }
 
   console.log('Create invoice from quote…');
   const { res: invRes, json: invJson } = await request(
@@ -162,11 +172,21 @@ async function main() {
     { method: 'PATCH', body: { status: 'SENT' } }
   );
   if (!invSent.res.ok) throw new Error(`Invoice SENT failed (${invSent.res.status}) ref=${getLastRequestId()}`);
+  const invoiceNumber =
+    (invSent.json as { invoice?: { number?: string | null } })?.invoice?.number ?? null;
+  if (!invoiceNumber || !/^[A-Za-z0-9_-]+-\d{4}-\d{4}$/.test(invoiceNumber)) {
+    throw new Error(`Invoice number format invalid (${invoiceNumber}) ref=${getLastRequestId()}`);
+  }
   const invPaid = await request(
     `/api/pro/businesses/${businessId}/invoices/${invoice.id}`,
     { method: 'PATCH', body: { status: 'PAID' } }
   );
   if (!invPaid.res.ok) throw new Error(`Invoice PAID failed (${invPaid.res.status}) ref=${getLastRequestId()}`);
+  const paidNumber =
+    (invPaid.json as { invoice?: { number?: string | null } })?.invoice?.number ?? null;
+  if (paidNumber !== invoiceNumber) {
+    throw new Error(`Invoice number changed after PAID (${invoiceNumber} -> ${paidNumber}) ref=${getLastRequestId()}`);
+  }
 
   console.log('Dashboard (after)…');
   const { res: dashAfterRes, json: dashAfter } = await request(
@@ -179,7 +199,7 @@ async function main() {
 
   if (afterIncome - beforeIncome < invoiceTotal) {
     throw new Error(
-      `MTD income did not increase enough (before ${beforeIncome}, after ${afterIncome}, invoice ${invoiceTotal}) ref=${lastRequestId}`
+      `MTD income did not increase enough (before ${beforeIncome}, after ${afterIncome}, invoice ${invoiceTotal}) ref=${getLastRequestId()}`
     );
   }
 

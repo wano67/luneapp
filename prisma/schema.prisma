@@ -594,6 +594,8 @@ model BusinessSettings {
   businessId             BigInt   @unique
   invoicePrefix          String   @default("INV-")
   quotePrefix            String   @default("DEV-")
+  nextInvoiceNumber      Int      @default(1)
+  nextQuoteNumber        Int      @default(1)
   defaultDepositPercent  Int      @default(30)
   paymentTermsDays       Int      @default(30)
   enableAutoNumbering    Boolean  @default(true)
@@ -616,6 +618,7 @@ model Quote {
   clientId        BigInt?
   createdByUserId BigInt
   status          QuoteStatus @default(DRAFT)
+  number          String?
   depositPercent  Int         @default(30)
   currency        String      @default("EUR")
   totalCents      BigInt
@@ -633,6 +636,8 @@ model Quote {
   createdBy User    @relation("QuoteCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
   items    QuoteItem[]
   invoice  Invoice? @relation("QuoteInvoice")
+
+  @@unique([businessId, number])
 }
 
 model QuoteItem {
@@ -658,6 +663,7 @@ model Invoice {
   quoteId         BigInt?       @unique
   createdByUserId BigInt
   status          InvoiceStatus @default(DRAFT)
+  number          String?
   depositPercent  Int           @default(30)
   currency        String        @default("EUR")
   totalCents      BigInt
@@ -676,6 +682,8 @@ model Invoice {
   quote    Quote?   @relation("QuoteInvoice", fields: [quoteId], references: [id], onDelete: SetNull)
   createdBy User    @relation("InvoiceCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
   items    InvoiceItem[]
+
+  @@unique([businessId, number])
 }
 
 model InvoiceItem {

@@ -2126,9 +2126,15 @@ components:
         id: { type: string }
         businessId: { type: string }
         projectId: { type: string }
+        number: { type: string, nullable: true, description: 'Attribué quand le devis passe en SENT' }
         status: { type: string, enum: [DRAFT, SENT, SIGNED, CANCELLED, EXPIRED] }
+        currency: { type: string }
+        depositPercent: { type: integer }
         totalCents: { type: string }
         depositCents: { type: string }
+        balanceCents: { type: string }
+        issuedAt: { type: string, format: date-time, nullable: true }
+        expiresAt: { type: string, format: date-time, nullable: true }
         createdAt: { type: string, format: date-time }
     Invoice:
       type: object
@@ -2136,10 +2142,15 @@ components:
         id: { type: string }
         businessId: { type: string }
         projectId: { type: string }
+        number: { type: string, nullable: true, description: 'Attribué quand la facture passe en SENT' }
         status: { type: string, enum: [DRAFT, SENT, PAID, CANCELLED] }
+        currency: { type: string }
         totalCents: { type: string }
         depositCents: { type: string }
         balanceCents: { type: string }
+        issuedAt: { type: string, format: date-time, nullable: true }
+        dueAt: { type: string, format: date-time, nullable: true }
+        paidAt: { type: string, format: date-time, nullable: true }
         createdAt: { type: string, format: date-time }
     Finance:
       type: object
@@ -2189,6 +2200,8 @@ components:
         defaultDepositPercent: { type: integer }
         paymentTermsDays: { type: integer }
         enableAutoNumbering: { type: boolean }
+        nextQuoteNumber: { type: integer, description: 'Séquence courante pour les devis (auto-incrément)' }
+        nextInvoiceNumber: { type: integer, description: 'Séquence courante pour les factures (auto-incrément)' }
         vatRatePercent: { type: integer }
         vatEnabled: { type: boolean }
         allowMembersInvite: { type: boolean }

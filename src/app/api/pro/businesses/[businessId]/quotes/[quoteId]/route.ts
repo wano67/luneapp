@@ -12,7 +12,8 @@ import {
   notFound,
   unauthorized,
   withRequestId,
-} from '@/server/http/apiUtils';
+  } from '@/server/http/apiUtils';
+import { assignDocumentNumber } from '@/server/services/numbering';
 
 function parseId(param: string | undefined) {
   if (!param || !/^\d+$/.test(param)) return null;
@@ -50,6 +51,7 @@ function serializeQuote(quote: QuoteWithItems) {
     projectId: quote.projectId.toString(),
     clientId: quote.clientId ? quote.clientId.toString() : null,
     status: quote.status,
+    number: quote.number,
     depositPercent: quote.depositPercent,
     currency: quote.currency,
     totalCents: quote.totalCents.toString(),
@@ -174,14 +176,22 @@ export async function PATCH(
   }
 
   const data: Record<string, unknown> = { status: nextStatus };
-  if (nextStatus === QuoteStatus.SENT && !existing.issuedAt) {
-    data.issuedAt = new Date();
-  }
+  const updated = await prisma.$transaction(async (tx) => {
+    const issuedAt = nextStatus === QuoteStatus.SENT ? existing.issuedAt ?? new Date() : existing.issuedAt;
+    if (nextStatus === QuoteStatus.SENT && !existing.issuedAt) {
+      data.issuedAt = issuedAt;
+    }
 
-  const updated = await prisma.quote.update({
-    where: { id: quoteIdBigInt },
-    data,
-    include: { items: true },
+    if (nextStatus === QuoteStatus.SENT && !existing.number) {
+      const number = await assignDocumentNumber(tx, businessIdBigInt, 'QUOTE', issuedAt);
+      data.number = number;
+    }
+
+    return tx.quote.update({
+      where: { id: quoteIdBigInt },
+      data,
+      include: { items: true },
+    });
   });
 
   return withIdNoStore(jsonNoStore({ quote: serializeQuote(updated as QuoteWithItems) }), requestId);

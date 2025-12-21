@@ -35,6 +35,7 @@ function serializeQuote(
     projectId: bigint;
     clientId: bigint | null;
     status: QuoteStatus;
+    number: string | null;
     depositPercent: number;
     currency: string;
     totalCents: bigint;
@@ -64,6 +65,7 @@ function serializeQuote(
     projectId: quote.projectId.toString(),
     clientId: quote.clientId ? quote.clientId.toString() : null,
     status: quote.status,
+    number: quote.number,
     depositPercent: quote.depositPercent,
     currency: quote.currency,
     totalCents: quote.totalCents.toString(),

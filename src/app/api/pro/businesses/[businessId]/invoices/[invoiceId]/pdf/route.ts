@@ -56,6 +56,7 @@ export async function GET(
 
   const pdf = await buildInvoicePdf({
     invoiceId: invoice.id.toString(),
+    number: invoice.number,
     businessName: invoice.business.name,
     projectName: invoice.project.name,
     clientName: invoice.client?.name ?? null,
@@ -80,7 +81,7 @@ export async function GET(
     status: 200,
     headers: {
       'Content-Type': 'application/pdf',
-      'Content-Disposition': `attachment; filename="invoice-${invoice.id}.pdf"`,
+      'Content-Disposition': `attachment; filename="invoice-${invoice.number ?? invoice.id}.pdf"`,
     },
   });
 

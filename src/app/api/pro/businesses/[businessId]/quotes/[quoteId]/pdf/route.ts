@@ -56,6 +56,7 @@ export async function GET(
 
   const pdf = await buildQuotePdf({
     quoteId: quote.id.toString(),
+    number: quote.number,
     businessName: quote.business.name,
     projectName: quote.project.name,
     clientName: quote.client?.name ?? null,
@@ -79,7 +80,7 @@ export async function GET(
     status: 200,
     headers: {
       'Content-Type': 'application/pdf',
-      'Content-Disposition': `attachment; filename="quote-${quote.id}.pdf"`,
+      'Content-Disposition': `attachment; filename="quote-${quote.number ?? quote.id}.pdf"`,
     },
   });
 

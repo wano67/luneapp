@@ -13,6 +13,7 @@ import {
   unauthorized,
   withRequestId,
 } from '@/server/http/apiUtils';
+import { assignDocumentNumber } from '@/server/services/numbering';
 
 function parseId(param: string | undefined) {
   if (!param || !/^\d+$/.test(param)) return null;
@@ -51,6 +52,7 @@ function serializeInvoice(invoice: InvoiceWithItems) {
     clientId: invoice.clientId ? invoice.clientId.toString() : null,
     quoteId: invoice.quoteId ? invoice.quoteId.toString() : null,
     status: invoice.status,
+    number: invoice.number,
     depositPercent: invoice.depositPercent,
     currency: invoice.currency,
     totalCents: invoice.totalCents.toString(),
@@ -175,11 +177,17 @@ export async function PATCH(
   }
 
   const now = new Date();
-  const data: Record<string, unknown> = { status: nextStatus };
-  if (nextStatus === InvoiceStatus.SENT && !existing.issuedAt) data.issuedAt = now;
-  if (nextStatus === InvoiceStatus.PAID) data.paidAt = now;
-
   const updated = await prisma.$transaction(async (tx) => {
+    const data: Record<string, unknown> = { status: nextStatus };
+    const issuedAt = nextStatus === InvoiceStatus.SENT ? existing.issuedAt ?? now : existing.issuedAt;
+    if (nextStatus === InvoiceStatus.SENT && !existing.issuedAt) data.issuedAt = issuedAt;
+    if (nextStatus === InvoiceStatus.PAID) data.paidAt = now;
+
+    if (nextStatus === InvoiceStatus.SENT && !existing.number) {
+      const number = await assignDocumentNumber(tx, businessIdBigInt, 'INVOICE', issuedAt);
+      data.number = number;
+    }
+
     const invoice = await tx.invoice.update({
       where: { id: existing.id },
       data,

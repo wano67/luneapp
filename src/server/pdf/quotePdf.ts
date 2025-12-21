@@ -30,6 +30,7 @@ type QuotePdfItem = {
 
 export type QuotePdfPayload = {
   quoteId: string;
+  number?: string | null;
   businessName: string;
   projectName?: string | null;
   clientName?: string | null;
@@ -60,7 +61,8 @@ export async function buildQuotePdf(payload: QuotePdfPayload): Promise<Uint8Arra
   y -= 18;
   addText('Devis', 14, margin, rgb(0.1, 0.1, 0.1), bold);
   y -= 16;
-  addText(`Devis #${payload.quoteId}`, 11, margin, rgb(0.2, 0.2, 0.2));
+  const numberLabel = payload.number ?? `(brouillon #${payload.quoteId})`;
+  addText(`Devis n° ${numberLabel}`, 11, margin, rgb(0.2, 0.2, 0.2));
   y -= 14;
   if (payload.requestId) {
     addText(`Req: ${payload.requestId}`, 9, margin, rgb(0.35, 0.35, 0.35));
