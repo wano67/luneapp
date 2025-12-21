@@ -30,6 +30,7 @@ tags:
   - name: Pro / Billing
   - name: Pro / References
   - name: Pro / Settings
+  - name: Pro / Finance Advanced
 
 paths:
   /api/health:
@@ -1402,6 +1403,63 @@ paths:
             schema: { $ref: '#/components/schemas/FinanceCreate' }
       responses:
         '201': { $ref: '#/components/responses/Ok' }
+
+  /api/pro/businesses/{businessId}/finances/treasury:
+    get:
+      tags: [Pro / Finance Advanced]
+      security: [ { cookieAuth: [] } ]
+      summary: Synthèse trésorerie
+      description: |
+        VIEWER+. Totaux revenus/dépenses/net + séries mensuelles (12 mois) et top catégories.
+        Réponses: `x-request-id` + `cache-control: no-store`.
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+        - in: query
+          name: from
+          required: false
+          schema: { type: string, format: date-time }
+        - in: query
+          name: to
+          required: false
+          schema: { type: string, format: date-time }
+      responses:
+        '200':
+          description: Synthèse trésorerie
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TreasurySummary' }
+
+  /api/pro/businesses/{businessId}/finances/vat:
+    get:
+      tags: [Pro / Finance Advanced]
+      security: [ { cookieAuth: [] } ]
+      summary: Synthèse TVA
+      description: |
+        VIEWER+. Utilise les écritures Finance avec catégories VAT_COLLECTED / VAT_PAID. Si aucune écriture détectée, renvoie isConfigured=false.
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+      responses:
+        '200':
+          description: Synthèse TVA
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VatSummary' }
+
+  /api/pro/businesses/{businessId}/finances/forecasting:
+    get:
+      tags: [Pro / Finance Advanced]
+      security: [ { cookieAuth: [] } ]
+      summary: Prévisions simples
+      description: |
+        VIEWER+. Historique 6 mois + projection 3 mois basée sur la moyenne des 3 derniers mois.
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+      responses:
+        '200':
+          description: Prévisions
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ForecastSummary' }
   /api/pro/businesses/{businessId}/finances/{financeId}:
     get:
       tags: [Pro / Finances]
@@ -1678,6 +1736,95 @@ components:
         integrationStripePublicKey: { type: string, nullable: true }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
+    TreasurySummary:
+      type: object
+      properties:
+        businessId: { type: string }
+        range:
+          type: object
+          properties:
+            from: { type: string, format: date-time }
+            to: { type: string, format: date-time }
+        totals:
+          type: object
+          properties:
+            incomeCents: { type: string }
+            expenseCents: { type: string }
+            netCents: { type: string }
+        monthly:
+          type: array
+          items:
+            type: object
+            properties:
+              month: { type: string, example: '2025-01' }
+              incomeCents: { type: string }
+              expenseCents: { type: string }
+              netCents: { type: string }
+        byCategory:
+          type: array
+          items:
+            type: object
+            properties:
+              category: { type: string }
+              netCents: { type: string }
+    VatSummary:
+      type: object
+      properties:
+        businessId: { type: string }
+        range:
+          type: object
+          properties:
+            from: { type: string, format: date-time }
+            to: { type: string, format: date-time }
+        isConfigured: { type: boolean }
+        message: { type: string, nullable: true }
+        totals:
+          type: object
+          properties:
+            collectedCents: { type: string }
+            deductibleCents: { type: string }
+            balanceCents: { type: string }
+        monthly:
+          type: array
+          items:
+            type: object
+            properties:
+              month: { type: string }
+              collectedCents: { type: string }
+              deductibleCents: { type: string }
+              balanceCents: { type: string }
+    ForecastSummary:
+      type: object
+      properties:
+        businessId: { type: string }
+        historyRange:
+          type: object
+          properties:
+            from: { type: string, format: date-time }
+            to: { type: string, format: date-time }
+        assumptions:
+          type: object
+          properties:
+            monthsAveraged: { type: integer }
+            note: { type: string }
+        history:
+          type: array
+          items:
+            type: object
+            properties:
+              month: { type: string }
+              incomeCents: { type: string }
+              expenseCents: { type: string }
+              netCents: { type: string }
+        projections:
+          type: array
+          items:
+            type: object
+            properties:
+              month: { type: string }
+              projectedIncomeCents: { type: string }
+              projectedExpenseCents: { type: string }
+              projectedNetCents: { type: string }
     FinanceCreate:
       type: object
       required: [type, amountCents, date]

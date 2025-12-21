@@ -109,48 +109,45 @@ async function main() {
     `/api/pro/businesses/${businessId}/services`
   );
   if (!servicesRes.ok) throw new Error(`Services failed (${servicesRes.status}) ref=${lastRequestId}`);
-  const serviceId =
+  let serviceId =
     (servicesJson as { items?: Array<{ id?: string }> })?.items?.[0]?.id ??
     (servicesJson as { items?: Array<{ service?: { id?: string } }> })?.items?.[0]?.service?.id;
-  if (!serviceId) throw new Error('No service available to attach.');
+  if (!serviceId) {
+    console.log('No service available, creating a temporary one…');
+    const code = `SER-${Date.now()}`;
+    const { res: createSvcRes, json: createSvcJson } = await request(
+      `/api/pro/businesses/${businessId}/services`,
+      {
+        method: 'POST',
+        body: {
+          code,
+          name: `Smoke Service ${Date.now()}`,
+          description: 'Smoke billing',
+          defaultPriceCents: 10000,
+        },
+      }
+    );
+    if (!createSvcRes.ok) throw new Error(`Create service failed (${createSvcRes.status}) ref=${lastRequestId}`);
+    serviceId = (createSvcJson as { id?: string })?.id ?? null;
+    if (!serviceId) throw new Error('Service creation returned no id.');
+  }
 
-  console.log('Find project with services…');
-  const { res: projectsRes, json: projectsJson } = await request(
-    `/api/pro/businesses/${businessId}/projects`
+  console.log('Create project and attach service…');
+  const name = `Billing Smoke ${Date.now()}`;
+  const { res: createProjRes, json: createProjJson } = await request(
+    `/api/pro/businesses/${businessId}/projects`,
+    { method: 'POST', body: { name } }
   );
-  if (!projectsRes.ok) throw new Error(`Projects failed (${projectsRes.status}) ref=${lastRequestId}`);
-  const projectItems = (projectsJson as { items?: Array<{ id?: string }> })?.items ?? [];
-
-  let projectId: string | null = null;
-  for (const p of projectItems) {
-    if (!p.id) continue;
-    const { res: svcRes, json: svcJson } = await request(
-      `/api/pro/businesses/${businessId}/projects/${p.id}/services`
-    );
-    if (svcRes.ok && (svcJson as { items?: unknown[] })?.items?.length) {
-      projectId = p.id;
-      break;
-    }
-  }
-
-  if (!projectId) {
-    console.log('No project with services, creating one…');
-    const name = `Billing Smoke ${Date.now()}`;
-    const { res: createProjRes, json: createProjJson } = await request(
-      `/api/pro/businesses/${businessId}/projects`,
-      { method: 'POST', body: { name } }
-    );
-    if (!createProjRes.ok)
-      throw new Error(`Create project failed (${createProjRes.status}) ref=${lastRequestId}`);
-    projectId = (createProjJson as { id?: string })?.id;
-    if (!projectId) throw new Error('Project creation returned no id.');
-    const { res: attachRes, json: attachJson } = await request(
-      `/api/pro/businesses/${businessId}/projects/${projectId}/services`,
-      { method: 'POST', body: { serviceId, quantity: 1 } }
-    );
-    if (!attachRes.ok)
-      throw new Error(`Attach service failed (${attachRes.status}) ref=${lastRequestId} json=${JSON.stringify(attachJson)}`);
-  }
+  if (!createProjRes.ok)
+    throw new Error(`Create project failed (${createProjRes.status}) ref=${lastRequestId}`);
+  const projectId = (createProjJson as { id?: string })?.id;
+  if (!projectId) throw new Error('Project creation returned no id.');
+  const { res: attachRes, json: attachJson } = await request(
+    `/api/pro/businesses/${businessId}/projects/${projectId}/services`,
+    { method: 'POST', body: { serviceId, quantity: 1, priceCents: 10000 } }
+  );
+  if (!attachRes.ok)
+    throw new Error(`Attach service failed (${attachRes.status}) ref=${lastRequestId} json=${JSON.stringify(attachJson)}`);
 
   console.log(`Project ${projectId}`);
 
