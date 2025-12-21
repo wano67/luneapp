@@ -13,12 +13,16 @@ import { Badge } from '@/components/ui/badge';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import RoleBanner from '@/components/RoleBanner';
 import { useActiveBusiness } from '../../ActiveBusinessProvider';
+import { ReferencePicker } from '../references/ReferencePicker';
 
 type Service = {
   id: string;
   businessId: string;
   code: string;
   name: string;
+  categoryReferenceId: string | null;
+  categoryReferenceName?: string | null;
+  tagReferences?: { id: string; name: string }[];
   type: string | null;
   description: string | null;
   defaultPriceCents: string | null;
@@ -63,6 +67,8 @@ type ServiceFormState = {
   durationHours: string;
   vatRate: string;
   description: string;
+  categoryReferenceId: string;
+  tagReferenceIds: string[];
 };
 
 const emptyTemplateForm: TemplateFormState = {
@@ -81,6 +87,8 @@ const emptyForm: ServiceFormState = {
   durationHours: '',
   vatRate: '',
   description: '',
+  categoryReferenceId: '',
+  tagReferenceIds: [],
 };
 
 function formatMoney(cents: string | null) {
@@ -149,6 +157,12 @@ export default function ServicesPage() {
 
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('ALL');
+  const [categoryFilter, setCategoryFilter] = useState<string>('');
+  const [tagFilter, setTagFilter] = useState<string>('');
+  const [categoryOptions, setCategoryOptions] = useState<Array<{ id: string; name: string }>>([]);
+  const [tagOptions, setTagOptions] = useState<Array<{ id: string; name: string }>>([]);
+  const [referenceError, setReferenceError] = useState<string | null>(null);
+  const [referenceRequestId, setReferenceRequestId] = useState<string | null>(null);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Service | null>(null);
@@ -185,6 +199,37 @@ export default function ServicesPage() {
     return Array.from(values);
   }, [services]);
 
+  async function loadReferenceOptions(signal?: AbortSignal) {
+    try {
+      setReferenceError(null);
+      setReferenceRequestId(null);
+      const [catRes, tagRes] = await Promise.all([
+        fetchJson<{ items: Array<{ id: string; name: string }> }>(
+          `/api/pro/businesses/${businessId}/references?type=CATEGORY`,
+          {},
+          signal
+        ),
+        fetchJson<{ items: Array<{ id: string; name: string }> }>(
+          `/api/pro/businesses/${businessId}/references?type=TAG`,
+          {},
+          signal
+        ),
+      ]);
+      if (signal?.aborted) return;
+      setReferenceRequestId(catRes.requestId || tagRes.requestId || null);
+      if (!catRes.ok || !tagRes.ok || !catRes.data || !tagRes.data) {
+        const msg = catRes.error || tagRes.error || 'Impossible de charger les références.';
+        setReferenceError(catRes.requestId || tagRes.requestId ? `${msg} (Ref: ${catRes.requestId || tagRes.requestId})` : msg);
+        return;
+      }
+      setCategoryOptions(catRes.data.items);
+      setTagOptions(tagRes.data.items);
+    } catch (err) {
+      if (signal?.aborted) return;
+      setReferenceError(getErrorMessage(err));
+    }
+  }
+
   function sortTemplates(list: ServiceTemplate[]) {
     const order = (phase: TaskPhase) => {
       const idx = PHASE_ORDER.findIndex((p) => p === phase);
@@ -213,6 +258,8 @@ export default function ServicesPage() {
       const paramsQuery = new URLSearchParams();
       if (search.trim()) paramsQuery.set('q', search.trim());
       if (typeFilter !== 'ALL') paramsQuery.set('type', typeFilter);
+      if (categoryFilter) paramsQuery.set('categoryReferenceId', categoryFilter);
+      if (tagFilter) paramsQuery.set('tagReferenceId', tagFilter);
 
       const res = await fetchJson<ServiceListResponse>(
         `/api/pro/businesses/${businessId}/services${paramsQuery.toString() ? `?${paramsQuery.toString()}` : ''}`,
@@ -238,6 +285,7 @@ export default function ServicesPage() {
       setServices(
         res.data.items.map((item) => ({
           ...item,
+          tagReferences: item.tagReferences ?? [],
           templateCount: item.templateCount ?? 0,
         }))
       );
@@ -510,7 +558,14 @@ export default function ServicesPage() {
       templateFetchController.current?.abort();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [businessId, typeFilter]);
+  }, [businessId, typeFilter, categoryFilter, tagFilter]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void loadReferenceOptions(controller.signal);
+    return () => controller.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [businessId]);
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -551,6 +606,8 @@ export default function ServicesPage() {
     if (tjmNum != null) payload.tjmCents = Math.round(tjmNum * 100);
     if (durationNum != null) payload.durationHours = durationNum;
     if (vatNum != null) payload.vatRate = vatNum;
+    payload.categoryReferenceId = form.categoryReferenceId || null;
+    payload.tagReferenceIds = form.tagReferenceIds;
 
     const isEdit = Boolean(editing);
     const endpoint = isEdit
@@ -607,6 +664,8 @@ export default function ServicesPage() {
       tjm: service.tjmCents ? (Number(service.tjmCents) / 100).toString() : '',
       durationHours: service.durationHours != null ? String(service.durationHours) : '',
       vatRate: service.vatRate != null ? String(service.vatRate) : '',
+      categoryReferenceId: service.categoryReferenceId ?? '',
+      tagReferenceIds: service.tagReferences?.map((t) => t.id) ?? [],
     });
     setFormError(null);
     setInfo(null);
@@ -701,6 +760,36 @@ export default function ServicesPage() {
             ))}
           </Select>
         </div>
+        <div className="grid gap-3 md:grid-cols-3">
+          <Select
+            label="Catégorie"
+            value={categoryFilter}
+            onChange={(e) => setCategoryFilter(e.target.value)}
+          >
+            <option value="">Toutes</option>
+            {categoryOptions.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </Select>
+          <Select label="Tag" value={tagFilter} onChange={(e) => setTagFilter(e.target.value)}>
+            <option value="">Tous</option>
+            {tagOptions.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
+            ))}
+          </Select>
+          {referenceError ? (
+            <p className="text-xs text-rose-500">
+              {referenceError}
+              {referenceRequestId ? ` (Ref: ${referenceRequestId})` : ''}
+            </p>
+          ) : referenceRequestId ? (
+            <p className="text-[10px] text-[var(--text-secondary)]">Refs Request ID: {referenceRequestId}</p>
+          ) : null}
+        </div>
 
         {loading ? (
           <p className="text-sm text-[var(--text-secondary)]">Chargement du catalogue…</p>
@@ -722,6 +811,7 @@ export default function ServicesPage() {
                 <TableHead>Code</TableHead>
                 <TableHead>Nom</TableHead>
                 <TableHead>Type</TableHead>
+                <TableHead>Références</TableHead>
                 <TableHead>Prix défaut</TableHead>
                 <TableHead>TJM</TableHead>
                 <TableHead>Durée</TableHead>
@@ -736,6 +826,20 @@ export default function ServicesPage() {
                   <TableCell className="font-semibold text-[var(--text-primary)]">{service.code}</TableCell>
                   <TableCell>{service.name}</TableCell>
                   <TableCell>{service.type || '—'}</TableCell>
+                  <TableCell>
+                    <div className="flex flex-wrap gap-1">
+                      {service.categoryReferenceName ? (
+                        <Badge variant="neutral" className="bg-indigo-50 text-indigo-700">
+                          {service.categoryReferenceName}
+                        </Badge>
+                      ) : null}
+                      {service.tagReferences?.map((tag) => (
+                        <Badge key={tag.id} variant="neutral" className="bg-emerald-50 text-emerald-700">
+                          {tag.name}
+                        </Badge>
+                      ))}
+                    </div>
+                  </TableCell>
                   <TableCell>{formatMoney(service.defaultPriceCents)}</TableCell>
                   <TableCell>{formatMoney(service.tjmCents)}</TableCell>
                   <TableCell>{formatHours(service.durationHours)}</TableCell>
@@ -1046,6 +1150,16 @@ export default function ServicesPage() {
               className="w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-base text-[var(--text-primary)] placeholder:text-[var(--text-faint)] transition-colors hover:border-[var(--border-strong)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
             />
           </div>
+
+          <ReferencePicker
+            businessId={businessId}
+            categoryId={form.categoryReferenceId || null}
+            tagIds={form.tagReferenceIds}
+            onCategoryChange={(id) => setForm((prev) => ({ ...prev, categoryReferenceId: id || '' }))}
+            onTagsChange={(ids) => setForm((prev) => ({ ...prev, tagReferenceIds: ids }))}
+            disabled={!isAdmin}
+            title="Références (catégorie + tags)"
+          />
 
           {formError ? <p className="text-sm font-semibold text-rose-500">{formError}</p> : null}
           {!isAdmin ? (

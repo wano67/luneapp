@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/server/db/client';
-import { ProjectStatus, ProjectQuoteStatus, ProjectDepositStatus, TaskStatus } from '@/generated/prisma/client';
+import {
+  BusinessReferenceType,
+  ProjectStatus,
+  ProjectQuoteStatus,
+  ProjectDepositStatus,
+  TaskStatus,
+} from '@/generated/prisma/client';
 import { requireBusinessRole } from '@/server/auth/businessRole';
 import { assertSameOrigin, jsonNoStore, withNoStore } from '@/server/security/csrf';
 import { rateLimit } from '@/server/security/rateLimit';
@@ -27,6 +33,44 @@ function parseId(param: string | undefined) {
 
 function withIdNoStore(res: NextResponse, requestId: string) {
   return withNoStore(withRequestId(res, requestId));
+}
+
+async function validateCategoryAndTags(
+  businessId: bigint,
+  categoryReferenceId: bigint | null,
+  tagReferenceIds?: bigint[]
+): Promise<{ categoryId: bigint | null; tagIds: bigint[] } | { error: string }> {
+  if (categoryReferenceId) {
+    const category = await prisma.businessReference.findFirst({
+      where: {
+        id: categoryReferenceId,
+        businessId,
+        type: BusinessReferenceType.CATEGORY,
+        isArchived: false,
+      },
+      select: { id: true },
+    });
+    if (!category) return { error: 'categoryReferenceId invalide pour ce business.' };
+  }
+
+  let tagIds: bigint[] = [];
+  if (tagReferenceIds && tagReferenceIds.length) {
+    const tags = await prisma.businessReference.findMany({
+      where: {
+        id: { in: tagReferenceIds },
+        businessId,
+        type: BusinessReferenceType.TAG,
+        isArchived: false,
+      },
+      select: { id: true },
+    });
+    if (tags.length !== tagReferenceIds.length) {
+      return { error: 'tagReferenceIds invalides pour ce business.' };
+    }
+    tagIds = tags.map((t) => t.id);
+  }
+
+  return { categoryId: categoryReferenceId, tagIds };
 }
 
 // GET /api/pro/businesses/{businessId}/projects
@@ -62,11 +106,21 @@ export async function GET(
   const archivedParam = searchParams.get('archived');
   const clientIdParam = searchParams.get('clientId');
   const q = searchParams.get('q')?.trim();
+  const categoryReferenceIdParam = searchParams.get('categoryReferenceId');
+  const tagReferenceIdParam = searchParams.get('tagReferenceId');
 
   const archivedFilter =
     archivedParam === 'true' ? { archivedAt: { not: null } } : archivedParam === 'false' ? { archivedAt: null } : {};
   const clientId =
     clientIdParam && /^\d+$/.test(clientIdParam) ? BigInt(clientIdParam) : null;
+  const categoryReferenceId = categoryReferenceIdParam ? parseId(categoryReferenceIdParam) : null;
+  if (categoryReferenceIdParam && !categoryReferenceId) {
+    return withIdNoStore(badRequest('categoryReferenceId invalide.'), requestId);
+  }
+  const tagReferenceId = tagReferenceIdParam ? parseId(tagReferenceIdParam) : null;
+  if (tagReferenceIdParam && !tagReferenceId) {
+    return withIdNoStore(badRequest('tagReferenceId invalide.'), requestId);
+  }
 
   const projects = await prisma.project.findMany({
     where: {
@@ -75,10 +129,14 @@ export async function GET(
       ...(clientId ? { clientId } : {}),
       ...archivedFilter,
       ...(q ? { name: { contains: q, mode: 'insensitive' } } : {}),
+      ...(categoryReferenceId ? { categoryReferenceId } : {}),
+      ...(tagReferenceId ? { tags: { some: { referenceId: tagReferenceId } } } : {}),
     },
     orderBy: { createdAt: 'desc' },
     include: {
       client: { select: { id: true, name: true } },
+      categoryReference: { select: { id: true, name: true } },
+      tags: { include: { reference: { select: { id: true, name: true } } } },
     },
   });
 
@@ -119,6 +177,9 @@ export async function GET(
         businessId: p.businessId.toString(),
         clientId: p.clientId ? p.clientId.toString() : null,
         clientName: p.client?.name ?? null,
+        categoryReferenceId: p.categoryReferenceId ? p.categoryReferenceId.toString() : null,
+        categoryReferenceName: p.categoryReference?.name ?? null,
+        tagReferences: p.tags.map((t) => ({ id: t.reference.id.toString(), name: t.reference.name })),
         name: p.name,
         status: p.status,
         quoteStatus: p.quoteStatus,
@@ -200,6 +261,34 @@ export async function POST(
     }
   }
 
+  const categoryProvided = Object.prototype.hasOwnProperty.call(body, 'categoryReferenceId');
+  const categoryReferenceId =
+    categoryProvided && typeof body.categoryReferenceId === 'string' && /^\d+$/.test(body.categoryReferenceId)
+      ? BigInt(body.categoryReferenceId)
+      : categoryProvided
+        ? null
+        : undefined;
+
+  const tagProvided = Object.prototype.hasOwnProperty.call(body, 'tagReferenceIds');
+  const tagReferenceIds: bigint[] | undefined = tagProvided
+    ? Array.from(
+        new Set(
+          ((Array.isArray(body.tagReferenceIds) ? body.tagReferenceIds : []) as unknown[])
+            .filter((id): id is string => typeof id === 'string' && /^\d+$/.test(id))
+            .map((id) => BigInt(id))
+        )
+      )
+    : undefined;
+
+  const validated = await validateCategoryAndTags(
+    businessIdBigInt,
+    categoryReferenceId ?? null,
+    tagReferenceIds
+  );
+  if ('error' in validated) {
+    return withIdNoStore(badRequest(validated.error), requestId);
+  }
+
   const status: ProjectStatus =
     typeof body.status === 'string' && Object.values(ProjectStatus).includes(body.status as ProjectStatus)
       ? (body.status as ProjectStatus)
@@ -218,6 +307,13 @@ export async function POST(
       businessId: businessIdBigInt,
       clientId,
       name,
+      categoryReferenceId: validated.categoryId ?? undefined,
+      tags:
+        validated.tagIds.length > 0
+          ? {
+              create: validated.tagIds.map((id) => ({ referenceId: id })),
+            }
+          : undefined,
       status,
       quoteStatus,
       depositStatus,
@@ -236,6 +332,8 @@ export async function POST(
         id: project.id.toString(),
         businessId: project.businessId.toString(),
         clientId: project.clientId ? project.clientId.toString() : null,
+        categoryReferenceId: project.categoryReferenceId ? project.categoryReferenceId.toString() : null,
+        tagReferences: validated.tagIds.map((id) => ({ id: id.toString() })),
         name: project.name,
         status: project.status,
         quoteStatus: project.quoteStatus,

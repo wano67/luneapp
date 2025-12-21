@@ -13,6 +13,7 @@ import { Select } from '@/components/ui/select';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import { useActiveBusiness } from '../../ActiveBusinessProvider';
 import RoleBanner from '@/components/RoleBanner';
+import { ReferencePicker } from '../references/ReferencePicker';
 
 type ProjectStatus = 'PLANNED' | 'ACTIVE' | 'ON_HOLD' | 'COMPLETED' | 'CANCELLED';
 type ProjectQuoteStatus = 'DRAFT' | 'SENT' | 'ACCEPTED' | 'SIGNED';
@@ -23,6 +24,9 @@ type Project = {
   businessId: string;
   clientId: string | null;
   clientName: string | null;
+  categoryReferenceId?: string | null;
+  categoryReferenceName?: string | null;
+  tagReferences?: { id: string; name: string }[];
   name: string;
   status: ProjectStatus;
   quoteStatus: ProjectQuoteStatus;
@@ -88,6 +92,12 @@ export default function ProjectsPage() {
   const [success, setSuccess] = useState<string | null>(null);
 
   const [statusFilter, setStatusFilter] = useState<ProjectStatus | 'ALL'>('ALL');
+  const [categoryFilter, setCategoryFilter] = useState<string>('');
+  const [tagFilter, setTagFilter] = useState<string>('');
+  const [categoryOptions, setCategoryOptions] = useState<Array<{ id: string; name: string }>>([]);
+  const [tagOptions, setTagOptions] = useState<Array<{ id: string; name: string }>>([]);
+  const [referenceError, setReferenceError] = useState<string | null>(null);
+  const [referenceRequestId, setReferenceRequestId] = useState<string | null>(null);
   const [archivedFilter, setArchivedFilter] = useState<'all' | 'true' | 'false'>('false');
 
   const [createOpen, setCreateOpen] = useState(false);
@@ -98,6 +108,8 @@ export default function ProjectsPage() {
   const [status, setStatus] = useState<ProjectStatus>('PLANNED');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [categoryReferenceId, setCategoryReferenceId] = useState<string>('');
+  const [tagReferenceIds, setTagReferenceIds] = useState<string[]>([]);
   const [editing, setEditing] = useState<Project | null>(null);
   const [deleting, setDeleting] = useState<Project | null>(null);
   const [readOnlyInfo, setReadOnlyInfo] = useState<string | null>(null);
@@ -110,7 +122,10 @@ export default function ProjectsPage() {
     setStatus('PLANNED');
     setStartDate('');
     setEndDate('');
+    setCategoryReferenceId('');
+    setTagReferenceIds([]);
     setCreateError(null);
+    setSuccess(null);
   }
 
   function closeModal() {
@@ -134,6 +149,8 @@ export default function ProjectsPage() {
       const query = new URLSearchParams();
       if (statusFilter !== 'ALL') query.set('status', statusFilter);
       if (archivedFilter !== 'all') query.set('archived', archivedFilter);
+      if (categoryFilter) query.set('categoryReferenceId', categoryFilter);
+      if (tagFilter) query.set('tagReferenceId', tagFilter);
 
       const res = await fetchJson<ProjectListResponse>(
         `/api/pro/businesses/${businessId}/projects${query.toString() ? `?${query.toString()}` : ''}`,
@@ -159,7 +176,7 @@ export default function ProjectsPage() {
         return;
       }
 
-      setProjects(res.data.items);
+      setProjects(res.data.items.map((item) => ({ ...item, tagReferences: item.tagReferences ?? [] })));
     } catch (err) {
       if (effectiveSignal?.aborted) return;
       console.error(err);
@@ -173,7 +190,38 @@ export default function ProjectsPage() {
     void loadProjects();
     return () => fetchController.current?.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [businessId, statusFilter, archivedFilter]);
+  }, [businessId, statusFilter, archivedFilter, categoryFilter, tagFilter]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    async function loadRefs() {
+      setReferenceError(null);
+      setReferenceRequestId(null);
+      const [catRes, tagRes] = await Promise.all([
+        fetchJson<{ items: Array<{ id: string; name: string }> }>(
+          `/api/pro/businesses/${businessId}/references?type=CATEGORY`,
+          {},
+          controller.signal
+        ),
+        fetchJson<{ items: Array<{ id: string; name: string }> }>(
+          `/api/pro/businesses/${businessId}/references?type=TAG`,
+          {},
+          controller.signal
+        ),
+      ]);
+      if (controller.signal.aborted) return;
+      setReferenceRequestId(catRes.requestId || tagRes.requestId || null);
+      if (!catRes.ok || !tagRes.ok || !catRes.data || !tagRes.data) {
+        const msg = catRes.error || tagRes.error || 'Impossible de charger les références.';
+        setReferenceError(catRes.requestId || tagRes.requestId ? `${msg} (Ref: ${catRes.requestId || tagRes.requestId})` : msg);
+        return;
+      }
+      setCategoryOptions(catRes.data.items);
+      setTagOptions(tagRes.data.items);
+    }
+    void loadRefs();
+    return () => controller.abort();
+  }, [businessId]);
 
   async function handleCreate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -201,6 +249,8 @@ export default function ProjectsPage() {
           name: trimmedName,
           clientId: clientId.trim() || undefined,
           status,
+          categoryReferenceId: categoryReferenceId || null,
+          tagReferenceIds,
           startDate: startDate || undefined,
           endDate: endDate || undefined,
         }),
@@ -219,7 +269,6 @@ export default function ProjectsPage() {
         return;
       }
 
-      setName('');
       resetForm();
       setCreateOpen(false);
       setSuccess('Projet créé.');
@@ -243,6 +292,8 @@ export default function ProjectsPage() {
     setStatus(project.status);
     setStartDate(project.startDate ? project.startDate.slice(0, 10) : '');
     setEndDate(project.endDate ? project.endDate.slice(0, 10) : '');
+    setCategoryReferenceId(project.categoryReferenceId ?? '');
+    setTagReferenceIds(project.tagReferences?.map((t) => t.id) ?? []);
     setCreateError(null);
     setSuccess(null);
     setActionError(null);
@@ -278,6 +329,8 @@ export default function ProjectsPage() {
             name: trimmedName,
             clientId: clientId.trim() || null,
             status,
+            categoryReferenceId: categoryReferenceId || null,
+            tagReferenceIds,
             startDate: startDate || null,
             endDate: endDate || null,
           }),
@@ -417,6 +470,36 @@ export default function ProjectsPage() {
         </div>
         {success ? <p className="text-xs font-semibold text-emerald-500">{success}</p> : null}
         {readOnlyInfo ? <p className="text-xs text-[var(--text-secondary)]">{readOnlyInfo}</p> : null}
+        <div className="grid gap-3 md:grid-cols-3 pb-3">
+          <Select
+            label="Catégorie"
+            value={categoryFilter}
+            onChange={(e) => setCategoryFilter(e.target.value)}
+          >
+            <option value="">Toutes</option>
+            {categoryOptions.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </Select>
+          <Select label="Tag" value={tagFilter} onChange={(e) => setTagFilter(e.target.value)}>
+            <option value="">Tous</option>
+            {tagOptions.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
+            ))}
+          </Select>
+          {referenceError ? (
+            <p className="text-xs text-rose-500">
+              {referenceError}
+              {referenceRequestId ? ` (Ref: ${referenceRequestId})` : ''}
+            </p>
+          ) : referenceRequestId ? (
+            <p className="text-[10px] text-[var(--text-secondary)]">Refs Req: {referenceRequestId}</p>
+          ) : null}
+        </div>
         {loading ? (
           <p className="text-sm text-[var(--text-secondary)]">Chargement des projets…</p>
         ) : error ? (
@@ -462,6 +545,18 @@ export default function ProjectsPage() {
                   <p className="text-xs text-[var(--text-secondary)]">
                     Client : {project.clientName ?? 'Non assigné'}
                   </p>
+                  <div className="flex flex-wrap gap-1">
+                    {project.categoryReferenceName ? (
+                      <Badge variant="neutral" className="bg-indigo-50 text-indigo-700">
+                        {project.categoryReferenceName}
+                      </Badge>
+                    ) : null}
+                    {project.tagReferences?.map((tag) => (
+                      <Badge key={tag.id} variant="neutral" className="bg-emerald-50 text-emerald-700">
+                        {tag.name}
+                      </Badge>
+                    ))}
+                  </div>
                   <p className="text-[10px] text-[var(--text-secondary)]">
                     {formatDate(project.startDate)} → {formatDate(project.endDate)}
                   </p>
@@ -545,6 +640,17 @@ export default function ProjectsPage() {
             onChange={(e: ChangeEvent<HTMLInputElement>) => setEndDate(e.target.value)}
           />
         </div>
+
+          <ReferencePicker
+            businessId={businessId}
+            categoryId={categoryReferenceId || null}
+            tagIds={tagReferenceIds}
+            onCategoryChange={(id) => setCategoryReferenceId(id || '')}
+            onTagsChange={(ids) => setTagReferenceIds(ids)}
+            disabled={!isAdmin}
+            title="Références"
+          />
+
           {!isAdmin ? (
             <p className="text-xs text-[var(--text-secondary)]">
               Lecture seule : rôle ADMIN/OWNER requis pour créer ou modifier un projet.

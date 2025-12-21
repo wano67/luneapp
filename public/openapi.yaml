@@ -568,7 +568,32 @@ paths:
       tags: [Pro / Projects]
       security: [ { cookieAuth: [] } ]
       summary: Liste des projets
-      parameters: [ { $ref: '#/components/parameters/BusinessId' } ]
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+        - in: query
+          name: status
+          required: false
+          schema: { type: string }
+        - in: query
+          name: archived
+          required: false
+          schema: { type: string, enum: ['true', 'false', 'all'] }
+        - in: query
+          name: clientId
+          required: false
+          schema: { type: string }
+        - in: query
+          name: q
+          required: false
+          schema: { type: string }
+        - in: query
+          name: categoryReferenceId
+          required: false
+          schema: { type: string }
+        - in: query
+          name: tagReferenceId
+          required: false
+          schema: { type: string }
       responses:
         '200': { $ref: '#/components/responses/Ok' }
     post:
@@ -586,6 +611,13 @@ paths:
               properties:
                 name: { type: string }
                 clientId: { type: string, nullable: true }
+                categoryReferenceId: { type: string, nullable: true }
+                tagReferenceIds:
+                  type: array
+                  items: { type: string }
+                status: { type: string }
+                startDate: { type: string, format: date, nullable: true }
+                endDate: { type: string, format: date, nullable: true }
       responses:
         '201': { $ref: '#/components/responses/Ok' }
   /api/pro/businesses/{businessId}/projects/{projectId}:
@@ -1345,7 +1377,24 @@ paths:
       tags: [Pro / Services]
       security: [ { cookieAuth: [] } ]
       summary: Liste des services catalogue
-      parameters: [ { $ref: '#/components/parameters/BusinessId' } ]
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+        - in: query
+          name: q
+          required: false
+          schema: { type: string }
+        - in: query
+          name: type
+          required: false
+          schema: { type: string }
+        - in: query
+          name: categoryReferenceId
+          required: false
+          schema: { type: string }
+        - in: query
+          name: tagReferenceId
+          required: false
+          schema: { type: string }
       responses:
         '200': { $ref: '#/components/responses/Ok' }
     post:
@@ -1359,11 +1408,20 @@ paths:
           application/json:
             schema:
               type: object
-              required: [name]
+              required: [name, code]
               properties:
+                code: { type: string }
                 name: { type: string }
                 type: { type: string }
                 defaultPriceCents: { type: integer }
+                categoryReferenceId: { type: string, nullable: true }
+                tagReferenceIds:
+                  type: array
+                  items: { type: string }
+                description: { type: string, nullable: true }
+                tjmCents: { type: integer, nullable: true }
+                durationHours: { type: integer, nullable: true }
+                vatRate: { type: integer, nullable: true }
       responses:
         '201': { $ref: '#/components/responses/Ok' }
   /api/pro/businesses/{businessId}/services/{serviceId}:
@@ -1383,6 +1441,25 @@ paths:
       parameters:
         - $ref: '#/components/parameters/BusinessId'
         - $ref: '#/components/parameters/ServiceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                code: { type: string }
+                name: { type: string }
+                type: { type: string, nullable: true }
+                categoryReferenceId: { type: string, nullable: true }
+                tagReferenceIds:
+                  type: array
+                  items: { type: string }
+                defaultPriceCents: { type: integer, nullable: true }
+                tjmCents: { type: integer, nullable: true }
+                durationHours: { type: integer, nullable: true }
+                vatRate: { type: integer, nullable: true }
+                description: { type: string, nullable: true }
       responses:
         '200': { $ref: '#/components/responses/Ok' }
     delete:
@@ -1828,6 +1905,15 @@ components:
         id: { type: string }
         businessId: { type: string }
         clientId: { type: string, nullable: true }
+        categoryReferenceId: { type: string, nullable: true }
+        categoryReferenceName: { type: string, nullable: true }
+        tagReferences:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              name: { type: string }
         name: { type: string }
         status: { type: string }
         quoteStatus: { type: string }
@@ -1838,6 +1924,10 @@ components:
       properties:
         name: { type: string }
         status: { type: string }
+        categoryReferenceId: { type: string, nullable: true }
+        tagReferenceIds:
+          type: array
+          items: { type: string }
         startDate: { type: string, format: date-time, nullable: true }
         endDate: { type: string, format: date-time, nullable: true }
     Quote:
@@ -2084,6 +2174,15 @@ components:
         code: { type: string }
         name: { type: string }
         type: { type: string }
+        categoryReferenceId: { type: string, nullable: true }
+        categoryReferenceName: { type: string, nullable: true }
+        tagReferences:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              name: { type: string }
         defaultPriceCents: { type: string, nullable: true }
     PersonalAccount:
       type: object

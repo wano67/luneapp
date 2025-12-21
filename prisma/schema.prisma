@@ -299,6 +299,7 @@ model Project {
   id         BigInt        @id @default(autoincrement())
   businessId BigInt
   clientId   BigInt?
+  categoryReferenceId BigInt?
   name       String
   status     ProjectStatus @default(PLANNED)
   quoteStatus   ProjectQuoteStatus   @default(DRAFT)
@@ -310,10 +311,12 @@ model Project {
 
   business Business @relation(fields: [businessId], references: [id])
   client   Client?  @relation(fields: [clientId], references: [id])
+  categoryReference BusinessReference? @relation("ProjectCategoryReference", fields: [categoryReferenceId], references: [id], onDelete: SetNull)
   tasks    Task[]
   finances Finance[]
   projectServices ProjectService[]
   interactions Interaction[]
+  tags     ProjectTag[]
   quotes    Quote[]
   invoices  Invoice[]
 
@@ -321,6 +324,7 @@ model Project {
   updatedAt DateTime @updatedAt
 
   @@index([businessId, status])
+  @@index([businessId, categoryReferenceId])
 }
 
 model Task {
@@ -408,6 +412,7 @@ model Service {
   business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
   code        String   @unique
   name        String
+  categoryReferenceId BigInt?
   type        String?
   description String?
   defaultPriceCents BigInt?
@@ -415,6 +420,8 @@ model Service {
   durationHours Int?
   vatRate     Int?
 
+  categoryReference BusinessReference? @relation("ServiceCategoryReference", fields: [categoryReferenceId], references: [id], onDelete: SetNull)
+  tags              ServiceTag[]
   taskTemplates   ServiceTaskTemplate[]
   projectServices ProjectService[]
   quoteItems      QuoteItem[]
@@ -424,6 +431,35 @@ model Service {
   updatedAt DateTime @updatedAt
 
   @@index([businessId, code])
+  @@index([businessId, categoryReferenceId])
+}
+
+model ProjectTag {
+  id          BigInt @id @default(autoincrement())
+  projectId   BigInt
+  referenceId BigInt
+
+  project   Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  reference BusinessReference @relation("ProjectTagReference", fields: [referenceId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([projectId, referenceId])
+  @@index([referenceId])
+}
+
+model ServiceTag {
+  id          BigInt @id @default(autoincrement())
+  serviceId   BigInt
+  referenceId BigInt
+
+  service   Service          @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  reference BusinessReference @relation("ServiceTagReference", fields: [referenceId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([serviceId, referenceId])
+  @@index([referenceId])
 }
 
 model ServiceTaskTemplate {
@@ -484,6 +520,10 @@ model BusinessReference {
   updatedAt  DateTime             @updatedAt
 
   business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  projectCategories Project[] @relation("ProjectCategoryReference")
+  serviceCategories Service[] @relation("ServiceCategoryReference")
+  projectTags       ProjectTag[] @relation("ProjectTagReference")
+  serviceTags       ServiceTag[] @relation("ServiceTagReference")
 
   @@unique([businessId, type, name])
   @@index([businessId, type])
