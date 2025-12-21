@@ -1,17 +1,27 @@
 'use client';
 
 import { useParams } from 'next/navigation';
-import { ComingSoon } from '../../../../ComingSoon';
+import { SettingsForm } from '../SettingsForm';
 
 export default function TaxesSettingsPage() {
   const params = useParams();
   const businessId = (params?.businessId ?? '') as string;
   return (
-    <ComingSoon
+    <SettingsForm
+      businessId={businessId}
       title="Paramètres TVA/Taxes"
-      description="Configuration TVA et localisation fiscale arrivera bientôt."
-      backHref={`/app/pro/${businessId}`}
-      backLabel="Retour au dashboard"
+      description="Activez ou désactivez la TVA et définissez le taux par défaut."
+      fields={[
+        { key: 'vatEnabled', label: 'TVA activée', type: 'checkbox' },
+        {
+          key: 'vatRatePercent',
+          label: 'Taux TVA (%)',
+          type: 'number',
+          min: 0,
+          max: 100,
+          helper: 'Taux par défaut appliqué aux devis/factures.',
+        },
+      ]}
     />
   );
 }

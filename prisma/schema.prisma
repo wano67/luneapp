@@ -120,6 +120,7 @@ model Business {
   quotes      Quote[]
   invoices    Invoice[]
   references  BusinessReference[]
+  settings    BusinessSettings?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -448,6 +449,26 @@ model BusinessReference {
 
   @@unique([businessId, type, name])
   @@index([businessId, type])
+}
+
+model BusinessSettings {
+  id                     BigInt   @id @default(autoincrement())
+  businessId             BigInt   @unique
+  invoicePrefix          String   @default("INV-")
+  quotePrefix            String   @default("DEV-")
+  defaultDepositPercent  Int      @default(30)
+  paymentTermsDays       Int      @default(30)
+  enableAutoNumbering    Boolean  @default(true)
+  vatRatePercent         Int      @default(20)
+  vatEnabled             Boolean  @default(false)
+  allowMembersInvite     Boolean  @default(true)
+  allowViewerExport      Boolean  @default(false)
+  integrationStripeEnabled    Boolean  @default(false)
+  integrationStripePublicKey  String?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
 }
 
 model Quote {

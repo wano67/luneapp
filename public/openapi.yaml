@@ -29,6 +29,7 @@ tags:
   - name: Pro / Finances
   - name: Pro / Billing
   - name: Pro / References
+  - name: Pro / Settings
 
 paths:
   /api/health:
@@ -1129,6 +1130,58 @@ paths:
       responses:
         '200': { $ref: '#/components/responses/Ok' }
 
+  /api/pro/businesses/{businessId}/settings:
+    get:
+      tags: [Pro / Settings]
+      security: [ { cookieAuth: [] } ]
+      summary: Récupère les paramètres d’entreprise
+      description: >
+        Crée des paramètres par défaut si absents. Requiert rôle VIEWER+.
+        Toutes les réponses incluent `x-request-id` et `cache-control: no-store`.
+      parameters: [ { $ref: '#/components/parameters/BusinessId' } ]
+      responses:
+        '200':
+          description: Paramètres
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  item: { $ref: '#/components/schemas/BusinessSettings' }
+    patch:
+      tags: [Pro / Settings]
+      security: [ { cookieAuth: [] } ]
+      summary: Met à jour les paramètres d’entreprise
+      description: ADMIN/OWNER uniquement. CSRF (Origin) requis + rate limit.
+      parameters: [ { $ref: '#/components/parameters/BusinessId' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                invoicePrefix: { type: string }
+                quotePrefix: { type: string }
+                defaultDepositPercent: { type: integer, minimum: 0, maximum: 100 }
+                paymentTermsDays: { type: integer, minimum: 0, maximum: 365 }
+                enableAutoNumbering: { type: boolean }
+                vatRatePercent: { type: integer, minimum: 0, maximum: 100 }
+                vatEnabled: { type: boolean }
+                allowMembersInvite: { type: boolean }
+                allowViewerExport: { type: boolean }
+                integrationStripeEnabled: { type: boolean }
+                integrationStripePublicKey: { type: string, nullable: true }
+      responses:
+        '200':
+          description: Paramètres mis à jour
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  item: { $ref: '#/components/schemas/BusinessSettings' }
+
   /api/pro/businesses/{businessId}/services:
     get:
       tags: [Pro / Services]
@@ -1605,6 +1658,24 @@ components:
         name: { type: string }
         value: { type: string, nullable: true }
         isArchived: { type: boolean }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    BusinessSettings:
+      type: object
+      properties:
+        id: { type: string }
+        businessId: { type: string }
+        invoicePrefix: { type: string }
+        quotePrefix: { type: string }
+        defaultDepositPercent: { type: integer }
+        paymentTermsDays: { type: integer }
+        enableAutoNumbering: { type: boolean }
+        vatRatePercent: { type: integer }
+        vatEnabled: { type: boolean }
+        allowMembersInvite: { type: boolean }
+        allowViewerExport: { type: boolean }
+        integrationStripeEnabled: { type: boolean }
+        integrationStripePublicKey: { type: string, nullable: true }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
     FinanceCreate:

@@ -1,17 +1,30 @@
 'use client';
 
 import { useParams } from 'next/navigation';
-import { ComingSoon } from '../../../../ComingSoon';
+import { SettingsForm } from '../SettingsForm';
 
 export default function PermissionsSettingsPage() {
   const params = useParams();
   const businessId = (params?.businessId ?? '') as string;
   return (
-    <ComingSoon
+    <SettingsForm
+      businessId={businessId}
       title="Permissions & rôles"
-      description="La configuration fine des rôles sera disponible bientôt."
-      backHref={`/app/pro/${businessId}`}
-      backLabel="Retour au dashboard"
+      description="Contrôlez les invitations et exports disponibles pour les membres/viewers."
+      fields={[
+        {
+          key: 'allowMembersInvite',
+          label: 'Autoriser les membres à inviter',
+          type: 'checkbox',
+          helper: 'Permettre aux non-admins d’envoyer des invitations.',
+        },
+        {
+          key: 'allowViewerExport',
+          label: 'Autoriser export pour viewers',
+          type: 'checkbox',
+          helper: 'Autoriser les viewers à exporter certaines données.',
+        },
+      ]}
     />
   );
 }

@@ -92,6 +92,9 @@ export async function POST(request: NextRequest) {
             role: 'OWNER' as BusinessRole,
           },
         },
+        settings: {
+          create: {},
+        },
       },
     });
 
