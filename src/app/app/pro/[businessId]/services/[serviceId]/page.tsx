@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import { useActiveBusiness } from '../../../ActiveBusinessProvider';
+import { ReferencePicker } from '../../references/ReferencePicker';
 
 type TaskTemplate = {
   id: string;
@@ -24,6 +25,9 @@ type ServiceDetail = {
   businessId: string;
   code: string;
   name: string;
+  categoryReferenceId: string | null;
+  categoryReferenceName?: string | null;
+  tagReferences?: { id: string; name: string }[];
   type: string | null;
   description: string | null;
   defaultPriceCents: string | null;
@@ -46,6 +50,8 @@ type FormState = {
   tjm: string;
   durationHours: string;
   vatRate: string;
+  categoryReferenceId: string;
+  tagReferenceIds: string[];
 };
 
 const emptyForm: FormState = {
@@ -57,6 +63,8 @@ const emptyForm: FormState = {
   tjm: '',
   durationHours: '',
   vatRate: '',
+  categoryReferenceId: '',
+  tagReferenceIds: [],
 };
 
 function formatCents(value: string | null | undefined) {
@@ -112,6 +120,8 @@ export default function ServiceDetailPage() {
       tjm: value.tjmCents ? (Number(value.tjmCents) / 100).toString() : '',
       durationHours: value.durationHours != null ? String(value.durationHours) : '',
       vatRate: value.vatRate != null ? String(value.vatRate) : '',
+      categoryReferenceId: value.categoryReferenceId ?? '',
+      tagReferenceIds: value.tagReferences?.map((t) => t.id) ?? [],
     };
   }
 
@@ -189,6 +199,8 @@ export default function ServiceDetailPage() {
       name: form.name.trim(),
       type: form.type.trim() || null,
       description: form.description.trim() || null,
+      categoryReferenceId: form.categoryReferenceId || null,
+      tagReferenceIds: form.tagReferenceIds,
     };
     if (priceNum != null) payload.defaultPriceCents = Math.round(priceNum * 100);
     if (tjmNum != null) payload.tjmCents = Math.round(tjmNum * 100);
@@ -257,6 +269,22 @@ export default function ServiceDetailPage() {
                   <span>Type: {service.type || '—'}</span>
                   <span>Créé: {formatDate(service.createdAt)}</span>
                   <span>Maj: {formatDate(service.updatedAt)}</span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {service.categoryReferenceName ? (
+                    <Badge variant="neutral">Catégorie : {service.categoryReferenceName}</Badge>
+                  ) : (
+                    <Badge variant="neutral">Sans catégorie</Badge>
+                  )}
+                  {service.tagReferences?.length ? (
+                    service.tagReferences.map((tag) => (
+                      <Badge key={tag.id} variant="neutral" className="bg-[var(--surface-hover)]">
+                        #{tag.name}
+                      </Badge>
+                    ))
+                  ) : (
+                    <Badge variant="neutral">Aucun tag</Badge>
+                  )}
                 </div>
               </div>
               <div className="flex flex-col items-start gap-2">
@@ -358,6 +386,19 @@ export default function ServiceDetailPage() {
                   disabled={!isAdmin || saving}
                   className="w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-base text-[var(--text-primary)] placeholder:text-[var(--text-faint)] transition-colors hover:border-[var(--border-strong)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)] disabled:cursor-not-allowed disabled:opacity-70"
                   placeholder="Pitch commercial, livrables clés, exclusions…"
+                />
+              </div>
+              <div className="md:col-span-2">
+                <ReferencePicker
+                  businessId={businessId}
+                  categoryId={form.categoryReferenceId || null}
+                  tagIds={form.tagReferenceIds}
+                  onCategoryChange={(id: string | null) =>
+                    setForm((prev) => ({ ...prev, categoryReferenceId: id ?? '' }))
+                  }
+                  onTagsChange={(ids: string[]) => setForm((prev) => ({ ...prev, tagReferenceIds: ids }))}
+                  disabled={!isAdmin || saving}
+                  title="Références"
                 />
               </div>
               <div className="md:col-span-2 flex flex-col gap-2">

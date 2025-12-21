@@ -12,10 +12,14 @@ import { Select } from '@/components/ui/select';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import { useActiveBusiness } from '../../../ActiveBusinessProvider';
 import RoleBanner from '@/components/RoleBanner';
+import { ReferencePicker } from '../../references/ReferencePicker';
 
 type Client = {
   id: string;
   businessId: string;
+  categoryReferenceId: string | null;
+  categoryReferenceName: string | null;
+  tagReferences: { id: string; name: string }[];
   name: string;
   email: string | null;
   phone: string | null;
@@ -80,7 +84,9 @@ export default function ClientDetailPage() {
   const clientId = (params?.clientId ?? '') as string;
   const activeCtx = useActiveBusiness({ optional: true });
   const role = activeCtx?.activeBusiness?.role;
-  const canEditInteractions = role === 'ADMIN' || role === 'OWNER';
+  const isAdminOrOwner = role === 'ADMIN' || role === 'OWNER';
+  const canEditInteractions = isAdminOrOwner;
+  const canEditReferences = isAdminOrOwner;
 
   const [client, setClient] = useState<Client | null>(null);
   const [loading, setLoading] = useState(true);
@@ -109,6 +115,12 @@ export default function ClientDetailPage() {
   const [financeLoading, setFinanceLoading] = useState(true);
   const [financeError, setFinanceError] = useState<string | null>(null);
   const [financeRequestId, setFinanceRequestId] = useState<string | null>(null);
+  const [categoryReferenceId, setCategoryReferenceId] = useState<string>('');
+  const [tagReferenceIds, setTagReferenceIds] = useState<string[]>([]);
+  const [referenceMessage, setReferenceMessage] = useState<string | null>(null);
+  const [referenceError, setReferenceError] = useState<string | null>(null);
+  const [referenceRequestId, setReferenceRequestId] = useState<string | null>(null);
+  const [referencesSaving, setReferencesSaving] = useState(false);
 
   function formatDate(value: string) {
     try {
@@ -385,6 +397,53 @@ export default function ClientDetailPage() {
     setSavingInteraction(false);
   }
 
+  async function saveReferences() {
+    if (!canEditReferences) return;
+    setReferenceError(null);
+    setReferenceMessage(null);
+    setReferencesSaving(true);
+    const res = await fetchJson<ClientDetailResponse>(
+      `/api/pro/businesses/${businessId}/clients/${clientId}`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          categoryReferenceId: categoryReferenceId || null,
+          tagReferenceIds,
+        }),
+      }
+    );
+
+    setReferenceRequestId(res.requestId ?? null);
+
+    if (res.status === 401) {
+      const from = window.location.pathname + window.location.search;
+      window.location.href = `/login?from=${encodeURIComponent(from)}`;
+      return;
+    }
+
+    if (!res.ok || !res.data) {
+      const msg = res.error ?? 'Impossible de mettre à jour les références.';
+      setReferenceError(res.requestId ? `${msg} (Ref: ${res.requestId})` : msg);
+      setReferencesSaving(false);
+      return;
+    }
+
+    const updated: Client = {
+      ...res.data.item,
+      categoryReferenceId: res.data.item.categoryReferenceId ?? null,
+      categoryReferenceName: res.data.item.categoryReferenceName ?? null,
+      tagReferences: res.data.item.tagReferences ?? [],
+    };
+
+    setClient(updated);
+    setCategoryReferenceId(updated.categoryReferenceId ?? '');
+    setTagReferenceIds(updated.tagReferences.map((t) => t.id));
+    setReferenceMessage('Références mises à jour.');
+    setReferenceError(null);
+    setReferencesSaving(false);
+  }
+
   useEffect(() => {
     const controller = new AbortController();
     fetchController.current?.abort();
@@ -416,7 +475,15 @@ export default function ClientDetailPage() {
           return;
         }
 
-        setClient(res.data.item);
+        const normalized: Client = {
+          ...res.data.item,
+          categoryReferenceId: res.data.item.categoryReferenceId ?? null,
+          categoryReferenceName: res.data.item.categoryReferenceName ?? null,
+          tagReferences: res.data.item.tagReferences ?? [],
+        };
+        setClient(normalized);
+        setCategoryReferenceId(normalized.categoryReferenceId ?? '');
+        setTagReferenceIds(normalized.tagReferences.map((t) => t.id));
       } catch (err) {
         if (controller.signal.aborted) return;
         console.error(err);
@@ -491,6 +558,24 @@ export default function ClientDetailPage() {
             <Badge variant="neutral">ID {client.id}</Badge>
           </div>
         </div>
+        <div className="flex flex-wrap gap-2">
+          {client.categoryReferenceName ? (
+            <Badge variant="neutral" className="bg-indigo-50 text-indigo-700">
+              {client.categoryReferenceName}
+            </Badge>
+          ) : (
+            <Badge variant="neutral">Catégorie ?</Badge>
+          )}
+          {client.tagReferences.length ? (
+            client.tagReferences.map((tag) => (
+              <Badge key={tag.id} variant="neutral" className="bg-emerald-50 text-emerald-700">
+                {tag.name}
+              </Badge>
+            ))
+          ) : (
+            <Badge variant="neutral">Tags ?</Badge>
+          )}
+        </div>
 
         <div className="grid gap-3 md:grid-cols-2">
           <Card className="space-y-1 border-dashed border-[var(--border)] bg-[var(--surface)]/70 p-3">
@@ -503,6 +588,33 @@ export default function ClientDetailPage() {
             <p className="text-xs font-semibold text-[var(--text-primary)]">Créé le</p>
             <p className="text-sm text-[var(--text-secondary)]">{formatDate(client.createdAt)}</p>
           </Card>
+        </div>
+      </Card>
+
+      <Card className="space-y-3 p-5">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <p className="text-sm font-semibold text-[var(--text-primary)]">Références</p>
+            <p className="text-xs text-[var(--text-secondary)]">Catégorie et tags liés à ce client.</p>
+          </div>
+          <Badge variant="neutral">{canEditReferences ? 'Admin/Owner' : 'Lecture seule'}</Badge>
+        </div>
+        <ReferencePicker
+          businessId={businessId}
+          categoryId={categoryReferenceId || null}
+          tagIds={tagReferenceIds}
+          onCategoryChange={(id) => setCategoryReferenceId(id ?? '')}
+          onTagsChange={(ids) => setTagReferenceIds(ids)}
+          disabled={!canEditReferences || referencesSaving}
+          title="Références client"
+        />
+        {referenceError ? <p className="text-xs font-semibold text-rose-500">{referenceError}</p> : null}
+        {referenceMessage ? <p className="text-xs text-emerald-500">{referenceMessage}</p> : null}
+        {referenceRequestId ? <p className="text-[10px] text-[var(--text-faint)]">Req: {referenceRequestId}</p> : null}
+        <div className="flex justify-end">
+          <Button onClick={() => void saveReferences()} disabled={!canEditReferences || referencesSaving}>
+            {referencesSaving ? 'Enregistrement…' : 'Enregistrer'}
+          </Button>
         </div>
       </Card>
 

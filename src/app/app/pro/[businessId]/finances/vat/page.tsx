@@ -1,17 +1,129 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { ComingSoon } from '../../../../ComingSoon';
+import { Card } from '@/components/ui/card';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { fetchJson } from '@/lib/apiClient';
+
+type VatResponse = {
+  businessId: string;
+  range: { from: string; to: string };
+  isConfigured: boolean;
+  totals: { collectedCents: string; deductibleCents: string; balanceCents: string };
+  monthly: Array<{ month: string; collectedCents: string; deductibleCents: string; balanceCents: string }>;
+  message?: string | null;
+};
+
+function formatMoney(cents: string) {
+  const num = Number(cents) / 100;
+  if (Number.isNaN(num)) return '—';
+  try {
+    return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(num);
+  } catch {
+    return `${num.toFixed(0)} €`;
+  }
+}
 
 export default function VatPage() {
   const params = useParams();
   const businessId = (params?.businessId ?? '') as string;
+  const [data, setData] = useState<VatResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [requestId, setRequestId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    const load = async () => {
+      setLoading(true);
+      setError(null);
+      setRequestId(null);
+      const res = await fetchJson<VatResponse>(`/api/pro/businesses/${businessId}/finances/vat`);
+      if (!mounted) return;
+      setRequestId(res.requestId);
+      setLoading(false);
+      if (!res.ok || !res.data) {
+        const msg = res.error ?? 'Impossible de charger la TVA.';
+        setError(res.requestId ? `${msg} (Ref: ${res.requestId})` : msg);
+        setData(null);
+        return;
+      }
+      setData(res.data);
+    };
+    void load();
+    return () => {
+      mounted = false;
+    };
+  }, [businessId]);
+
   return (
-    <ComingSoon
-      title="TVA / Déclarations"
-      description="Gestion des périodes de TVA arrive bientôt."
-      backHref={`/app/pro/${businessId}/finances`}
-      backLabel="Retour finances"
-    />
+    <div className="space-y-4">
+      <div>
+        <h1 className="text-2xl font-semibold">TVA / Déclarations</h1>
+        <p className="text-muted-foreground">Synthèse TVA collectée/déductible basée sur vos écritures.</p>
+      </div>
+
+      {error && <div className="text-sm text-red-700 bg-red-50 border border-red-200 px-3 py-2 rounded">{error}</div>}
+      {requestId && (
+        <div className="text-xs text-muted-foreground">
+          Request ID: <code>{requestId}</code>
+        </div>
+      )}
+
+      {loading && <p>Chargement…</p>}
+      {!loading && data && (
+        <>
+          <Card className="p-4 space-y-2">
+            <div className="flex gap-6 flex-wrap">
+              <div>
+                <div className="text-sm text-muted-foreground">Collectée</div>
+                <div className="text-lg font-semibold">{formatMoney(data.totals.collectedCents)}</div>
+              </div>
+              <div>
+                <div className="text-sm text-muted-foreground">Déductible</div>
+                <div className="text-lg font-semibold">{formatMoney(data.totals.deductibleCents)}</div>
+              </div>
+              <div>
+                <div className="text-sm text-muted-foreground">Balance</div>
+                <div className="text-lg font-semibold">{formatMoney(data.totals.balanceCents)}</div>
+              </div>
+            </div>
+            <div className="text-xs text-muted-foreground">
+              Période : {new Date(data.range.from).toLocaleDateString()} → {new Date(data.range.to).toLocaleDateString()}
+            </div>
+            {!data.isConfigured && (
+              <div className="text-sm text-amber-700 bg-amber-50 border border-amber-200 px-3 py-2 rounded">
+                {data.message || 'Aucune écriture TVA détectée (categories VAT_COLLECTED / VAT_PAID).'}
+              </div>
+            )}
+          </Card>
+
+          <Card className="p-4">
+            <h2 className="text-lg font-semibold mb-2">Par mois</h2>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Mois</TableHead>
+                  <TableHead>Collectée</TableHead>
+                  <TableHead>Déductible</TableHead>
+                  <TableHead>Balance</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {data.monthly.map((m) => (
+                  <TableRow key={m.month}>
+                    <TableCell>{m.month}</TableCell>
+                    <TableCell>{formatMoney(m.collectedCents)}</TableCell>
+                    <TableCell>{formatMoney(m.deductibleCents)}</TableCell>
+                    <TableCell>{formatMoney(m.balanceCents)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </Card>
+        </>
+      )}
+    </div>
   );
 }

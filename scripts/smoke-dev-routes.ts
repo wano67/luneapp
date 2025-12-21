@@ -2,62 +2,36 @@
  * Smoke test for dev server: checks public pages + authenticated pages/APIs.
  * Usage:
  *   BASE_URL=http://localhost:3000 TEST_EMAIL=... TEST_PASSWORD=... pnpm smoke:dev-routes
- * If credentials are missing, protected routes will be skipped.
+ * If credentials are missing, protected routes will be skipped unless SMOKE_STRICT=1.
  */
 
+import { createRequester, getSmokeCreds, handleMissingCreds } from './smoke-utils';
+
 const baseUrl = process.env.BASE_URL?.trim() || 'http://localhost:3000';
-const email = process.env.TEST_EMAIL;
-const password = process.env.TEST_PASSWORD;
-
-let cookie: string | null = null;
-
-function extractCookie(setCookie: string | null) {
-  if (!setCookie) return;
-  const auth = setCookie.split(',').find((c) => c.trim().startsWith('auth_token='));
-  if (auth) cookie = auth;
-}
-
-async function request(path: string, init: RequestInit = {}) {
-  const res = await fetch(`${baseUrl}${path}`, {
-    ...init,
-    headers: {
-      ...(init.headers ?? {}),
-      ...(cookie ? { Cookie: cookie } : {}),
-    },
-  });
-  extractCookie(res.headers.get('set-cookie'));
-  return res;
-}
-
-async function requestJson(path: string, init: RequestInit = {}) {
-  const res = await request(path, init);
-  let json: unknown = null;
-  try {
-    json = await res.json();
-  } catch {
-    // ignore
-  }
-  return { res, json };
-}
+const { request } = createRequester(baseUrl);
 
 async function checkRoute(path: string) {
-  const res = await request(path);
+  const { res } = await request(path, { allowError: true });
   if (res.status >= 500) throw new Error(`Route ${path} failed with ${res.status}`);
   console.log(`${path}: ${res.status}`);
 }
 
-async function login() {
-  if (!email || !password) return false;
-  const res = await request('/api/auth/login', {
+async function login(): Promise<boolean> {
+  let creds;
+  try {
+    creds = getSmokeCreds({ preferAdmin: true });
+  } catch (err) {
+    handleMissingCreds((err as Error).message);
+    return false;
+  }
+
+  const { res, json } = await request('/api/auth/login', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Origin: baseUrl },
-    body: JSON.stringify({ email, password }),
+    body: { email: creds.email, password: creds.password },
   });
   if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`Login failed (${res.status}): ${body}`);
+    throw new Error(`Login failed (${res.status}): ${JSON.stringify(json)}`);
   }
-  extractCookie(res.headers.get('set-cookie'));
   return true;
 }
 
@@ -69,20 +43,16 @@ async function main() {
     await checkRoute(r);
   }
 
-  if (!email || !password) {
-    console.log('No TEST_EMAIL/TEST_PASSWORD, skipping protected routes.');
-    return;
-  }
-
   console.log('Login...');
-  await login();
+  const logged = await login();
+  if (!logged) return;
 
   console.log('GET /api/auth/me');
   const me = await request('/api/auth/me');
-  if (!me.ok) throw new Error(`/api/auth/me failed with ${me.status}`);
+  if (!me.res.ok) throw new Error(`/api/auth/me failed with ${me.res.status}`);
 
   console.log('Businesses…');
-  const { res: bizRes, json: bizJson } = await requestJson('/api/pro/businesses');
+  const { res: bizRes, json: bizJson } = await request('/api/pro/businesses');
   if (!bizRes.ok) throw new Error(`/api/pro/businesses failed with ${bizRes.status}`);
   const businessId = (bizJson as { items?: Array<{ business?: { id?: string } }> })?.items?.[0]?.business?.id;
   if (!businessId) throw new Error('No business found to continue smoke tests.');
@@ -95,7 +65,7 @@ async function main() {
     `/app/pro/${businessId}/invites`,
   ];
 
-  const { res: clientsRes, json: clientsJson } = await requestJson(
+  const { res: clientsRes, json: clientsJson } = await request(
     `/api/pro/businesses/${businessId}/clients`
   );
   if (!clientsRes.ok) throw new Error(`/api/pro/businesses/${businessId}/clients failed with ${clientsRes.status}`);
@@ -106,11 +76,12 @@ async function main() {
 
   console.log('Dashboard…');
   const dashboard = await request(`/api/pro/businesses/${businessId}/dashboard`);
-  if (!dashboard.ok) throw new Error(`/api/pro/businesses/${businessId}/dashboard failed with ${dashboard.status}`);
+  if (!dashboard.res.ok)
+    throw new Error(`/api/pro/businesses/${businessId}/dashboard failed with ${dashboard.res.status}`);
 
   console.log('Invites list…');
   const invites = await request(`/api/pro/businesses/${businessId}/invites`);
-  if (!invites.ok) throw new Error(`/api/pro/businesses/${businessId}/invites failed with ${invites.status}`);
+  if (!invites.res.ok) throw new Error(`/api/pro/businesses/${businessId}/invites failed with ${invites.res.status}`);
 
   for (const r of protectedPages) {
     await checkRoute(r);
@@ -119,7 +90,8 @@ async function main() {
   if (clientId) {
     console.log('Client detail…');
     const detail = await request(`/api/pro/businesses/${businessId}/clients/${clientId}`);
-    if (!detail.ok) throw new Error(`/api/pro/businesses/${businessId}/clients/${clientId} failed with ${detail.status}`);
+    if (!detail.res.ok)
+      throw new Error(`/api/pro/businesses/${businessId}/clients/${clientId} failed with ${detail.res.status}`);
   }
 
   console.log('Smoke dev routes OK.');

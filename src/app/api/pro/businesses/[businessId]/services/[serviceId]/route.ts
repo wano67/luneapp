@@ -5,7 +5,7 @@ import { requireBusinessRole } from '@/server/auth/businessRole';
 import { assertSameOrigin, jsonNoStore, withNoStore } from '@/server/security/csrf';
 import { rateLimit } from '@/server/security/rateLimit';
 import { badRequest, getRequestId, unauthorized, withRequestId } from '@/server/http/apiUtils';
-import { TaskPhase } from '@/generated/prisma/client';
+import { BusinessReferenceType, TaskPhase } from '@/generated/prisma/client';
 
 function forbidden() {
   return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -52,6 +52,8 @@ type ServiceBodyParsed =
   | {
       code: string;
       name: string;
+      categoryReferenceId: bigint | null | undefined;
+      tagReferenceIds: bigint[] | undefined;
       type: string | null;
       description: string | null;
       defaultPriceCents: number | null;
@@ -117,9 +119,30 @@ function validateServiceBody(body: unknown): ServiceBodyParsed {
       return { error: 'Template tâche : assigneeRole trop long.' };
   }
 
+  const categoryProvided = Object.prototype.hasOwnProperty.call(body, 'categoryReferenceId');
+  const categoryReferenceId =
+    categoryProvided && typeof body.categoryReferenceId === 'string' && /^\d+$/.test(body.categoryReferenceId)
+      ? BigInt(body.categoryReferenceId)
+      : categoryProvided
+        ? null
+        : undefined;
+
+  const tagProvided = Object.prototype.hasOwnProperty.call(body, 'tagReferenceIds');
+  const tagReferenceIds: bigint[] | undefined = tagProvided
+    ? Array.from(
+        new Set(
+          (Array.isArray(body.tagReferenceIds) ? body.tagReferenceIds : [])
+            .filter((id) => typeof id === 'string' && /^\d+$/.test(id))
+            .map((id) => BigInt(id as string))
+        )
+      )
+    : undefined;
+
   return {
     code,
     name,
+    categoryReferenceId,
+    tagReferenceIds,
     type: type || null,
     description: description || null,
     defaultPriceCents,
@@ -133,7 +156,11 @@ function validateServiceBody(body: unknown): ServiceBodyParsed {
 async function ensureService(businessId: bigint, serviceId: bigint) {
   return prisma.service.findFirst({
     where: { id: serviceId, businessId },
-    include: { taskTemplates: true },
+    include: {
+      taskTemplates: true,
+      categoryReference: { select: { id: true, name: true } },
+      tags: { include: { reference: { select: { id: true, name: true } } } },
+    },
   });
 }
 
@@ -148,6 +175,46 @@ function ensureServiceDelegate(requestId: string) {
     );
   }
   return null;
+}
+
+async function validateCategoryAndTags(
+  businessId: bigint,
+  categoryReferenceId: bigint | null,
+  tagReferenceIds?: bigint[]
+): Promise<{ categoryId: bigint | null; tagIds: bigint[] } | { error: string }> {
+  if (categoryReferenceId) {
+    const category = await prisma.businessReference.findFirst({
+      where: {
+        id: categoryReferenceId,
+        businessId,
+        type: BusinessReferenceType.CATEGORY,
+        isArchived: false,
+      },
+      select: { id: true },
+    });
+    if (!category) {
+      return { error: 'categoryReferenceId invalide pour ce business.' };
+    }
+  }
+
+  let tagIds: bigint[] = [];
+  if (tagReferenceIds && tagReferenceIds.length) {
+    const tags = await prisma.businessReference.findMany({
+      where: {
+        id: { in: tagReferenceIds },
+        businessId,
+        type: BusinessReferenceType.TAG,
+        isArchived: false,
+      },
+      select: { id: true },
+    });
+    if (tags.length !== tagReferenceIds.length) {
+      return { error: 'tagReferenceIds invalides pour ce business.' };
+    }
+    tagIds = tags.map((t) => t.id);
+  }
+
+  return { categoryId: categoryReferenceId, tagIds };
 }
 
 // GET /api/pro/businesses/{businessId}/services/{serviceId}
@@ -186,6 +253,9 @@ export async function GET(
     businessId: service.businessId.toString(),
     code: service.code,
     name: service.name,
+    categoryReferenceId: service.categoryReferenceId ? service.categoryReferenceId.toString() : null,
+    categoryReferenceName: service.categoryReference?.name ?? null,
+    tagReferences: service.tags.map((t) => ({ id: t.reference.id.toString(), name: t.reference.name })),
     type: service.type,
     description: service.description,
     defaultPriceCents: service.defaultPriceCents?.toString() ?? null,
@@ -249,30 +319,62 @@ export async function PATCH(
     return withRequestId(NextResponse.json({ error: 'Service introuvable.' }, { status: 404 }), requestId);
   }
 
+  const categoryToApply =
+    parsed.categoryReferenceId !== undefined ? parsed.categoryReferenceId : existing.categoryReferenceId;
+  const tagsToApply =
+    parsed.tagReferenceIds !== undefined
+      ? parsed.tagReferenceIds
+      : existing.tags.map((t) => t.referenceId).filter((id): id is bigint => !!id);
+
+  const validated = await validateCategoryAndTags(
+    businessIdBigInt,
+    categoryToApply ?? null,
+    tagsToApply
+  );
+  if ('error' in validated) {
+    return withRequestId(badRequest(validated.error), requestId);
+  }
+
+  const updateData: Record<string, unknown> = {
+    code: parsed.code,
+    name: parsed.name,
+    type: parsed.type || undefined,
+    description: parsed.description || undefined,
+    defaultPriceCents: parsed.defaultPriceCents ?? undefined,
+    tjmCents: parsed.tjmCents ?? undefined,
+    durationHours: parsed.durationHours ?? undefined,
+    vatRate: parsed.vatRate ?? undefined,
+    taskTemplates: parsed.templates.length
+      ? {
+          deleteMany: { serviceId: serviceIdBigInt },
+          create: parsed.templates.map((tpl) => ({
+            phase: tpl.phase ?? undefined,
+            title: tpl.title,
+            defaultAssigneeRole: tpl.defaultAssigneeRole || undefined,
+            defaultDueOffsetDays: tpl.defaultDueOffsetDays ?? undefined,
+          })),
+        }
+      : undefined,
+  };
+
+  if (parsed.categoryReferenceId !== undefined) {
+    updateData.categoryReferenceId = validated.categoryId;
+  }
+  if (parsed.tagReferenceIds !== undefined) {
+    updateData.tags = {
+      deleteMany: { serviceId: serviceIdBigInt },
+      create: validated.tagIds.map((id) => ({ referenceId: id })),
+    };
+  }
+
   const updated = await prisma.service.update({
     where: { id: serviceIdBigInt },
-    data: {
-      code: parsed.code,
-      name: parsed.name,
-      type: parsed.type || undefined,
-      description: parsed.description || undefined,
-      defaultPriceCents: parsed.defaultPriceCents ?? undefined,
-      tjmCents: parsed.tjmCents ?? undefined,
-      durationHours: parsed.durationHours ?? undefined,
-      vatRate: parsed.vatRate ?? undefined,
-      taskTemplates: parsed.templates.length
-        ? {
-            deleteMany: { serviceId: serviceIdBigInt },
-            create: parsed.templates.map((tpl) => ({
-              phase: tpl.phase ?? undefined,
-              title: tpl.title,
-              defaultAssigneeRole: tpl.defaultAssigneeRole || undefined,
-              defaultDueOffsetDays: tpl.defaultDueOffsetDays ?? undefined,
-            })),
-          }
-        : undefined,
+    data: updateData,
+    include: {
+      taskTemplates: true,
+      categoryReference: { select: { id: true, name: true } },
+      tags: { include: { reference: { select: { id: true, name: true } } } },
     },
-    include: { taskTemplates: true },
   });
 
   return jsonNoStore({
@@ -280,6 +382,9 @@ export async function PATCH(
     businessId: updated.businessId.toString(),
     code: updated.code,
     name: updated.name,
+    categoryReferenceId: updated.categoryReferenceId ? updated.categoryReferenceId.toString() : null,
+    categoryReferenceName: updated.categoryReference?.name ?? null,
+    tagReferences: updated.tags.map((t) => ({ id: t.reference.id.toString(), name: t.reference.name })),
     type: updated.type,
     description: updated.description,
     defaultPriceCents: updated.defaultPriceCents?.toString() ?? null,

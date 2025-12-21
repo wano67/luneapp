@@ -13,6 +13,7 @@ import { Select } from '@/components/ui/select';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import { useActiveBusiness } from '../../../ActiveBusinessProvider';
 import RoleBanner from '@/components/RoleBanner';
+import { ReferencePicker } from '../../references/ReferencePicker';
 
 type ProjectStatus = 'PLANNED' | 'ACTIVE' | 'ON_HOLD' | 'COMPLETED' | 'CANCELLED';
 type ProjectQuoteStatus = 'DRAFT' | 'SENT' | 'ACCEPTED' | 'SIGNED';
@@ -36,6 +37,9 @@ type Project = {
   businessId: string;
   clientId: string | null;
   clientName: string | null;
+  categoryReferenceId?: string | null;
+  categoryReferenceName?: string | null;
+  tagReferences?: { id: string; name: string }[];
   name: string;
   status: ProjectStatus;
   quoteStatus: ProjectQuoteStatus;
@@ -313,6 +317,12 @@ export default function ProjectDetailPage() {
   const [tasksLoading, setTasksLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [requestId, setRequestId] = useState<string | null>(null);
+  const [categoryReferenceId, setCategoryReferenceId] = useState<string>('');
+  const [tagReferenceIds, setTagReferenceIds] = useState<string[]>([]);
+  const [referencesSaving, setReferencesSaving] = useState(false);
+  const [referencesError, setReferencesError] = useState<string | null>(null);
+  const [referencesMessage, setReferencesMessage] = useState<string | null>(null);
+  const [referencesRequestId, setReferencesRequestId] = useState<string | null>(null);
   const controllerRef = useRef<AbortController | null>(null);
 
   const [serviceModalOpen, setServiceModalOpen] = useState(false);
@@ -645,6 +655,8 @@ export default function ProjectDetailPage() {
       }
       setRequestId(res.requestId ?? null);
       setProject(res.data.item);
+      setCategoryReferenceId(res.data.item.categoryReferenceId ?? '');
+      setTagReferenceIds(res.data.item.tagReferences?.map((t) => t.id) ?? []);
       setServices(res.data.item.projectServices ?? []);
       setQuoteStatusValue(res.data.item.quoteStatus);
       setDepositStatusValue(res.data.item.depositStatus);
@@ -997,8 +1009,48 @@ export default function ProjectDetailPage() {
     } else {
       setCommercialMessage('Statuts mis à jour.');
       setProject(res.data.item);
+      setCategoryReferenceId(res.data.item.categoryReferenceId ?? '');
+      setTagReferenceIds(res.data.item.tagReferences?.map((t) => t.id) ?? []);
     }
     setSavingCommercial(false);
+  }
+
+  async function saveReferences() {
+    if (!isAdmin) {
+      setReferencesError(readOnlyMessage);
+      setReadOnlyInfo(readOnlyMessage);
+      return;
+    }
+    setReferencesSaving(true);
+    setReferencesError(null);
+    setReferencesMessage(null);
+    setReferencesRequestId(null);
+
+    const res = await fetchJson<ProjectDetailResponse>(
+      `/api/pro/businesses/${businessId}/projects/${projectId}`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          categoryReferenceId: categoryReferenceId || null,
+          tagReferenceIds,
+        }),
+      }
+    );
+
+    setReferencesRequestId(res.requestId ?? null);
+
+    if (!res.ok || !res.data) {
+      const msg = res.error ?? 'Impossible de mettre à jour les références.';
+      setReferencesError(res.requestId ? `${msg} (Ref: ${res.requestId})` : msg);
+    } else {
+      setProject(res.data.item);
+      setCategoryReferenceId(res.data.item.categoryReferenceId ?? '');
+      setTagReferenceIds(res.data.item.tagReferences?.map((t) => t.id) ?? []);
+      setReferencesMessage('Références mises à jour.');
+    }
+
+    setReferencesSaving(false);
   }
 
   if (loading) {
@@ -1108,6 +1160,54 @@ export default function ProjectDetailPage() {
             </p>
           </Card>
         </div>
+        <div className="flex flex-wrap gap-2">
+          {project.categoryReferenceName ? (
+            <Badge variant="neutral">Catégorie : {project.categoryReferenceName}</Badge>
+          ) : (
+            <Badge variant="neutral">Sans catégorie</Badge>
+          )}
+          {project.tagReferences?.length ? (
+            project.tagReferences.map((tag) => (
+              <Badge key={tag.id} variant="neutral" className="bg-[var(--surface-hover)]">
+                #{tag.name}
+              </Badge>
+            ))
+          ) : (
+            <Badge variant="neutral">Aucun tag</Badge>
+          )}
+        </div>
+      </Card>
+
+      <Card className="space-y-3 p-5">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <p className="text-sm font-semibold text-[var(--text-primary)]">Références</p>
+            <p className="text-xs text-[var(--text-secondary)]">Catégorie + tags utilisés pour filtrer et organiser.</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {referencesMessage ? <span className="text-[11px] text-emerald-600">{referencesMessage}</span> : null}
+            {referencesError ? <span className="text-[11px] text-rose-600">{referencesError}</span> : null}
+            {referencesRequestId ? (
+              <span className="text-[10px] text-[var(--text-secondary)]">Ref: {referencesRequestId}</span>
+            ) : null}
+            <Button size="sm" variant="outline" onClick={saveReferences} disabled={!isAdmin || referencesSaving}>
+              {referencesSaving ? 'Sauvegarde…' : 'Enregistrer'}
+            </Button>
+          </div>
+        </div>
+        <ReferencePicker
+          businessId={businessId}
+          categoryId={categoryReferenceId || null}
+          tagIds={tagReferenceIds}
+          onCategoryChange={(id: string | null) => setCategoryReferenceId(id ?? '')}
+          onTagsChange={(ids: string[]) => setTagReferenceIds(ids)}
+          disabled={!isAdmin || referencesSaving}
+        />
+        {!isAdmin ? (
+          <p className="text-xs text-[var(--text-secondary)]">
+            Lecture seule : ADMIN/OWNER requis pour modifier les références.
+          </p>
+        ) : null}
       </Card>
 
       {readOnlyInfo ? <p className="text-xs text-[var(--text-secondary)] px-1">{readOnlyInfo}</p> : null}

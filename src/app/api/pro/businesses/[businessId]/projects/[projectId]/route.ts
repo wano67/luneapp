@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/server/db/client';
-import { ProjectDepositStatus, ProjectQuoteStatus, ProjectStatus } from '@/generated/prisma/client';
+import {
+  BusinessReferenceType,
+  ProjectDepositStatus,
+  ProjectQuoteStatus,
+  ProjectStatus,
+} from '@/generated/prisma/client';
 import { requireBusinessRole } from '@/server/auth/businessRole';
 import { requireAuthPro } from '@/server/auth/requireAuthPro';
 import { assertSameOrigin, jsonNoStore, withNoStore } from '@/server/security/csrf';
@@ -39,6 +44,9 @@ function serializeProject(project: {
   endDate: Date | null;
   createdAt: Date;
   updatedAt: Date;
+  categoryReferenceId?: bigint | null;
+  categoryReference?: { id: bigint; name: string | null } | null;
+  tags?: Array<{ referenceId: bigint; reference: { id: bigint; name: string } }>;
   client?: { id: bigint; name: string | null } | null;
   _count?: { tasks: number; projectServices: number; interactions: number };
   projectServices?: {
@@ -60,6 +68,14 @@ function serializeProject(project: {
     clientName: project.client?.name ?? null,
     client: project.client ? { id: project.client.id.toString(), name: project.client.name } : null,
     name: project.name,
+    categoryReferenceId: project.categoryReferenceId ? project.categoryReferenceId.toString() : null,
+    categoryReferenceName: project.categoryReference?.name ?? null,
+    tagReferences: project.tags
+      ? project.tags.map((tag) => ({
+          id: tag.reference.id.toString(),
+          name: tag.reference.name,
+        }))
+      : [],
     status: project.status,
     quoteStatus: project.quoteStatus,
     depositStatus: project.depositStatus,
@@ -102,6 +118,44 @@ function withIdNoStore(res: NextResponse, requestId: string) {
   return withNoStore(withRequestId(res, requestId));
 }
 
+async function validateCategoryAndTags(
+  businessId: bigint,
+  categoryReferenceId: bigint | null,
+  tagReferenceIds?: bigint[]
+): Promise<{ categoryId: bigint | null; tagIds: bigint[] } | { error: string }> {
+  if (categoryReferenceId) {
+    const category = await prisma.businessReference.findFirst({
+      where: {
+        id: categoryReferenceId,
+        businessId,
+        type: BusinessReferenceType.CATEGORY,
+        isArchived: false,
+      },
+      select: { id: true },
+    });
+    if (!category) return { error: 'categoryReferenceId invalide pour ce business.' };
+  }
+
+  let tagIds: bigint[] = [];
+  if (tagReferenceIds && tagReferenceIds.length) {
+    const tags = await prisma.businessReference.findMany({
+      where: {
+        id: { in: tagReferenceIds },
+        businessId,
+        type: BusinessReferenceType.TAG,
+        isArchived: false,
+      },
+      select: { id: true },
+    });
+    if (tags.length !== tagReferenceIds.length) {
+      return { error: 'tagReferenceIds invalides pour ce business.' };
+    }
+    tagIds = tags.map((t) => t.id);
+  }
+
+  return { categoryId: categoryReferenceId, tagIds };
+}
+
 function isValidStatus(status: unknown): status is ProjectStatus {
   return typeof status === 'string' && Object.values(ProjectStatus).includes(status as ProjectStatus);
 }
@@ -135,6 +189,8 @@ export async function GET(
       where: { id: projectIdBigInt, businessId: businessIdBigInt },
       include: {
         client: { select: { id: true, name: true } },
+        categoryReference: { select: { id: true, name: true } },
+        tags: { include: { reference: { select: { id: true, name: true } } } },
         _count: { select: { tasks: true, projectServices: true, interactions: true } },
         projectServices: {
           include: { service: { select: { id: true, code: true, name: true, type: true, defaultPriceCents: true } } },
@@ -206,7 +262,11 @@ export async function PATCH(
 
   const project = await prisma.project.findFirst({
     where: { id: projectIdBigInt, businessId: businessIdBigInt },
-    include: { client: { select: { id: true, name: true } } },
+    include: {
+      client: { select: { id: true, name: true } },
+      categoryReference: { select: { id: true, name: true } },
+      tags: { include: { reference: { select: { id: true, name: true } } } },
+    },
   });
   if (!project) {
     return withIdNoStore(notFound('Projet introuvable.'), requestId);
@@ -299,15 +359,61 @@ export async function PATCH(
     }
   }
 
-  if (Object.keys(data).length === 0) {
+  const categoryProvided = Object.prototype.hasOwnProperty.call(body, 'categoryReferenceId');
+  const categoryReferenceId =
+    categoryProvided && typeof body.categoryReferenceId === 'string' && /^\d+$/.test(body.categoryReferenceId)
+      ? BigInt(body.categoryReferenceId)
+      : categoryProvided
+        ? null
+        : undefined;
+
+  const tagProvided = Object.prototype.hasOwnProperty.call(body, 'tagReferenceIds');
+  const tagReferenceIds: bigint[] | undefined = tagProvided
+    ? Array.from(
+        new Set(
+          ((Array.isArray(body.tagReferenceIds) ? body.tagReferenceIds : []) as unknown[])
+            .filter((id): id is string => typeof id === 'string' && /^\d+$/.test(id))
+            .map((id) => BigInt(id))
+        )
+      )
+    : undefined;
+
+  let tagsInstruction: { deleteMany: { projectId: bigint }; create: Array<{ referenceId: bigint }> } | undefined;
+
+  if (categoryProvided || tagProvided) {
+    const validated = await validateCategoryAndTags(
+      businessIdBigInt,
+      categoryProvided ? categoryReferenceId ?? null : project.categoryReferenceId ?? null,
+      tagProvided ? tagReferenceIds : project.tags.map((t) => t.referenceId)
+    );
+    if ('error' in validated) {
+      return withIdNoStore(badRequest(validated.error), requestId);
+    }
+    if (categoryProvided) {
+      data.categoryReferenceId = validated.categoryId;
+    }
+    if (tagProvided) {
+      tagsInstruction = {
+        deleteMany: { projectId: projectIdBigInt },
+        create: validated.tagIds.map((id) => ({ referenceId: id })),
+      };
+    }
+  }
+
+  if (!tagsInstruction && Object.keys(data).length === 0) {
     return withIdNoStore(badRequest('Aucune modification.'), requestId);
   }
 
   const updated = await prisma.project.update({
     where: { id: projectIdBigInt },
-    data,
+    data: {
+      ...data,
+      ...(tagsInstruction ? { tags: tagsInstruction } : {}),
+    },
     include: {
       client: { select: { id: true, name: true } },
+      categoryReference: { select: { id: true, name: true } },
+      tags: { include: { reference: { select: { id: true, name: true } } } },
       _count: { select: { tasks: true, projectServices: true, interactions: true } },
     },
   });

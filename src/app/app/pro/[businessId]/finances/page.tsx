@@ -14,6 +14,7 @@ import { Modal } from '@/components/ui/modal';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import { formatCurrency } from '../../pro-data';
 import { useActiveBusiness } from '../../ActiveBusinessProvider';
+import { ReferencePicker } from '../references/ReferencePicker';
 
 type FinanceType = 'INCOME' | 'EXPENSE';
 
@@ -22,6 +23,9 @@ type Finance = {
   businessId: string;
   projectId: string | null;
   projectName: string | null;
+  categoryReferenceId: string | null;
+  categoryReferenceName: string | null;
+  tagReferences: { id: string; name: string }[];
   type: FinanceType;
   amountCents: string;
   amount: number;
@@ -65,6 +69,12 @@ export default function FinancesPage() {
   const [typeFilter, setTypeFilter] = useState<FinanceType | 'ALL'>('ALL');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('');
+  const [tagFilter, setTagFilter] = useState('');
+  const [categoryOptions, setCategoryOptions] = useState<Array<{ id: string; name: string }>>([]);
+  const [tagOptions, setTagOptions] = useState<Array<{ id: string; name: string }>>([]);
+  const [referenceError, setReferenceError] = useState<string | null>(null);
+  const [referenceRequestId, setReferenceRequestId] = useState<string | null>(null);
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
@@ -77,6 +87,8 @@ export default function FinancesPage() {
     date: '',
     projectId: '',
     note: '',
+    categoryReferenceId: '',
+    tagReferenceIds: [] as string[],
   });
   const [actionError, setActionError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -89,6 +101,8 @@ export default function FinancesPage() {
   const filtered = useMemo(() => {
     return items.filter((item) => {
       if (typeFilter !== 'ALL' && item.type !== typeFilter) return false;
+      if (categoryFilter && item.categoryReferenceId !== categoryFilter) return false;
+      if (tagFilter && !item.tagReferences?.some((t) => t.id === tagFilter)) return false;
       const ts = new Date(item.date).getTime();
       if (fromDate) {
         const fromTs = new Date(fromDate).getTime();
@@ -100,7 +114,7 @@ export default function FinancesPage() {
       }
       return true;
     });
-  }, [fromDate, items, toDate, typeFilter]);
+  }, [fromDate, items, toDate, typeFilter, categoryFilter, tagFilter]);
 
   const displaySelectedId = selectedId ?? filtered[0]?.id ?? null;
   const selected = filtered.find((f) => f.id === displaySelectedId) ?? null;
@@ -114,6 +128,8 @@ export default function FinancesPage() {
       date: '',
       projectId: '',
       note: '',
+      categoryReferenceId: '',
+      tagReferenceIds: [],
     });
     setActionError(null);
     setModalOpen(true);
@@ -128,6 +144,8 @@ export default function FinancesPage() {
       date: item.date.slice(0, 10),
       projectId: item.projectId ?? '',
       note: item.note ?? '',
+      categoryReferenceId: item.categoryReferenceId ?? '',
+      tagReferenceIds: item.tagReferences?.map((t) => t.id) ?? [],
     });
     setActionError(null);
     setModalOpen(true);
@@ -148,6 +166,8 @@ export default function FinancesPage() {
       if (typeFilter !== 'ALL') query.set('type', typeFilter);
       if (fromDate) query.set('from', fromDate);
       if (toDate) query.set('to', toDate);
+      if (categoryFilter) query.set('categoryReferenceId', categoryFilter);
+      if (tagFilter) query.set('tagReferenceId', tagFilter);
       const res = await fetchJson<FinanceListResponse>(
         `/api/pro/businesses/${businessId}/finances${query.toString() ? `?${query.toString()}` : ''}`,
         {},
@@ -169,7 +189,13 @@ export default function FinancesPage() {
         setItems([]);
         return;
       }
-      setItems(res.data.items);
+      const normalized = res.data.items.map((item) => ({
+        ...item,
+        categoryReferenceId: item.categoryReferenceId ?? null,
+        categoryReferenceName: item.categoryReferenceName ?? null,
+        tagReferences: item.tagReferences ?? [],
+      }));
+      setItems(normalized);
     } catch (err) {
       if (effectiveSignal?.aborted) return;
       console.error(err);
@@ -183,7 +209,40 @@ export default function FinancesPage() {
     void loadFinances();
     return () => controllerRef.current?.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [businessId, typeFilter, fromDate, toDate]);
+  }, [businessId, typeFilter, fromDate, toDate, categoryFilter, tagFilter]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    async function loadRefs() {
+      setReferenceError(null);
+      setReferenceRequestId(null);
+      const [catRes, tagRes] = await Promise.all([
+        fetchJson<{ items: Array<{ id: string; name: string }> }>(
+          `/api/pro/businesses/${businessId}/references?type=CATEGORY`,
+          {},
+          controller.signal
+        ),
+        fetchJson<{ items: Array<{ id: string; name: string }> }>(
+          `/api/pro/businesses/${businessId}/references?type=TAG`,
+          {},
+          controller.signal
+        ),
+      ]);
+      if (controller.signal.aborted) return;
+      setReferenceRequestId(catRes.requestId || tagRes.requestId || null);
+      if (!catRes.ok || !catRes.data || !tagRes.ok || !tagRes.data) {
+        const msg = catRes.error || tagRes.error || 'Impossible de charger les références.';
+        setReferenceError(
+          catRes.requestId || tagRes.requestId ? `${msg} (Ref: ${catRes.requestId || tagRes.requestId})` : msg
+        );
+        return;
+      }
+      setCategoryOptions(catRes.data.items);
+      setTagOptions(tagRes.data.items);
+    }
+    void loadRefs();
+    return () => controller.abort();
+  }, [businessId]);
 
   function handleChange<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -202,6 +261,8 @@ export default function FinancesPage() {
       date: form.date,
       projectId: form.projectId.trim() || undefined,
       note: form.note.trim() || undefined,
+      categoryReferenceId: form.categoryReferenceId || null,
+      tagReferenceIds: form.tagReferenceIds,
     };
 
     const endpoint = editing
@@ -356,6 +417,14 @@ export default function FinancesPage() {
             {isAdmin ? <Button size="sm" onClick={openCreate}>Nouvelle ligne</Button> : null}
           </div>
         </div>
+        {referenceError ? (
+          <p className="text-xs text-rose-500">
+            {referenceError}
+            {referenceRequestId ? ` (Ref: ${referenceRequestId})` : ''}
+          </p>
+        ) : referenceRequestId ? (
+          <p className="text-[10px] text-[var(--text-secondary)]">Refs Req: {referenceRequestId}</p>
+        ) : null}
 
         <div className="grid gap-2 md:grid-cols-4">
           <Select
@@ -366,22 +435,42 @@ export default function FinancesPage() {
             }}
           >
             <option value="ALL">Tous</option>
-            <option value="INCOME">Revenu</option>
-            <option value="EXPENSE">Dépense</option>
-          </Select>
-          <Input
-            label="Du"
+              <option value="INCOME">Revenu</option>
+              <option value="EXPENSE">Dépense</option>
+            </Select>
+            <Input
+              label="Du"
             type="date"
             value={fromDate}
             onChange={(e: ChangeEvent<HTMLInputElement>) => setFromDate(e.target.value)}
           />
-          <Input
-            label="Au"
-            type="date"
-            value={toDate}
-            onChange={(e: ChangeEvent<HTMLInputElement>) => setToDate(e.target.value)}
-          />
-        </div>
+            <Input
+              label="Au"
+              type="date"
+              value={toDate}
+              onChange={(e: ChangeEvent<HTMLInputElement>) => setToDate(e.target.value)}
+            />
+            <Select
+              label="Catégorie ref"
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value)}
+            >
+              <option value="">Toutes</option>
+              {categoryOptions.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </Select>
+            <Select label="Tag ref" value={tagFilter} onChange={(e) => setTagFilter(e.target.value)}>
+              <option value="">Tous</option>
+              {tagOptions.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </Select>
+          </div>
 
         {loading ? (
           <p className="text-sm text-[var(--text-secondary)]">Chargement…</p>
@@ -394,6 +483,7 @@ export default function FinancesPage() {
                 <TableHead>Type</TableHead>
                 <TableHead>Date</TableHead>
                 <TableHead>Projet</TableHead>
+                <TableHead>Références</TableHead>
                 {isAdmin ? <TableHead>Actions</TableHead> : null}
               </TableRow>
             </TableHeader>
@@ -428,6 +518,20 @@ export default function FinancesPage() {
                     </TableCell>
                     <TableCell>{formatDate(finance.date)}</TableCell>
                     <TableCell>{finance.projectName ?? '—'}</TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap gap-1">
+                        {finance.categoryReferenceName ? (
+                          <Badge variant="neutral" className="bg-indigo-50 text-indigo-700">
+                            {finance.categoryReferenceName}
+                          </Badge>
+                        ) : null}
+                        {finance.tagReferences?.map((tag) => (
+                          <Badge key={tag.id} variant="neutral" className="bg-emerald-50 text-emerald-700">
+                            {tag.name}
+                          </Badge>
+                        ))}
+                      </div>
+                    </TableCell>
                     {isAdmin ? (
                       <TableCell>
                         <div className="flex flex-wrap gap-2">
@@ -461,6 +565,16 @@ export default function FinancesPage() {
               <Badge variant="neutral">
                 {formatCurrency(selected.amount)} · {selected.type === 'INCOME' ? 'IN' : 'OUT'}
               </Badge>
+              {selected.categoryReferenceName ? (
+                <Badge variant="neutral" className="bg-indigo-50 text-indigo-700">
+                  {selected.categoryReferenceName}
+                </Badge>
+              ) : null}
+              {selected.tagReferences?.map((tag) => (
+                <Badge key={tag.id} variant="neutral" className="bg-emerald-50 text-emerald-700">
+                  {tag.name}
+                </Badge>
+              ))}
               {selected.projectId ? (
                 <Button size="sm" variant="ghost" asChild>
                   <Link href={`/app/pro/${businessId}/projects/${selected.projectId}`}>
@@ -549,6 +663,15 @@ export default function FinancesPage() {
               placeholder="Observations"
             />
           </label>
+          <ReferencePicker
+            businessId={businessId}
+            categoryId={form.categoryReferenceId || null}
+            tagIds={form.tagReferenceIds}
+            onCategoryChange={(id) => handleChange('categoryReferenceId', id ?? '')}
+            onTagsChange={(ids) => handleChange('tagReferenceIds', ids)}
+            disabled={creating}
+            title="Références (catégorie / tags)"
+          />
           <div className="flex items-center justify-between">
             {actionError ? <p className="text-xs text-rose-500">{actionError}</p> : null}
             <div className="flex gap-2">

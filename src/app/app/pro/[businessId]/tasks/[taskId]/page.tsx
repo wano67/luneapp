@@ -8,6 +8,8 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { fetchJson } from '@/lib/apiClient';
+import { ReferencePicker } from '../../references/ReferencePicker';
+import { useActiveBusiness } from '../../../ActiveBusinessProvider';
 
 type TaskStatus = 'TODO' | 'IN_PROGRESS' | 'DONE';
 
@@ -19,6 +21,9 @@ type Task = {
   assigneeUserId: string | null;
   assigneeEmail: string | null;
   assigneeName: string | null;
+  categoryReferenceId: string | null;
+  categoryReferenceName: string | null;
+  tagReferences: { id: string; name: string }[];
   title: string;
   status: TaskStatus;
   dueDate: string | null;
@@ -47,11 +52,19 @@ export default function TaskDetailPage() {
   const params = useParams();
   const businessId = (params?.businessId ?? '') as string;
   const taskId = (params?.taskId ?? '') as string;
+  const activeCtx = useActiveBusiness({ optional: true });
+  const role = activeCtx?.activeBusiness?.role;
+  const canEditReferences = role === 'ADMIN' || role === 'OWNER';
 
   const [task, setTask] = useState<Task | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [requestId, setRequestId] = useState<string | null>(null);
+  const [categoryReferenceId, setCategoryReferenceId] = useState<string>('');
+  const [tagReferenceIds, setTagReferenceIds] = useState<string[]>([]);
+  const [referenceError, setReferenceError] = useState<string | null>(null);
+  const [referenceInfo, setReferenceInfo] = useState<string | null>(null);
+  const [referencesSaving, setReferencesSaving] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -79,7 +92,15 @@ export default function TaskDetailPage() {
           setTask(null);
           return;
         }
-        setTask(res.data.item);
+        const normalized: Task = {
+          ...res.data.item,
+          categoryReferenceId: res.data.item.categoryReferenceId ?? null,
+          categoryReferenceName: res.data.item.categoryReferenceName ?? null,
+          tagReferences: res.data.item.tagReferences ?? [],
+        };
+        setTask(normalized);
+        setCategoryReferenceId(normalized.categoryReferenceId ?? '');
+        setTagReferenceIds(normalized.tagReferences.map((t) => t.id));
       } catch (err) {
         if (controller.signal.aborted) return;
         console.error(err);
@@ -92,6 +113,48 @@ export default function TaskDetailPage() {
     void load();
     return () => controller.abort();
   }, [businessId, taskId]);
+
+  async function saveReferences() {
+    if (!canEditReferences) return;
+    setReferenceError(null);
+    setReferenceInfo(null);
+    setReferencesSaving(true);
+    const res = await fetchJson<TaskDetailResponse>(
+      `/api/pro/businesses/${businessId}/tasks/${taskId}`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          categoryReferenceId: categoryReferenceId || null,
+          tagReferenceIds,
+        }),
+      }
+    );
+    setRequestId(res.requestId);
+    if (res.status === 401) {
+      const from = window.location.pathname + window.location.search;
+      window.location.href = `/login?from=${encodeURIComponent(from)}`;
+      return;
+    }
+    if (!res.ok || !res.data) {
+      const msg = res.error ?? 'Mise à jour impossible.';
+      setReferenceError(res.requestId ? `${msg} (Ref: ${res.requestId})` : msg);
+      setReferencesSaving(false);
+      return;
+    }
+    const normalized: Task = {
+      ...res.data.item,
+      categoryReferenceId: res.data.item.categoryReferenceId ?? null,
+      categoryReferenceName: res.data.item.categoryReferenceName ?? null,
+      tagReferences: res.data.item.tagReferences ?? [],
+    };
+    setTask(normalized);
+    setCategoryReferenceId(normalized.categoryReferenceId ?? '');
+    setTagReferenceIds(normalized.tagReferences.map((t) => t.id));
+    setReferenceInfo('Références mises à jour.');
+    setReferenceError(null);
+    setReferencesSaving(false);
+  }
 
   if (loading) {
     return (
@@ -134,6 +197,16 @@ export default function TaskDetailPage() {
             <Badge variant="neutral">
               {STATUS_LABELS[task.status] ?? task.status}
             </Badge>
+            {task.categoryReferenceName ? (
+              <Badge variant="neutral" className="bg-indigo-50 text-indigo-700">
+                {task.categoryReferenceName}
+              </Badge>
+            ) : null}
+            {task.tagReferences?.map((tag) => (
+              <Badge key={tag.id} variant="neutral" className="bg-emerald-50 text-emerald-700">
+                {tag.name}
+              </Badge>
+            ))}
             {requestId ? (
               <Badge variant="neutral" className="bg-[var(--surface-2)]">
                 Ref {requestId}
@@ -180,6 +253,32 @@ export default function TaskDetailPage() {
             {task.projectName ?? '—'}
           </p>
         </Card>
+      </Card>
+
+      <Card className="space-y-3 p-5">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <p className="text-sm font-semibold text-[var(--text-primary)]">Références</p>
+            <p className="text-xs text-[var(--text-secondary)]">Catégorie et tags de la tâche.</p>
+          </div>
+          <Badge variant="neutral">{canEditReferences ? 'Admin/Owner' : 'Lecture seule'}</Badge>
+        </div>
+        <ReferencePicker
+          businessId={businessId}
+          categoryId={categoryReferenceId || null}
+          tagIds={tagReferenceIds}
+          onCategoryChange={(id) => setCategoryReferenceId(id ?? '')}
+          onTagsChange={(ids) => setTagReferenceIds(ids)}
+          disabled={!canEditReferences || referencesSaving}
+          title="Références tâche"
+        />
+        {referenceError ? <p className="text-xs font-semibold text-rose-500">{referenceError}</p> : null}
+        {referenceInfo ? <p className="text-xs text-emerald-500">{referenceInfo}</p> : null}
+        <div className="flex justify-end">
+          <Button onClick={() => void saveReferences()} disabled={!canEditReferences || referencesSaving}>
+            {referencesSaving ? 'Enregistrement…' : 'Enregistrer'}
+          </Button>
+        </div>
       </Card>
     </div>
   );

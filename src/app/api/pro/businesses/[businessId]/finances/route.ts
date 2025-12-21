@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/server/db/client';
-import { FinanceType } from '@/generated/prisma/client';
+import { BusinessReferenceType, FinanceType } from '@/generated/prisma/client';
 import { requireAuthPro } from '@/server/auth/requireAuthPro';
 import { requireBusinessRole } from '@/server/auth/businessRole';
 import { assertSameOrigin, jsonNoStore, withNoStore } from '@/server/security/csrf';
@@ -56,6 +56,44 @@ function parseDate(value: unknown): Date | null {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return null;
   return date;
+}
+
+async function validateCategoryAndTags(
+  businessId: bigint,
+  categoryReferenceId: bigint | null,
+  tagReferenceIds?: bigint[]
+): Promise<{ categoryId: bigint | null; tagIds: bigint[] } | { error: string }> {
+  if (categoryReferenceId) {
+    const category = await prisma.businessReference.findFirst({
+      where: {
+        id: categoryReferenceId,
+        businessId,
+        type: BusinessReferenceType.CATEGORY,
+        isArchived: false,
+      },
+      select: { id: true },
+    });
+    if (!category) return { error: 'categoryReferenceId invalide pour ce business.' };
+  }
+
+  let tagIds: bigint[] = [];
+  if (tagReferenceIds && tagReferenceIds.length) {
+    const tags = await prisma.businessReference.findMany({
+      where: {
+        id: { in: tagReferenceIds },
+        businessId,
+        type: BusinessReferenceType.TAG,
+        isArchived: false,
+      },
+      select: { id: true },
+    });
+    if (tags.length !== tagReferenceIds.length) {
+      return { error: 'tagReferenceIds invalides pour ce business.' };
+    }
+    tagIds = tags.map((t) => t.id);
+  }
+
+  return { categoryId: categoryReferenceId, tagIds };
 }
 
 const PAYMENT_METADATA_KEYS = [
@@ -114,6 +152,9 @@ function serializeFinance(finance: {
   createdAt: Date;
   updatedAt: Date;
   project?: { name: string | null } | null;
+  categoryReferenceId?: bigint | null;
+  categoryReference?: { id: bigint; name: string | null } | null;
+  tags?: Array<{ referenceId: bigint; reference: { id: bigint; name: string } }>;
 }) {
   const metadata = parseMetadataFromNote(finance.note);
 
@@ -122,6 +163,14 @@ function serializeFinance(finance: {
     businessId: finance.businessId.toString(),
     projectId: finance.projectId ? finance.projectId.toString() : null,
     projectName: finance.project?.name ?? null,
+    categoryReferenceId: finance.categoryReferenceId ? finance.categoryReferenceId.toString() : null,
+    categoryReferenceName: finance.categoryReference?.name ?? null,
+    tagReferences: finance.tags
+      ? finance.tags.map((tag) => ({
+          id: tag.reference.id.toString(),
+          name: tag.reference.name,
+        }))
+      : [],
     type: finance.type,
     amountCents: finance.amountCents.toString(),
     amount: Number(finance.amountCents) / 100,
@@ -183,12 +232,24 @@ export async function GET(
   }
   const aggregate = searchParams.get('aggregate') === '1';
   const categoryParam = searchParams.get('category')?.trim();
+  const categoryReferenceIdParam = searchParams.get('categoryReferenceId');
+  const categoryReferenceId = categoryReferenceIdParam ? parseId(categoryReferenceIdParam) : null;
+  if (categoryReferenceIdParam && !categoryReferenceId) {
+    return withIdNoStore(badRequest('categoryReferenceId invalide.'), requestId);
+  }
+  const tagReferenceIdParam = searchParams.get('tagReferenceId');
+  const tagReferenceId = tagReferenceIdParam ? parseId(tagReferenceIdParam) : null;
+  if (tagReferenceIdParam && !tagReferenceId) {
+    return withIdNoStore(badRequest('tagReferenceId invalide.'), requestId);
+  }
 
   const where = {
     businessId: businessIdBigInt,
     ...(typeFilter ? { type: typeFilter } : {}),
     ...(projectIdFilter ? { projectId: projectIdFilter } : {}),
     ...(categoryParam ? { category: categoryParam } : {}),
+    ...(categoryReferenceId ? { categoryReferenceId } : {}),
+    ...(tagReferenceId ? { tags: { some: { referenceId: tagReferenceId } } } : {}),
     ...(fromDate || toDate
       ? {
           date: {
@@ -223,6 +284,8 @@ export async function GET(
     orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
     include: {
       project: { select: { name: true } },
+      categoryReference: { select: { id: true, name: true } },
+      tags: { include: { reference: { select: { id: true, name: true } } } },
     },
   });
 
@@ -323,6 +386,35 @@ export async function POST(
   const metadata = sanitizeMetadata((body as { metadata?: unknown }).metadata);
   const noteToStore = metadata ? JSON.stringify(metadata) : note;
 
+  const categoryProvided = Object.prototype.hasOwnProperty.call(body, 'categoryReferenceId');
+  const categoryReferenceId =
+    categoryProvided && typeof (body as { categoryReferenceId?: unknown }).categoryReferenceId === 'string'
+      ? (() => {
+          const raw = (body as { categoryReferenceId: string }).categoryReferenceId;
+          return /^\d+$/.test(raw) ? BigInt(raw) : null;
+        })()
+      : categoryProvided
+        ? null
+        : undefined;
+
+  const tagProvided = Object.prototype.hasOwnProperty.call(body, 'tagReferenceIds');
+  const tagReferenceIds: bigint[] | undefined = tagProvided
+    ? Array.from(
+        new Set(
+          ((Array.isArray((body as { tagReferenceIds?: unknown }).tagReferenceIds)
+            ? (body as { tagReferenceIds: unknown[] }).tagReferenceIds
+            : []) as unknown[])
+            .filter((id): id is string => typeof id === 'string' && /^\d+$/.test(id))
+            .map((id) => BigInt(id))
+        )
+      )
+    : undefined;
+
+  const validated = await validateCategoryAndTags(businessIdBigInt, categoryReferenceId ?? null, tagReferenceIds);
+  if ('error' in validated) {
+    return withIdNoStore(badRequest(validated.error), requestId);
+  }
+
   const finance = await prisma.finance.create({
     data: {
       businessId: businessIdBigInt,
@@ -332,9 +424,18 @@ export async function POST(
       category,
       date: dateParsed,
       note: noteToStore,
+      categoryReferenceId: validated.categoryId ?? undefined,
+      tags:
+        validated.tagIds.length > 0
+          ? {
+              create: validated.tagIds.map((id) => ({ referenceId: id })),
+            }
+          : undefined,
     },
     include: {
       project: { select: { name: true } },
+      categoryReference: { select: { id: true, name: true } },
+      tags: { include: { reference: { select: { id: true, name: true } } } },
     },
   });
 

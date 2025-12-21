@@ -22,6 +22,10 @@
     "smoke:finance": "pnpm tsx scripts/smoke-finance-wiring.ts",
     "smoke:billing": "pnpm tsx scripts/smoke-billing-wiring.ts",
     "smoke:references": "pnpm tsx scripts/smoke-references.ts",
+    "smoke:references-consumption": "pnpm tsx scripts/smoke-references-consumption.ts",
+    "smoke:settings": "pnpm tsx scripts/smoke-settings.ts",
+    "smoke:finance-advanced": "pnpm tsx scripts/smoke-finance-advanced.ts",
+    "smoke:processes": "pnpm tsx scripts/smoke-processes.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {
