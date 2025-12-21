@@ -119,6 +119,7 @@ model Business {
   interactions Interaction[]
   quotes      Quote[]
   invoices    Invoice[]
+  references  BusinessReference[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -249,6 +250,13 @@ enum InteractionType {
   EMAIL
   NOTE
   MESSAGE
+}
+
+enum BusinessReferenceType {
+  CATEGORY
+  TAG
+  NUMBERING
+  AUTOMATION
 }
 
 model Client {
@@ -424,6 +432,22 @@ model Interaction {
 
   @@index([businessId, clientId])
   @@index([businessId, projectId])
+}
+
+model BusinessReference {
+  id         BigInt               @id @default(autoincrement())
+  businessId BigInt
+  type       BusinessReferenceType
+  name       String
+  value      String?
+  isArchived Boolean              @default(false)
+  createdAt  DateTime             @default(now())
+  updatedAt  DateTime             @updatedAt
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@unique([businessId, type, name])
+  @@index([businessId, type])
 }
 
 model Quote {

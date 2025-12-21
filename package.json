@@ -21,6 +21,7 @@
     "smoke:invites": "pnpm tsx scripts/smoke-invites.ts",
     "smoke:finance": "pnpm tsx scripts/smoke-finance-wiring.ts",
     "smoke:billing": "pnpm tsx scripts/smoke-billing-wiring.ts",
+    "smoke:references": "pnpm tsx scripts/smoke-references.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {
