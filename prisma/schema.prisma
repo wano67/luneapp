@@ -35,6 +35,26 @@ enum BusinessPermission {
   FINANCE_EDIT
 }
 
+enum ProductUnit {
+  PIECE
+  KG
+  HOUR
+  LITER
+  OTHER
+}
+
+enum InventoryMovementType {
+  IN
+  OUT
+  ADJUST
+}
+
+enum InventoryMovementSource {
+  MANUAL
+  PURCHASE
+  SALE
+}
+
 /**
  * Statut d'une invitation d'entreprise
  */
@@ -106,6 +126,7 @@ model User {
   personalTransactions PersonalTransaction[]
   personalCategories   PersonalCategory[]
   interactionsCreated  Interaction[] @relation("InteractionCreatedBy")
+  inventoryMovements   InventoryMovement[]
 }
 
 /**
@@ -132,6 +153,8 @@ model Business {
   references  BusinessReference[]
   processes   Process[]
   settings    BusinessSettings?
+  products    Product[]
+  inventoryMovements InventoryMovement[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -485,6 +508,49 @@ model Service {
 
   @@index([businessId, code])
   @@index([businessId, categoryReferenceId])
+}
+
+model Product {
+  id                 BigInt       @id @default(autoincrement())
+  businessId         BigInt
+  business           Business     @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  sku                String
+  skuLower           String
+  name               String
+  description        String?
+  unit               ProductUnit  @default(PIECE)
+  salePriceCents     BigInt?
+  purchasePriceCents BigInt?
+  isArchived         Boolean      @default(false)
+  movements          InventoryMovement[]
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  @@unique([businessId, skuLower])
+  @@index([businessId, isArchived])
+}
+
+model InventoryMovement {
+  id              BigInt                  @id @default(autoincrement())
+  businessId      BigInt
+  productId       BigInt
+  type            InventoryMovementType
+  source          InventoryMovementSource @default(MANUAL)
+  quantity        Int
+  unitCostCents   BigInt?
+  reason          String?
+  date            DateTime
+  createdByUserId BigInt?
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  product  Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdBy User?   @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([businessId, productId])
+  @@index([businessId, date])
 }
 
 model ProjectTag {
