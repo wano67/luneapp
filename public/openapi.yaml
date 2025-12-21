@@ -1651,15 +1651,24 @@ paths:
     get:
       tags: [Pro / Members]
       security: [ { cookieAuth: [] } ]
-      summary: Liste des membres
+      summary: Liste des membres (avec profils)
       parameters: [ { $ref: '#/components/parameters/BusinessId' } ]
       responses:
-        '200': { $ref: '#/components/responses/Ok' }
+        '200':
+          description: Membres
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Member' }
   /api/pro/businesses/{businessId}/members/{userId}:
-    patch:
+    get:
       tags: [Pro / Members]
       security: [ { cookieAuth: [] } ]
-      summary: Change le rôle d'un membre
+      summary: Détail membre (profil employé)
       parameters:
         - $ref: '#/components/parameters/BusinessId'
         - name: userId
@@ -1667,7 +1676,45 @@ paths:
           required: true
           schema: { type: string }
       responses:
-        '200': { $ref: '#/components/responses/Ok' }
+        '200':
+          description: Membre
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  member: { $ref: '#/components/schemas/Member' }
+    patch:
+      tags: [Pro / Members]
+      security: [ { cookieAuth: [] } ]
+      summary: Met à jour rôle/profil employé/permissions
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+        - name: userId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                role: { type: string, enum: [OWNER, ADMIN, MEMBER, VIEWER] }
+                employeeProfile: { $ref: '#/components/schemas/EmployeeProfileInput' }
+                permissions:
+                  type: array
+                  items: { $ref: '#/components/schemas/BusinessPermission' }
+      responses:
+        '200':
+          description: Membre mis à jour
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  member: { $ref: '#/components/schemas/Member' }
     delete:
       tags: [Pro / Members]
       security: [ { cookieAuth: [] } ]
@@ -2179,6 +2226,47 @@ components:
     BusinessReferenceType:
       type: string
       enum: [CATEGORY, TAG, NUMBERING, AUTOMATION]
+    BusinessPermission:
+      type: string
+      enum: [TEAM_EDIT, FINANCE_EDIT]
+    EmployeeProfile:
+      type: object
+      properties:
+        id: { type: string }
+        jobTitle: { type: string, nullable: true }
+        contractType: { type: string, nullable: true }
+        startDate: { type: string, format: date-time, nullable: true }
+        endDate: { type: string, format: date-time, nullable: true }
+        weeklyHours: { type: integer, nullable: true }
+        hourlyCostCents: { type: string, nullable: true }
+        status: { type: string, enum: [ACTIVE, INACTIVE] }
+        notes: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    EmployeeProfileInput:
+      type: object
+      properties:
+        jobTitle: { type: string, nullable: true }
+        contractType: { type: string, nullable: true }
+        startDate: { type: string, format: date-time, nullable: true }
+        endDate: { type: string, format: date-time, nullable: true }
+        weeklyHours: { type: integer, nullable: true }
+        hourlyCostCents: { type: string, nullable: true }
+        status: { type: string, enum: [ACTIVE, INACTIVE] }
+        notes: { type: string, nullable: true }
+    Member:
+      type: object
+      properties:
+        userId: { type: string }
+        email: { type: string }
+        role: { type: string, enum: [OWNER, ADMIN, MEMBER, VIEWER] }
+        createdAt: { type: string, format: date-time }
+        employeeProfile:
+          $ref: '#/components/schemas/EmployeeProfile'
+          nullable: true
+        permissions:
+          type: array
+          items: { $ref: '#/components/schemas/BusinessPermission' }
     BusinessReference:
       type: object
       properties:

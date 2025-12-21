@@ -25,6 +25,16 @@ enum BusinessRole {
   VIEWER
 }
 
+enum EmployeeStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum BusinessPermission {
+  TEAM_EDIT
+  FINANCE_EDIT
+}
+
 /**
  * Statut d'une invitation d'entreprise
  */
@@ -138,10 +148,41 @@ model BusinessMembership {
 
   business Business @relation(fields: [businessId], references: [id])
   user     User     @relation(fields: [userId], references: [id])
+  employeeProfile EmployeeProfile?
+  permissions     BusinessMemberPermission[]
 
   createdAt DateTime @default(now())
 
   @@unique([businessId, userId])
+}
+
+model EmployeeProfile {
+  id           BigInt         @id @default(autoincrement())
+  membershipId BigInt         @unique
+  jobTitle     String?
+  contractType String?
+  startDate    DateTime?
+  endDate      DateTime?
+  weeklyHours  Int?
+  hourlyCostCents BigInt?
+  status       EmployeeStatus @default(ACTIVE)
+  notes        String?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  membership BusinessMembership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+}
+
+model BusinessMemberPermission {
+  id           BigInt             @id @default(autoincrement())
+  membershipId BigInt
+  permission   BusinessPermission
+  createdAt    DateTime           @default(now())
+
+  membership BusinessMembership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+
+  @@unique([membershipId, permission])
+  @@index([permission])
 }
 
 /**
