@@ -12,12 +12,29 @@ import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import { useActiveBusiness } from '../../../ActiveBusinessProvider';
 
 type BusinessRole = 'OWNER' | 'ADMIN' | 'MEMBER' | 'VIEWER';
+type BusinessPermission = 'TEAM_EDIT' | 'FINANCE_EDIT';
+
+type EmployeeProfile = {
+  id?: string;
+  jobTitle: string | null;
+  contractType: string | null;
+  startDate: string | null;
+  endDate: string | null;
+  weeklyHours: number | null;
+  hourlyCostCents: string | null;
+  status: 'ACTIVE' | 'INACTIVE';
+  notes: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+};
 
 type Member = {
   userId: string;
   email: string;
   role: BusinessRole;
   createdAt: string;
+  employeeProfile: EmployeeProfile | null;
+  permissions: BusinessPermission[];
 };
 
 type MembersResponse = {
@@ -66,6 +83,17 @@ function allowedRoles(actorRole: BusinessRole | null | undefined, target: Member
   return [];
 }
 
+function canEditEmployeeProfile(
+  actorRole: BusinessRole | null | undefined,
+  actorPermissions: BusinessPermission[] | undefined,
+  target: Member
+) {
+  const hasFlag = actorPermissions?.includes('TEAM_EDIT');
+  if (actorRole === 'OWNER' || actorRole === 'ADMIN') return true;
+  if (hasFlag && target.role !== 'OWNER') return true;
+  return false;
+}
+
 function canRemove(
   actorRole: BusinessRole | null | undefined,
   target: Member,
@@ -93,10 +121,25 @@ export default function BusinessTeamSettingsPage() {
   const [roleDrafts, setRoleDrafts] = useState<Record<string, BusinessRole>>({});
   const [roleModal, setRoleModal] = useState<{ member: Member; nextRole: BusinessRole } | null>(null);
   const [removeModal, setRemoveModal] = useState<Member | null>(null);
+  const [employeeModal, setEmployeeModal] = useState<Member | null>(null);
+  const [employeeDraft, setEmployeeDraft] = useState<EmployeeProfile>({
+    jobTitle: '',
+    contractType: '',
+    startDate: '',
+    endDate: '',
+    weeklyHours: null,
+    hourlyCostCents: '',
+    status: 'ACTIVE',
+    notes: '',
+  });
   const [actionLoading, setActionLoading] = useState(false);
   const controllerRef = useRef<AbortController | null>(null);
 
   const currentUserId = me?.id ?? null;
+  const actorMember = useMemo(
+    () => members.find((m) => m.userId === currentUserId),
+    [currentUserId, members]
+  );
 
   const sortedMembers = useMemo(
     () => [...members].sort((a, b) => a.email.localeCompare(b.email)),
@@ -260,6 +303,76 @@ export default function BusinessTeamSettingsPage() {
 
   const roleValueFor = (member: Member) => roleDrafts[member.userId] ?? member.role;
 
+  const toDateInput = (value: string | null | undefined) => (value ? value.slice(0, 10) : '');
+
+  function openEmployeeModal(member: Member) {
+    setEmployeeModal(member);
+    setEmployeeDraft({
+      jobTitle: member.employeeProfile?.jobTitle ?? '',
+      contractType: member.employeeProfile?.contractType ?? '',
+      startDate: toDateInput(member.employeeProfile?.startDate),
+      endDate: toDateInput(member.employeeProfile?.endDate),
+      weeklyHours:
+        typeof member.employeeProfile?.weeklyHours === 'number' ? member.employeeProfile.weeklyHours : null,
+      hourlyCostCents: member.employeeProfile?.hourlyCostCents ?? '',
+      status: member.employeeProfile?.status ?? 'ACTIVE',
+      notes: member.employeeProfile?.notes ?? '',
+    });
+    setActionError(null);
+    setSuccess(null);
+  }
+
+  async function saveEmployeeProfile() {
+    if (!employeeModal) return;
+    setActionLoading(true);
+    setActionError(null);
+    setSuccess(null);
+    try {
+      const res = await fetchJson<{ member: Member }>(
+        `/api/pro/businesses/${businessId}/members/${employeeModal.userId}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            employeeProfile: {
+              jobTitle: employeeDraft.jobTitle || null,
+              contractType: employeeDraft.contractType || null,
+              startDate: employeeDraft.startDate || null,
+              endDate: employeeDraft.endDate || null,
+              weeklyHours: employeeDraft.weeklyHours,
+              hourlyCostCents: employeeDraft.hourlyCostCents || null,
+              status: employeeDraft.status,
+              notes: employeeDraft.notes || null,
+            },
+          }),
+        }
+      );
+
+      if (res.status === 401) {
+        redirectToLogin();
+        return;
+      }
+
+      if (!res.ok || !res.data) {
+        setActionError(
+          res.requestId
+            ? `${res.error ?? 'Impossible de sauvegarder le profil employé.'} (Ref: ${res.requestId})`
+            : res.error ?? 'Impossible de sauvegarder le profil employé.'
+        );
+        return;
+      }
+
+      setSuccess('Profil employé mis à jour.');
+      await load();
+    } catch (err) {
+      console.error(err);
+      setActionError(getErrorMessage(err));
+    } finally {
+      setActionLoading(false);
+      setEmployeeModal(null);
+    }
+  }
+
   return (
     <div className="space-y-4">
       <Card className="p-5 space-y-1">
@@ -309,9 +422,25 @@ export default function BusinessTeamSettingsPage() {
                 >
                   <div className="space-y-1">
                     <p className="text-sm font-semibold text-[var(--text-primary)]">{member.email}</p>
-                    <p className="text-[10px] text-[var(--text-secondary)]">
-                      Ajouté le {formatDate(member.createdAt)}
-                    </p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-[10px] text-[var(--text-secondary)]">
+                        Ajouté le {formatDate(member.createdAt)}
+                      </p>
+                      {member.employeeProfile ? (
+                        <Badge variant="neutral" className="border border-[var(--border)]">
+                          {member.employeeProfile.status === 'ACTIVE' ? 'Employé actif' : 'Inactif'}
+                        </Badge>
+                      ) : (
+                        <Badge variant="neutral" className="border border-[var(--border)]">
+                          Aucun profil employé
+                        </Badge>
+                      )}
+                    </div>
+                    {member.employeeProfile?.jobTitle ? (
+                      <p className="text-xs text-[var(--text-secondary)]">
+                        {member.employeeProfile.jobTitle} {member.employeeProfile.contractType ? `· ${member.employeeProfile.contractType}` : ''}
+                      </p>
+                    ) : null}
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     {canEdit ? (
@@ -333,6 +462,16 @@ export default function BusinessTeamSettingsPage() {
                       <Badge variant="neutral" className="bg-[var(--surface-2)]">
                         Toi
                       </Badge>
+                    ) : null}
+                    {canEditEmployeeProfile(actorRole, actorMember?.permissions, member) ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={actionLoading}
+                        onClick={() => openEmployeeModal(member)}
+                      >
+                        Profil employé
+                      </Button>
                     ) : null}
                     {canDelete ? (
                       <Button
@@ -399,6 +538,110 @@ export default function BusinessTeamSettingsPage() {
             </Button>
             <Button variant="danger" onClick={confirmRemoval} disabled={actionLoading}>
               {actionLoading ? 'Retrait…' : 'Retirer'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        open={!!employeeModal}
+        onCloseAction={actionLoading ? () => {} : () => setEmployeeModal(null)}
+        title="Profil employé"
+        description={employeeModal ? `Profil de ${employeeModal.email}` : undefined}
+      >
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <label className="text-sm text-[var(--text-primary)]">
+              <span className="block text-xs text-[var(--text-secondary)]">Intitulé de poste</span>
+              <input
+                className="mt-1 w-full rounded-md border border-[var(--border)] bg-[var(--surface)] p-2 text-sm"
+                value={employeeDraft.jobTitle ?? ''}
+                onChange={(e) => setEmployeeDraft((prev) => ({ ...prev, jobTitle: e.target.value }))}
+                disabled={actionLoading}
+              />
+            </label>
+            <label className="text-sm text-[var(--text-primary)]">
+              <span className="block text-xs text-[var(--text-secondary)]">Type de contrat</span>
+              <input
+                className="mt-1 w-full rounded-md border border-[var(--border)] bg-[var(--surface)] p-2 text-sm"
+                value={employeeDraft.contractType ?? ''}
+                onChange={(e) => setEmployeeDraft((prev) => ({ ...prev, contractType: e.target.value }))}
+                disabled={actionLoading}
+              />
+            </label>
+            <label className="text-sm text-[var(--text-primary)]">
+              <span className="block text-xs text-[var(--text-secondary)]">Date de début</span>
+              <input
+                type="date"
+                className="mt-1 w-full rounded-md border border-[var(--border)] bg-[var(--surface)] p-2 text-sm"
+                value={employeeDraft.startDate ?? ''}
+                onChange={(e) => setEmployeeDraft((prev) => ({ ...prev, startDate: e.target.value }))}
+                disabled={actionLoading}
+              />
+            </label>
+            <label className="text-sm text-[var(--text-primary)]">
+              <span className="block text-xs text-[var(--text-secondary)]">Date de fin</span>
+              <input
+                type="date"
+                className="mt-1 w-full rounded-md border border-[var(--border)] bg-[var(--surface)] p-2 text-sm"
+                value={employeeDraft.endDate ?? ''}
+                onChange={(e) => setEmployeeDraft((prev) => ({ ...prev, endDate: e.target.value }))}
+                disabled={actionLoading}
+              />
+            </label>
+            <label className="text-sm text-[var(--text-primary)]">
+              <span className="block text-xs text-[var(--text-secondary)]">Heures hebdo</span>
+              <input
+                type="number"
+                className="mt-1 w-full rounded-md border border-[var(--border)] bg-[var(--surface)] p-2 text-sm"
+                value={employeeDraft.weeklyHours ?? ''}
+                onChange={(e) =>
+                  setEmployeeDraft((prev) => ({ ...prev, weeklyHours: e.target.value ? Number(e.target.value) : null }))
+                }
+                disabled={actionLoading}
+              />
+            </label>
+            <label className="text-sm text-[var(--text-primary)]">
+              <span className="block text-xs text-[var(--text-secondary)]">Coût horaire (cents)</span>
+              <input
+                type="number"
+                className="mt-1 w-full rounded-md border border-[var(--border)] bg-[var(--surface)] p-2 text-sm"
+                value={employeeDraft.hourlyCostCents ?? ''}
+                onChange={(e) =>
+                  setEmployeeDraft((prev) => ({ ...prev, hourlyCostCents: e.target.value || '' }))
+                }
+                disabled={actionLoading}
+              />
+            </label>
+            <label className="text-sm text-[var(--text-primary)]">
+              <span className="block text-xs text-[var(--text-secondary)]">Statut</span>
+              <Select
+                value={employeeDraft.status}
+                onChange={(e) => setEmployeeDraft((prev) => ({ ...prev, status: e.target.value as 'ACTIVE' | 'INACTIVE' }))}
+                disabled={actionLoading}
+              >
+                <option value="ACTIVE">Actif</option>
+                <option value="INACTIVE">Inactif</option>
+              </Select>
+            </label>
+          </div>
+          <label className="text-sm text-[var(--text-primary)]">
+            <span className="block text-xs text-[var(--text-secondary)]">Notes</span>
+            <textarea
+              className="mt-1 w-full rounded-md border border-[var(--border)] bg-[var(--surface)] p-2 text-sm"
+              rows={3}
+              value={employeeDraft.notes ?? ''}
+              onChange={(e) => setEmployeeDraft((prev) => ({ ...prev, notes: e.target.value }))}
+              disabled={actionLoading}
+            />
+          </label>
+
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setEmployeeModal(null)} disabled={actionLoading}>
+              Annuler
+            </Button>
+            <Button onClick={saveEmployeeProfile} disabled={actionLoading}>
+              {actionLoading ? 'Enregistrement…' : 'Enregistrer'}
             </Button>
           </div>
         </div>

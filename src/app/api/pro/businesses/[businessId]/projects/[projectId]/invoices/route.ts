@@ -27,6 +27,7 @@ function serialize(invoice: Awaited<ReturnType<typeof prisma.invoice.findFirst>>
     clientId: invoice.clientId ? invoice.clientId.toString() : null,
     quoteId: invoice.quoteId ? invoice.quoteId.toString() : null,
     status: invoice.status,
+    number: invoice.number,
     totalCents: invoice.totalCents.toString(),
     depositCents: invoice.depositCents.toString(),
     balanceCents: invoice.balanceCents.toString(),

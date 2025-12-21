@@ -30,6 +30,7 @@ type InvoicePdfItem = {
 
 export type InvoicePdfPayload = {
   invoiceId: string;
+  number?: string | null;
   businessName: string;
   projectName?: string | null;
   clientName?: string | null;
@@ -61,7 +62,8 @@ export async function buildInvoicePdf(payload: InvoicePdfPayload): Promise<Uint8
   y -= 18;
   addText('Facture', 14, margin, rgb(0.1, 0.1, 0.1), bold);
   y -= 16;
-  addText(`Facture #${payload.invoiceId}`, 11, margin, rgb(0.2, 0.2, 0.2));
+  const numberLabel = payload.number ?? `(brouillon #${payload.invoiceId})`;
+  addText(`Facture n° ${numberLabel}`, 11, margin, rgb(0.2, 0.2, 0.2));
   y -= 14;
   if (payload.requestId) {
     addText(`Req: ${payload.requestId}`, 9, margin, rgb(0.35, 0.35, 0.35));

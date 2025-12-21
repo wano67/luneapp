@@ -28,6 +28,7 @@ tags:
   - name: Pro / Members
   - name: Pro / Invites
   - name: Pro / Finances
+  - name: Pro / Stock
   - name: Pro / Billing
   - name: Pro / References
   - name: Pro / Settings
@@ -1651,15 +1652,24 @@ paths:
     get:
       tags: [Pro / Members]
       security: [ { cookieAuth: [] } ]
-      summary: Liste des membres
+      summary: Liste des membres (avec profils)
       parameters: [ { $ref: '#/components/parameters/BusinessId' } ]
       responses:
-        '200': { $ref: '#/components/responses/Ok' }
+        '200':
+          description: Membres
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Member' }
   /api/pro/businesses/{businessId}/members/{userId}:
-    patch:
+    get:
       tags: [Pro / Members]
       security: [ { cookieAuth: [] } ]
-      summary: Change le rôle d'un membre
+      summary: Détail membre (profil employé)
       parameters:
         - $ref: '#/components/parameters/BusinessId'
         - name: userId
@@ -1667,7 +1677,45 @@ paths:
           required: true
           schema: { type: string }
       responses:
-        '200': { $ref: '#/components/responses/Ok' }
+        '200':
+          description: Membre
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  member: { $ref: '#/components/schemas/Member' }
+    patch:
+      tags: [Pro / Members]
+      security: [ { cookieAuth: [] } ]
+      summary: Met à jour rôle/profil employé/permissions
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+        - name: userId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                role: { type: string, enum: [OWNER, ADMIN, MEMBER, VIEWER] }
+                employeeProfile: { $ref: '#/components/schemas/EmployeeProfileInput' }
+                permissions:
+                  type: array
+                  items: { $ref: '#/components/schemas/BusinessPermission' }
+      responses:
+        '200':
+          description: Membre mis à jour
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  member: { $ref: '#/components/schemas/Member' }
     delete:
       tags: [Pro / Members]
       security: [ { cookieAuth: [] } ]
@@ -1680,6 +1728,248 @@ paths:
           schema: { type: string }
       responses:
         '200': { $ref: '#/components/responses/Ok' }
+
+  /api/pro/businesses/{businessId}/products:
+    get:
+      tags: [Pro / Stock]
+      security: [ { cookieAuth: [] } ]
+      summary: Liste les produits
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+        - in: query
+          name: archived
+          schema: { type: string, enum: ['0', '1'] }
+      responses:
+        '200':
+          description: Produits
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Product' }
+    post:
+      tags: [Pro / Stock]
+      security: [ { cookieAuth: [] } ]
+      summary: Crée un produit
+      parameters: [ { $ref: '#/components/parameters/BusinessId' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sku, name]
+              properties:
+                sku: { type: string }
+                name: { type: string }
+                unit: { $ref: '#/components/schemas/ProductUnit' }
+                salePriceCents: { type: string, nullable: true }
+                purchasePriceCents: { type: string, nullable: true }
+      responses:
+        '201':
+          description: Produit créé
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  product: { $ref: '#/components/schemas/Product' }
+
+  /api/pro/businesses/{businessId}/products/{productId}:
+    get:
+      tags: [Pro / Stock]
+      security: [ { cookieAuth: [] } ]
+      summary: Détail produit (inclut stock)
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+        - name: productId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Produit
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  product: { $ref: '#/components/schemas/Product' }
+    patch:
+      tags: [Pro / Stock]
+      security: [ { cookieAuth: [] } ]
+      summary: Met à jour un produit
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+        - name: productId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                sku: { type: string }
+                name: { type: string }
+                description: { type: string, nullable: true }
+                unit: { $ref: '#/components/schemas/ProductUnit' }
+                salePriceCents: { type: string, nullable: true }
+                purchasePriceCents: { type: string, nullable: true }
+                isArchived: { type: boolean }
+      responses:
+        '200':
+          description: Produit mis à jour
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  product: { $ref: '#/components/schemas/Product' }
+    delete:
+      tags: [Pro / Stock]
+      security: [ { cookieAuth: [] } ]
+      summary: Archive le produit
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+        - name: productId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '204': { description: Archivé }
+
+  /api/pro/businesses/{businessId}/products/{productId}/movements:
+    get:
+      tags: [Pro / Stock]
+      security: [ { cookieAuth: [] } ]
+      summary: Liste des mouvements d'inventaire
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+        - name: productId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Mouvements
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/InventoryMovement' }
+    post:
+      tags: [Pro / Stock]
+      security: [ { cookieAuth: [] } ]
+      summary: Crée un mouvement de stock
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+        - name: productId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type, quantity]
+              properties:
+                type: { $ref: '#/components/schemas/InventoryMovementType' }
+                source: { $ref: '#/components/schemas/InventoryMovementSource' }
+                quantity: { type: number }
+                unitCostCents: { type: string, nullable: true }
+                reason: { type: string, nullable: true }
+                date: { type: string, format: date-time, nullable: true }
+                createFinanceEntry: { type: boolean }
+                financeType: { type: string, enum: [INCOME, EXPENSE], nullable: true }
+      responses:
+        '201':
+          description: Mouvement créé
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  movement: { $ref: '#/components/schemas/InventoryMovement' }
+
+  /api/pro/businesses/{businessId}/products/{productId}/movements/{movementId}:
+    patch:
+      tags: [Pro / Stock]
+      security: [ { cookieAuth: [] } ]
+      summary: Met à jour un mouvement (quantité/raison/date)
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+        - name: productId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: movementId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                quantity: { type: number }
+                reason: { type: string, nullable: true }
+                date: { type: string, format: date-time, nullable: true }
+      responses:
+        '200':
+          description: Mouvement mis à jour
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  movement: { $ref: '#/components/schemas/InventoryMovement' }
+    delete:
+      tags: [Pro / Stock]
+      security: [ { cookieAuth: [] } ]
+      summary: Supprime un mouvement
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+        - name: productId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: movementId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '204': { description: Supprimé }
+
+  /api/pro/businesses/{businessId}/inventory/summary:
+    get:
+      tags: [Pro / Stock]
+      security: [ { cookieAuth: [] } ]
+      summary: Synthèse du stock courant par produit
+      parameters: [ { $ref: '#/components/parameters/BusinessId' } ]
+      responses:
+        '200':
+          description: Résumé stock
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/InventorySummaryRow' }
 
   /api/pro/businesses/{businessId}/invites:
     get:
@@ -2126,9 +2416,15 @@ components:
         id: { type: string }
         businessId: { type: string }
         projectId: { type: string }
+        number: { type: string, nullable: true, description: 'Attribué quand le devis passe en SENT' }
         status: { type: string, enum: [DRAFT, SENT, SIGNED, CANCELLED, EXPIRED] }
+        currency: { type: string }
+        depositPercent: { type: integer }
         totalCents: { type: string }
         depositCents: { type: string }
+        balanceCents: { type: string }
+        issuedAt: { type: string, format: date-time, nullable: true }
+        expiresAt: { type: string, format: date-time, nullable: true }
         createdAt: { type: string, format: date-time }
     Invoice:
       type: object
@@ -2136,10 +2432,15 @@ components:
         id: { type: string }
         businessId: { type: string }
         projectId: { type: string }
+        number: { type: string, nullable: true, description: 'Attribué quand la facture passe en SENT' }
         status: { type: string, enum: [DRAFT, SENT, PAID, CANCELLED] }
+        currency: { type: string }
         totalCents: { type: string }
         depositCents: { type: string }
         balanceCents: { type: string }
+        issuedAt: { type: string, format: date-time, nullable: true }
+        dueAt: { type: string, format: date-time, nullable: true }
+        paidAt: { type: string, format: date-time, nullable: true }
         createdAt: { type: string, format: date-time }
     Finance:
       type: object
@@ -2168,6 +2469,96 @@ components:
     BusinessReferenceType:
       type: string
       enum: [CATEGORY, TAG, NUMBERING, AUTOMATION]
+    BusinessPermission:
+      type: string
+      enum: [TEAM_EDIT, FINANCE_EDIT]
+    EmployeeProfile:
+      type: object
+      properties:
+        id: { type: string }
+        jobTitle: { type: string, nullable: true }
+        contractType: { type: string, nullable: true }
+        startDate: { type: string, format: date-time, nullable: true }
+        endDate: { type: string, format: date-time, nullable: true }
+        weeklyHours: { type: integer, nullable: true }
+        hourlyCostCents: { type: string, nullable: true }
+        status: { type: string, enum: [ACTIVE, INACTIVE] }
+        notes: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    EmployeeProfileInput:
+      type: object
+      properties:
+        jobTitle: { type: string, nullable: true }
+        contractType: { type: string, nullable: true }
+        startDate: { type: string, format: date-time, nullable: true }
+        endDate: { type: string, format: date-time, nullable: true }
+        weeklyHours: { type: integer, nullable: true }
+        hourlyCostCents: { type: string, nullable: true }
+        status: { type: string, enum: [ACTIVE, INACTIVE] }
+        notes: { type: string, nullable: true }
+    Member:
+      type: object
+      properties:
+        userId: { type: string }
+        email: { type: string }
+        role: { type: string, enum: [OWNER, ADMIN, MEMBER, VIEWER] }
+        createdAt: { type: string, format: date-time }
+        employeeProfile:
+          $ref: '#/components/schemas/EmployeeProfile'
+          nullable: true
+        permissions:
+          type: array
+          items: { $ref: '#/components/schemas/BusinessPermission' }
+    ProductUnit:
+      type: string
+      enum: [PIECE, KG, HOUR, LITER, OTHER]
+    InventoryMovementType:
+      type: string
+      enum: [IN, OUT, ADJUST]
+    InventoryMovementSource:
+      type: string
+      enum: [MANUAL, PURCHASE, SALE]
+    Product:
+      type: object
+      properties:
+        id: { type: string }
+        businessId: { type: string }
+        sku: { type: string }
+        name: { type: string }
+        description: { type: string, nullable: true }
+        unit: { $ref: '#/components/schemas/ProductUnit' }
+        salePriceCents: { type: string, nullable: true }
+        purchasePriceCents: { type: string, nullable: true }
+        isArchived: { type: boolean }
+        stock: { type: number, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    InventoryMovement:
+      type: object
+      properties:
+        id: { type: string }
+        businessId: { type: string }
+        productId: { type: string }
+        type: { $ref: '#/components/schemas/InventoryMovementType' }
+        source: { $ref: '#/components/schemas/InventoryMovementSource' }
+        quantity: { type: number }
+        unitCostCents: { type: string, nullable: true }
+        reason: { type: string, nullable: true }
+        date: { type: string, format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    InventorySummaryRow:
+      type: object
+      properties:
+        productId: { type: string }
+        sku: { type: string }
+        name: { type: string }
+        unit: { $ref: '#/components/schemas/ProductUnit' }
+        stock: { type: number }
+        salePriceCents: { type: string, nullable: true }
+        purchasePriceCents: { type: string, nullable: true }
+        lastMovementAt: { type: string, format: date-time, nullable: true }
     BusinessReference:
       type: object
       properties:
@@ -2189,6 +2580,8 @@ components:
         defaultDepositPercent: { type: integer }
         paymentTermsDays: { type: integer }
         enableAutoNumbering: { type: boolean }
+        nextQuoteNumber: { type: integer, description: 'Séquence courante pour les devis (auto-incrément)' }
+        nextInvoiceNumber: { type: integer, description: 'Séquence courante pour les factures (auto-incrément)' }
         vatRatePercent: { type: integer }
         vatEnabled: { type: boolean }
         allowMembersInvite: { type: boolean }

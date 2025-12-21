@@ -25,6 +25,36 @@ enum BusinessRole {
   VIEWER
 }
 
+enum EmployeeStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum BusinessPermission {
+  TEAM_EDIT
+  FINANCE_EDIT
+}
+
+enum ProductUnit {
+  PIECE
+  KG
+  HOUR
+  LITER
+  OTHER
+}
+
+enum InventoryMovementType {
+  IN
+  OUT
+  ADJUST
+}
+
+enum InventoryMovementSource {
+  MANUAL
+  PURCHASE
+  SALE
+}
+
 /**
  * Statut d'une invitation d'entreprise
  */
@@ -96,6 +126,7 @@ model User {
   personalTransactions PersonalTransaction[]
   personalCategories   PersonalCategory[]
   interactionsCreated  Interaction[] @relation("InteractionCreatedBy")
+  inventoryMovements   InventoryMovement[]
 }
 
 /**
@@ -122,6 +153,8 @@ model Business {
   references  BusinessReference[]
   processes   Process[]
   settings    BusinessSettings?
+  products    Product[]
+  inventoryMovements InventoryMovement[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -138,10 +171,41 @@ model BusinessMembership {
 
   business Business @relation(fields: [businessId], references: [id])
   user     User     @relation(fields: [userId], references: [id])
+  employeeProfile EmployeeProfile?
+  permissions     BusinessMemberPermission[]
 
   createdAt DateTime @default(now())
 
   @@unique([businessId, userId])
+}
+
+model EmployeeProfile {
+  id           BigInt         @id @default(autoincrement())
+  membershipId BigInt         @unique
+  jobTitle     String?
+  contractType String?
+  startDate    DateTime?
+  endDate      DateTime?
+  weeklyHours  Int?
+  hourlyCostCents BigInt?
+  status       EmployeeStatus @default(ACTIVE)
+  notes        String?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  membership BusinessMembership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+}
+
+model BusinessMemberPermission {
+  id           BigInt             @id @default(autoincrement())
+  membershipId BigInt
+  permission   BusinessPermission
+  createdAt    DateTime           @default(now())
+
+  membership BusinessMembership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+
+  @@unique([membershipId, permission])
+  @@index([permission])
 }
 
 /**
@@ -446,6 +510,49 @@ model Service {
   @@index([businessId, categoryReferenceId])
 }
 
+model Product {
+  id                 BigInt       @id @default(autoincrement())
+  businessId         BigInt
+  business           Business     @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  sku                String
+  skuLower           String
+  name               String
+  description        String?
+  unit               ProductUnit  @default(PIECE)
+  salePriceCents     BigInt?
+  purchasePriceCents BigInt?
+  isArchived         Boolean      @default(false)
+  movements          InventoryMovement[]
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  @@unique([businessId, skuLower])
+  @@index([businessId, isArchived])
+}
+
+model InventoryMovement {
+  id              BigInt                  @id @default(autoincrement())
+  businessId      BigInt
+  productId       BigInt
+  type            InventoryMovementType
+  source          InventoryMovementSource @default(MANUAL)
+  quantity        Int
+  unitCostCents   BigInt?
+  reason          String?
+  date            DateTime
+  createdByUserId BigInt?
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  product  Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdBy User?   @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([businessId, productId])
+  @@index([businessId, date])
+}
+
 model ProjectTag {
   id          BigInt @id @default(autoincrement())
   projectId   BigInt
@@ -594,6 +701,8 @@ model BusinessSettings {
   businessId             BigInt   @unique
   invoicePrefix          String   @default("INV-")
   quotePrefix            String   @default("DEV-")
+  nextInvoiceNumber      Int      @default(1)
+  nextQuoteNumber        Int      @default(1)
   defaultDepositPercent  Int      @default(30)
   paymentTermsDays       Int      @default(30)
   enableAutoNumbering    Boolean  @default(true)
@@ -616,6 +725,7 @@ model Quote {
   clientId        BigInt?
   createdByUserId BigInt
   status          QuoteStatus @default(DRAFT)
+  number          String?
   depositPercent  Int         @default(30)
   currency        String      @default("EUR")
   totalCents      BigInt
@@ -633,6 +743,8 @@ model Quote {
   createdBy User    @relation("QuoteCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
   items    QuoteItem[]
   invoice  Invoice? @relation("QuoteInvoice")
+
+  @@unique([businessId, number])
 }
 
 model QuoteItem {
@@ -658,6 +770,7 @@ model Invoice {
   quoteId         BigInt?       @unique
   createdByUserId BigInt
   status          InvoiceStatus @default(DRAFT)
+  number          String?
   depositPercent  Int           @default(30)
   currency        String        @default("EUR")
   totalCents      BigInt
@@ -676,6 +789,8 @@ model Invoice {
   quote    Quote?   @relation("QuoteInvoice", fields: [quoteId], references: [id], onDelete: SetNull)
   createdBy User    @relation("InvoiceCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
   items    InvoiceItem[]
+
+  @@unique([businessId, number])
 }
 
 model InvoiceItem {

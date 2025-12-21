@@ -123,6 +123,7 @@ type Quote = {
   projectId: string;
   clientId: string | null;
   status: QuoteStatus;
+  number?: string | null;
   depositPercent: number;
   currency: string;
   totalCents: string;
@@ -145,6 +146,7 @@ type Invoice = {
   clientId: string | null;
   quoteId: string | null;
   status: InvoiceStatus;
+  number?: string | null;
   depositPercent: number;
   currency: string;
   totalCents: string;
@@ -1451,7 +1453,7 @@ export default function ProjectDetailPage() {
                     >
                       <div>
                         <p className="text-sm font-semibold text-[var(--text-primary)]">
-                          Devis #{quote.id} · {formatCents(quote.totalCents)}
+                          Devis {quote.number ?? `#${quote.id}`} · {formatCents(quote.totalCents)}
                         </p>
                         <p className="text-[11px] text-[var(--text-secondary)]">
                           {quote.items?.length ?? 0} lignes · Acompte {formatCents(quote.depositCents)} · Solde{' '}
@@ -1464,6 +1466,11 @@ export default function ProjectDetailPage() {
                         ) : null}
                       </div>
                       <div className="flex flex-wrap gap-2">
+                        {quote.number ? (
+                          <Badge variant="neutral" className="bg-indigo-50 text-indigo-700">
+                            {quote.number}
+                          </Badge>
+                        ) : null}
                         <Badge variant="neutral">{QUOTE_STATUS_LABELS[quote.status]}</Badge>
                         <Button size="sm" variant="ghost" asChild>
                           <Link
@@ -1525,7 +1532,7 @@ export default function ProjectDetailPage() {
                     >
                       <div>
                         <p className="text-sm font-semibold text-[var(--text-primary)]">
-                          Facture #{invoice.id} · {formatCents(invoice.totalCents)}
+                          Facture {invoice.number ?? `#${invoice.id}`} · {formatCents(invoice.totalCents)}
                         </p>
                         <p className="text-[11px] text-[var(--text-secondary)]">
                           Acompte {formatCents(invoice.depositCents)} · Solde {formatCents(invoice.balanceCents)}
@@ -1535,6 +1542,11 @@ export default function ProjectDetailPage() {
                         </p>
                       </div>
                       <div className="flex flex-wrap gap-2">
+                        {invoice.number ? (
+                          <Badge variant="neutral" className="bg-indigo-50 text-indigo-700">
+                            {invoice.number}
+                          </Badge>
+                        ) : null}
                         <Badge variant="neutral">{INVOICE_STATUS_LABELS[invoice.status]}</Badge>
                         <Button size="sm" variant="ghost" asChild>
                           <Link
