@@ -69,7 +69,7 @@ function getGlobalSections(): NavSection[] {
         { href: '/app', label: 'Accueil', icon: <IconHome size={18} /> },
         { href: '/app/personal', label: 'Wallet', icon: <IconWallet size={18} />, accent: 'wallet' },
         { href: '/app/pro', label: 'Studio', icon: <IconStudio size={18} />, accent: 'studio' },
-        { href: '/app/performance', label: 'Focus', icon: <IconFocus size={18} />, accent: 'focus' },
+        { label: 'Focus', icon: <IconFocus size={18} />, accent: 'focus', disabled: true, hint: 'Bientôt' },
       ],
     },
     {
@@ -106,12 +106,31 @@ function getStudioBusinessSections(businessId: string): NavSection[] {
         { href: `${base}/prospects`, label: 'Pipeline', icon: <span className="text-[16px]">•</span> },
         { href: `${base}/projects`, label: 'Projets', icon: <span className="text-[16px]">•</span> },
         { href: `${base}/tasks`, label: 'Tâches', icon: <span className="text-[16px]">•</span> },
-        { href: `${base}/finances`, label: 'Finances', icon: <span className="text-[16px]">•</span> },
+        { href: `${base}/services`, label: 'Services', icon: <span className="text-[16px]">•</span> },
       ],
     },
     {
-      title: 'Settings',
-      items: [{ href: `${base}/settings`, label: 'Paramètres', icon: <span className="text-[16px]">•</span> }],
+      title: 'Finances',
+      items: [
+        { href: `${base}/finances`, label: 'Finances', icon: <span className="text-[16px]">•</span> },
+        { href: `${base}/finances/payments`, label: 'Paiements', icon: <span className="text-[16px]">•</span> },
+        {
+          href: `${base}/projects`,
+          label: 'Facturation (via projets)',
+          icon: <span className="text-[16px]">•</span>,
+          hint: 'Créer devis/factures depuis un projet',
+        },
+      ],
+    },
+    {
+      title: 'À venir',
+      items: [
+        { label: 'Process', icon: <span className="text-[16px]">•</span>, disabled: true, hint: 'Bientôt' },
+        { label: 'Références', icon: <span className="text-[16px]">•</span>, disabled: true, hint: 'Bientôt' },
+        { label: 'Paramètres', icon: <span className="text-[16px]">•</span>, disabled: true, hint: 'Bientôt' },
+        { label: 'Admin', icon: <span className="text-[16px]">•</span>, disabled: true, hint: 'Bientôt' },
+        { label: 'Trésorerie / Forecasting / TVA', icon: <span className="text-[16px]">•</span>, disabled: true, hint: 'Bientôt' },
+      ],
     },
   ];
 }
@@ -135,14 +154,13 @@ function getWalletSections(): NavSection[] {
 }
 
 function getFocusSections(): NavSection[] {
-  const base = '/app/performance';
   return [
     {
       title: 'Focus',
       items: [
-        { href: `${base}/pro`, label: 'Pro', icon: <IconFocus size={18} />, accent: 'focus' },
-        { href: `${base}/perso`, label: 'Perso', icon: <span className="text-[16px]">•</span> },
-        { href: `${base}/alignement`, label: 'Alignement', icon: <span className="text-[16px]">•</span> },
+        { label: 'Pro', icon: <IconFocus size={18} />, accent: 'focus', disabled: true, hint: 'Bientôt' },
+        { label: 'Perso', icon: <span className="text-[16px]">•</span>, disabled: true, hint: 'Bientôt' },
+        { label: 'Alignement', icon: <span className="text-[16px]">•</span>, disabled: true, hint: 'Bientôt' },
       ],
     },
   ];

@@ -1,86 +1,44 @@
-// src/app/app/pro/[businessId]/references/page.tsx
 'use client';
 
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import {
-  getMockAutomations,
-  getMockCategories,
-  getMockNumbering,
-  getMockTags,
-} from '../../pro-data';
-import { usePersistentState } from '../../usePersistentState';
+
+const referenceLinks = [
+  { href: 'categories', title: 'Catégories', desc: 'Classer clients, projets et finances.' },
+  { href: 'tags', title: 'Tags', desc: 'Tags globaux pour organiser et filtrer.' },
+  { href: 'numbering', title: 'Numérotation', desc: 'Préfixes et séquences pour documents.' },
+  { href: 'automations', title: 'Automations', desc: 'Règles et SOPs centralisées.' },
+];
 
 export default function ReferencesPage() {
   const params = useParams();
   const businessId = (params?.businessId ?? '') as string;
 
-  const [categories] = usePersistentState(`refs-categories:${businessId}`, getMockCategories());
-  const [tags] = usePersistentState(`refs-tags:${businessId}`, getMockTags());
-  const [automations] = usePersistentState(
-    `refs-automations:${businessId}`,
-    getMockAutomations()
-  );
-  const [numbering] = usePersistentState(`refs-numbering:${businessId}`, getMockNumbering());
-
-  const links = [
-    {
-      href: `/app/pro/${businessId}/references/categories`,
-      label: 'Categories',
-      desc: 'Catégories pour revenus/dépenses',
-      count: categories.length,
-    },
-    {
-      href: `/app/pro/${businessId}/references/tags`,
-      label: 'Tags',
-      desc: 'Étiquettes globales',
-      count: tags.length,
-    },
-    {
-      href: `/app/pro/${businessId}/references/automations`,
-      label: 'Automations',
-      desc: 'Règles et SOP',
-      count: automations.length,
-    },
-    {
-      href: `/app/pro/${businessId}/references/numbering`,
-      label: 'Numbering',
-      desc: 'Paramètres de numérotation',
-      count: numbering.length,
-    },
-  ];
-
   return (
-    <div className="space-y-4">
-      <Card className="p-5 space-y-1">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-[var(--text-secondary)]">
-          PRO · References
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-semibold">Référentiels</h1>
+        <p className="text-muted-foreground">
+          Gérez les catégories, tags, numérotations et automations partagées pour votre entreprise.
         </p>
-        <h1 className="text-xl font-semibold text-[var(--text-primary)]">Référentiels</h1>
-        <p className="text-sm text-[var(--text-secondary)]">
-          Gère les référentiels communs de Business #{businessId}.
-        </p>
-      </Card>
-
-      <div className="grid gap-3 md:grid-cols-2">
-        {links.map((link) => (
-          <Card key={link.href} className="p-4 space-y-2">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-semibold text-[var(--text-primary)]">{link.label}</p>
-                <p className="text-xs text-[var(--text-secondary)]">
-                  {link.desc} · {link.count} éléments
-                </p>
-              </div>
-              <Button asChild size="sm" variant="outline">
-                <Link href={link.href}>Ouvrir</Link>
+      </div>
+      <div className="grid gap-4 md:grid-cols-2">
+        {referenceLinks.map((link) => (
+          <Card key={link.href} className="p-4 flex flex-col gap-2 justify-between">
+            <div>
+              <h2 className="text-lg font-semibold">{link.title}</h2>
+              <p className="text-sm text-muted-foreground">{link.desc}</p>
+            </div>
+            <div className="flex gap-2">
+              <Button asChild>
+                <Link href={`/app/pro/${businessId}/references/${link.href}`}>Ouvrir</Link>
+              </Button>
+              <Button asChild variant="outline">
+                <Link href={`/app/pro/${businessId}`}>Dashboard</Link>
               </Button>
             </div>
-            <p className="text-[10px] text-[var(--text-secondary)]">
-              Mock persistant dans le navigateur, prêt pour branchement API.
-            </p>
           </Card>
         ))}
       </div>

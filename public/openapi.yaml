@@ -28,6 +28,7 @@ tags:
   - name: Pro / Invites
   - name: Pro / Finances
   - name: Pro / Billing
+  - name: Pro / References
 
 paths:
   /api/health:
@@ -1023,6 +1024,111 @@ paths:
       responses:
         '200': { $ref: '#/components/responses/Ok' }
 
+  /api/pro/businesses/{businessId}/references:
+    get:
+      tags: [Pro / References]
+      security: [ { cookieAuth: [] } ]
+      summary: Liste des références (catégories, tags, numérotation, automations)
+      description: >
+        VIEWER+ accès. Filtrage par type, recherche et inclusion des archivés. Toutes les réponses incluent `x-request-id`
+        et `cache-control: no-store`.
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+        - in: query
+          name: type
+          required: false
+          schema: { $ref: '#/components/schemas/BusinessReferenceType' }
+        - in: query
+          name: search
+          required: false
+          schema: { type: string }
+        - in: query
+          name: includeArchived
+          required: false
+          schema: { type: boolean }
+      responses:
+        '200':
+          description: Liste de références
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/BusinessReference' }
+    post:
+      tags: [Pro / References]
+      security: [ { cookieAuth: [] } ]
+      summary: Crée une référence
+      description: ADMIN/OWNER uniquement. CSRF (Origin) requis + rate limit.
+      parameters: [ { $ref: '#/components/parameters/BusinessId' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type, name]
+              properties:
+                type: { $ref: '#/components/schemas/BusinessReferenceType' }
+                name: { type: string }
+                value: { type: string, nullable: true }
+      responses:
+        '201':
+          description: Référence créée
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  item: { $ref: '#/components/schemas/BusinessReference' }
+
+  /api/pro/businesses/{businessId}/references/{referenceId}:
+    patch:
+      tags: [Pro / References]
+      security: [ { cookieAuth: [] } ]
+      summary: Met à jour une référence
+      description: ADMIN/OWNER uniquement. CSRF (Origin) requis + rate limit.
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+        - name: referenceId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                value: { type: string, nullable: true }
+                isArchived: { type: boolean }
+      responses:
+        '200':
+          description: Référence mise à jour
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  item: { $ref: '#/components/schemas/BusinessReference' }
+    delete:
+      tags: [Pro / References]
+      security: [ { cookieAuth: [] } ]
+      summary: Supprime une référence
+      description: ADMIN/OWNER uniquement. CSRF (Origin) requis + rate limit.
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+        - name: referenceId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+
   /api/pro/businesses/{businessId}/services:
     get:
       tags: [Pro / Services]
@@ -1487,6 +1593,20 @@ components:
         category: { type: string }
         date: { type: string, format: date-time }
         note: { type: string, nullable: true }
+    BusinessReferenceType:
+      type: string
+      enum: [CATEGORY, TAG, NUMBERING, AUTOMATION]
+    BusinessReference:
+      type: object
+      properties:
+        id: { type: string }
+        businessId: { type: string }
+        type: { $ref: '#/components/schemas/BusinessReferenceType' }
+        name: { type: string }
+        value: { type: string, nullable: true }
+        isArchived: { type: boolean }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
     FinanceCreate:
       type: object
       required: [type, amountCents, date]

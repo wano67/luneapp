@@ -1,63 +1,17 @@
-// src/app/app/pro/[businessId]/admin/page.tsx
 'use client';
 
-import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { Card } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { getMockDeadlines, getMockDocuments } from '../../pro-data';
-import { usePersistentState } from '../../usePersistentState';
+import { ComingSoon } from '../../../ComingSoon';
 
 export default function AdminPage() {
   const params = useParams();
   const businessId = (params?.businessId ?? '') as string;
-
-  const [docs] = usePersistentState(`admin-docs:${businessId}`, getMockDocuments());
-  const [deadlines] = usePersistentState(`deadlines:${businessId}`, getMockDeadlines());
-
-  const links = [
-    {
-      href: `/app/pro/${businessId}/admin/documents`,
-      label: 'Documents',
-      desc: `Contrats, assurances, Kbis… (${docs.length})`,
-    },
-    {
-      href: `/app/pro/${businessId}/admin/deadlines`,
-      label: 'Deadlines',
-      desc: `Échéances légales et administratives (${deadlines.length})`,
-    },
-  ];
-
   return (
-    <div className="space-y-4">
-      <Card className="p-5 space-y-1">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-[var(--text-secondary)]">
-          PRO · Admin
-        </p>
-        <h1 className="text-xl font-semibold text-[var(--text-primary)]">Administration</h1>
-        <p className="text-sm text-[var(--text-secondary)]">
-          Formalités et conformité pour Business #{businessId}.
-        </p>
-      </Card>
-
-      <div className="grid gap-3 md:grid-cols-2">
-        {links.map((link) => (
-          <Card key={link.href} className="p-4 space-y-2">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-semibold text-[var(--text-primary)]">{link.label}</p>
-                <p className="text-xs text-[var(--text-secondary)]">{link.desc}</p>
-              </div>
-              <Button asChild size="sm" variant="outline">
-                <Link href={link.href}>Ouvrir</Link>
-              </Button>
-            </div>
-            <p className="text-[10px] text-[var(--text-secondary)]">
-              Mock persistant · prêt à brancher l’API admin.
-            </p>
-          </Card>
-        ))}
-      </div>
-    </div>
+    <ComingSoon
+      title="Admin / Conformité"
+      description="Documents et échéances administratives seront ajoutés prochainement."
+      backHref={`/app/pro/${businessId}`}
+      backLabel="Retour au dashboard"
+    />
   );
 }
