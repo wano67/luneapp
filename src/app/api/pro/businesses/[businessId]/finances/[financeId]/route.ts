@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/server/db/client';
-import { FinanceType } from '@/generated/prisma/client';
+import { BusinessReferenceType, FinanceType } from '@/generated/prisma/client';
 import { requireAuthPro } from '@/server/auth/requireAuthPro';
 import { requireBusinessRole } from '@/server/auth/businessRole';
 import { assertSameOrigin, jsonNoStore, withNoStore } from '@/server/security/csrf';
@@ -60,6 +60,44 @@ function parseDate(value: unknown): Date | null {
   return date;
 }
 
+async function validateCategoryAndTags(
+  businessId: bigint,
+  categoryReferenceId: bigint | null,
+  tagReferenceIds?: bigint[]
+): Promise<{ categoryId: bigint | null; tagIds: bigint[] } | { error: string }> {
+  if (categoryReferenceId) {
+    const category = await prisma.businessReference.findFirst({
+      where: {
+        id: categoryReferenceId,
+        businessId,
+        type: BusinessReferenceType.CATEGORY,
+        isArchived: false,
+      },
+      select: { id: true },
+    });
+    if (!category) return { error: 'categoryReferenceId invalide pour ce business.' };
+  }
+
+  let tagIds: bigint[] = [];
+  if (tagReferenceIds && tagReferenceIds.length) {
+    const tags = await prisma.businessReference.findMany({
+      where: {
+        id: { in: tagReferenceIds },
+        businessId,
+        type: BusinessReferenceType.TAG,
+        isArchived: false,
+      },
+      select: { id: true },
+    });
+    if (tags.length !== tagReferenceIds.length) {
+      return { error: 'tagReferenceIds invalides pour ce business.' };
+    }
+    tagIds = tags.map((t) => t.id);
+  }
+
+  return { categoryId: categoryReferenceId, tagIds };
+}
+
 const PAYMENT_METADATA_KEYS = [
   'clientName',
   'project',
@@ -116,6 +154,9 @@ function serializeFinance(finance: {
   createdAt: Date;
   updatedAt: Date;
   project?: { name: string | null } | null;
+  categoryReferenceId?: bigint | null;
+  categoryReference?: { id: bigint; name: string | null } | null;
+  tags?: Array<{ referenceId: bigint; reference: { id: bigint; name: string } }>;
 }) {
   const metadata = parseMetadataFromNote(finance.note);
 
@@ -124,6 +165,14 @@ function serializeFinance(finance: {
     businessId: finance.businessId.toString(),
     projectId: finance.projectId ? finance.projectId.toString() : null,
     projectName: finance.project?.name ?? null,
+    categoryReferenceId: finance.categoryReferenceId ? finance.categoryReferenceId.toString() : null,
+    categoryReferenceName: finance.categoryReference?.name ?? null,
+    tagReferences: finance.tags
+      ? finance.tags.map((tag) => ({
+          id: tag.reference.id.toString(),
+          name: tag.reference.name,
+        }))
+      : [],
     type: finance.type,
     amountCents: finance.amountCents.toString(),
     amount: Number(finance.amountCents) / 100,
@@ -165,7 +214,11 @@ export async function GET(
 
   const finance = await prisma.finance.findFirst({
     where: { id: financeIdBigInt, businessId: businessIdBigInt },
-    include: { project: { select: { name: true } } },
+    include: {
+      project: { select: { name: true } },
+      categoryReference: { select: { id: true, name: true } },
+      tags: { include: { reference: { select: { id: true, name: true } } } },
+    },
   });
   if (!finance) return withIdNoStore(notFound('Opération introuvable.'), requestId);
 
@@ -210,7 +263,11 @@ export async function PATCH(
 
   const existing = await prisma.finance.findFirst({
     where: { id: financeIdBigInt, businessId: businessIdBigInt },
-    include: { project: { select: { name: true } } },
+    include: {
+      project: { select: { name: true } },
+      categoryReference: { select: { id: true, name: true } },
+      tags: { include: { reference: { select: { id: true, name: true } } } },
+    },
   });
   if (!existing) return withIdNoStore(notFound('Opération introuvable.'), requestId);
 
@@ -260,6 +317,57 @@ export async function PATCH(
     data.note = JSON.stringify(metadata);
   }
 
+  const categoryProvided = Object.prototype.hasOwnProperty.call(body, 'categoryReferenceId');
+  const categoryReferenceId =
+    categoryProvided && typeof (body as { categoryReferenceId?: unknown }).categoryReferenceId === 'string'
+      ? (() => {
+          const raw = (body as { categoryReferenceId: string }).categoryReferenceId;
+          return /^\d+$/.test(raw) ? BigInt(raw) : null;
+        })()
+      : categoryProvided
+        ? null
+        : undefined;
+
+  const tagProvided = Object.prototype.hasOwnProperty.call(body, 'tagReferenceIds');
+  const tagReferenceIds: bigint[] | undefined = tagProvided
+    ? Array.from(
+        new Set(
+          ((Array.isArray((body as { tagReferenceIds?: unknown }).tagReferenceIds)
+            ? (body as { tagReferenceIds: unknown[] }).tagReferenceIds
+            : []) as unknown[])
+            .filter((id): id is string => typeof id === 'string' && /^\d+$/.test(id))
+            .map((id) => BigInt(id))
+        )
+      )
+    : undefined;
+
+  let tagsInstruction:
+    | {
+        deleteMany: { financeId: bigint };
+        create: Array<{ referenceId: bigint }>;
+      }
+    | undefined;
+
+  if (categoryProvided || tagProvided) {
+    const validated = await validateCategoryAndTags(
+      businessIdBigInt,
+      categoryProvided ? categoryReferenceId ?? null : existing.categoryReferenceId ?? null,
+      tagProvided ? tagReferenceIds : existing.tags?.map((t) => t.referenceId)
+    );
+    if ('error' in validated) {
+      return withIdNoStore(badRequest(validated.error), requestId);
+    }
+    if (categoryProvided) {
+      data.categoryReferenceId = validated.categoryId;
+    }
+    if (tagProvided) {
+      tagsInstruction = {
+        deleteMany: { financeId: financeIdBigInt },
+        create: validated.tagIds.map((id) => ({ referenceId: id })),
+      };
+    }
+  }
+
   if ('projectId' in body) {
     const raw = (body as { projectId?: unknown }).projectId;
     if (raw === null || raw === undefined || raw === '') {
@@ -279,14 +387,21 @@ export async function PATCH(
     }
   }
 
-  if (Object.keys(data).length === 0) {
+  if (!tagsInstruction && Object.keys(data).length === 0) {
     return withIdNoStore(badRequest('Aucune modification.'), requestId);
   }
 
   const updated = await prisma.finance.update({
     where: { id: financeIdBigInt },
-    data,
-    include: { project: { select: { name: true } } },
+    data: {
+      ...data,
+      ...(tagsInstruction ? { tags: tagsInstruction } : {}),
+    },
+    include: {
+      project: { select: { name: true } },
+      categoryReference: { select: { id: true, name: true } },
+      tags: { include: { reference: { select: { id: true, name: true } } } },
+    },
   });
 
   return withIdNoStore(jsonNoStore({ item: serializeFinance(updated) }), requestId);

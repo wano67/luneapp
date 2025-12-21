@@ -43,6 +43,7 @@ async function main() {
   let serviceId: string | null = null;
   let clientId: string | null = null;
   let taskId: string | null = null;
+  let financeId: string | null = null;
   let categoryId: string | null = null;
   let tagId: string | null = null;
   try {
@@ -224,8 +225,54 @@ async function main() {
     const taskFound = (taskListJson as { items?: Array<{ id?: string }> })?.items?.find((t) => t.id === taskId);
     if (!taskFound) throw new Error('Filtered tasks did not return the created task.');
 
+    console.log('Create finance…');
+    const { res: financeRes, json: financeJson } = await request(
+      `/api/pro/businesses/${businessId}/finances`,
+      {
+        method: 'POST',
+        body: {
+          type: 'INCOME',
+          amount: 1234,
+          category: 'SMOKE_REF',
+          date: new Date().toISOString(),
+          categoryReferenceId: categoryId,
+          tagReferenceIds: tagId ? [tagId] : [],
+        },
+      }
+    );
+    if (!financeRes.ok) throw new Error(`Create finance failed (${financeRes.status}) ref=${getLastRequestId()}`);
+    financeId =
+      (financeJson as { item?: { id?: string } })?.item?.id ??
+      (financeJson as { id?: string })?.id ??
+      null;
+    if (!financeId) throw new Error('Finance created but no id.');
+
+    console.log('Get finance detail…');
+    const { res: financeDetailRes, json: financeDetailJson } = await request(
+      `/api/pro/businesses/${businessId}/finances/${financeId}`
+    );
+    if (!financeDetailRes.ok) throw new Error(`Finance detail failed (${financeDetailRes.status}) ref=${getLastRequestId()}`);
+    const financeDetail =
+      (financeDetailJson as { item?: { categoryReferenceId?: string | null; tagReferences?: Array<{ id?: string }> } }).item ??
+      (financeDetailJson as { categoryReferenceId?: string | null; tagReferences?: Array<{ id?: string }> });
+    if (!financeDetail) throw new Error('Finance detail missing payload.');
+    if ((categoryId && financeDetail.categoryReferenceId !== categoryId) || !financeDetail.tagReferences?.find((t) => t.id === tagId)) {
+      throw new Error('References not persisted on finance detail.');
+    }
+
+    console.log('Filter finances by tag…');
+    const { res: financeListRes, json: financeListJson } = await request(
+      `/api/pro/businesses/${businessId}/finances?tagReferenceId=${tagId}`
+    );
+    if (!financeListRes.ok) throw new Error(`Finance list filter failed (${financeListRes.status}) ref=${getLastRequestId()}`);
+    const financeFound = (financeListJson as { items?: Array<{ id?: string }> })?.items?.find((f) => f.id === financeId);
+    if (!financeFound) throw new Error('Filtered finances did not return the created finance.');
+
     console.log('Smoke references consumption OK.');
   } finally {
+    if (financeId) {
+      await request(`/api/pro/businesses/${businessId}/finances/${financeId}`, { method: 'DELETE', allowError: true });
+    }
     if (taskId) {
       await request(`/api/pro/businesses/${businessId}/tasks/${taskId}`, {
         method: 'DELETE',

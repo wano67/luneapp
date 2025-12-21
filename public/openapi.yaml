@@ -1741,9 +1741,47 @@ paths:
       tags: [Pro / Finances]
       security: [ { cookieAuth: [] } ]
       summary: Liste des opérations financières
-      parameters: [ { $ref: '#/components/parameters/BusinessId' } ]
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+        - in: query
+          name: type
+          required: false
+          schema: { type: string, enum: [INCOME, EXPENSE] }
+        - in: query
+          name: projectId
+          required: false
+          schema: { type: string }
+        - in: query
+          name: from
+          required: false
+          schema: { type: string, format: date-time }
+        - in: query
+          name: to
+          required: false
+          schema: { type: string, format: date-time }
+        - in: query
+          name: category
+          required: false
+          schema: { type: string }
+        - in: query
+          name: categoryReferenceId
+          required: false
+          schema: { type: string }
+        - in: query
+          name: tagReferenceId
+          required: false
+          schema: { type: string }
       responses:
-        '200': { $ref: '#/components/responses/Ok' }
+        '200':
+          description: Liste des opérations
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Finance' }
     post:
       tags: [Pro / Finances]
       security: [ { cookieAuth: [] } ]
@@ -2108,11 +2146,25 @@ components:
       properties:
         id: { type: string }
         businessId: { type: string }
+        projectId: { type: string, nullable: true }
+        projectName: { type: string, nullable: true }
         type: { type: string, enum: [INCOME, EXPENSE] }
         amountCents: { type: string }
+        amount: { type: number }
         category: { type: string }
+        categoryReferenceId: { type: string, nullable: true }
+        categoryReferenceName: { type: string, nullable: true }
+        tagReferences:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              name: { type: string }
         date: { type: string, format: date-time }
         note: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
     BusinessReferenceType:
       type: string
       enum: [CATEGORY, TAG, NUMBERING, AUTOMATION]
@@ -2236,14 +2288,18 @@ components:
               projectedNetCents: { type: string }
     FinanceCreate:
       type: object
-      required: [type, amountCents, date]
+      required: [type, amount, date, category]
       properties:
         type: { type: string, enum: [INCOME, EXPENSE] }
-        amountCents: { type: integer }
+        amount: { type: number }
         category: { type: string }
         date: { type: string, format: date-time }
         note: { type: string, nullable: true }
         projectId: { type: string, nullable: true }
+        categoryReferenceId: { type: string, nullable: true }
+        tagReferenceIds:
+          type: array
+          items: { type: string }
     Task:
       type: object
       properties:

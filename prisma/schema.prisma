@@ -395,6 +395,7 @@ model Finance {
   id         BigInt      @id @default(autoincrement())
   businessId BigInt
   projectId  BigInt?
+  categoryReferenceId BigInt?
   type       FinanceType
   amountCents BigInt
   category   String
@@ -403,12 +404,15 @@ model Finance {
 
   business Business @relation(fields: [businessId], references: [id])
   project  Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  categoryReference BusinessReference? @relation("FinanceCategoryReference", fields: [categoryReferenceId], references: [id], onDelete: SetNull)
+  tags     FinanceTag[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([businessId, date])
   @@index([businessId, type])
+  @@index([businessId, categoryReferenceId])
 }
 
 /**
@@ -532,10 +536,12 @@ model BusinessReference {
   serviceCategories Service[] @relation("ServiceCategoryReference")
   clientCategories  Client[]  @relation("ClientCategoryReference")
   taskCategories    Task[]    @relation("TaskCategoryReference")
+  financeCategories Finance[] @relation("FinanceCategoryReference")
   projectTags       ProjectTag[] @relation("ProjectTagReference")
   serviceTags       ServiceTag[] @relation("ServiceTagReference")
   clientTags        ClientTag[] @relation("ClientTagReference")
   taskTags          TaskTag[] @relation("TaskTagReference")
+  financeTags       FinanceTag[] @relation("FinanceTagReference")
 
   @@unique([businessId, type, name])
   @@index([businessId, type])
@@ -566,6 +572,20 @@ model TaskTag {
   createdAt DateTime @default(now())
 
   @@unique([taskId, referenceId])
+  @@index([referenceId])
+}
+
+model FinanceTag {
+  id          BigInt @id @default(autoincrement())
+  financeId   BigInt
+  referenceId BigInt
+
+  finance   Finance          @relation(fields: [financeId], references: [id], onDelete: Cascade)
+  reference BusinessReference @relation("FinanceTagReference", fields: [referenceId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([financeId, referenceId])
   @@index([referenceId])
 }
 
