@@ -23,6 +23,7 @@ tags:
   - name: Pro / Projects
   - name: Pro / Services
   - name: Pro / Tasks
+  - name: Pro / Processes
   - name: Pro / Interactions
   - name: Pro / Members
   - name: Pro / Invites
@@ -975,6 +976,162 @@ paths:
       responses:
         '200': { $ref: '#/components/responses/Ok' }
 
+  /api/pro/businesses/{businessId}/processes:
+    get:
+      tags: [Pro / Processes]
+      security: [ { cookieAuth: [] } ]
+      summary: Liste des process (actifs par défaut)
+      description: Utiliser `archived=1` pour inclure les process archivés. IDs BigInt en string, réponses no-store + x-request-id.
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+        - in: query
+          name: archived
+          required: false
+          schema: { type: string, enum: ['0', '1', 'true'] }
+      responses:
+        '200':
+          description: Liste des process
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Process' }
+    post:
+      tags: [Pro / Processes]
+      security: [ { cookieAuth: [] } ]
+      summary: Crée un process
+      description: ADMIN/OWNER. CSRF (Origin) requis + rate limit pro:processes:create.
+      parameters: [ { $ref: '#/components/parameters/BusinessId' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProcessCreate' }
+      responses:
+        '201':
+          description: Process créé
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  item: { $ref: '#/components/schemas/ProcessWithSteps' }
+
+  /api/pro/businesses/{businessId}/processes/{processId}:
+    get:
+      tags: [Pro / Processes]
+      security: [ { cookieAuth: [] } ]
+      summary: Détail process (avec étapes)
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+        - $ref: '#/components/parameters/ProcessId'
+      responses:
+        '200':
+          description: Process + étapes
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  item: { $ref: '#/components/schemas/ProcessWithSteps' }
+    patch:
+      tags: [Pro / Processes]
+      security: [ { cookieAuth: [] } ]
+      summary: Met à jour un process (nom, description, archive/unarchive)
+      description: ADMIN/OWNER. CSRF (Origin) requis + rate limit pro:processes:update.
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+        - $ref: '#/components/parameters/ProcessId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProcessUpdate' }
+      responses:
+        '200':
+          description: Process mis à jour
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  item: { $ref: '#/components/schemas/ProcessWithSteps' }
+    delete:
+      tags: [Pro / Processes]
+      security: [ { cookieAuth: [] } ]
+      summary: Supprime un process
+      description: ADMIN/OWNER. CSRF (Origin) requis + rate limit pro:processes:delete.
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+        - $ref: '#/components/parameters/ProcessId'
+      responses:
+        '204':
+          description: Process supprimé
+
+  /api/pro/businesses/{businessId}/processes/{processId}/steps:
+    post:
+      tags: [Pro / Processes]
+      security: [ { cookieAuth: [] } ]
+      summary: Ajoute une étape
+      description: ADMIN/OWNER. CSRF (Origin) requis + rate limit pro:processes:steps:create.
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+        - $ref: '#/components/parameters/ProcessId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProcessStepCreate' }
+      responses:
+        '201':
+          description: Étape créée
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  item: { $ref: '#/components/schemas/ProcessStep' }
+
+  /api/pro/businesses/{businessId}/processes/{processId}/steps/{stepId}:
+    patch:
+      tags: [Pro / Processes]
+      security: [ { cookieAuth: [] } ]
+      summary: Met à jour une étape (titre/description/position/isDone)
+      description: ADMIN/OWNER. CSRF (Origin) requis + rate limit pro:processes:steps:update.
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+        - $ref: '#/components/parameters/ProcessId'
+        - $ref: '#/components/parameters/ProcessStepId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProcessStepUpdate' }
+      responses:
+        '200':
+          description: Étape mise à jour
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  item: { $ref: '#/components/schemas/ProcessStep' }
+    delete:
+      tags: [Pro / Processes]
+      security: [ { cookieAuth: [] } ]
+      summary: Supprime une étape
+      description: ADMIN/OWNER. CSRF (Origin) requis + rate limit pro:processes:steps:delete.
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+        - $ref: '#/components/parameters/ProcessId'
+        - $ref: '#/components/parameters/ProcessStepId'
+      responses:
+        '204':
+          description: Étape supprimée
+
   /api/pro/businesses/{businessId}/interactions:
     get:
       tags: [Pro / Interactions]
@@ -1541,6 +1698,16 @@ components:
       in: path
       required: true
       schema: { type: string }
+    ProcessId:
+      name: processId
+      in: path
+      required: true
+      schema: { type: string }
+    ProcessStepId:
+      name: stepId
+      in: path
+      required: true
+      schema: { type: string }
     QuoteId:
       name: quoteId
       in: path
@@ -1846,6 +2013,70 @@ components:
         progress: { type: integer }
         dueDate: { type: string, format: date-time, nullable: true }
         createdAt: { type: string, format: date-time }
+    ProcessStatus:
+      type: string
+      enum: [ACTIVE, ARCHIVED]
+    Process:
+      type: object
+      properties:
+        id: { type: string }
+        businessId: { type: string }
+        name: { type: string }
+        description: { type: string, nullable: true }
+        status: { $ref: '#/components/schemas/ProcessStatus' }
+        stepsCount: { type: integer, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    ProcessWithSteps:
+      allOf:
+        - $ref: '#/components/schemas/Process'
+        - type: object
+          properties:
+            steps:
+              type: array
+              items: { $ref: '#/components/schemas/ProcessStep' }
+    ProcessCreate:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        description: { type: string, nullable: true }
+        steps:
+          type: array
+          items: { $ref: '#/components/schemas/ProcessStepCreate' }
+    ProcessUpdate:
+      type: object
+      properties:
+        name: { type: string }
+        description: { type: string, nullable: true }
+        status: { $ref: '#/components/schemas/ProcessStatus' }
+        archived: { type: boolean, nullable: true }
+    ProcessStep:
+      type: object
+      properties:
+        id: { type: string }
+        processId: { type: string }
+        title: { type: string }
+        description: { type: string, nullable: true }
+        position: { type: integer }
+        isDone: { type: boolean }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    ProcessStepCreate:
+      type: object
+      required: [title]
+      properties:
+        title: { type: string }
+        description: { type: string, nullable: true }
+        position: { type: integer, nullable: true }
+        isDone: { type: boolean, nullable: true }
+    ProcessStepUpdate:
+      type: object
+      properties:
+        title: { type: string }
+        description: { type: string, nullable: true }
+        position: { type: integer }
+        isDone: { type: boolean }
     Service:
       type: object
       properties:

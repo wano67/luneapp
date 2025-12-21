@@ -102,11 +102,28 @@ function getStudioBusinessSections(businessId: string): NavSection[] {
       title: 'Pilotage',
       items: [
         { href: `${base}`, label: 'Dashboard', icon: <span className="text-[16px]">•</span> },
+      ],
+    },
+    {
+      title: 'Commercial',
+      items: [
+        { href: `${base}/prospects`, label: 'Prospects', icon: <span className="text-[16px]">•</span> },
         { href: `${base}/clients`, label: 'Clients', icon: <span className="text-[16px]">•</span> },
-        { href: `${base}/prospects`, label: 'Pipeline', icon: <span className="text-[16px]">•</span> },
+      ],
+    },
+    {
+      title: 'Production',
+      items: [
         { href: `${base}/projects`, label: 'Projets', icon: <span className="text-[16px]">•</span> },
         { href: `${base}/tasks`, label: 'Tâches', icon: <span className="text-[16px]">•</span> },
+        { href: `${base}/process`, label: 'Process', icon: <span className="text-[16px]">•</span> },
+      ],
+    },
+    {
+      title: 'Catalogue',
+      items: [
         { href: `${base}/services`, label: 'Services', icon: <span className="text-[16px]">•</span> },
+        { href: `${base}/references`, label: 'Références', icon: <span className="text-[16px]">•</span> },
       ],
     },
     {
@@ -114,6 +131,9 @@ function getStudioBusinessSections(businessId: string): NavSection[] {
       items: [
         { href: `${base}/finances`, label: 'Finances', icon: <span className="text-[16px]">•</span> },
         { href: `${base}/finances/payments`, label: 'Paiements', icon: <span className="text-[16px]">•</span> },
+        { href: `${base}/finances/treasury`, label: 'Trésorerie', icon: <span className="text-[16px]">•</span> },
+        { href: `${base}/finances/vat`, label: 'TVA', icon: <span className="text-[16px]">•</span> },
+        { href: `${base}/finances/forecasting`, label: 'Prévisions', icon: <span className="text-[16px]">•</span> },
         {
           href: `${base}/projects`,
           label: 'Facturation (via projets)',
@@ -123,13 +143,10 @@ function getStudioBusinessSections(businessId: string): NavSection[] {
       ],
     },
     {
-      title: 'À venir',
+      title: 'Settings',
       items: [
-        { label: 'Process', icon: <span className="text-[16px]">•</span>, disabled: true, hint: 'Bientôt' },
-        { label: 'Références', icon: <span className="text-[16px]">•</span>, disabled: true, hint: 'Bientôt' },
-        { label: 'Paramètres', icon: <span className="text-[16px]">•</span>, disabled: true, hint: 'Bientôt' },
-        { label: 'Admin', icon: <span className="text-[16px]">•</span>, disabled: true, hint: 'Bientôt' },
-        { label: 'Trésorerie / Forecasting / TVA', icon: <span className="text-[16px]">•</span>, disabled: true, hint: 'Bientôt' },
+        { href: `${base}/settings/team`, label: 'Équipe', icon: <span className="text-[16px]">•</span> },
+        { href: `${base}/settings`, label: 'Paramètres', icon: <span className="text-[16px]">•</span> },
       ],
     },
   ];
