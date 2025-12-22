@@ -13,6 +13,9 @@ import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import { formatCurrency } from '@/app/app/pro/pro-data';
 import { useActiveBusiness } from '@/app/app/pro/ActiveBusinessProvider';
 import RoleBanner from '@/components/RoleBanner';
+import { PageHeader } from '@/app/app/components/PageHeader';
+import { ActionTile } from '@/app/app/components/ActionTile';
+import { Building2, UserPlus, Briefcase, Wallet2 } from 'lucide-react';
 
 type TaskStatus = 'TODO' | 'IN_PROGRESS' | 'DONE';
 type ProspectPipelineStatus = 'NEW' | 'IN_DISCUSSION' | 'OFFER_SENT' | 'FOLLOW_UP' | 'CLOSED';
@@ -150,6 +153,7 @@ export default function ProDashboard({ businessId }: { businessId: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [requestId, setRequestId] = useState<string | null>(null);
+  const activeCtx = useActiveBusiness({ optional: true });
 
   const active = useActiveBusiness({ optional: true });
   const role = active?.activeBusiness?.role ?? null;
@@ -239,37 +243,62 @@ export default function ProDashboard({ businessId }: { businessId: string }) {
   const monthlySeries = dashboard?.monthlySeries ?? [];
 
   return (
-    <div className="space-y-5">
+    <div className="mx-auto max-w-6xl space-y-5 px-4 py-4">
       <RoleBanner role={role} />
-      <Card className="p-5">
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div className="space-y-1">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-[var(--text-secondary)]">
-              Pro · Dashboard
-            </p>
-            <h1 className="text-xl font-semibold text-[var(--text-primary)]">Vue d’ensemble</h1>
-            <p className="text-sm text-[var(--text-secondary)]">
-              KPIs, tendances et alertes sur la période sélectionnée.
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <select
-              value={periodDays}
-              onChange={(e) => setPeriodDays(Number(e.target.value))}
-              className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm"
-            >
-              <option value={7}>7 jours</option>
-              <option value={30}>30 jours</option>
-              <option value={90}>90 jours</option>
-            </select>
-            {requestId ? (
-              <Badge variant="neutral" className="bg-[var(--surface-2)] text-[11px]">
-                Ref {requestId}
-              </Badge>
-            ) : null}
-          </div>
+      <PageHeader
+        backHref="/app/pro"
+        backLabel="Studio"
+        title={activeCtx?.activeBusiness?.name ?? 'Dashboard pro'}
+        subtitle="KPIs, tendances et actions rapides"
+        primaryAction={{ label: 'Ajouter un client', href: `/app/pro/${businessId}/clients` }}
+        secondaryAction={{ label: 'Nouvelle opération', href: `/app/pro/${businessId}/finances`, variant: 'outline' }}
+      />
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2">
+          <span className="text-xs text-[var(--text-secondary)]">Période</span>
+          <select
+            value={periodDays}
+            onChange={(e) => setPeriodDays(Number(e.target.value))}
+            className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-2 py-1 text-sm"
+          >
+            <option value={7}>7 jours</option>
+            <option value={30}>30 jours</option>
+            <option value={90}>90 jours</option>
+          </select>
         </div>
-      </Card>
+        {requestId ? (
+          <Badge variant="neutral" className="bg-[var(--surface-2)] text-[11px]">
+            Ref {requestId}
+          </Badge>
+        ) : null}
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <ActionTile
+          icon={<UserPlus size={18} />}
+          title="Nouveau client"
+          description="Ajoute un contact et démarre un projet"
+          href={`/app/pro/${businessId}/clients`}
+        />
+        <ActionTile
+          icon={<Briefcase size={18} />}
+          title="Nouveau projet"
+          description="Crée un devis ou une mission"
+          href={`/app/pro/${businessId}/projects`}
+        />
+        <ActionTile
+          icon={<Wallet2 size={18} />}
+          title="Enregistrer un paiement"
+          description="Paiements et finances"
+          href={`/app/pro/${businessId}/finances/payments`}
+        />
+        <ActionTile
+          icon={<Building2 size={18} />}
+          title="Pipeline prospects"
+          description="Suivre les leads en cours"
+          href={`/app/pro/${businessId}/prospects`}
+        />
+      </div>
 
       {loading ? (
         <Card className="p-5">
@@ -409,24 +438,6 @@ export default function ProDashboard({ businessId }: { businessId: string }) {
             </Card>
           </div>
 
-          <Card className="flex flex-wrap items-center gap-2 p-4">
-            <p className="text-sm font-semibold text-[var(--text-primary)]">Navigation rapide</p>
-            <Button size="sm" variant="outline" asChild>
-              <Link href={`/app/pro/${businessId}/projects`}>Projets</Link>
-            </Button>
-            <Button size="sm" variant="outline" asChild>
-              <Link href={`/app/pro/${businessId}/tasks`}>Tâches</Link>
-            </Button>
-            <Button size="sm" variant="outline" asChild>
-              <Link href={`/app/pro/${businessId}/services`}>Services</Link>
-            </Button>
-            <Button size="sm" variant="outline" asChild>
-              <Link href={`/app/pro/${businessId}/prospects`}>Pipeline</Link>
-            </Button>
-            <Button size="sm" variant="outline" asChild>
-              <Link href={`/app/pro/${businessId}/finances`}>Finances</Link>
-            </Button>
-          </Card>
         </>
       )}
     </div>
