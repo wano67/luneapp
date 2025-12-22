@@ -15,6 +15,7 @@ type InvoiceStatus = 'DRAFT' | 'SENT' | 'PAID' | 'CANCELLED';
 type InvoiceItem = {
   id: string;
   serviceId: string | null;
+  productId: string | null;
   label: string;
   quantity: number;
   unitPriceCents: string;
@@ -30,6 +31,7 @@ type InvoiceDetail = {
   clientId: string | null;
   quoteId: string | null;
   status: InvoiceStatus;
+  reservationStatus?: 'ACTIVE' | 'RELEASED' | 'CONSUMED' | null;
   depositPercent: number;
   currency: string;
   totalCents: string;
@@ -40,6 +42,8 @@ type InvoiceDetail = {
   paidAt: string | null;
   createdAt: string;
   updatedAt: string;
+  consumptionLedgerEntryId?: string | null;
+  cashSaleLedgerEntryId?: string | null;
   items: InvoiceItem[];
 };
 
@@ -203,10 +207,29 @@ export default function InvoiceDetailPage() {
                 <p className="text-sm font-semibold text-[var(--text-primary)]">
                   Statut: {STATUS_LABELS[invoice.status]}
                 </p>
+                <p className="text-[11px] text-[var(--text-secondary)]">
+                  Réservation stock: {invoice.reservationStatus ?? '—'}
+                </p>
                 <div className="flex flex-wrap gap-2 text-xs text-[var(--text-secondary)]">
                   <span>Projet: {invoice.projectId}</span>
                   <span>Client: {invoice.clientId ?? '—'}</span>
                   <span>Devis: {invoice.quoteId ?? '—'}</span>
+                  {invoice.consumptionLedgerEntryId ? (
+                    <Link
+                      href={`/api/pro/businesses/${businessId}/ledger/${invoice.consumptionLedgerEntryId}`}
+                      className="underline"
+                    >
+                      Écriture comptable
+                    </Link>
+                  ) : null}
+                  {invoice.cashSaleLedgerEntryId ? (
+                    <Link
+                      href={`/api/pro/businesses/${businessId}/ledger/${invoice.cashSaleLedgerEntryId}`}
+                      className="underline"
+                    >
+                      Écriture vente (caisse)
+                    </Link>
+                  ) : null}
                 </div>
               </div>
               <div className="flex flex-wrap gap-2">

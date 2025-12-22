@@ -40,6 +40,13 @@ function serialize(settings: {
   allowViewerExport: boolean;
   integrationStripeEnabled: boolean;
   integrationStripePublicKey: string | null;
+  accountInventoryCode: string;
+  accountCogsCode: string;
+  accountCashCode: string;
+  accountRevenueCode: string;
+  ledgerSalesAccountCode: string;
+  ledgerVatCollectedAccountCode: string;
+  ledgerCashAccountCode: string;
   createdAt: Date;
   updatedAt: Date;
 }) {
@@ -57,6 +64,13 @@ function serialize(settings: {
     allowViewerExport: settings.allowViewerExport,
     integrationStripeEnabled: settings.integrationStripeEnabled,
     integrationStripePublicKey: settings.integrationStripePublicKey,
+    accountInventoryCode: settings.accountInventoryCode,
+    accountCogsCode: settings.accountCogsCode,
+    accountCashCode: settings.accountCashCode,
+    accountRevenueCode: settings.accountRevenueCode,
+    ledgerSalesAccountCode: settings.ledgerSalesAccountCode,
+    ledgerVatCollectedAccountCode: settings.ledgerVatCollectedAccountCode,
+    ledgerCashAccountCode: settings.ledgerCashAccountCode,
     createdAt: settings.createdAt.toISOString(),
     updatedAt: settings.updatedAt.toISOString(),
   };
@@ -155,6 +169,59 @@ export async function PATCH(
     if (!quotePrefix) return withIdNoStore(badRequest('quotePrefix requis.'), requestId);
     if (quotePrefix.length > 50) return withIdNoStore(badRequest('quotePrefix trop long (50 max).'), requestId);
     data.quotePrefix = quotePrefix;
+  }
+
+  const accountInventoryCode = str((body as Record<string, unknown>).accountInventoryCode);
+  if (accountInventoryCode !== null) {
+    if (!accountInventoryCode) return withIdNoStore(badRequest('accountInventoryCode requis.'), requestId);
+    if (accountInventoryCode.length > 50) {
+      return withIdNoStore(badRequest('accountInventoryCode trop long (50 max).'), requestId);
+    }
+    data.accountInventoryCode = accountInventoryCode;
+  }
+  const accountCogsCode = str((body as Record<string, unknown>).accountCogsCode);
+  if (accountCogsCode !== null) {
+    if (!accountCogsCode) return withIdNoStore(badRequest('accountCogsCode requis.'), requestId);
+    if (accountCogsCode.length > 50) return withIdNoStore(badRequest('accountCogsCode trop long (50 max).'), requestId);
+    data.accountCogsCode = accountCogsCode;
+  }
+  const accountCashCode = str((body as Record<string, unknown>).accountCashCode);
+  if (accountCashCode !== null) {
+    if (!accountCashCode) return withIdNoStore(badRequest('accountCashCode requis.'), requestId);
+    if (accountCashCode.length > 50) return withIdNoStore(badRequest('accountCashCode trop long (50 max).'), requestId);
+    data.accountCashCode = accountCashCode;
+  }
+  const accountRevenueCode = str((body as Record<string, unknown>).accountRevenueCode);
+  if (accountRevenueCode !== null) {
+    if (!accountRevenueCode) return withIdNoStore(badRequest('accountRevenueCode requis.'), requestId);
+    if (accountRevenueCode.length > 50) return withIdNoStore(badRequest('accountRevenueCode trop long (50 max).'), requestId);
+    data.accountRevenueCode = accountRevenueCode;
+  }
+  const ledgerSalesAccountCode = str((body as Record<string, unknown>).ledgerSalesAccountCode);
+  if (ledgerSalesAccountCode !== null) {
+    if (!ledgerSalesAccountCode) return withIdNoStore(badRequest('ledgerSalesAccountCode requis.'), requestId);
+    if (ledgerSalesAccountCode.length > 50) {
+      return withIdNoStore(badRequest('ledgerSalesAccountCode trop long (50 max).'), requestId);
+    }
+    data.ledgerSalesAccountCode = ledgerSalesAccountCode;
+  }
+  const ledgerVatCollectedAccountCode = str((body as Record<string, unknown>).ledgerVatCollectedAccountCode);
+  if (ledgerVatCollectedAccountCode !== null) {
+    if (!ledgerVatCollectedAccountCode) {
+      return withIdNoStore(badRequest('ledgerVatCollectedAccountCode requis.'), requestId);
+    }
+    if (ledgerVatCollectedAccountCode.length > 50) {
+      return withIdNoStore(badRequest('ledgerVatCollectedAccountCode trop long (50 max).'), requestId);
+    }
+    data.ledgerVatCollectedAccountCode = ledgerVatCollectedAccountCode;
+  }
+  const ledgerCashAccountCode = str((body as Record<string, unknown>).ledgerCashAccountCode);
+  if (ledgerCashAccountCode !== null) {
+    if (!ledgerCashAccountCode) return withIdNoStore(badRequest('ledgerCashAccountCode requis.'), requestId);
+    if (ledgerCashAccountCode.length > 50) {
+      return withIdNoStore(badRequest('ledgerCashAccountCode trop long (50 max).'), requestId);
+    }
+    data.ledgerCashAccountCode = ledgerCashAccountCode;
   }
 
   const defaultDepositPercent = num((body as Record<string, unknown>).defaultDepositPercent);

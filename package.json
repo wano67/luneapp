@@ -28,6 +28,8 @@
     "smoke:processes": "pnpm tsx scripts/smoke-processes.ts",
     "smoke:team": "pnpm tsx scripts/smoke-team-employees.ts",
     "smoke:stock": "pnpm tsx scripts/smoke-stock.ts",
+    "smoke:invoice-reservation": "pnpm tsx scripts/smoke-invoice-reservation.ts",
+    "smoke:ledger": "pnpm tsx scripts/smoke-ledger.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {
@@ -36,6 +38,7 @@
     "bcryptjs": "^3.0.3",
     "dotenv": "^17.2.3",
     "jose": "^6.1.3",
+    "lucide-react": "^0.462.0",
     "next": "16.0.10",
     "pdf-lib": "^1.17.1",
     "pg": "^8.16.3",

@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import { Card } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { fetchJson } from '@/lib/apiClient';
+import { PageHeader } from '../../../../components/PageHeader';
 
 type VatResponse = {
   businessId: string;
@@ -59,10 +60,12 @@ export default function VatPage() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-semibold">TVA / Déclarations</h1>
-        <p className="text-muted-foreground">Synthèse TVA collectée/déductible basée sur vos écritures.</p>
-      </div>
+      <PageHeader
+        backHref={`/app/pro/${businessId}/finances`}
+        backLabel="Finances"
+        title="TVA / Déclarations"
+        subtitle="Synthèse TVA collectée/déductible basée sur vos écritures."
+      />
 
       {error && <div className="text-sm text-red-700 bg-red-50 border border-red-200 px-3 py-2 rounded">{error}</div>}
       {requestId && (
@@ -101,26 +104,28 @@ export default function VatPage() {
 
           <Card className="p-4">
             <h2 className="text-lg font-semibold mb-2">Par mois</h2>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Mois</TableHead>
-                  <TableHead>Collectée</TableHead>
-                  <TableHead>Déductible</TableHead>
-                  <TableHead>Balance</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {data.monthly.map((m) => (
-                  <TableRow key={m.month}>
-                    <TableCell>{m.month}</TableCell>
-                    <TableCell>{formatMoney(m.collectedCents)}</TableCell>
-                    <TableCell>{formatMoney(m.deductibleCents)}</TableCell>
-                    <TableCell>{formatMoney(m.balanceCents)}</TableCell>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Mois</TableHead>
+                    <TableHead>Collectée</TableHead>
+                    <TableHead>Déductible</TableHead>
+                    <TableHead>Balance</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {data.monthly.map((m) => (
+                    <TableRow key={m.month}>
+                      <TableCell>{m.month}</TableCell>
+                      <TableCell>{formatMoney(m.collectedCents)}</TableCell>
+                      <TableCell>{formatMoney(m.deductibleCents)}</TableCell>
+                      <TableCell>{formatMoney(m.balanceCents)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           </Card>
         </>
       )}

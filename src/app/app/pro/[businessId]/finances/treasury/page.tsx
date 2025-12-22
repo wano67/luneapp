@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import { Card } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { fetchJson } from '@/lib/apiClient';
+import { PageHeader } from '../../../../components/PageHeader';
 
 type TreasuryResponse = {
   businessId: string;
@@ -59,10 +60,12 @@ export default function TreasuryPage() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-semibold">Trésorerie</h1>
-        <p className="text-muted-foreground">Vue synthétique basée sur les écritures Finance.</p>
-      </div>
+      <PageHeader
+        backHref={`/app/pro/${businessId}/finances`}
+        backLabel="Finances"
+        title="Trésorerie"
+        subtitle="Vue synthétique basée sur les écritures Finance."
+      />
 
       {error && <div className="text-sm text-red-700 bg-red-50 border border-red-200 px-3 py-2 rounded">{error}</div>}
       {requestId && (
@@ -96,26 +99,28 @@ export default function TreasuryPage() {
 
           <Card className="p-4">
             <h2 className="text-lg font-semibold mb-2">Par mois</h2>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Mois</TableHead>
-                  <TableHead>Revenus</TableHead>
-                  <TableHead>Dépenses</TableHead>
-                  <TableHead>Net</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {data.monthly.map((m) => (
-                  <TableRow key={m.month}>
-                    <TableCell>{m.month}</TableCell>
-                    <TableCell>{formatMoney(m.incomeCents)}</TableCell>
-                    <TableCell>{formatMoney(m.expenseCents)}</TableCell>
-                    <TableCell>{formatMoney(m.netCents)}</TableCell>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Mois</TableHead>
+                    <TableHead>Revenus</TableHead>
+                    <TableHead>Dépenses</TableHead>
+                    <TableHead>Net</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {data.monthly.map((m) => (
+                    <TableRow key={m.month}>
+                      <TableCell>{m.month}</TableCell>
+                      <TableCell>{formatMoney(m.incomeCents)}</TableCell>
+                      <TableCell>{formatMoney(m.expenseCents)}</TableCell>
+                      <TableCell>{formatMoney(m.netCents)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           </Card>
 
           <Card className="p-4">
@@ -123,22 +128,24 @@ export default function TreasuryPage() {
             {data.byCategory.length === 0 ? (
               <p className="text-sm text-muted-foreground">Aucune catégorie disponible.</p>
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Catégorie</TableHead>
-                    <TableHead>Net</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {data.byCategory.map((c) => (
-                    <TableRow key={c.category}>
-                      <TableCell>{c.category}</TableCell>
-                      <TableCell>{formatMoney(c.netCents)}</TableCell>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Catégorie</TableHead>
+                      <TableHead>Net</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {data.byCategory.map((c) => (
+                      <TableRow key={c.category}>
+                        <TableCell>{c.category}</TableCell>
+                        <TableCell>{formatMoney(c.netCents)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
             )}
           </Card>
         </>

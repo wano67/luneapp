@@ -13,6 +13,7 @@ import {
   unauthorized,
   withRequestId,
 } from '@/server/http/apiUtils';
+import { upsertLedgerForMovement } from '@/server/services/ledger';
 
 function parseId(param: string | undefined) {
   if (!param || !/^\d+$/.test(param)) return null;
@@ -203,17 +204,41 @@ export async function POST(
         product.salePriceCents ??
         BigInt(0);
       const amount = amountPerUnit * BigInt(Math.abs(quantity));
-      await tx.finance.create({
-        data: {
+      await tx.finance.upsert({
+        where: { inventoryMovementId: created.id },
+        create: {
           businessId: businessIdBigInt,
           type: financeType,
           amountCents: amount,
           category: financeType === FinanceType.EXPENSE ? 'INVENTORY' : 'PRODUCT_SALE',
           date,
+          inventoryMovementId: created.id,
+          inventoryProductId: productIdBigInt,
           note: JSON.stringify({
-            source: 'inventory',
+            auto: true,
+            source: 'inventory_movement',
             productId: productIdBigInt.toString(),
+            productName: product.name,
             movementId: created.id.toString(),
+            movementType: type,
+            sku: product.sku,
+            quantity,
+            unitCostCents: amountPerUnit.toString(),
+          }),
+        },
+        update: {
+          type: financeType,
+          amountCents: amount,
+          category: financeType === FinanceType.EXPENSE ? 'INVENTORY' : 'PRODUCT_SALE',
+          date,
+          inventoryProductId: productIdBigInt,
+          note: JSON.stringify({
+            auto: true,
+            source: 'inventory_movement',
+            productId: productIdBigInt.toString(),
+            productName: product.name,
+            movementId: created.id.toString(),
+            movementType: type,
             sku: product.sku,
             quantity,
             unitCostCents: amountPerUnit.toString(),
@@ -221,6 +246,19 @@ export async function POST(
         },
       });
     }
+
+    await upsertLedgerForMovement(tx, {
+      movement: {
+        id: created.id,
+        businessId: businessIdBigInt,
+        type,
+        quantity,
+        unitCostCents,
+        date,
+      },
+      product: { name: product.name, sku: product.sku },
+      createdByUserId: BigInt(userId),
+    });
 
     return created;
   });

@@ -12,6 +12,7 @@ import { Modal } from '@/components/ui/modal';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import { useActiveBusiness } from '../../../ActiveBusinessProvider';
 import RoleBanner from '@/components/RoleBanner';
+import { PageHeader } from '../../../../components/PageHeader';
 
 type ProcessStatus = 'ACTIVE' | 'ARCHIVED';
 
@@ -362,23 +363,36 @@ export default function ProcessDetailPage() {
   return (
     <div className="space-y-5">
       <RoleBanner role={actorRole} />
+      <PageHeader
+        backHref={`/app/pro/${businessId}/process`}
+        backLabel="Process"
+        title={process?.name ?? `Process #${processId}`}
+        subtitle={process?.description ?? 'Suivi des étapes et de l’exécution'}
+        primaryAction={
+          isAdmin
+            ? {
+                label: 'Ajouter une étape',
+                onClick: () => openStepModal(),
+              }
+            : undefined
+        }
+        secondaryAction={
+          isAdmin
+            ? {
+                label: 'Modifier',
+                onClick: () => {
+                  if (!process) return;
+                  setEditOpen(true);
+                },
+                variant: 'outline',
+              }
+            : undefined
+        }
+      />
+
       <Card className="space-y-3 p-5">
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div className="space-y-1">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-[var(--text-secondary)]">
-              Process
-            </p>
-            <h1 className="text-xl font-semibold text-[var(--text-primary)]">
-              {process?.name ?? `Process #${processId}`}
-            </h1>
-            {process?.description ? (
-              <p className="text-sm text-[var(--text-secondary)]">{process.description}</p>
-            ) : null}
-            {requestId ? (
-              <p className="text-[10px] text-[var(--text-secondary)]">Request ID: {requestId}</p>
-            ) : null}
-          </div>
-          <div className="flex flex-wrap gap-2">
+        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+          <div className="flex flex-wrap items-center gap-2">
             <Badge
               variant="neutral"
               className={
@@ -389,19 +403,11 @@ export default function ProcessDetailPage() {
             >
               {process ? STATUS_LABELS[process.status] : '—'}
             </Badge>
-            <Button variant="outline" onClick={() => openStepModal()} disabled={!isAdmin}>
-              Ajouter une étape
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => {
-                if (!process) return;
-                setEditOpen(true);
-              }}
-              disabled={!isAdmin}
-            >
-              Modifier
-            </Button>
+            <p className="text-xs text-[var(--text-secondary)]">
+              Créé le {formatDate(process?.createdAt ?? null)} · Dernière mise à jour {formatDate(process?.updatedAt ?? null)}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
             <Button variant="outline" onClick={handleArchiveToggle} disabled={!isAdmin}>
               {process?.status === 'ARCHIVED' ? 'Désarchiver' : 'Archiver'}
             </Button>
@@ -410,6 +416,9 @@ export default function ProcessDetailPage() {
             </Button>
           </div>
         </div>
+        {requestId ? (
+          <p className="text-[10px] text-[var(--text-secondary)]">Request ID: {requestId}</p>
+        ) : null}
         {info ? <p className="text-xs text-emerald-500">{info}</p> : null}
         {error ? <p className="text-xs text-rose-500">{error}</p> : null}
         {actionError ? <p className="text-xs text-rose-500">{actionError}</p> : null}
@@ -426,73 +435,75 @@ export default function ProcessDetailPage() {
         {loading ? (
           <p className="text-sm text-[var(--text-secondary)]">Chargement…</p>
         ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Titre</TableHead>
-                <TableHead>Position</TableHead>
-                <TableHead>Statut</TableHead>
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {orderedSteps.length === 0 ? (
-                <TableEmpty>Aucune étape.</TableEmpty>
-              ) : (
-                orderedSteps.map((step) => (
-                  <TableRow key={step.id}>
-                    <TableCell>
-                      <div className="space-y-1">
-                        <p className="font-semibold text-[var(--text-primary)]">{step.title}</p>
-                        {step.description ? (
-                          <p className="text-[12px] text-[var(--text-secondary)] line-clamp-2">
-                            {step.description}
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Titre</TableHead>
+                  <TableHead>Position</TableHead>
+                  <TableHead>Statut</TableHead>
+                  <TableHead>Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {orderedSteps.length === 0 ? (
+                  <TableEmpty>Aucune étape.</TableEmpty>
+                ) : (
+                  orderedSteps.map((step) => (
+                    <TableRow key={step.id}>
+                      <TableCell>
+                        <div className="space-y-1">
+                          <p className="font-semibold text-[var(--text-primary)]">{step.title}</p>
+                          {step.description ? (
+                            <p className="text-[12px] text-[var(--text-secondary)] line-clamp-2">
+                              {step.description}
+                            </p>
+                          ) : null}
+                          <p className="text-[11px] text-[var(--text-secondary)]">
+                            Créé le {formatDate(step.createdAt)}
                           </p>
-                        ) : null}
-                        <p className="text-[11px] text-[var(--text-secondary)]">
-                          Créé le {formatDate(step.createdAt)}
-                        </p>
-                      </div>
-                    </TableCell>
-                    <TableCell>{step.position}</TableCell>
-                    <TableCell>
-                      <Badge
-                        variant="neutral"
-                        className={
-                          step.isDone ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
-                        }
-                      >
-                        {step.isDone ? 'Fait' : 'À faire'}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-wrap gap-2">
-                        <Button size="sm" variant="outline" onClick={() => openStepModal(step)} disabled={!isAdmin}>
-                          Modifier
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => toggleDone(step)}
-                          disabled={!isAdmin}
+                        </div>
+                      </TableCell>
+                      <TableCell>{step.position}</TableCell>
+                      <TableCell>
+                        <Badge
+                          variant="neutral"
+                          className={
+                            step.isDone ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
+                          }
                         >
-                          {step.isDone ? 'Repasser en cours' : 'Marquer fait'}
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="danger"
-                          onClick={() => deleteStep(step)}
-                          disabled={!isAdmin}
-                        >
-                          Supprimer
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+                          {step.isDone ? 'Fait' : 'À faire'}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-wrap gap-2">
+                          <Button size="sm" variant="outline" onClick={() => openStepModal(step)} disabled={!isAdmin}>
+                            Modifier
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => toggleDone(step)}
+                            disabled={!isAdmin}
+                          >
+                            {step.isDone ? 'Repasser en cours' : 'Marquer fait'}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="danger"
+                            onClick={() => deleteStep(step)}
+                            disabled={!isAdmin}
+                          >
+                            Supprimer
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
         )}
       </Card>
 

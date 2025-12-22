@@ -20,6 +20,7 @@ import {
 } from '../../../pro-data';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import { KpiCard } from '@/components/ui/kpi-card';
+import { PageHeader } from '../../../../components/PageHeader';
 
 type SortKey = 'date' | 'amount' | 'status';
 
@@ -304,17 +305,14 @@ export default function PaymentsPage() {
 
   return (
     <div className="space-y-5">
-      <Card className="p-5 space-y-1">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-[var(--text-secondary)]">
-          PRO · Finances · Payments
-        </p>
-        <h1 className="text-xl font-semibold text-[var(--text-primary)]">Paiements</h1>
-        <p className="text-sm text-[var(--text-secondary)]">
-          Suis les encaissements et les retards pour Business #{businessId}.
-        </p>
-        {error ? <p className="text-xs text-rose-500">{error}</p> : null}
-        {requestId ? <p className="text-[10px] text-[var(--text-secondary)]">Req: {requestId}</p> : null}
-      </Card>
+      <PageHeader
+        backHref={`/app/pro/${businessId}/finances`}
+        backLabel="Finances"
+        title="Paiements"
+        subtitle={`Suis les encaissements et les retards pour Business #${businessId}.`}
+      />
+      {error ? <p className="text-xs text-rose-500">{error}</p> : null}
+      {requestId ? <p className="text-[10px] text-[var(--text-secondary)]">Req: {requestId}</p> : null}
 
       <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-5">
         {kpis.map((kpi) => (
@@ -389,58 +387,60 @@ export default function PaymentsPage() {
           </Select>
         </div>
 
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Client</TableHead>
-              <TableHead>Projet</TableHead>
-              <TableHead>Date</TableHead>
-              <TableHead>Montant</TableHead>
-              <TableHead>Méthode</TableHead>
-              <TableHead>Statut</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {loading ? (
-              <TableEmpty>Chargement des paiements…</TableEmpty>
-            ) : pageItems.length === 0 ? (
-              <TableEmpty>Aucun paiement ne correspond au filtre.</TableEmpty>
-            ) : (
-              pageItems.map((payment) => (
-                <TableRow
-                  key={payment.id}
-                  className={payment.id === displaySelectedId ? 'bg-[var(--surface-2)]' : ''}
-                  onClick={() => setSelectedId(payment.id)}
-                >
-                  <TableCell className="font-medium text-[var(--text-primary)]">
-                    {payment.clientName}
-                    <p className="text-[10px] text-[var(--text-secondary)]">
-                      {payment.invoiceId ?? 'Sans facture'}
-                    </p>
-                  </TableCell>
-                  <TableCell>{payment.project ?? '—'}</TableCell>
-                  <TableCell>{formatDate(payment.receivedAt || payment.expectedAt)}</TableCell>
-                  <TableCell>{formatCurrency(payment.amount, payment.currency)}</TableCell>
-                  <TableCell>{METHOD_LABELS[payment.method]}</TableCell>
-                  <TableCell>
-                    <Badge
-                      variant="neutral"
-                      className={
-                        payment.status === 'LATE'
-                          ? 'bg-rose-100 text-rose-700'
-                          : payment.status === 'PENDING'
-                            ? 'bg-amber-100 text-amber-700'
-                            : 'bg-emerald-100 text-emerald-700'
-                      }
-                    >
-                      {STATUS_LABELS[payment.status]}
-                    </Badge>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Client</TableHead>
+                <TableHead>Projet</TableHead>
+                <TableHead>Date</TableHead>
+                <TableHead>Montant</TableHead>
+                <TableHead>Méthode</TableHead>
+                <TableHead>Statut</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {loading ? (
+                <TableEmpty>Chargement des paiements…</TableEmpty>
+              ) : pageItems.length === 0 ? (
+                <TableEmpty>Aucun paiement ne correspond au filtre.</TableEmpty>
+              ) : (
+                pageItems.map((payment) => (
+                  <TableRow
+                    key={payment.id}
+                    className={payment.id === displaySelectedId ? 'bg-[var(--surface-2)]' : ''}
+                    onClick={() => setSelectedId(payment.id)}
+                  >
+                    <TableCell className="font-medium text-[var(--text-primary)]">
+                      {payment.clientName}
+                      <p className="text-[10px] text-[var(--text-secondary)]">
+                        {payment.invoiceId ?? 'Sans facture'}
+                      </p>
+                    </TableCell>
+                    <TableCell>{payment.project ?? '—'}</TableCell>
+                    <TableCell>{formatDate(payment.receivedAt || payment.expectedAt)}</TableCell>
+                    <TableCell>{formatCurrency(payment.amount, payment.currency)}</TableCell>
+                    <TableCell>{METHOD_LABELS[payment.method]}</TableCell>
+                    <TableCell>
+                      <Badge
+                        variant="neutral"
+                        className={
+                          payment.status === 'LATE'
+                            ? 'bg-rose-100 text-rose-700'
+                            : payment.status === 'PENDING'
+                              ? 'bg-amber-100 text-amber-700'
+                              : 'bg-emerald-100 text-emerald-700'
+                        }
+                      >
+                        {STATUS_LABELS[payment.status]}
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </div>
 
         <div className="flex items-center justify-between text-xs text-[var(--text-secondary)]">
           <div className="flex items-center gap-2">

@@ -49,6 +49,18 @@ enum InventoryMovementType {
   ADJUST
 }
 
+enum InventoryReservationStatus {
+  ACTIVE
+  RELEASED
+  CONSUMED
+}
+
+enum LedgerSourceType {
+  INVENTORY_MOVEMENT
+  INVOICE_STOCK_CONSUMPTION
+  INVOICE_CASH_SALE
+}
+
 enum InventoryMovementSource {
   MANUAL
   PURCHASE
@@ -127,6 +139,7 @@ model User {
   personalCategories   PersonalCategory[]
   interactionsCreated  Interaction[] @relation("InteractionCreatedBy")
   inventoryMovements   InventoryMovement[]
+  ledgerEntriesCreated LedgerEntry[]
 }
 
 /**
@@ -155,6 +168,8 @@ model Business {
   settings    BusinessSettings?
   products    Product[]
   inventoryMovements InventoryMovement[]
+  inventoryReservations InventoryReservation[]
+  ledgerEntries        LedgerEntry[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -460,6 +475,8 @@ model Finance {
   businessId BigInt
   projectId  BigInt?
   categoryReferenceId BigInt?
+  inventoryMovementId BigInt? @unique
+  inventoryProductId  BigInt?
   type       FinanceType
   amountCents BigInt
   category   String
@@ -469,6 +486,8 @@ model Finance {
   business Business @relation(fields: [businessId], references: [id])
   project  Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
   categoryReference BusinessReference? @relation("FinanceCategoryReference", fields: [categoryReferenceId], references: [id], onDelete: SetNull)
+  inventoryMovement  InventoryMovement? @relation("InventoryMovementFinance", fields: [inventoryMovementId], references: [id], onDelete: SetNull)
+  inventoryProduct   Product?           @relation("ProductFinance", fields: [inventoryProductId], references: [id], onDelete: SetNull)
   tags     FinanceTag[]
 
   createdAt DateTime @default(now())
@@ -477,6 +496,7 @@ model Finance {
   @@index([businessId, date])
   @@index([businessId, type])
   @@index([businessId, categoryReferenceId])
+  @@index([businessId, inventoryProductId])
 }
 
 /**
@@ -523,6 +543,9 @@ model Product {
   purchasePriceCents BigInt?
   isArchived         Boolean      @default(false)
   movements          InventoryMovement[]
+  inventoryFinances  Finance[]    @relation("ProductFinance")
+  reservationItems   InventoryReservationItem[]
+  invoiceItems       InvoiceItem[]
   createdAt          DateTime     @default(now())
   updatedAt          DateTime     @updatedAt
 
@@ -541,6 +564,7 @@ model InventoryMovement {
   reason          String?
   date            DateTime
   createdByUserId BigInt?
+  financeEntry    Finance?                @relation("InventoryMovementFinance")
 
   business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
   product  Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
@@ -551,6 +575,37 @@ model InventoryMovement {
 
   @@index([businessId, productId])
   @@index([businessId, date])
+}
+
+model InventoryReservation {
+  id         BigInt                    @id @default(autoincrement())
+  businessId BigInt
+  invoiceId  BigInt      @unique
+  status     InventoryReservationStatus @default(ACTIVE)
+  items      InventoryReservationItem[]
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([businessId, status])
+}
+
+model InventoryReservationItem {
+  id             BigInt @id @default(autoincrement())
+  reservationId  BigInt
+  productId      BigInt
+  quantity       Int
+  unitPriceCents BigInt?
+  createdAt      DateTime @default(now())
+
+  reservation InventoryReservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  product     Product             @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([reservationId])
+  @@index([productId])
 }
 
 model ProjectTag {
@@ -696,6 +751,43 @@ model FinanceTag {
   @@index([referenceId])
 }
 
+model LedgerEntry {
+  id             BigInt          @id @default(autoincrement())
+  businessId     BigInt
+  date           DateTime
+  memo           String?
+  sourceType     LedgerSourceType
+  sourceId       BigInt?
+  createdByUserId BigInt?
+  lines          LedgerLine[]
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  createdBy User?   @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([businessId, date])
+  @@index([sourceType, sourceId])
+  @@unique([sourceType, sourceId])
+}
+
+model LedgerLine {
+  id          BigInt  @id @default(autoincrement())
+  entryId     BigInt
+  accountCode String
+  accountName String?
+  debitCents  BigInt?
+  creditCents BigInt?
+  metadata    Json?
+
+  entry LedgerEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([entryId])
+}
+
 model BusinessSettings {
   id                     BigInt   @id @default(autoincrement())
   businessId             BigInt   @unique
@@ -712,6 +804,13 @@ model BusinessSettings {
   allowViewerExport      Boolean  @default(false)
   integrationStripeEnabled    Boolean  @default(false)
   integrationStripePublicKey  String?
+  accountInventoryCode   String   @default("3700")
+  accountCogsCode        String   @default("6000")
+  accountCashCode        String   @default("5300")
+  accountRevenueCode     String   @default("7000")
+  ledgerSalesAccountCode       String   @default("706")
+  ledgerVatCollectedAccountCode String   @default("44571")
+  ledgerCashAccountCode        String   @default("512")
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
 
@@ -789,6 +888,7 @@ model Invoice {
   quote    Quote?   @relation("QuoteInvoice", fields: [quoteId], references: [id], onDelete: SetNull)
   createdBy User    @relation("InvoiceCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
   items    InvoiceItem[]
+  reservation InventoryReservation?
 
   @@unique([businessId, number])
 }
@@ -797,6 +897,7 @@ model InvoiceItem {
   id             BigInt   @id @default(autoincrement())
   invoiceId      BigInt
   serviceId      BigInt?
+  productId      BigInt?
   label          String
   quantity       Int
   unitPriceCents BigInt
@@ -806,6 +907,9 @@ model InvoiceItem {
 
   invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   service Service? @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  product Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([productId])
 }
 
 /**

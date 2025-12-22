@@ -15,6 +15,10 @@ import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import { formatCurrency } from '../../pro-data';
 import { useActiveBusiness } from '../../ActiveBusinessProvider';
 import { ReferencePicker } from '../references/ReferencePicker';
+import { PageHeader } from '../../../components/PageHeader';
+import { Plus } from 'lucide-react';
+import { useRowSelection } from '../../../components/selection/useRowSelection';
+import { BulkActionBar } from '../../../components/selection/BulkActionBar';
 
 type FinanceType = 'INCOME' | 'EXPENSE';
 
@@ -59,6 +63,7 @@ export default function FinancesPage() {
   const activeCtx = useActiveBusiness({ optional: true });
   const actorRole = activeCtx?.activeBusiness?.role ?? null;
   const isAdmin = actorRole === 'OWNER' || actorRole === 'ADMIN';
+  const readOnlyMessage = 'Action réservée aux admins/owners.';
 
   const [items, setItems] = useState<Finance[]>([]);
   const [loading, setLoading] = useState(true);
@@ -95,6 +100,9 @@ export default function FinancesPage() {
 
   const [deleteModal, setDeleteModal] = useState<Finance | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [bulkError, setBulkError] = useState<string | null>(null);
+  const [bulkLoading, setBulkLoading] = useState(false);
+  const { selectedArray, selectedCount, toggle, toggleAll, clear, isSelected } = useRowSelection();
 
   const controllerRef = useRef<AbortController | null>(null);
 
@@ -322,22 +330,60 @@ export default function FinancesPage() {
     await loadFinances();
   }
 
+  async function handleBulkDelete(ids: string[]) {
+    if (!ids.length) return;
+    if (!isAdmin) {
+      setInfo(readOnlyMessage);
+      return;
+    }
+    const ok = window.confirm(ids.length === 1 ? 'Supprimer cette opération ?' : `Supprimer ${ids.length} opérations ?`);
+    if (!ok) return;
+    setBulkLoading(true);
+    setBulkError(null);
+    setInfo(null);
+    let failed = 0;
+    for (const id of ids) {
+      const res = await fetchJson<null>(`/api/pro/businesses/${businessId}/finances/${id}`, { method: 'DELETE' });
+      if (!res.ok) {
+        failed += 1;
+        setBulkError((prev) => prev ?? `Suppression partielle. Ref: ${res.requestId ?? 'N/A'}`);
+      }
+    }
+    setBulkLoading(false);
+    clear();
+    await loadFinances();
+    if (failed) {
+      setBulkError((prev) => prev ?? 'Certaines suppressions ont échoué.');
+    } else {
+      setInfo('Opérations supprimées.');
+    }
+  }
+
   return (
     <div className="space-y-4">
-      <Card className="space-y-2 p-5">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-[var(--text-secondary)]">
-          Finances
-        </p>
-        <h1 className="text-xl font-semibold text-[var(--text-primary)]">
-          Finances de l’entreprise
-        </h1>
-        <p className="text-sm text-[var(--text-secondary)]">
-          Vue unique pour suivre revenus, dépenses et trésorerie avant export.
-        </p>
-        {requestId ? (
-          <p className="text-[10px] text-[var(--text-secondary)]">Request ID: {requestId}</p>
-        ) : null}
-      </Card>
+      <PageHeader
+        backHref={`/app/pro/${businessId}`}
+        backLabel="Dashboard"
+        title="Finances"
+        subtitle="Suivi et création des écritures manuelles."
+        primaryAction={
+          isAdmin
+            ? {
+                label: 'Nouvelle écriture',
+                onClick: () => {
+                  setInfo(null);
+                  if (!isAdmin) {
+                    setInfo(readOnlyMessage);
+                    return;
+                  }
+                  openCreate();
+                },
+                icon: <Plus size={14} />,
+              }
+            : undefined
+        }
+      />
+      {requestId ? <p className="text-[10px] text-[var(--text-secondary)]">Request ID: {requestId}</p> : null}
 
       <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
         <Card className="space-y-2 border-dashed border-[var(--border)] bg-transparent p-4">
@@ -435,120 +481,152 @@ export default function FinancesPage() {
             }}
           >
             <option value="ALL">Tous</option>
-              <option value="INCOME">Revenu</option>
-              <option value="EXPENSE">Dépense</option>
-            </Select>
-            <Input
-              label="Du"
+            <option value="INCOME">Revenu</option>
+            <option value="EXPENSE">Dépense</option>
+          </Select>
+          <Input
+            label="Du"
             type="date"
             value={fromDate}
             onChange={(e: ChangeEvent<HTMLInputElement>) => setFromDate(e.target.value)}
           />
-            <Input
-              label="Au"
-              type="date"
-              value={toDate}
-              onChange={(e: ChangeEvent<HTMLInputElement>) => setToDate(e.target.value)}
-            />
-            <Select
-              label="Catégorie ref"
-              value={categoryFilter}
-              onChange={(e) => setCategoryFilter(e.target.value)}
-            >
-              <option value="">Toutes</option>
-              {categoryOptions.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </Select>
-            <Select label="Tag ref" value={tagFilter} onChange={(e) => setTagFilter(e.target.value)}>
-              <option value="">Tous</option>
-              {tagOptions.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                </option>
-              ))}
-            </Select>
-          </div>
+          <Input
+            label="Au"
+            type="date"
+            value={toDate}
+            onChange={(e: ChangeEvent<HTMLInputElement>) => setToDate(e.target.value)}
+          />
+          <Select label="Catégorie ref" value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
+            <option value="">Toutes</option>
+            {categoryOptions.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </Select>
+          <Select label="Tag ref" value={tagFilter} onChange={(e) => setTagFilter(e.target.value)}>
+            <option value="">Tous</option>
+            {tagOptions.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
+            ))}
+          </Select>
+        </div>
 
         {loading ? (
           <p className="text-sm text-[var(--text-secondary)]">Chargement…</p>
         ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Catégorie</TableHead>
-                <TableHead>Montant</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Date</TableHead>
-                <TableHead>Projet</TableHead>
-                <TableHead>Références</TableHead>
-                {isAdmin ? <TableHead>Actions</TableHead> : null}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filtered.length === 0 ? (
-                <TableEmpty>Aucune opération.</TableEmpty>
-              ) : (
-                filtered.map((finance) => (
-                  <TableRow
-                    key={finance.id}
-                    className={finance.id === displaySelectedId ? 'bg-[var(--surface-2)]' : ''}
-                    onClick={() => setSelectedId(finance.id)}
-                  >
-                    <TableCell className="font-semibold text-[var(--text-primary)]">
-                      {finance.category}
-                      <p className="text-[10px] text-[var(--text-secondary)]">{finance.note ?? '—'}</p>
-                    </TableCell>
-                    <TableCell className={finance.type === 'INCOME' ? 'text-emerald-600' : 'text-rose-600'}>
-                      {formatCurrency(finance.amount)}
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant="neutral"
-                        className={
-                          finance.type === 'INCOME'
-                            ? 'bg-emerald-100 text-emerald-700'
-                            : 'bg-rose-100 text-rose-700'
-                        }
-                      >
-                        {finance.type === 'INCOME' ? 'Revenu' : 'Dépense'}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>{formatDate(finance.date)}</TableCell>
-                    <TableCell>{finance.projectName ?? '—'}</TableCell>
-                    <TableCell>
-                      <div className="flex flex-wrap gap-1">
-                        {finance.categoryReferenceName ? (
-                          <Badge variant="neutral" className="bg-indigo-50 text-indigo-700">
-                            {finance.categoryReferenceName}
-                          </Badge>
-                        ) : null}
-                        {finance.tagReferences?.map((tag) => (
-                          <Badge key={tag.id} variant="neutral" className="bg-emerald-50 text-emerald-700">
-                            {tag.name}
-                          </Badge>
-                        ))}
-                      </div>
-                    </TableCell>
-                    {isAdmin ? (
+          <div className="space-y-2">
+            {bulkError ? <p className="text-xs font-semibold text-rose-500">{bulkError}</p> : null}
+            <BulkActionBar
+              count={selectedCount}
+              onClear={clear}
+              actions={[
+                {
+                  label: bulkLoading ? 'Suppression…' : 'Supprimer',
+                  onClick: () => handleBulkDelete(selectedArray),
+                  variant: 'danger',
+                  disabled: !isAdmin || bulkLoading,
+                },
+              ]}
+            />
+            <div className="overflow-x-auto">
+              <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-10">
+                    <input
+                      type="checkbox"
+                      aria-label="Tout sélectionner"
+                      className="h-4 w-4 accent-[var(--accent)]"
+                      checked={filtered.length > 0 && filtered.every((f) => isSelected(f.id))}
+                      onChange={() => toggleAll(filtered.map((f) => f.id))}
+                    />
+                  </TableHead>
+                  <TableHead>Catégorie</TableHead>
+                  <TableHead>Montant</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Projet</TableHead>
+                  <TableHead>Références</TableHead>
+                  {isAdmin ? <TableHead>Actions</TableHead> : null}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filtered.length === 0 ? (
+                  <TableEmpty>Aucune opération.</TableEmpty>
+                ) : (
+                  filtered.map((finance) => (
+                    <TableRow
+                      key={finance.id}
+                      className={finance.id === displaySelectedId ? 'bg-[var(--surface-2)]' : ''}
+                      onClick={() => setSelectedId(finance.id)}
+                    >
+                      <TableCell onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 accent-[var(--accent)]"
+                          checked={isSelected(finance.id)}
+                          onChange={() => toggle(finance.id)}
+                          aria-label="Sélectionner"
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                      </TableCell>
+                      <TableCell className="font-semibold text-[var(--text-primary)]">
+                        {finance.category}
+                        <p className="text-[10px] text-[var(--text-secondary)]">{finance.note ?? '—'}</p>
+                      </TableCell>
+                      <TableCell className={finance.type === 'INCOME' ? 'text-emerald-600' : 'text-rose-600'}>
+                        {formatCurrency(finance.amount)}
+                      </TableCell>
                       <TableCell>
-                        <div className="flex flex-wrap gap-2">
-                          <Button size="sm" variant="outline" onClick={() => openEdit(finance)}>
-                            Modifier
-                          </Button>
-                          <Button size="sm" variant="outline" onClick={() => setDeleteModal(finance)}>
-                            Supprimer
-                          </Button>
+                        <Badge
+                          variant="neutral"
+                          className={
+                            finance.type === 'INCOME'
+                              ? 'bg-emerald-100 text-emerald-700'
+                              : 'bg-rose-100 text-rose-700'
+                          }
+                        >
+                          {finance.type === 'INCOME' ? 'Revenu' : 'Dépense'}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>{formatDate(finance.date)}</TableCell>
+                      <TableCell>{finance.projectName ?? '—'}</TableCell>
+                      <TableCell>
+                        <div className="flex flex-wrap gap-1">
+                          {finance.categoryReferenceName ? (
+                            <Badge variant="neutral" className="bg-indigo-50 text-indigo-700">
+                              {finance.categoryReferenceName}
+                            </Badge>
+                          ) : null}
+                          {finance.tagReferences?.map((tag) => (
+                            <Badge key={tag.id} variant="neutral" className="bg-emerald-50 text-emerald-700">
+                              {tag.name}
+                            </Badge>
+                          ))}
                         </div>
                       </TableCell>
-                    ) : null}
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+                      {isAdmin ? (
+                        <TableCell>
+                          <div className="flex flex-wrap gap-2">
+                            <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); openEdit(finance); }}>
+                              Modifier
+                            </Button>
+                            <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); setDeleteModal(finance); }}>
+                              Supprimer
+                            </Button>
+                          </div>
+                        </TableCell>
+                      ) : null}
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+            </div>
+          </div>
         )}
       </Card>
 
