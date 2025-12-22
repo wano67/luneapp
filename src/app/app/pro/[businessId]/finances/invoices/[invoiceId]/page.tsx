@@ -15,6 +15,7 @@ type InvoiceStatus = 'DRAFT' | 'SENT' | 'PAID' | 'CANCELLED';
 type InvoiceItem = {
   id: string;
   serviceId: string | null;
+  productId: string | null;
   label: string;
   quantity: number;
   unitPriceCents: string;
@@ -30,6 +31,7 @@ type InvoiceDetail = {
   clientId: string | null;
   quoteId: string | null;
   status: InvoiceStatus;
+  reservationStatus?: 'ACTIVE' | 'RELEASED' | 'CONSUMED' | null;
   depositPercent: number;
   currency: string;
   totalCents: string;
@@ -202,6 +204,9 @@ export default function InvoiceDetailPage() {
               <div className="space-y-1">
                 <p className="text-sm font-semibold text-[var(--text-primary)]">
                   Statut: {STATUS_LABELS[invoice.status]}
+                </p>
+                <p className="text-[11px] text-[var(--text-secondary)]">
+                  Réservation stock: {invoice.reservationStatus ?? '—'}
                 </p>
                 <div className="flex flex-wrap gap-2 text-xs text-[var(--text-secondary)]">
                   <span>Projet: {invoice.projectId}</span>

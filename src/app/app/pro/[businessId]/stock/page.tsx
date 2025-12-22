@@ -29,6 +29,9 @@ type SummaryRow = {
   name: string;
   unit: string;
   stock: number;
+  onHand?: number;
+  reserved?: number;
+  available?: number;
   lastMovementAt: string | null;
 };
 
@@ -178,7 +181,8 @@ export default function StockListPage() {
                       {p.name} <span className="text-[var(--text-secondary)]">({p.sku})</span>
                     </p>
                     <p className="text-[11px] text-[var(--text-secondary)]">
-                      Stock: {sum?.stock ?? 0} {p.unit.toLowerCase()}
+                      Stock phys.: {sum?.onHand ?? sum?.stock ?? 0} · Réservé: {sum?.reserved ?? 0} · Dispo:{' '}
+                      {sum?.available ?? (sum?.onHand ?? sum?.stock ?? 0) - (sum?.reserved ?? 0)} {p.unit.toLowerCase()}
                       {sum?.lastMovementAt ? ` · Dernier: ${new Date(sum.lastMovementAt).toLocaleDateString('fr-FR')}` : ''}
                     </p>
                   </div>

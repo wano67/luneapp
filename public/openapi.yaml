@@ -954,7 +954,7 @@ paths:
     patch:
       tags: [Pro / Billing]
       security: [ { cookieAuth: [] } ]
-      summary: Met à jour le statut de facture
+      summary: Met à jour le statut de facture (SENT réserve le stock, PAID le consomme) et peut lier des produits aux lignes
       parameters:
         - $ref: '#/components/parameters/BusinessId'
         - $ref: '#/components/parameters/InvoiceId'
@@ -968,6 +968,14 @@ paths:
                 status:
                   type: string
                   enum: [DRAFT, SENT, PAID, CANCELLED]
+                items:
+                  type: array
+                  description: Mise à jour des productId des lignes
+                  items:
+                    type: object
+                    properties:
+                      id: { type: string }
+                      productId: { type: string, nullable: true }
       responses:
         '200': { $ref: '#/components/responses/Ok' }
   /api/pro/businesses/{businessId}/invoices/{invoiceId}/pdf:
@@ -2449,6 +2457,11 @@ components:
         dueAt: { type: string, format: date-time, nullable: true }
         paidAt: { type: string, format: date-time, nullable: true }
         createdAt: { type: string, format: date-time }
+        reservationStatus:
+          type: string
+          enum: [ACTIVE, RELEASED, CONSUMED]
+          nullable: true
+          description: 'SENT réserve le stock, PAID le consomme'
     Finance:
       type: object
       properties:
@@ -2565,7 +2578,10 @@ components:
         sku: { type: string }
         name: { type: string }
         unit: { $ref: '#/components/schemas/ProductUnit' }
-        stock: { type: number }
+        stock: { type: number, description: 'Stock physique (onHand)' }
+        onHand: { type: number }
+        reserved: { type: number }
+        available: { type: number }
         salePriceCents: { type: string, nullable: true }
         purchasePriceCents: { type: string, nullable: true }
         lastMovementAt: { type: string, format: date-time, nullable: true }

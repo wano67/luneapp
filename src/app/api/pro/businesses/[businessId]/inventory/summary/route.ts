@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { InventoryReservationStatus } from '@/generated/prisma/client';
 import { prisma } from '@/server/db/client';
 import { requireAuthPro } from '@/server/auth/requireAuthPro';
 import { requireBusinessRole } from '@/server/auth/businessRole';
@@ -63,21 +64,35 @@ export async function GET(
     },
   });
 
+  const reservations = await prisma.inventoryReservationItem.findMany({
+    where: { reservation: { businessId: businessIdBigInt, status: InventoryReservationStatus.ACTIVE } },
+    select: { productId: true, quantity: true },
+  });
+  const reservedByProduct = new Map<bigint, number>();
+  for (const r of reservations) {
+    reservedByProduct.set(r.productId, (reservedByProduct.get(r.productId) ?? 0) + r.quantity);
+  }
+
   const rows = products.map((p) => {
-    let stock = 0;
+    let onHand = 0;
     let lastMovementAt: Date | null = null;
     for (const m of p.movements) {
-      if (m.type === 'IN') stock += m.quantity;
-      else if (m.type === 'OUT') stock -= m.quantity;
-      else stock += m.quantity;
+      if (m.type === 'IN') onHand += m.quantity;
+      else if (m.type === 'OUT') onHand -= m.quantity;
+      else onHand += m.quantity;
       if (!lastMovementAt || m.date > lastMovementAt) lastMovementAt = m.date;
     }
+    const reserved = reservedByProduct.get(p.id) ?? 0;
+    const available = onHand - reserved;
     return {
       productId: p.id.toString(),
       sku: p.sku,
       name: p.name,
       unit: p.unit,
-      stock,
+      stock: onHand,
+      onHand,
+      reserved,
+      available,
       salePriceCents: p.salePriceCents ? p.salePriceCents.toString() : null,
       purchasePriceCents: p.purchasePriceCents ? p.purchasePriceCents.toString() : null,
       lastMovementAt: lastMovementAt ? lastMovementAt.toISOString() : null,

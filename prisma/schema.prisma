@@ -49,6 +49,12 @@ enum InventoryMovementType {
   ADJUST
 }
 
+enum InventoryReservationStatus {
+  ACTIVE
+  RELEASED
+  CONSUMED
+}
+
 enum InventoryMovementSource {
   MANUAL
   PURCHASE
@@ -155,6 +161,7 @@ model Business {
   settings    BusinessSettings?
   products    Product[]
   inventoryMovements InventoryMovement[]
+  inventoryReservations InventoryReservation[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -529,6 +536,8 @@ model Product {
   isArchived         Boolean      @default(false)
   movements          InventoryMovement[]
   inventoryFinances  Finance[]    @relation("ProductFinance")
+  reservationItems   InventoryReservationItem[]
+  invoiceItems       InvoiceItem[]
   createdAt          DateTime     @default(now())
   updatedAt          DateTime     @updatedAt
 
@@ -558,6 +567,37 @@ model InventoryMovement {
 
   @@index([businessId, productId])
   @@index([businessId, date])
+}
+
+model InventoryReservation {
+  id         BigInt                    @id @default(autoincrement())
+  businessId BigInt
+  invoiceId  BigInt      @unique
+  status     InventoryReservationStatus @default(ACTIVE)
+  items      InventoryReservationItem[]
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([businessId, status])
+}
+
+model InventoryReservationItem {
+  id             BigInt @id @default(autoincrement())
+  reservationId  BigInt
+  productId      BigInt
+  quantity       Int
+  unitPriceCents BigInt?
+  createdAt      DateTime @default(now())
+
+  reservation InventoryReservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  product     Product             @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([reservationId])
+  @@index([productId])
 }
 
 model ProjectTag {
@@ -796,6 +836,7 @@ model Invoice {
   quote    Quote?   @relation("QuoteInvoice", fields: [quoteId], references: [id], onDelete: SetNull)
   createdBy User    @relation("InvoiceCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
   items    InvoiceItem[]
+  reservation InventoryReservation?
 
   @@unique([businessId, number])
 }
@@ -804,6 +845,7 @@ model InvoiceItem {
   id             BigInt   @id @default(autoincrement())
   invoiceId      BigInt
   serviceId      BigInt?
+  productId      BigInt?
   label          String
   quantity       Int
   unitPriceCents BigInt
@@ -813,6 +855,9 @@ model InvoiceItem {
 
   invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   service Service? @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  product Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([productId])
 }
 
 /**
