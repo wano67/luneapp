@@ -615,7 +615,7 @@ paths:
                   items: { type: string }
                 action:
                   type: string
-                  enum: [ARCHIVE, UNARCHIVE]
+                  enum: [ARCHIVE, UNARCHIVE, DELETE]
       responses:
         '200':
           description: Résultat bulk
@@ -624,8 +624,16 @@ paths:
               schema:
                 type: object
                 properties:
-                  updatedCount: { type: integer }
-                  action: { type: string }
+                  updatedCount: { type: integer, nullable: true }
+                  deletedCount: { type: integer, nullable: true }
+                  action: { type: string, nullable: true }
+                  failed:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string }
+                        reason: { type: string }
   /api/pro/businesses/{businessId}/clients/{clientId}:
     get:
       tags: [Pro / Clients]

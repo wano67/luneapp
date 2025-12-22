@@ -75,6 +75,7 @@ export default function ClientsPage() {
   const fetchController = useRef<AbortController | null>(null);
   const [sortBy, setSortBy] = useState<'name' | 'createdAt' | 'updatedAt'>('name');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+  const [showArchived, setShowArchived] = useState(false);
 
   async function loadClients(signal?: AbortSignal) {
     const controller = signal ? null : new AbortController();
@@ -94,6 +95,7 @@ export default function ClientsPage() {
       if (tagFilter) query.set('tagReferenceId', tagFilter);
       query.set('sortBy', sortBy);
       query.set('sortDir', sortDir);
+      if (showArchived) query.set('archived', '1');
 
       const res = await fetchJson<ClientListResponse>(
         `/api/pro/businesses/${businessId}/clients${query.toString() ? `?${query.toString()}` : ''}`,
@@ -136,7 +138,11 @@ export default function ClientsPage() {
     void loadClients();
     return () => fetchController.current?.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [businessId, categoryFilter, tagFilter, sortBy, sortDir]);
+  }, [businessId, categoryFilter, tagFilter, sortBy, sortDir, showArchived]);
+
+  useEffect(() => {
+    clear();
+  }, [showArchived, clear]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -256,6 +262,65 @@ export default function ClientsPage() {
     clear();
   }
 
+  async function handleBulkUnarchive() {
+    if (!isAdmin) {
+      setReadOnlyInfo(readOnlyMessage);
+      return;
+    }
+    if (selectedArray.length === 0) return;
+    const confirmRestore = window.confirm(`Restaurer ${selectedArray.length} client(s) ?`);
+    if (!confirmRestore) return;
+    setBulkError(null);
+    const res = await fetchJson<{ updatedCount: number }>(
+      `/api/pro/businesses/${businessId}/clients/bulk`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientIds: selectedArray, action: 'UNARCHIVE' }),
+      }
+    );
+    if (!res.ok) {
+      setBulkError(
+        res.requestId ? `${res.error ?? 'Restaurer impossible.'} (Ref: ${res.requestId})` : res.error ?? 'Restaurer impossible.'
+      );
+      return;
+    }
+    await loadClients();
+    clear();
+  }
+
+  async function handleBulkDelete() {
+    if (!isAdmin) {
+      setReadOnlyInfo(readOnlyMessage);
+      return;
+    }
+    if (selectedArray.length === 0) return;
+    const confirmDelete = window.confirm(`Supprimer définitivement ${selectedArray.length} client(s) ?`);
+    if (!confirmDelete) return;
+    setBulkError(null);
+    const res = await fetchJson<{ deletedCount: number; failed?: Array<{ id: string; reason: string }> }>(
+      `/api/pro/businesses/${businessId}/clients/bulk`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientIds: selectedArray, action: 'DELETE' }),
+      }
+    );
+    if (!res.ok) {
+      setBulkError(
+        res.requestId ? `${res.error ?? 'Suppression impossible.'} (Ref: ${res.requestId})` : res.error ?? 'Suppression impossible.'
+      );
+      return;
+    }
+    const failed = res.data?.failed ?? [];
+    if (failed.length) {
+      const reasons = failed.map((f) => `${f.id}: ${f.reason}`).join(' ; ');
+      setBulkError(`Certains clients n'ont pas été supprimés: ${reasons}`);
+    }
+    await loadClients();
+    clear();
+  }
+
   return (
     <div className="mx-auto max-w-6xl space-y-5 px-4 py-4">
       <RoleBanner role={role} />
@@ -341,6 +406,27 @@ export default function ClientsPage() {
               </select>
             </div>
           </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-semibold text-[var(--text-secondary)]">Vue</label>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant={!showArchived ? 'primary' : 'outline'}
+                onClick={() => setShowArchived(false)}
+              >
+                Actifs
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={showArchived ? 'primary' : 'outline'}
+                onClick={() => setShowArchived(true)}
+              >
+                Archivés
+              </Button>
+            </div>
+          </div>
           {referenceError ? (
             <p className="text-xs text-rose-500">
               {referenceError}
@@ -399,13 +485,28 @@ export default function ClientsPage() {
               <BulkActionBar
                 count={selectedCount}
                 onClear={clear}
-                actions={[
-                  {
-                    label: 'Archiver',
-                    onClick: handleBulkArchive,
-                    variant: 'outline',
-                  },
-                ]}
+                actions={
+                  showArchived
+                    ? [
+                        {
+                          label: 'Restaurer',
+                          onClick: handleBulkUnarchive,
+                          variant: 'outline',
+                        },
+                        {
+                          label: 'Supprimer définitivement',
+                          onClick: handleBulkDelete,
+                          variant: 'danger',
+                        },
+                      ]
+                    : [
+                        {
+                          label: 'Archiver',
+                          onClick: handleBulkArchive,
+                          variant: 'outline',
+                        },
+                      ]
+                }
               />
             </div>
             {clients.map((client) => (
