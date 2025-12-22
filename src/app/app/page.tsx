@@ -1,12 +1,13 @@
 'use client';
 
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { formatCents } from '@/lib/money';
 import { PageHeader } from './components/PageHeader';
+import { ActionTile } from './components/ActionTile';
 import { Wallet2, Building2, User, FileCode, Rocket } from 'lucide-react';
 
 type ApiErrorShape = { error: string };
@@ -423,45 +424,5 @@ export default function AppHomePage() {
         </div>
       </section>
     </div>
-  );
-}
-
-function ActionTile({
-  icon,
-  title,
-  description,
-  href,
-  badge,
-  helper,
-}: {
-  icon: ReactNode;
-  title: string;
-  description: string;
-  href: string;
-  badge?: string;
-  helper?: string;
-}) {
-  return (
-    <Link
-      href={href}
-      className="group block focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
-    >
-      <Card className="h-full rounded-2xl border border-[var(--border)] bg-[var(--surface)]/70 p-4 transition hover:border-[var(--accent)] hover:bg-[var(--surface-hover)]">
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex items-center gap-2 text-[var(--text-primary)]">
-            <span className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] p-2 text-[var(--text-secondary)] group-hover:border-[var(--accent)]">
-              {icon}
-            </span>
-            <div>
-              <p className="text-sm font-semibold">{title}</p>
-              <p className="text-xs text-[var(--text-secondary)]">{description}</p>
-            </div>
-          </div>
-          <span className="text-[12px] text-[var(--text-secondary)]">→</span>
-        </div>
-        {badge ? <p className="mt-3 text-lg font-semibold text-[var(--text-primary)]">{badge}</p> : null}
-        {helper ? <p className="text-xs text-[var(--text-secondary)]">{helper}</p> : null}
-      </Card>
-    </Link>
   );
 }
