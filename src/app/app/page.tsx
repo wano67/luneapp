@@ -6,6 +6,9 @@ import { useRouter } from 'next/navigation';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { formatCents } from '@/lib/money';
+import { PageHeader } from './components/PageHeader';
+import { ActionTile } from './components/ActionTile';
+import { Wallet2, Building2, User, FileCode, Rocket } from 'lucide-react';
 
 type ApiErrorShape = { error: string };
 
@@ -50,7 +53,6 @@ export default function AppHomePage() {
   const [lastBusinessId, setLastBusinessId] = useState<string | null>(null);
 
   const [loadingAuth, setLoadingAuth] = useState(true);
-  const [loadingSummary, setLoadingSummary] = useState(true);
   const [loadingBusinesses, setLoadingBusinesses] = useState(true);
 
   const [errorPersonal, setErrorPersonal] = useState<string | null>(null);
@@ -96,7 +98,6 @@ export default function AppHomePage() {
     const ctrl = new AbortController();
 
     async function loadSummary() {
-      setLoadingSummary(true);
       setErrorPersonal(null);
       try {
         const res = await fetch('/api/personal/summary', { credentials: 'include', signal: ctrl.signal });
@@ -152,7 +153,7 @@ export default function AppHomePage() {
         if (ctrl.signal.aborted) return;
         setErrorPersonal(getErrorMessage(e));
       } finally {
-        if (!ctrl.signal.aborted) setLoadingSummary(false);
+        // no-op
       }
     }
 
@@ -218,14 +219,23 @@ export default function AppHomePage() {
     return summary.accounts[0];
   }, [summary]);
 
+  const primaryCta = useMemo(() => {
+    if (lastBusiness) {
+      return { label: 'Aller au Studio', href: `/app/pro/${lastBusiness.id}` };
+    }
+    if (summary?.accountsCount) {
+      return { label: 'Aller au Wallet', href: '/app/personal' };
+    }
+    return { label: 'Créer ou rejoindre une entreprise', href: '/app/pro' };
+  }, [lastBusiness, summary]);
+
   return (
-    <div className="space-y-6">
-      <header className="space-y-1">
-        <h1 className="text-xl font-semibold text-[var(--text-primary)]">{greeting}</h1>
-        <p className="text-sm text-[var(--text-secondary)]">
-          Choisis ton espace et reprends là où tu t’es arrêté.
-        </p>
-      </header>
+    <div className="mx-auto max-w-6xl space-y-6 px-4 py-4">
+      <PageHeader
+        title="Accueil"
+        subtitle={greeting}
+        primaryAction={{ label: primaryCta.label, href: primaryCta.href }}
+      />
 
       <section className="space-y-3">
         <div className="flex items-center justify-between">
@@ -238,27 +248,25 @@ export default function AppHomePage() {
           </div>
         </div>
         <div className="grid gap-3 md:grid-cols-2">
-          <DashboardCard
+          <ActionTile
+            icon={<Wallet2 size={18} />}
             title="Espace personnel"
+            description="Wallet, transactions, budgets."
             href="/app/personal"
-            loading={loadingSummary}
-            stat={summary ? formatCents(summary.totalBalanceCents, 'EUR') : undefined}
-            helper={
-              summary ? `Net 30j : ${formatCents(summary.monthNetCents, 'EUR')}` : 'Wallet et transactions'
-            }
-            actionLabel="Ouvrir le Wallet"
+            badge={summary ? formatCents(summary.totalBalanceCents, 'EUR') : undefined}
+            helper={summary ? `Net 30j : ${formatCents(summary.monthNetCents, 'EUR')}` : undefined}
           />
-          <DashboardCard
+          <ActionTile
+            icon={<Building2 size={18} />}
             title="Studio (Pro)"
+            description="Clients, projets, tâches, finances."
             href="/app/pro"
-            loading={loadingBusinesses}
-            stat={
+            badge={
               loadingBusinesses
-                ? undefined
+                ? '—'
                 : `${businesses.length} entreprise${businesses.length > 1 ? 's' : ''}`
             }
-            helper="Clients, projets, tâches, finances."
-            actionLabel="Ouvrir le Studio"
+            helper={lastBusiness ? `Dernier : ${lastBusiness.name}` : undefined}
           />
         </div>
       </section>
@@ -291,7 +299,7 @@ export default function AppHomePage() {
             </Card>
           )}
 
-          {recentAccount ? (
+            {recentAccount ? (
             <Card className="flex h-full flex-col justify-between rounded-2xl border border-[var(--border)] bg-[var(--surface)]/70 p-4">
               <div className="space-y-1">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[var(--text-secondary)]">
@@ -323,78 +331,98 @@ export default function AppHomePage() {
       </section>
 
       <section className="space-y-3">
-        <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
-          Actions rapides
-        </h2>
-        <div className="grid gap-3 sm:grid-cols-3">
-          <DashboardCard
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
+            Actions rapides
+          </h2>
+          <span className="text-xs text-[var(--text-secondary)]">Sélectionne une destination.</span>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <ActionTile
+            icon={<Wallet2 size={18} />}
             title="Importer un CSV"
+            description="Alimente tes transactions"
             href="/app/personal/transactions?import=1"
-            helper="Alimente tes transactions."
-            actionLabel="Lancer l’import"
-            compact
           />
-          <DashboardCard
+          <ActionTile
+            icon={<Rocket size={18} />}
             title="Créer une entreprise"
+            description="Démarre un nouveau workspace"
             href="/app/pro?create=1"
-            helper="En quelques clics."
-            actionLabel="Créer"
-            compact
           />
-          <DashboardCard
+          <ActionTile
+            icon={<Building2 size={18} />}
             title="Rejoindre une entreprise"
+            description="Via une invitation"
             href="/app/pro?join=1"
-            helper="Utilise un lien d’invitation."
-            actionLabel="Rejoindre"
-            compact
+          />
+          <ActionTile
+            icon={<User size={18} />}
+            title="Profil & Préférences"
+            description="Compte et sécurité"
+            href="/app/account"
           />
         </div>
       </section>
-    </div>
-  );
-}
 
-type DashboardCardProps = {
-  title: string;
-  href: string;
-  stat?: string;
-  helper?: string;
-  actionLabel: string;
-  loading?: boolean;
-  compact?: boolean;
-};
-
-function DashboardCard({ title, href, stat, helper, actionLabel, loading, compact }: DashboardCardProps) {
-  return (
-    <Link
-      href={href}
-      className="group block focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-400/60"
-    >
-      <Card
-        className={[
-          'h-full rounded-2xl border border-[var(--border)] bg-[var(--surface)]/60 p-4 text-[var(--text-primary)] shadow-sm transition',
-          'hover:border-[var(--border)] hover:bg-[var(--surface-hover)]/70 hover:shadow-lg hover:shadow-black/10',
-        ].join(' ')}
-      >
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="text-sm font-semibold text-[var(--text-primary)]">{title}</p>
-            {helper ? <p className="mt-1 text-xs text-[var(--text-secondary)]">{helper}</p> : null}
-          </div>
-          <span className="rounded-full border border-[var(--border)] bg-[var(--background)] px-3 py-1 text-[11px] font-semibold text-[var(--text-secondary)] transition group-hover:border-[var(--accent)] group-hover:text-[var(--text-primary)]">
-            {actionLabel}
-          </span>
+      <section className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
+            Prochaines étapes
+          </h2>
+          <span className="text-xs text-[var(--text-secondary)]">Guides rapides</span>
         </div>
-        <div className="mt-4">
-          {loading ? (
-            <div className="h-6 w-24 animate-pulse rounded-full bg-[var(--background-alt)]" />
-          ) : stat ? (
-            <p className={compact ? 'text-lg font-semibold' : 'text-xl font-semibold'}>{stat}</p>
+        <div className="grid gap-3 md:grid-cols-2">
+          {businesses.length === 0 ? (
+            <Card className="rounded-2xl border border-[var(--border)] bg-[var(--surface)]/70 p-4">
+              <p className="text-sm font-semibold text-[var(--text-primary)]">Pas encore de business</p>
+              <p className="text-xs text-[var(--text-secondary)]">Crée ou rejoins pour débloquer le Studio.</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button asChild size="sm">
+                  <Link href="/app/pro?create=1">Créer une entreprise</Link>
+                </Button>
+                <Button asChild size="sm" variant="outline">
+                  <Link href="/app/pro?join=1">Rejoindre</Link>
+                </Button>
+              </div>
+            </Card>
           ) : (
-            <p className="text-sm text-[var(--text-secondary)]">—</p>
+            <Card className="rounded-2xl border border-[var(--border)] bg-[var(--surface)]/70 p-4">
+              <p className="text-sm font-semibold text-[var(--text-primary)]">Pour {lastBusiness?.name ?? 'le Studio'}</p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <Button asChild size="sm">
+                  <Link href={`/app/pro/${lastBusiness?.id ?? businesses[0].id}`}>Ouvrir le dashboard</Link>
+                </Button>
+                <Button asChild size="sm" variant="outline">
+                  <Link href={`/app/pro/${lastBusiness?.id ?? businesses[0].id}/clients`}>Créer un client</Link>
+                </Button>
+                <Button asChild size="sm" variant="outline">
+                  <Link href={`/app/pro/${lastBusiness?.id ?? businesses[0].id}/projects`}>Créer un devis/facture</Link>
+                </Button>
+              </div>
+            </Card>
           )}
+          <Card className="rounded-2xl border border-[var(--border)] bg-[var(--surface)]/70 p-4">
+            <p className="text-sm font-semibold text-[var(--text-primary)]">Documentation & API</p>
+            <p className="text-xs text-[var(--text-secondary)]">Consulte les endpoints publics et tests rapides.</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button asChild size="sm" variant="outline">
+                <Link href="/openapi.yaml">OpenAPI</Link>
+              </Button>
+              <Button asChild size="sm" variant="outline">
+                <Link href="/api-docs.html">Swagger UI</Link>
+              </Button>
+              <Button asChild size="sm" variant="ghost">
+                <Link href="/app/docs">
+                  <div className="flex items-center gap-1">
+                    <FileCode size={14} /> Docs produit
+                  </div>
+                </Link>
+              </Button>
+            </div>
+          </Card>
         </div>
-      </Card>
-    </Link>
+      </section>
+    </div>
   );
 }

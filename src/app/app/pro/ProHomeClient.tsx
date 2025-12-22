@@ -2,7 +2,6 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
-import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -12,6 +11,9 @@ import { Modal } from '@/components/ui/modal';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import SwitchBusinessModal from './SwitchBusinessModal';
 import { useActiveBusiness } from './ActiveBusinessProvider';
+import { PageHeader } from '../components/PageHeader';
+import { ActionTile } from '../components/ActionTile';
+import { Building2, Rocket } from 'lucide-react';
 
 /* ===================== TYPES ===================== */
 
@@ -330,51 +332,30 @@ export default function ProHomeClient() {
 
   /* ===================== UI ===================== */
 
-  if (loading) {
-    return (
-      <Card className="p-5">
-        <p className="text-sm text-[var(--text-secondary)]">Chargement…</p>
-      </Card>
-    );
-  }
-
-  if (error) {
-    return (
-      <Card className="p-5">
-        <p className="text-sm font-semibold text-rose-500">Espace PRO</p>
-        <p className="text-sm text-rose-500/90">{error}</p>
-      </Card>
-    );
-  }
-
   return (
-    <div className="space-y-6">
-      {/* HEADER */}
-      <Card className="p-5 space-y-3">
-        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-          <div className="space-y-1">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-[var(--text-secondary)]">
-              App · PRO
+    <div className="mx-auto max-w-6xl space-y-6 px-4 py-4">
+      {loading ? (
+        <Card className="p-5">
+          <p className="text-sm text-[var(--text-secondary)]">Chargement…</p>
+        </Card>
+      ) : error ? (
+        <Card className="p-5">
+          <p className="text-sm font-semibold text-rose-500">Espace PRO</p>
+          <p className="text-sm text-rose-500/90">{error}</p>
+        </Card>
+      ) : (
+        <>
+          <PageHeader
+            title="Espace PRO"
+            subtitle="Gère tes entreprises, prospects, projets et clients."
+            primaryAction={{ label: 'Créer une entreprise', onClick: () => setCreateOpen(true) }}
+            secondaryAction={{ label: 'Rejoindre via invitation', onClick: () => setJoinOpen(true), variant: 'outline' }}
+          />
+          {me?.user ? (
+            <p className="text-xs text-[var(--text-secondary)]">
+              Connecté en tant que <span className="font-semibold text-[var(--text-primary)]">{me.user.name ?? me.user.email}</span>
             </p>
-            <h2 className="text-xl font-semibold">Espace PRO</h2>
-            <p className="text-sm text-[var(--text-secondary)]">
-              Gère tes entreprises, prospects, projets et clients.
-            </p>
-            {me?.user ? (
-              <p className="text-xs text-[var(--text-secondary)]">
-                Connecté en tant que <span className="font-semibold text-[var(--text-primary)]">{me.user.name ?? me.user.email}</span>
-              </p>
-            ) : null}
-          </div>
-
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <Button onClick={() => setCreateOpen(true)}>Créer une entreprise</Button>
-            <Button variant="outline" onClick={() => setJoinOpen(true)}>
-              Rejoindre via invitation
-            </Button>
-          </div>
-        </div>
-      </Card>
+          ) : null}
 
       {process.env.NODE_ENV !== 'production' ? (
         <Card className="flex flex-col gap-2 border-dashed border-[var(--border)] bg-transparent p-4">
@@ -392,139 +373,146 @@ export default function ProHomeClient() {
         </Card>
       ) : null}
 
-      {activeId ? (
-        <Card className="p-5">
-          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-            <div className="space-y-1">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-[var(--text-secondary)]">
-                Entreprise active
-              </p>
-              <p className="text-lg font-semibold text-[var(--text-primary)]">
-                {activeCtx?.activeBusiness?.name ?? activeId}
-              </p>
-              <p className="text-xs text-[var(--text-secondary)]">
-                Définie depuis ta dernière navigation.
-              </p>
-            </div>
-            <Button onClick={() => rememberAndGo(activeId, `/app/pro/${activeId}`)}>
-              Ouvrir mon espace de travail
-            </Button>
-            <Button variant="outline" onClick={() => activeCtx?.openSwitchModal?.()}>
-              Changer d’entreprise
-            </Button>
-          </div>
-        </Card>
-      ) : null}
-
-      {/* CONTINUER */}
-      {continueBusiness ? (
-        <Card className="p-5">
-          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-            <div className="space-y-1">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-[var(--text-secondary)]">
-                Continuer
-              </p>
-              <div className="flex items-center gap-2">
-                <h3 className="text-lg font-semibold">{continueBusiness.business.name}</h3>
-                <Badge variant="neutral">{continueBusiness.role}</Badge>
+      <section className="space-y-3">
+        <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
+          Continuer
+        </h3>
+        <div className="grid gap-3 md:grid-cols-2">
+          {activeId ? (
+            <ActionTile
+              icon={<Building2 size={18} />}
+              title={activeCtx?.activeBusiness?.name ?? 'Entreprise active'}
+              description="Espace de travail actuel"
+              href={`/app/pro/${activeId}`}
+              badge="Active"
+              helper="Changer depuis le header ou le bouton dédié"
+            />
+          ) : null}
+          {continueBusiness ? (
+            <ActionTile
+              icon={<Rocket size={18} />}
+              title={continueBusiness.business.name}
+              description="Dernière entreprise visitée"
+              href={`/app/pro/${continueBusiness.business.id}`}
+              badge={continueBusiness.role}
+              helper="Accès rapide au dashboard et pipeline"
+            />
+          ) : null}
+          {!activeId && !continueBusiness ? (
+            <Card className="rounded-2xl border border-dashed border-[var(--border)] bg-transparent p-4">
+              <p className="text-sm font-semibold text-[var(--text-primary)]">Aucune entreprise sélectionnée</p>
+              <p className="text-xs text-[var(--text-secondary)]">Crée ou rejoins pour commencer.</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button size="sm" onClick={() => setCreateOpen(true)}>Créer</Button>
+                <Button size="sm" variant="outline" onClick={() => setJoinOpen(true)}>
+                  Rejoindre
+                </Button>
               </div>
-              <p className="text-sm text-[var(--text-secondary)]">
-                Dernière entreprise visitée ou première de ta liste.
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                onClick={() =>
-                  rememberAndGo(continueBusiness.business.id, `/app/pro/${continueBusiness.business.id}`)
-                }
-              >
-                Ouvrir
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() =>
-                  rememberAndGo(
-                    continueBusiness.business.id,
-                    `/app/pro/${continueBusiness.business.id}/prospects`
-                  )
-                }
-              >
-                Prospects
-              </Button>
-            </div>
-          </div>
-        </Card>
-      ) : null}
-
-      {/* LIST */}
-      {items.length > 0 ? (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {items.map(({ business, role }) => {
-            const isAdmin = role === 'ADMIN' || role === 'OWNER';
-            return (
-              <Card key={business.id} className="p-4 space-y-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="truncate font-semibold">{business.name}</p>
-                    <p className="text-xs text-[var(--text-secondary)]">
-                      Créée le {new Date(business.createdAt).toLocaleDateString('fr-FR')}
-                    </p>
-                  </div>
-                  <Badge variant="neutral" className="shrink-0">
-                    {role}
-                  </Badge>
-                </div>
-
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    size="sm"
-                    onClick={() => rememberAndGo(business.id, `/app/pro/${business.id}`)}
-                  >
-                    Ouvrir
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() =>
-                      rememberAndGo(business.id, `/app/pro/${business.id}/prospects`)
-                    }
-                  >
-                    Prospects
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => rememberAndGo(business.id, `/app/pro/${business.id}/projects`)}
-                  >
-                    Projets
-                  </Button>
-                  {isAdmin ? (
-                    <Link
-                      href={`/app/pro/${business.id}/invites`}
-                      className="text-xs font-semibold text-[var(--accent)] underline underline-offset-4"
-                      onClick={() => rememberAndGo(business.id, `/app/pro/${business.id}/invites`)}
-                    >
-                      Invitations
-                    </Link>
-                  ) : null}
-                </div>
-              </Card>
-            );
-          })}
+            </Card>
+          ) : null}
         </div>
-      ) : (
-        <Card className="p-5">
-          <p className="text-sm text-[var(--text-secondary)]">
-            Aucune entreprise pour le moment. Crée-en une ou rejoins-en une.
-          </p>
-          <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-            <Button onClick={() => setCreateOpen(true)}>Créer une entreprise</Button>
-            <Button variant="outline" onClick={() => setJoinOpen(true)}>
-              Rejoindre via invitation
-            </Button>
+      </section>
+
+      <section className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
+            Mes entreprises
+          </h3>
+          <Badge variant="neutral" className="text-[11px]">
+            {items.length} entreprise{items.length > 1 ? 's' : ''}
+          </Badge>
+        </div>
+        {items.length > 0 ? (
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {items.map(({ business, role }) => {
+              const isAdmin = role === 'ADMIN' || role === 'OWNER';
+              return (
+                <Card
+                  key={business.id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => rememberAndGo(business.id, `/app/pro/${business.id}`)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      rememberAndGo(business.id, `/app/pro/${business.id}`);
+                    }
+                  }}
+                  className="flex h-full flex-col gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)]/70 p-4 transition hover:border-[var(--accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 space-y-1">
+                      <p className="truncate font-semibold text-[var(--text-primary)]">{business.name}</p>
+                      <p className="text-xs text-[var(--text-secondary)]">
+                        Créée le {new Date(business.createdAt).toLocaleDateString('fr-FR')}
+                      </p>
+                    </div>
+                    <Badge variant="neutral" className="shrink-0">
+                      {role}
+                    </Badge>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        rememberAndGo(business.id, `/app/pro/${business.id}`);
+                      }}
+                    >
+                      Ouvrir
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        rememberAndGo(business.id, `/app/pro/${business.id}/projects`);
+                      }}
+                    >
+                      Projets
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        rememberAndGo(business.id, `/app/pro/${business.id}/prospects`);
+                      }}
+                    >
+                      Prospects
+                    </Button>
+                    {isAdmin ? (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          rememberAndGo(business.id, `/app/pro/${business.id}/invites`);
+                        }}
+                      >
+                        Invitations
+                      </Button>
+                    ) : null}
+                  </div>
+                </Card>
+              );
+            })}
           </div>
-        </Card>
-      )}
+        ) : (
+          <Card className="p-5">
+            <p className="text-sm text-[var(--text-secondary)]">
+              Aucune entreprise pour le moment. Crée-en une ou rejoins-en une.
+            </p>
+            <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+              <Button onClick={() => setCreateOpen(true)}>Créer une entreprise</Button>
+              <Button variant="outline" onClick={() => setJoinOpen(true)}>
+                Rejoindre via invitation
+              </Button>
+            </div>
+          </Card>
+        )}
+      </section>
 
       {/* CREATE MODAL */}
       <Modal
@@ -591,6 +579,8 @@ export default function ProHomeClient() {
           </div>
         </form>
       </Modal>
+        </>
+      )}
     </div>
   );
 }
