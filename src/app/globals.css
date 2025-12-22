@@ -102,6 +102,7 @@ a:hover {
     @apply hover:bg-[var(--surface-hover)] hover:border-[var(--accent)] hover:shadow-md hover:shadow-black/10;
     @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)];
     @apply active:shadow-sm motion-safe:hover:-translate-y-[1px];
+    text-decoration: none;
   }
   .card-interactive.is-active,
   .card-interactive[data-active='true'] {
