@@ -1,34 +1,35 @@
 'use client';
-/* eslint-disable @next/next/no-img-element */
 
 import { useMemo, useState } from 'react';
 import { getFaviconUrl, normalizeWebsiteUrl } from '@/lib/website';
 
 type Props = {
-  name: string;
   websiteUrl?: string | null;
   size?: number;
+  alt?: string;
   className?: string;
+  fallbackText?: string;
 };
 
-export function FaviconAvatar({ name, websiteUrl, size = 32, className }: Props) {
+export function Favicon({ websiteUrl, size = 32, alt = '', className, fallbackText }: Props) {
   const [errored, setErrored] = useState(false);
   const normalized = useMemo(() => normalizeWebsiteUrl(websiteUrl).value, [websiteUrl]);
-  const favicon = useMemo(() => getFaviconUrl(normalized), [normalized]);
-  const initials =
-    name?.trim().split(/\s+/).map((part) => part[0] || '')?.join('').slice(0, 2).toUpperCase() ||
-    '?';
+  const src = useMemo(() => getFaviconUrl(normalized), [normalized]);
+
+  const fallback =
+    fallbackText?.trim().slice(0, 2).toUpperCase() ||
+    (normalized ? new URL(normalized).host.slice(0, 2).toUpperCase() : '?');
 
   return (
     <span
       className={`inline-flex items-center justify-center rounded-lg bg-[var(--surface-2)] text-[var(--text-secondary)] ${className ?? ''}`}
       style={{ width: size, height: size, minWidth: size }}
-      aria-hidden
+      aria-label={alt}
     >
-      {favicon && !errored ? (
+      {src && !errored ? (
         <img
-          src={favicon}
-          alt=""
+          src={src}
+          alt={alt}
           className="h-full w-full rounded-lg object-cover"
           width={size}
           height={size}
@@ -36,7 +37,7 @@ export function FaviconAvatar({ name, websiteUrl, size = 32, className }: Props)
           loading="lazy"
         />
       ) : (
-        <span className="text-xs font-semibold text-[var(--text-primary)]">{initials}</span>
+        <span className="text-xs font-semibold text-[var(--text-primary)]">{fallback}</span>
       )}
     </span>
   );

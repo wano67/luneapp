@@ -98,6 +98,26 @@ paths:
               schema:
                 type: object
                 properties: { status: { type: string, example: logged_out } }
+  /api/favicon:
+    get:
+      tags: [Public]
+      summary: Proxy de favicon pour une URL de site
+      parameters:
+        - in: query
+          name: url
+          required: true
+          schema: { type: string }
+          description: URL du site dont extraire l'icône
+      responses:
+        '200':
+          description: Icône renvoyée
+          content:
+            image/*:
+              schema:
+                type: string
+                format: binary
+        '204':
+          description: Aucune icône disponible
   /api/auth/me:
     get:
       tags: [Auth]
