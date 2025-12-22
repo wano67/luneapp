@@ -17,6 +17,7 @@ import { useRowSelection } from '../../../components/selection/useRowSelection';
 import { BulkActionBar } from '../../../components/selection/BulkActionBar';
 import { FaviconAvatar } from '../../../components/FaviconAvatar';
 import { PageHeader } from '../../../components/PageHeader';
+import { ExternalLink } from 'lucide-react';
 
 type Client = {
   id: string;
@@ -69,9 +70,11 @@ export default function ClientsPage() {
   const [tagReferenceIds, setTagReferenceIds] = useState<string[]>([]);
   const [readOnlyInfo, setReadOnlyInfo] = useState<string | null>(null);
   const [bulkError, setBulkError] = useState<string | null>(null);
-  const { selectedCount, toggle, toggleAll, clear, isSelected } = useRowSelection();
+  const { selectedCount, selectedArray, toggle, toggleAll, clear, isSelected, allSelected } = useRowSelection();
 
   const fetchController = useRef<AbortController | null>(null);
+  const [sortBy, setSortBy] = useState<'name' | 'createdAt' | 'updatedAt'>('name');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
 
   async function loadClients(signal?: AbortSignal) {
     const controller = signal ? null : new AbortController();
@@ -89,6 +92,8 @@ export default function ClientsPage() {
       if (search.trim()) query.set('search', search.trim());
       if (categoryFilter) query.set('categoryReferenceId', categoryFilter);
       if (tagFilter) query.set('tagReferenceId', tagFilter);
+      query.set('sortBy', sortBy);
+      query.set('sortDir', sortDir);
 
       const res = await fetchJson<ClientListResponse>(
         `/api/pro/businesses/${businessId}/clients${query.toString() ? `?${query.toString()}` : ''}`,
@@ -131,7 +136,7 @@ export default function ClientsPage() {
     void loadClients();
     return () => fetchController.current?.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [businessId, categoryFilter, tagFilter]);
+  }, [businessId, categoryFilter, tagFilter, sortBy, sortDir]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -224,12 +229,31 @@ export default function ClientsPage() {
     }
   }
 
-  function handleBulkUnavailable() {
+  async function handleBulkArchive() {
     if (!isAdmin) {
       setReadOnlyInfo(readOnlyMessage);
       return;
     }
-    setBulkError('Aucune action bulk disponible pour les clients (pas d’API de suppression/archivage).');
+    if (selectedArray.length === 0) return;
+    const confirmArchive = window.confirm(`Archiver ${selectedArray.length} client(s) ?`);
+    if (!confirmArchive) return;
+    setBulkError(null);
+    const res = await fetchJson<{ updatedCount: number }>(
+      `/api/pro/businesses/${businessId}/clients/bulk`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientIds: selectedArray, action: 'ARCHIVE' }),
+      }
+    );
+    if (!res.ok) {
+      setBulkError(
+        res.requestId ? `${res.error ?? 'Archiver impossible.'} (Ref: ${res.requestId})` : res.error ?? 'Archiver impossible.'
+      );
+      return;
+    }
+    await loadClients();
+    clear();
   }
 
   return (
@@ -295,6 +319,28 @@ export default function ClientsPage() {
               ))}
             </select>
           </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-semibold text-[var(--text-secondary)]">Trier par</label>
+            <div className="flex flex-col gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm sm:flex-row sm:items-center sm:gap-2">
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+                className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-2 py-1 text-sm sm:w-auto"
+              >
+                <option value="name">Nom</option>
+                <option value="createdAt">Plus récents</option>
+                <option value="updatedAt">Dernière mise à jour</option>
+              </select>
+              <select
+                value={sortDir}
+                onChange={(e) => setSortDir(e.target.value as typeof sortDir)}
+                className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-2 py-1 text-sm sm:w-auto"
+              >
+                <option value="asc">Asc</option>
+                <option value="desc">Desc</option>
+              </select>
+            </div>
+          </div>
           {referenceError ? (
             <p className="text-xs text-rose-500">
               {referenceError}
@@ -345,7 +391,7 @@ export default function ClientsPage() {
                 <input
                   type="checkbox"
                   className="h-4 w-4 accent-[var(--accent)]"
-                  checked={clients.length > 0 && clients.every((c) => isSelected(c.id))}
+                  checked={clients.length > 0 && allSelected(clients.map((c) => c.id))}
                   onChange={() => toggleAll(clients.map((c) => c.id))}
                 />
                 Tout sélectionner
@@ -353,11 +399,11 @@ export default function ClientsPage() {
               <BulkActionBar
                 count={selectedCount}
                 onClear={clear}
-                  actions={[
-                    {
-                      label: 'Actions bulk indisponibles',
-                      onClick: handleBulkUnavailable,
-                      variant: 'outline',
+                actions={[
+                  {
+                    label: 'Archiver',
+                    onClick: handleBulkArchive,
+                    variant: 'outline',
                   },
                 ]}
               />
@@ -409,9 +455,17 @@ export default function ClientsPage() {
                       <Badge variant="neutral">Phone ?</Badge>
                     )}
                     {client.websiteUrl ? (
-                      <Badge variant="neutral" className="max-w-[180px] truncate bg-[var(--surface-2)]">
-                        {client.websiteUrl}
-                      </Badge>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        asChild
+                        className="h-8"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <a href={client.websiteUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1">
+                          <ExternalLink size={14} /> Site
+                        </a>
+                      </Button>
                     ) : null}
                   </div>
                 </div>

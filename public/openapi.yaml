@@ -557,6 +557,18 @@ paths:
           name: tagReferenceId
           required: false
           schema: { type: string }
+        - in: query
+          name: archived
+          required: false
+          schema: { type: string, enum: ['0', '1', 'true', 'false'] }
+        - in: query
+          name: sortBy
+          required: false
+          schema: { type: string, enum: [name, createdAt, updatedAt], default: name }
+        - in: query
+          name: sortDir
+          required: false
+          schema: { type: string, enum: [asc, desc], default: asc }
       responses:
         '200':
           description: Liste
@@ -584,6 +596,36 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Client' }
+  /api/pro/businesses/{businessId}/clients/bulk:
+    post:
+      tags: [Pro / Clients]
+      security: [ { cookieAuth: [] } ]
+      summary: Actions bulk clients (archive/unarchive)
+      parameters: [ { $ref: '#/components/parameters/BusinessId' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [clientIds, action]
+              properties:
+                clientIds:
+                  type: array
+                  items: { type: string }
+                action:
+                  type: string
+                  enum: [ARCHIVE, UNARCHIVE]
+      responses:
+        '200':
+          description: Résultat bulk
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  updatedCount: { type: integer }
+                  action: { type: string }
   /api/pro/businesses/{businessId}/clients/{clientId}:
     get:
       tags: [Pro / Clients]
@@ -2505,6 +2547,7 @@ components:
             properties:
               id: { type: string }
               name: { type: string }
+        archivedAt: { type: string, format: date-time, nullable: true }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
     ClientCreate:
@@ -2522,6 +2565,8 @@ components:
         tagReferenceIds:
           type: array
           items: { type: string }
+        archive: { type: boolean, nullable: true }
+        archivedAt: { type: string, format: date-time, nullable: true }
     ClientUpdate:
       type: object
       properties:

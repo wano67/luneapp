@@ -97,6 +97,7 @@ function serializeClient(client: {
   sector: string | null;
   status: ClientStatus;
   leadSource: LeadSource | null;
+  archivedAt: Date | null;
   categoryReferenceId?: bigint | null;
   categoryReference?: { id: bigint; name: string | null } | null;
   tags?: Array<{ referenceId: bigint; reference: { id: bigint; name: string } }>;
@@ -122,6 +123,7 @@ function serializeClient(client: {
     sector: client.sector,
     status: client.status,
     leadSource: client.leadSource,
+    archivedAt: client.archivedAt ? client.archivedAt.toISOString() : null,
     createdAt: client.createdAt.toISOString(),
     updatedAt: client.updatedAt.toISOString(),
   };
@@ -161,6 +163,9 @@ export async function GET(
   const origin = searchParams.get('origin')?.trim();
   const categoryReferenceIdParam = searchParams.get('categoryReferenceId');
   const tagReferenceIdParam = searchParams.get('tagReferenceId');
+  const archivedParam = searchParams.get('archived');
+  const sortByParam = searchParams.get('sortBy') ?? 'name';
+  const sortDirParam = searchParams.get('sortDir') ?? 'asc';
   const categoryReferenceId = categoryReferenceIdParam ? parseId(categoryReferenceIdParam) : null;
   if (categoryReferenceIdParam && !categoryReferenceId) {
     return withRequestId(badRequest('categoryReferenceId invalide.'), requestId);
@@ -170,9 +175,17 @@ export async function GET(
     return withRequestId(badRequest('tagReferenceId invalide.'), requestId);
   }
 
+  const showArchived = archivedParam === '1' || archivedParam === 'true';
+  const sortBy =
+    sortByParam === 'createdAt' || sortByParam === 'updatedAt' || sortByParam === 'name'
+      ? sortByParam
+      : 'name';
+  const sortDir = sortDirParam === 'desc' ? 'desc' : 'asc';
+
   const clients = await prisma.client.findMany({
     where: {
       businessId: businessIdBigInt,
+      ...(showArchived ? {} : { archivedAt: null }),
       ...(search
         ? {
             name: { contains: search, mode: 'insensitive' },
@@ -184,7 +197,7 @@ export async function GET(
       ...(categoryReferenceId ? { categoryReferenceId } : {}),
       ...(tagReferenceId ? { tags: { some: { referenceId: tagReferenceId } } } : {}),
     },
-    orderBy: { name: 'asc' },
+    orderBy: { [sortBy]: sortDir },
     include: {
       categoryReference: { select: { id: true, name: true } },
       tags: { include: { reference: { select: { id: true, name: true } } } },

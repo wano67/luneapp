@@ -40,6 +40,14 @@ export function useRowSelection(options?: RowSelectionOptions) {
 
   const selectedCount = selectedIds.size;
   const selectedArray = useMemo(() => Array.from(selectedIds), [selectedIds]);
+  const allSelected = useCallback(
+    (ids: string[]) => ids.length > 0 && ids.every((id) => selectedIds.has(id)),
+    [selectedIds]
+  );
+  const someSelected = useCallback(
+    (ids: string[]) => ids.some((id) => selectedIds.has(id)),
+    [selectedIds]
+  );
 
   return {
     selectedIds,
@@ -50,5 +58,7 @@ export function useRowSelection(options?: RowSelectionOptions) {
     selectAll,
     clear,
     isSelected,
+    allSelected,
+    someSelected,
   };
 }

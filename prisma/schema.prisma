@@ -364,6 +364,7 @@ model Client {
   estimatedBudget Int?
   notes           String?
   status          ClientStatus @default(ACTIVE)
+  archivedAt      DateTime?
 
   business Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
   categoryReference BusinessReference? @relation("ClientCategoryReference", fields: [categoryReferenceId], references: [id], onDelete: SetNull)
@@ -378,6 +379,7 @@ model Client {
 
   @@index([businessId, name])
   @@index([businessId, categoryReferenceId])
+  @@index([businessId, archivedAt])
 }
 
 model Project {
