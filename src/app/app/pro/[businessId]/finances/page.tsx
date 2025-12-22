@@ -15,6 +15,8 @@ import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import { formatCurrency } from '../../pro-data';
 import { useActiveBusiness } from '../../ActiveBusinessProvider';
 import { ReferencePicker } from '../references/ReferencePicker';
+import { PageHeader } from '../../../components/PageHeader';
+import { Plus } from 'lucide-react';
 
 type FinanceType = 'INCOME' | 'EXPENSE';
 
@@ -59,6 +61,7 @@ export default function FinancesPage() {
   const activeCtx = useActiveBusiness({ optional: true });
   const actorRole = activeCtx?.activeBusiness?.role ?? null;
   const isAdmin = actorRole === 'OWNER' || actorRole === 'ADMIN';
+  const readOnlyMessage = 'Action réservée aux admins/owners.';
 
   const [items, setItems] = useState<Finance[]>([]);
   const [loading, setLoading] = useState(true);
@@ -324,20 +327,29 @@ export default function FinancesPage() {
 
   return (
     <div className="space-y-4">
-      <Card className="space-y-2 p-5">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-[var(--text-secondary)]">
-          Finances
-        </p>
-        <h1 className="text-xl font-semibold text-[var(--text-primary)]">
-          Finances de l’entreprise
-        </h1>
-        <p className="text-sm text-[var(--text-secondary)]">
-          Vue unique pour suivre revenus, dépenses et trésorerie avant export.
-        </p>
-        {requestId ? (
-          <p className="text-[10px] text-[var(--text-secondary)]">Request ID: {requestId}</p>
-        ) : null}
-      </Card>
+      <PageHeader
+        backHref={`/app/pro/${businessId}`}
+        backLabel="Dashboard"
+        title="Finances"
+        subtitle="Suivi et création des écritures manuelles."
+        primaryAction={
+          isAdmin
+            ? {
+                label: 'Nouvelle écriture',
+                onClick: () => {
+                  setInfo(null);
+                  if (!isAdmin) {
+                    setInfo(readOnlyMessage);
+                    return;
+                  }
+                  openCreate();
+                },
+                icon: <Plus size={14} />,
+              }
+            : undefined
+        }
+      />
+      {requestId ? <p className="text-[10px] text-[var(--text-secondary)]">Request ID: {requestId}</p> : null}
 
       <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
         <Card className="space-y-2 border-dashed border-[var(--border)] bg-transparent p-4">
@@ -435,47 +447,44 @@ export default function FinancesPage() {
             }}
           >
             <option value="ALL">Tous</option>
-              <option value="INCOME">Revenu</option>
-              <option value="EXPENSE">Dépense</option>
-            </Select>
-            <Input
-              label="Du"
+            <option value="INCOME">Revenu</option>
+            <option value="EXPENSE">Dépense</option>
+          </Select>
+          <Input
+            label="Du"
             type="date"
             value={fromDate}
             onChange={(e: ChangeEvent<HTMLInputElement>) => setFromDate(e.target.value)}
           />
-            <Input
-              label="Au"
-              type="date"
-              value={toDate}
-              onChange={(e: ChangeEvent<HTMLInputElement>) => setToDate(e.target.value)}
-            />
-            <Select
-              label="Catégorie ref"
-              value={categoryFilter}
-              onChange={(e) => setCategoryFilter(e.target.value)}
-            >
-              <option value="">Toutes</option>
-              {categoryOptions.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </Select>
-            <Select label="Tag ref" value={tagFilter} onChange={(e) => setTagFilter(e.target.value)}>
-              <option value="">Tous</option>
-              {tagOptions.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                </option>
-              ))}
-            </Select>
-          </div>
+          <Input
+            label="Au"
+            type="date"
+            value={toDate}
+            onChange={(e: ChangeEvent<HTMLInputElement>) => setToDate(e.target.value)}
+          />
+          <Select label="Catégorie ref" value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
+            <option value="">Toutes</option>
+            {categoryOptions.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </Select>
+          <Select label="Tag ref" value={tagFilter} onChange={(e) => setTagFilter(e.target.value)}>
+            <option value="">Tous</option>
+            {tagOptions.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
+            ))}
+          </Select>
+        </div>
 
         {loading ? (
           <p className="text-sm text-[var(--text-secondary)]">Chargement…</p>
         ) : (
-          <Table>
+          <div className="overflow-x-auto">
+            <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Catégorie</TableHead>
@@ -549,6 +558,7 @@ export default function FinancesPage() {
               )}
             </TableBody>
           </Table>
+          </div>
         )}
       </Card>
 

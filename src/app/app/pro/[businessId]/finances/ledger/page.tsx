@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import { useActiveBusiness } from '../../../ActiveBusinessProvider';
+import { PageHeader } from '../../../../components/PageHeader';
 
 type LedgerLine = {
   id: string;
@@ -98,12 +99,13 @@ export default function LedgerPage() {
 
   return (
     <div className="space-y-4">
-      <Card className="p-5 space-y-1">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-[var(--text-secondary)]">PRO · Comptabilité</p>
-        <h1 className="text-xl font-semibold text-[var(--text-primary)]">Grand livre (MVP)</h1>
-        <p className="text-sm text-[var(--text-secondary)]">Écritures liées au stock et aux factures.</p>
-        {requestId ? <p className="text-[11px] text-[var(--text-secondary)]">Ref: {requestId}</p> : null}
-      </Card>
+      <PageHeader
+        backHref={`/app/pro/${businessId}/finances`}
+        backLabel="Finances"
+        title="Grand livre"
+        subtitle="Écritures liées au stock et aux factures."
+      />
+      {requestId ? <p className="text-[10px] text-[var(--text-secondary)]">Req: {requestId}</p> : null}
 
       <Card className="p-5 space-y-3">
         <div className="flex items-center justify-between gap-2">
@@ -128,40 +130,44 @@ export default function LedgerPage() {
         ) : (
           <div className="space-y-3">
             {formatted.map((entry) => (
-              <Card key={entry.id} className="border border-[var(--border)] bg-[var(--surface)]/60 p-3 space-y-2">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="space-y-1">
-                    <p className="text-sm font-semibold text-[var(--text-primary)]">
-                      {entry.dateFmt} · {entry.memo ?? 'Écriture'}
-                    </p>
-                    <p className="text-[11px] text-[var(--text-secondary)]">
-                      Source: {entry.sourceLabel} {entry.sourceId ? `#${entry.sourceId}` : ''}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2 text-xs text-[var(--text-secondary)]">
-                    <Badge variant="neutral">Débit {entry.debit}</Badge>
-                    <Badge variant="neutral">Crédit {entry.credit}</Badge>
-                    <Badge variant="neutral">{entry.lines.length} lignes</Badge>
-                    <Link href={`/api/pro/businesses/${businessId}/ledger/${entry.id}`} className="text-[var(--text-primary)] underline">
-                      JSON
-                    </Link>
-                  </div>
-                </div>
-                <div className="grid gap-2 md:grid-cols-2">
-                  {entry.lines.map((line) => (
-                    <div key={line.id} className="rounded border border-[var(--border)]/70 bg-white/40 p-2 text-xs">
-                      <div className="flex items-center justify-between">
-                        <span className="font-semibold text-[var(--text-primary)]">{line.accountCode}</span>
-                        <span className="text-[11px] text-[var(--text-secondary)]">{new Date(line.createdAt).toLocaleDateString('fr-FR')}</span>
-                      </div>
-                      {line.accountName ? <p className="text-[11px] text-[var(--text-secondary)]">{line.accountName}</p> : null}
+              <Link
+                key={entry.id}
+                href={`/api/pro/businesses/${businessId}/ledger/${entry.id}`}
+                className="block focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
+              >
+                <Card className="border border-[var(--border)] bg-[var(--surface)]/60 p-3 space-y-2 transition-colors hover:border-[var(--accent)]">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="space-y-1">
+                      <p className="text-sm font-semibold text-[var(--text-primary)]">
+                        {entry.dateFmt} · {entry.memo ?? 'Écriture'}
+                      </p>
                       <p className="text-[11px] text-[var(--text-secondary)]">
-                        Débit: {line.debitCents ?? '0'} · Crédit: {line.creditCents ?? '0'}
+                        Source: {entry.sourceLabel} {entry.sourceId ? `#${entry.sourceId}` : ''}
                       </p>
                     </div>
-                  ))}
-                </div>
-              </Card>
+                    <div className="flex items-center gap-2 text-xs text-[var(--text-secondary)]">
+                      <Badge variant="neutral">Débit {entry.debit}</Badge>
+                      <Badge variant="neutral">Crédit {entry.credit}</Badge>
+                      <Badge variant="neutral">{entry.lines.length} lignes</Badge>
+                      <span className="text-[var(--text-primary)] underline">Détail</span>
+                    </div>
+                  </div>
+                  <div className="grid gap-2 md:grid-cols-2">
+                    {entry.lines.map((line) => (
+                      <div key={line.id} className="rounded border border-[var(--border)]/70 bg-white/40 p-2 text-xs">
+                        <div className="flex items-center justify-between">
+                          <span className="font-semibold text-[var(--text-primary)]">{line.accountCode}</span>
+                          <span className="text-[11px] text-[var(--text-secondary)]">{new Date(line.createdAt).toLocaleDateString('fr-FR')}</span>
+                        </div>
+                        {line.accountName ? <p className="text-[11px] text-[var(--text-secondary)]">{line.accountName}</p> : null}
+                        <p className="text-[11px] text-[var(--text-secondary)]">
+                          Débit: {line.debitCents ?? '0'} · Crédit: {line.creditCents ?? '0'}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+              </Link>
             ))}
           </div>
         )}

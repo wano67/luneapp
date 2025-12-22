@@ -4,12 +4,27 @@
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import {
-  IconHome,
-  IconWallet,
-  IconStudio,
-  IconFocus,
-  IconSettings,
-} from '@/components/icons';
+  LayoutDashboard,
+  Briefcase,
+  Users,
+  Contact2,
+  CheckSquare,
+  Workflow,
+  Bookmark,
+  Banknote,
+  CreditCard,
+  PiggyBank,
+  Percent,
+  LineChart,
+  BookOpen,
+  Cog,
+  Wallet2,
+  Building2,
+  Focus,
+  Package,
+  ClipboardList,
+  FileSpreadsheet,
+} from 'lucide-react';
 import { useActiveBusiness } from './pro/ActiveBusinessProvider';
 
 export type Space = 'pro' | 'perso' | 'performance' | null;
@@ -66,15 +81,15 @@ function getGlobalSections(): NavSection[] {
     {
       title: 'Navigation',
       items: [
-        { href: '/app', label: 'Accueil', icon: <IconHome size={18} /> },
-        { href: '/app/personal', label: 'Wallet', icon: <IconWallet size={18} />, accent: 'wallet' },
-        { href: '/app/pro', label: 'Studio', icon: <IconStudio size={18} />, accent: 'studio' },
-        { label: 'Focus', icon: <IconFocus size={18} />, accent: 'focus', disabled: true, hint: 'Bientôt' },
+        { href: '/app', label: 'Accueil', icon: <LayoutDashboard size={18} /> },
+        { href: '/app/personal', label: 'Wallet', icon: <Wallet2 size={18} />, accent: 'wallet' },
+        { href: '/app/pro', label: 'Studio', icon: <Building2 size={18} />, accent: 'studio' },
+        { label: 'Focus', icon: <Focus size={18} />, accent: 'focus', disabled: true, hint: 'Bientôt' },
       ],
     },
     {
       title: 'Compte',
-      items: [{ href: '/app/account', label: 'Paramètres', icon: <IconSettings size={18} /> }],
+      items: [{ href: '/app/account', label: 'Paramètres', icon: <Cog size={18} /> }],
     },
   ];
 }
@@ -83,7 +98,7 @@ function getStudioRootSections(): NavSection[] {
   return [
     {
       title: 'Studio',
-      items: [{ href: '/app/pro', label: 'Mes entreprises', icon: <IconStudio size={18} />, accent: 'studio' }],
+      items: [{ href: '/app/pro', label: 'Mes entreprises', icon: <Building2 size={18} />, accent: 'studio' }],
     },
     {
       title: 'Actions',
@@ -101,52 +116,53 @@ function getStudioBusinessSections(businessId: string): NavSection[] {
     {
       title: 'Pilotage',
       items: [
-        { href: `${base}`, label: 'Dashboard', icon: <span className="text-[16px]">•</span> },
+        { href: `${base}`, label: 'Dashboard', icon: <LayoutDashboard size={18} /> },
       ],
     },
     {
       title: 'Commercial',
       items: [
-        { href: `${base}/prospects`, label: 'Prospects', icon: <span className="text-[16px]">•</span> },
-        { href: `${base}/clients`, label: 'Clients', icon: <span className="text-[16px]">•</span> },
+        { href: `${base}/prospects`, label: 'Prospects', icon: <Users size={18} /> },
+        { href: `${base}/clients`, label: 'Clients', icon: <Contact2 size={18} /> },
       ],
     },
     {
       title: 'Production',
       items: [
-        { href: `${base}/projects`, label: 'Projets', icon: <span className="text-[16px]">•</span> },
-        { href: `${base}/tasks`, label: 'Tâches', icon: <span className="text-[16px]">•</span> },
-        { href: `${base}/process`, label: 'Process', icon: <span className="text-[16px]">•</span> },
+        { href: `${base}/projects`, label: 'Projets', icon: <Briefcase size={18} /> },
+        { href: `${base}/tasks`, label: 'Tâches', icon: <CheckSquare size={18} /> },
+        { href: `${base}/process`, label: 'Process', icon: <Workflow size={18} /> },
       ],
     },
     {
       title: 'Catalogue',
       items: [
-        { href: `${base}/services`, label: 'Services', icon: <span className="text-[16px]">•</span> },
-        { href: `${base}/references`, label: 'Références', icon: <span className="text-[16px]">•</span> },
+        { href: `${base}/services`, label: 'Services', icon: <Package size={18} /> },
+        { href: `${base}/references`, label: 'Références', icon: <Bookmark size={18} /> },
       ],
     },
     {
       title: 'Finances',
       items: [
-        { href: `${base}/finances`, label: 'Finances', icon: <span className="text-[16px]">•</span> },
-        { href: `${base}/finances/payments`, label: 'Paiements', icon: <span className="text-[16px]">•</span> },
-        { href: `${base}/finances/treasury`, label: 'Trésorerie', icon: <span className="text-[16px]">•</span> },
-        { href: `${base}/finances/vat`, label: 'TVA', icon: <span className="text-[16px]">•</span> },
-        { href: `${base}/finances/forecasting`, label: 'Prévisions', icon: <span className="text-[16px]">•</span> },
+        { href: `${base}/finances`, label: 'Finances', icon: <Banknote size={18} /> },
+        { href: `${base}/finances/payments`, label: 'Paiements', icon: <CreditCard size={18} /> },
+        { href: `${base}/finances/treasury`, label: 'Trésorerie', icon: <PiggyBank size={18} /> },
+        { href: `${base}/finances/vat`, label: 'TVA', icon: <Percent size={18} /> },
+        { href: `${base}/finances/forecasting`, label: 'Prévisions', icon: <LineChart size={18} /> },
+        { href: `${base}/finances/ledger`, label: 'Grand livre', icon: <BookOpen size={18} /> },
         {
           href: `${base}/projects`,
-          label: 'Facturation (via projets)',
-          icon: <span className="text-[16px]">•</span>,
-          hint: 'Créer devis/factures depuis un projet',
+          label: 'Facturation (projets)',
+          icon: <FileSpreadsheet size={18} />,
+          hint: 'Devis/factures via projets',
         },
       ],
     },
     {
       title: 'Settings',
       items: [
-        { href: `${base}/settings/team`, label: 'Équipe', icon: <span className="text-[16px]">•</span> },
-        { href: `${base}/settings`, label: 'Paramètres', icon: <span className="text-[16px]">•</span> },
+        { href: `${base}/settings/team`, label: 'Équipe', icon: <Users size={18} /> },
+        { href: `${base}/settings`, label: 'Paramètres', icon: <Cog size={18} /> },
       ],
     },
   ];
@@ -158,13 +174,13 @@ function getWalletSections(): NavSection[] {
     {
       title: 'Wallet',
       items: [
-        { href: `${base}`, label: 'Vue d’accueil', icon: <IconWallet size={18} />, accent: 'wallet' },
-        { href: `${base}/comptes`, label: 'Comptes', icon: <span className="text-[16px]">•</span> },
-        { href: `${base}/transactions`, label: 'Transactions', icon: <span className="text-[16px]">•</span> },
-        { href: `${base}/transactions?type=INCOME`, label: 'Revenus', icon: <span className="text-[16px]">•</span> },
-        { href: `${base}/budgets`, label: 'Budgets', icon: <span className="text-[16px]">•</span>, disabled: true, hint: 'Bientôt' },
-        { href: `${base}/epargne`, label: 'Épargne', icon: <span className="text-[16px]">•</span>, disabled: true, hint: 'Bientôt' },
-        { href: `${base}/admin`, label: 'Administratif', icon: <span className="text-[16px]">•</span>, disabled: true, hint: 'Bientôt' },
+        { href: `${base}`, label: 'Vue d’accueil', icon: <Wallet2 size={18} />, accent: 'wallet' },
+        { href: `${base}/comptes`, label: 'Comptes', icon: <Banknote size={18} /> },
+        { href: `${base}/transactions`, label: 'Transactions', icon: <ClipboardList size={18} /> },
+        { href: `${base}/transactions?type=INCOME`, label: 'Revenus', icon: <Banknote size={18} /> },
+        { href: `${base}/budgets`, label: 'Budgets', icon: <LineChart size={18} />, disabled: true, hint: 'Bientôt' },
+        { href: `${base}/epargne`, label: 'Épargne', icon: <PiggyBank size={18} />, disabled: true, hint: 'Bientôt' },
+        { href: `${base}/admin`, label: 'Administratif', icon: <FileSpreadsheet size={18} />, disabled: true, hint: 'Bientôt' },
       ],
     },
   ];
@@ -175,9 +191,9 @@ function getFocusSections(): NavSection[] {
     {
       title: 'Focus',
       items: [
-        { label: 'Pro', icon: <IconFocus size={18} />, accent: 'focus', disabled: true, hint: 'Bientôt' },
-        { label: 'Perso', icon: <span className="text-[16px]">•</span>, disabled: true, hint: 'Bientôt' },
-        { label: 'Alignement', icon: <span className="text-[16px]">•</span>, disabled: true, hint: 'Bientôt' },
+        { label: 'Pro', icon: <Focus size={18} />, accent: 'focus', disabled: true, hint: 'Bientôt' },
+        { label: 'Perso', icon: <Users size={18} />, disabled: true, hint: 'Bientôt' },
+        { label: 'Alignement', icon: <Workflow size={18} />, disabled: true, hint: 'Bientôt' },
       ],
     },
   ];

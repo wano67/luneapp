@@ -10,6 +10,7 @@ import { Select } from '@/components/ui/select';
 import { Modal } from '@/components/ui/modal';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import { useActiveBusiness } from '../../../ActiveBusinessProvider';
+import { PageHeader } from '../../../../components/PageHeader';
 
 type BusinessRole = 'OWNER' | 'ADMIN' | 'MEMBER' | 'VIEWER';
 type BusinessPermission = 'TEAM_EDIT' | 'FINANCE_EDIT';
@@ -374,16 +375,13 @@ export default function BusinessTeamSettingsPage() {
   }
 
   return (
-    <div className="space-y-4">
-      <Card className="p-5 space-y-1">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-[var(--text-secondary)]">
-          PRO · Settings · Team
-        </p>
-        <h1 className="text-xl font-semibold text-[var(--text-primary)]">Équipe</h1>
-        <p className="text-sm text-[var(--text-secondary)]">
-          Gère les membres et rôles pour Business #{businessId}.
-        </p>
-      </Card>
+    <div className="space-y-5">
+      <PageHeader
+        backHref={`/app/pro/${businessId}/settings`}
+        backLabel="Paramètres"
+        title="Équipe"
+        subtitle="Gère les membres et rôles pour l’entreprise."
+      />
 
       <Card className="p-5 space-y-4">
         <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
