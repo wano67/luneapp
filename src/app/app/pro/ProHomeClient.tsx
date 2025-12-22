@@ -13,7 +13,7 @@ import SwitchBusinessModal from './SwitchBusinessModal';
 import { useActiveBusiness } from './ActiveBusinessProvider';
 import { PageHeader } from '../components/PageHeader';
 import { ActionTile } from '../components/ActionTile';
-import { Building2, Rocket } from 'lucide-react';
+import { FaviconAvatar } from '../components/FaviconAvatar';
 
 /* ===================== TYPES ===================== */
 
@@ -31,6 +31,7 @@ type BusinessSummary = {
   ownerId: string;
   createdAt: string;
   updatedAt: string;
+  websiteUrl?: string | null;
 };
 
 type AuthMeResponse = {
@@ -51,6 +52,7 @@ type BusinessInviteAcceptResponse = {
 
 type CreateBusinessDraft = {
   name: string;
+  websiteUrl: string;
 };
 
 /* ===================== COMPONENT ===================== */
@@ -76,6 +78,7 @@ export default function ProHomeClient() {
 
   const [draft, setDraft] = useState<CreateBusinessDraft>({
     name: '',
+    websiteUrl: '',
   });
   const [seedMessage, setSeedMessage] = useState<string | null>(null);
   const [seedError, setSeedError] = useState<string | null>(null);
@@ -231,7 +234,10 @@ export default function ProHomeClient() {
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: draft.name.trim() }),
+          body: JSON.stringify({
+            name: draft.name.trim(),
+            websiteUrl: draft.websiteUrl.trim() || undefined,
+          }),
         }
       );
 
@@ -247,6 +253,7 @@ export default function ProHomeClient() {
       setCreateOpen(false);
       setDraft({
         name: '',
+        websiteUrl: '',
       });
       rememberAndGo(res.data.business.id, `/app/pro/${res.data.business.id}`);
     } catch (err) {
@@ -380,7 +387,13 @@ export default function ProHomeClient() {
         <div className="grid gap-3 md:grid-cols-2">
           {activeId ? (
             <ActionTile
-              icon={<Building2 size={18} />}
+              icon={
+                <FaviconAvatar
+                  name={activeCtx?.activeBusiness?.name ?? 'Entreprise active'}
+                  websiteUrl={activeCtx?.activeBusiness?.websiteUrl}
+                  size={32}
+                />
+              }
               title={activeCtx?.activeBusiness?.name ?? 'Entreprise active'}
               description="Espace de travail actuel"
               href={`/app/pro/${activeId}`}
@@ -390,7 +403,13 @@ export default function ProHomeClient() {
           ) : null}
           {continueBusiness ? (
             <ActionTile
-              icon={<Rocket size={18} />}
+              icon={
+                <FaviconAvatar
+                  name={continueBusiness.business.name}
+                  websiteUrl={continueBusiness.business.websiteUrl}
+                  size={32}
+                />
+              }
               title={continueBusiness.business.name}
               description="Dernière entreprise visitée"
               href={`/app/pro/${continueBusiness.business.id}`}
@@ -441,11 +460,14 @@ export default function ProHomeClient() {
                   className="flex h-full flex-col gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)]/70 p-4 transition hover:border-[var(--accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
                 >
                   <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0 space-y-1">
-                      <p className="truncate font-semibold text-[var(--text-primary)]">{business.name}</p>
-                      <p className="text-xs text-[var(--text-secondary)]">
-                        Créée le {new Date(business.createdAt).toLocaleDateString('fr-FR')}
-                      </p>
+                    <div className="flex min-w-0 items-start gap-3">
+                      <FaviconAvatar name={business.name} websiteUrl={business.websiteUrl} size={38} />
+                      <div className="min-w-0 space-y-1">
+                        <p className="truncate font-semibold text-[var(--text-primary)]">{business.name}</p>
+                        <p className="text-xs text-[var(--text-secondary)]">
+                          Créée le {new Date(business.createdAt).toLocaleDateString('fr-FR')}
+                        </p>
+                      </div>
                     </div>
                     <Badge variant="neutral" className="shrink-0">
                       {role}
@@ -528,6 +550,12 @@ export default function ProHomeClient() {
             onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
             error={creationError ?? undefined}
             placeholder="Ex: StudioFief"
+          />
+          <Input
+            label="Site web"
+            value={draft.websiteUrl}
+            onChange={(e) => setDraft((d) => ({ ...d, websiteUrl: e.target.value }))}
+            placeholder="https://exemple.com"
           />
 
           <div className="flex justify-end gap-2">

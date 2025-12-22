@@ -14,6 +14,7 @@ import SwitchBusinessModal from '../SwitchBusinessModal';
 type Business = {
   id: string;
   name: string;
+  websiteUrl?: string | null;
   ownerId: string;
   createdAt: string;
   updatedAt: string;
@@ -71,7 +72,7 @@ export default function BusinessLayout({ children }: BusinessLayoutProps) {
   }, [businessId]);
 
   const initialActive: ActiveBusiness | null = business
-    ? { id: business.id, name: business.name, role }
+    ? { id: business.id, name: business.name, role, websiteUrl: business.websiteUrl }
     : null;
 
   return (

@@ -13,6 +13,7 @@ import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import { useActiveBusiness } from '../../../ActiveBusinessProvider';
 import RoleBanner from '@/components/RoleBanner';
 import { ReferencePicker } from '../../references/ReferencePicker';
+import { FaviconAvatar } from '../../../../components/FaviconAvatar';
 
 type Client = {
   id: string;
@@ -22,6 +23,7 @@ type Client = {
   tagReferences: { id: string; name: string }[];
   name: string;
   email: string | null;
+  websiteUrl: string | null;
   phone: string | null;
   notes: string | null;
   createdAt: string;
@@ -121,6 +123,11 @@ export default function ClientDetailPage() {
   const [referenceError, setReferenceError] = useState<string | null>(null);
   const [referenceRequestId, setReferenceRequestId] = useState<string | null>(null);
   const [referencesSaving, setReferencesSaving] = useState(false);
+  const [websiteInput, setWebsiteInput] = useState('');
+  const [contactSaving, setContactSaving] = useState(false);
+  const [contactError, setContactError] = useState<string | null>(null);
+  const [contactInfo, setContactInfo] = useState<string | null>(null);
+  const [contactRequestId, setContactRequestId] = useState<string | null>(null);
 
   function formatDate(value: string) {
     try {
@@ -434,6 +441,7 @@ export default function ClientDetailPage() {
       categoryReferenceId: res.data.item.categoryReferenceId ?? null,
       categoryReferenceName: res.data.item.categoryReferenceName ?? null,
       tagReferences: res.data.item.tagReferences ?? [],
+      websiteUrl: res.data.item.websiteUrl ?? null,
     };
 
     setClient(updated);
@@ -442,6 +450,54 @@ export default function ClientDetailPage() {
     setReferenceMessage('Références mises à jour.');
     setReferenceError(null);
     setReferencesSaving(false);
+  }
+
+  async function saveWebsite(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!isAdminOrOwner) {
+      setContactInfo('Action réservée aux admins/owners.');
+      return;
+    }
+    setContactSaving(true);
+    setContactError(null);
+    setContactInfo(null);
+    const res = await fetchJson<ClientDetailResponse>(
+      `/api/pro/businesses/${businessId}/clients/${clientId}`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ websiteUrl: websiteInput.trim() || null }),
+      }
+    );
+
+    setContactRequestId(res.requestId ?? null);
+
+    if (res.status === 401) {
+      const from = window.location.pathname + window.location.search;
+      window.location.href = `/login?from=${encodeURIComponent(from)}`;
+      return;
+    }
+
+    if (!res.ok || !res.data) {
+      const msg = res.error ?? 'Impossible de mettre à jour le site web.';
+      setContactError(res.requestId ? `${msg} (Ref: ${res.requestId})` : msg);
+      setContactSaving(false);
+      return;
+    }
+
+    const normalized: Client = {
+      ...res.data.item,
+      categoryReferenceId: res.data.item.categoryReferenceId ?? null,
+      categoryReferenceName: res.data.item.categoryReferenceName ?? null,
+      tagReferences: res.data.item.tagReferences ?? [],
+      websiteUrl: res.data.item.websiteUrl ?? null,
+    };
+
+    setClient(normalized);
+    setCategoryReferenceId(normalized.categoryReferenceId ?? '');
+    setTagReferenceIds(normalized.tagReferences.map((t) => t.id));
+    setContactInfo('Site web mis à jour.');
+    setContactSaving(false);
   }
 
   useEffect(() => {
@@ -480,6 +536,7 @@ export default function ClientDetailPage() {
           categoryReferenceId: res.data.item.categoryReferenceId ?? null,
           categoryReferenceName: res.data.item.categoryReferenceName ?? null,
           tagReferences: res.data.item.tagReferences ?? [],
+          websiteUrl: res.data.item.websiteUrl ?? null,
         };
         setClient(normalized);
         setCategoryReferenceId(normalized.categoryReferenceId ?? '');
@@ -509,6 +566,10 @@ export default function ClientDetailPage() {
     return () => projectsController.current?.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [businessId, clientId]);
+
+  useEffect(() => {
+    setWebsiteInput(client?.websiteUrl ?? '');
+  }, [client?.websiteUrl]);
 
   useEffect(() => {
     void loadFinanceLines();
@@ -547,12 +608,20 @@ export default function ClientDetailPage() {
       <RoleBanner role={role} />
       <Card className="space-y-3 p-5">
         <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-[var(--text-secondary)]">
-              Client · Centre de pilotage
-            </p>
-            <h1 className="text-xl font-semibold text-[var(--text-primary)]">{client.name}</h1>
-            <p className="text-xs text-[var(--text-secondary)]">Cockpit client — données consolidées.</p>
+          <div className="flex items-start gap-3">
+            <FaviconAvatar name={client.name} websiteUrl={client.websiteUrl} size={42} />
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-[var(--text-secondary)]">
+                Client · Centre de pilotage
+              </p>
+              <h1 className="text-xl font-semibold text-[var(--text-primary)]">{client.name}</h1>
+              <p className="text-xs text-[var(--text-secondary)]">Cockpit client — données consolidées.</p>
+              {client.websiteUrl ? (
+                <p className="text-[11px] text-[var(--text-secondary)] truncate max-w-sm">
+                  {client.websiteUrl}
+                </p>
+              ) : null}
+            </div>
           </div>
           <div className="flex flex-wrap gap-2">
             <Badge variant="neutral">ID {client.id}</Badge>
@@ -633,6 +702,25 @@ export default function ClientDetailPage() {
             <p className="text-sm text-[var(--text-primary)]">{client.phone ?? 'Non renseigné'}</p>
           </Card>
         </div>
+        <form onSubmit={saveWebsite} className="space-y-2">
+          <Input
+            label="Site web"
+            value={websiteInput}
+            onChange={(e) => setWebsiteInput(e.target.value)}
+            placeholder="https://exemple.com"
+            disabled={!isAdminOrOwner || contactSaving}
+          />
+          <div className="flex flex-wrap items-center gap-2">
+            <Button type="submit" disabled={!isAdminOrOwner || contactSaving}>
+              {contactSaving ? 'Enregistrement…' : 'Mettre à jour'}
+            </Button>
+            {contactInfo ? <span className="text-xs text-emerald-600">{contactInfo}</span> : null}
+            {contactError ? <span className="text-xs text-rose-600">{contactError}</span> : null}
+            {contactRequestId ? (
+              <span className="text-[10px] text-[var(--text-faint)]">Req: {contactRequestId}</span>
+            ) : null}
+          </div>
+        </form>
         <Card className="border-dashed border-[var(--border)] bg-transparent p-3">
           <p className="text-xs font-semibold text-[var(--text-secondary)]">Notes</p>
           <p className="text-sm text-[var(--text-primary)]">{client.notes ?? '—'}</p>

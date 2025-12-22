@@ -15,6 +15,7 @@ import { useActiveBusiness } from '../../ActiveBusinessProvider';
 import { ReferencePicker } from '../references/ReferencePicker';
 import { useRowSelection } from '../../../components/selection/useRowSelection';
 import { BulkActionBar } from '../../../components/selection/BulkActionBar';
+import { FaviconAvatar } from '../../../components/FaviconAvatar';
 
 type Client = {
   id: string;
@@ -24,6 +25,7 @@ type Client = {
   tagReferences: { id: string; name: string }[];
   name: string;
   email: string | null;
+  websiteUrl: string | null;
   phone: string | null;
   notes: string | null;
   createdAt: string;
@@ -59,6 +61,7 @@ export default function ClientsPage() {
   const [createError, setCreateError] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
+  const [websiteUrl, setWebsiteUrl] = useState('');
   const [phone, setPhone] = useState('');
   const [notes, setNotes] = useState('');
   const [categoryReferenceId, setCategoryReferenceId] = useState<string>('');
@@ -118,6 +121,7 @@ export default function ClientsPage() {
         ...item,
         categoryReferenceId: item.categoryReferenceId ?? null,
         categoryReferenceName: item.categoryReferenceName ?? null,
+        websiteUrl: item.websiteUrl ?? null,
         tagReferences: item.tagReferences ?? [],
       }));
       setClients(normalized);
@@ -195,6 +199,7 @@ export default function ClientsPage() {
         body: JSON.stringify({
           name: trimmedName,
           email: email.trim() || undefined,
+          websiteUrl: websiteUrl.trim() || undefined,
           phone: phone.trim() || undefined,
           notes: notes.trim() || undefined,
           categoryReferenceId: categoryReferenceId || null,
@@ -211,6 +216,7 @@ export default function ClientsPage() {
 
       setName('');
       setEmail('');
+      setWebsiteUrl('');
       setPhone('');
       setNotes('');
       setCategoryReferenceId('');
@@ -377,8 +383,8 @@ export default function ClientsPage() {
               <Link
                 key={client.id}
                 href={`/app/pro/${businessId}/clients/${client.id}`}
-                className="flex flex-col gap-1 rounded-xl border border-[var(--border)] bg-[var(--surface)]/70 p-3 transition hover:border-[var(--accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)] sm:flex-row sm:items-center sm:justify-between"
-                >
+                className="flex flex-col gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface)]/70 p-3 transition hover:border-[var(--accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)] sm:flex-row sm:items-center sm:justify-between"
+              >
                 <div className="flex items-start gap-3">
                   <input
                     type="checkbox"
@@ -391,29 +397,40 @@ export default function ClientsPage() {
                     onClick={(e) => e.stopPropagation()}
                     aria-label="Sélectionner"
                   />
-                <div className="space-y-1">
-                  <span className="font-semibold text-[var(--text-primary)]">{client.name}</span>
-                  <p className="text-xs text-[var(--text-secondary)]">Créé le {formatDate(client.createdAt)}</p>
-                  {client.notes ? (
-                    <p className="text-xs text-[var(--text-secondary)] line-clamp-2">{client.notes}</p>
-                  ) : null}
-                  <div className="flex flex-wrap gap-1">
-                    {client.categoryReferenceName ? (
-                      <Badge variant="neutral" className="bg-indigo-50 text-indigo-700">
-                        {client.categoryReferenceName}
-                      </Badge>
+                  <FaviconAvatar name={client.name} websiteUrl={client.websiteUrl} size={36} />
+                  <div className="space-y-1">
+                    <span className="font-semibold text-[var(--text-primary)]">{client.name}</span>
+                    <p className="text-xs text-[var(--text-secondary)]">Créé le {formatDate(client.createdAt)}</p>
+                    {client.websiteUrl ? (
+                      <p className="text-[11px] text-[var(--text-secondary)] truncate max-w-xs">
+                        {client.websiteUrl}
+                      </p>
                     ) : null}
-                    {client.tagReferences?.map((tag) => (
-                      <Badge key={tag.id} variant="neutral" className="bg-emerald-50 text-emerald-700">
-                        {tag.name}
-                      </Badge>
-                    ))}
+                    {client.notes ? (
+                      <p className="text-xs text-[var(--text-secondary)] line-clamp-2">{client.notes}</p>
+                    ) : null}
+                    <div className="flex flex-wrap gap-1">
+                      {client.categoryReferenceName ? (
+                        <Badge variant="neutral" className="bg-indigo-50 text-indigo-700">
+                          {client.categoryReferenceName}
+                        </Badge>
+                      ) : null}
+                      {client.tagReferences?.map((tag) => (
+                        <Badge key={tag.id} variant="neutral" className="bg-emerald-50 text-emerald-700">
+                          {tag.name}
+                        </Badge>
+                      ))}
+                    </div>
                   </div>
                 </div>
-                </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <Badge variant="neutral">{client.email || 'Email ?'}</Badge>
                   {client.phone ? <Badge variant="neutral">{client.phone}</Badge> : <Badge variant="neutral">Phone ?</Badge>}
+                  {client.websiteUrl ? (
+                    <Badge variant="neutral" className="max-w-[180px] truncate bg-[var(--surface-2)]">
+                      {client.websiteUrl}
+                    </Badge>
+                  ) : null}
                 </div>
               </Link>
             ))}
@@ -449,6 +466,12 @@ export default function ClientsPage() {
               placeholder="+33…"
             />
           </div>
+          <Input
+            label="Site web"
+            value={websiteUrl}
+            onChange={(e: ChangeEvent<HTMLInputElement>) => setWebsiteUrl(e.target.value)}
+            placeholder="https://exemple.com"
+          />
           <label className="space-y-1">
             <span className="text-sm font-medium text-[var(--text-secondary)]">Notes</span>
             <textarea

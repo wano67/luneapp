@@ -17,12 +17,14 @@ export type ActiveBusiness = {
   id: string;
   name: string;
   role?: string | null;
+  websiteUrl?: string | null;
 };
 
 type BusinessListItem = {
   business: {
     id: string;
     name: string;
+    websiteUrl?: string | null;
   };
   role: string;
 };
@@ -115,7 +117,8 @@ export function ActiveBusinessProvider({ children, initialBusiness }: ProviderPr
       if (
         prev?.id === initialBusiness.id &&
         prev?.name === initialBusiness.name &&
-        prev?.role === initialBusiness.role
+        prev?.role === initialBusiness.role &&
+        prev?.websiteUrl === initialBusiness.websiteUrl
       ) {
         return prev;
       }
