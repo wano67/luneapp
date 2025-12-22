@@ -18,6 +18,12 @@ function sumBigInt(values: bigint[]) {
   return values.reduce((acc, v) => acc + v, BigInt(0));
 }
 
+function divideAndRound(numerator: bigint, denominator: bigint) {
+  if (denominator === BigInt(0)) return BigInt(0);
+  const half = denominator / BigInt(2);
+  return (numerator + half) / denominator;
+}
+
 async function replaceLines(
   tx: TxClient,
   entryId: bigint,
@@ -161,6 +167,63 @@ export async function createLedgerForInvoiceConsumption(
   const lines = [
     { accountCode: settings.accountCogsCode, debitCents: totalAmount },
     { accountCode: settings.accountInventoryCode, creditCents: totalAmount },
+  ];
+  ensureBalanced(lines);
+  await replaceLines(tx, entry.id, lines);
+  return entry;
+}
+
+export async function upsertCashSaleLedgerForInvoicePaid(
+  tx: TxClient,
+  params: {
+    invoice: {
+      id: bigint;
+      businessId: bigint;
+      totalCents: bigint;
+      paidAt?: Date | null;
+      number?: string | null;
+    };
+    createdByUserId?: bigint | null;
+  }
+) {
+  const settings = await getSettings(tx, params.invoice.businessId);
+  const gross = params.invoice.totalCents;
+  const vatRateBps = Math.max(0, settings.vatRatePercent ?? 0) * 100;
+
+  const base = BigInt(10000);
+  const net =
+    settings.vatEnabled && vatRateBps > 0
+      ? divideAndRound(gross * base, base + BigInt(vatRateBps))
+      : gross;
+  const vat = gross - net;
+
+  const date = params.invoice.paidAt ?? new Date();
+  const memo = params.invoice.number ? `Vente facture ${params.invoice.number}` : 'Vente facture';
+
+  const entry = await tx.ledgerEntry.upsert({
+    where: {
+      sourceType_sourceId: {
+        sourceType: LedgerSourceType.INVOICE_CASH_SALE,
+        sourceId: params.invoice.id,
+      },
+    },
+    create: {
+      businessId: params.invoice.businessId,
+      date,
+      memo,
+      sourceType: LedgerSourceType.INVOICE_CASH_SALE,
+      sourceId: params.invoice.id,
+      createdByUserId: params.createdByUserId ?? null,
+    },
+    update: { date, memo },
+  });
+
+  const lines = [
+    { accountCode: settings.ledgerCashAccountCode, debitCents: gross },
+    { accountCode: settings.ledgerSalesAccountCode, creditCents: net },
+    ...(vat > BigInt(0)
+      ? [{ accountCode: settings.ledgerVatCollectedAccountCode, creditCents: vat }]
+      : []),
   ];
   ensureBalanced(lines);
   await replaceLines(tx, entry.id, lines);

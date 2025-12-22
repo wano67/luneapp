@@ -58,6 +58,7 @@ enum InventoryReservationStatus {
 enum LedgerSourceType {
   INVENTORY_MOVEMENT
   INVOICE_STOCK_CONSUMPTION
+  INVOICE_CASH_SALE
 }
 
 enum InventoryMovementSource {
@@ -807,6 +808,9 @@ model BusinessSettings {
   accountCogsCode        String   @default("6000")
   accountCashCode        String   @default("5300")
   accountRevenueCode     String   @default("7000")
+  ledgerSalesAccountCode       String   @default("706")
+  ledgerVatCollectedAccountCode String   @default("44571")
+  ledgerCashAccountCode        String   @default("512")
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
 

@@ -29,6 +29,12 @@ type LedgerEntry = {
   lines: LedgerLine[];
 };
 
+const SOURCE_LABELS: Record<string, string> = {
+  INVENTORY_MOVEMENT: 'Mouvement stock',
+  INVOICE_STOCK_CONSUMPTION: 'COGS facture',
+  INVOICE_CASH_SALE: 'Vente (caisse)',
+};
+
 export default function LedgerPage() {
   const active = useActiveBusiness({ optional: true });
   const businessId = active?.activeBusiness?.id;
@@ -81,6 +87,7 @@ export default function LedgerPage() {
         dateFmt: new Date(e.date).toLocaleString('fr-FR'),
         debit: e.lines.reduce((acc, l) => acc + (l.debitCents ? Number(l.debitCents) : 0), 0),
         credit: e.lines.reduce((acc, l) => acc + (l.creditCents ? Number(l.creditCents) : 0), 0),
+        sourceLabel: SOURCE_LABELS[e.sourceType] ?? e.sourceType,
       })),
     [entries]
   );
@@ -128,7 +135,7 @@ export default function LedgerPage() {
                       {entry.dateFmt} · {entry.memo ?? 'Écriture'}
                     </p>
                     <p className="text-[11px] text-[var(--text-secondary)]">
-                      Source: {entry.sourceType} {entry.sourceId ? `#${entry.sourceId}` : ''}
+                      Source: {entry.sourceLabel} {entry.sourceId ? `#${entry.sourceId}` : ''}
                     </p>
                   </div>
                   <div className="flex items-center gap-2 text-xs text-[var(--text-secondary)]">

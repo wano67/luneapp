@@ -24,7 +24,7 @@ import {
   releaseReservation,
   upsertReservationFromInvoice,
 } from '@/server/services/inventoryReservations';
-import { createLedgerForInvoiceConsumption } from '@/server/services/ledger';
+import { createLedgerForInvoiceConsumption, upsertCashSaleLedgerForInvoicePaid } from '@/server/services/ledger';
 
 function parseId(param: string | undefined) {
   if (!param || !/^\d+$/.test(param)) return null;
@@ -57,7 +57,10 @@ type InvoiceWithItems = NonNullable<
   reservation?: { status: InventoryReservationStatus } | null;
 };
 
-function serializeInvoice(invoice: InvoiceWithItems, opts?: { consumptionLedgerEntryId?: bigint | null }) {
+function serializeInvoice(
+  invoice: InvoiceWithItems,
+  opts?: { consumptionLedgerEntryId?: bigint | null; cashSaleLedgerEntryId?: bigint | null }
+) {
   if (!invoice) return null;
   return {
     id: invoice.id.toString(),
@@ -93,6 +96,26 @@ function serializeInvoice(invoice: InvoiceWithItems, opts?: { consumptionLedgerE
     consumptionLedgerEntryId: opts?.consumptionLedgerEntryId
       ? opts.consumptionLedgerEntryId.toString()
       : null,
+    cashSaleLedgerEntryId: opts?.cashSaleLedgerEntryId ? opts.cashSaleLedgerEntryId.toString() : null,
+  };
+}
+
+async function loadInvoiceLedgerIds(businessId: bigint, invoiceId: bigint) {
+  const entries = await prisma.ledgerEntry.findMany({
+    where: {
+      businessId,
+      sourceId: invoiceId,
+      sourceType: {
+        in: [LedgerSourceType.INVOICE_STOCK_CONSUMPTION, LedgerSourceType.INVOICE_CASH_SALE],
+      },
+    },
+    select: { id: true, sourceType: true },
+  });
+  const consumption = entries.find((e) => e.sourceType === LedgerSourceType.INVOICE_STOCK_CONSUMPTION);
+  const cashSale = entries.find((e) => e.sourceType === LedgerSourceType.INVOICE_CASH_SALE);
+  return {
+    consumptionLedgerEntryId: consumption?.id ?? null,
+    cashSaleLedgerEntryId: cashSale?.id ?? null,
   };
 }
 
@@ -126,18 +149,11 @@ export async function GET(
   });
   if (!invoice) return withIdNoStore(notFound('Facture introuvable.'), requestId);
 
-  const ledger = await prisma.ledgerEntry.findFirst({
-    where: {
-      businessId: businessIdBigInt,
-      sourceType: LedgerSourceType.INVOICE_STOCK_CONSUMPTION,
-      sourceId: invoiceIdBigInt,
-    },
-    select: { id: true },
-  });
+  const ledgerIds = await loadInvoiceLedgerIds(businessIdBigInt, invoiceIdBigInt);
 
   return withIdNoStore(
     jsonNoStore({
-      invoice: serializeInvoice(invoice as InvoiceWithItems, { consumptionLedgerEntryId: ledger?.id ?? null }),
+      invoice: serializeInvoice(invoice as InvoiceWithItems, ledgerIds),
     }),
     requestId
   );
@@ -244,6 +260,14 @@ export async function PATCH(
     }
   }
 
+  if (existing.status === InvoiceStatus.PAID) {
+    if (nextStatus !== InvoiceStatus.PAID || itemUpdates.length > 0) {
+      return withIdNoStore(badRequest('Facture payée: modification interdite.'), requestId);
+    }
+    const ledgerIds = await loadInvoiceLedgerIds(businessIdBigInt, invoiceIdBigInt);
+    return withIdNoStore(jsonNoStore({ invoice: serializeInvoice(existing as InvoiceWithItems, ledgerIds) }), requestId);
+  }
+
   const transitions: Record<InvoiceStatus, InvoiceStatus[]> = {
     [InvoiceStatus.DRAFT]: [InvoiceStatus.SENT, InvoiceStatus.CANCELLED],
     [InvoiceStatus.SENT]: [InvoiceStatus.PAID, InvoiceStatus.CANCELLED],
@@ -252,7 +276,8 @@ export async function PATCH(
   };
 
   if (existing.status === nextStatus && itemUpdates.length === 0) {
-    return withIdNoStore(jsonNoStore({ invoice: serializeInvoice(existing) }), requestId);
+    const ledgerIds = await loadInvoiceLedgerIds(businessIdBigInt, invoiceIdBigInt);
+    return withIdNoStore(jsonNoStore({ invoice: serializeInvoice(existing as InvoiceWithItems, ledgerIds) }), requestId);
   }
 
   const allowed = transitions[existing.status] ?? [];
@@ -271,10 +296,11 @@ export async function PATCH(
       }
     }
 
+    const isMarkingPaid = nextStatus === InvoiceStatus.PAID && existing.status !== InvoiceStatus.PAID;
     const data: Record<string, unknown> = { status: nextStatus };
     const issuedAt = nextStatus === InvoiceStatus.SENT ? existing.issuedAt ?? now : existing.issuedAt;
     if (nextStatus === InvoiceStatus.SENT && !existing.issuedAt) data.issuedAt = issuedAt;
-    if (nextStatus === InvoiceStatus.PAID) data.paidAt = now;
+    if (isMarkingPaid) data.paidAt = now;
 
     if (nextStatus === InvoiceStatus.SENT && !existing.number) {
       const number = await assignDocumentNumber(tx, businessIdBigInt, 'INVOICE', issuedAt);
@@ -301,7 +327,7 @@ export async function PATCH(
       await upsertReservationFromInvoice(tx, invoice as InvoiceWithItems);
     }
 
-    if (existing.status !== InvoiceStatus.PAID && nextStatus === InvoiceStatus.PAID) {
+    if (isMarkingPaid) {
       const paidAt = invoice.paidAt ?? now;
       await tx.finance.create({
         data: {
@@ -332,6 +358,16 @@ export async function PATCH(
           date: paidAt,
         });
       }
+      await upsertCashSaleLedgerForInvoicePaid(tx, {
+        invoice: {
+          id: invoice.id,
+          businessId: invoice.businessId,
+          totalCents: invoice.totalCents,
+          paidAt,
+          number: invoice.number,
+        },
+        createdByUserId: BigInt(userId),
+      });
     }
 
     const refreshed = await tx.invoice.findUnique({
@@ -342,18 +378,11 @@ export async function PATCH(
     return refreshed ?? invoice;
   });
 
-  const ledger = await prisma.ledgerEntry.findFirst({
-    where: {
-      businessId: businessIdBigInt,
-      sourceType: LedgerSourceType.INVOICE_STOCK_CONSUMPTION,
-      sourceId: invoiceIdBigInt,
-    },
-    select: { id: true },
-  });
+  const ledgerIds = await loadInvoiceLedgerIds(businessIdBigInt, invoiceIdBigInt);
 
   return withIdNoStore(
     jsonNoStore({
-      invoice: serializeInvoice(updated as InvoiceWithItems, { consumptionLedgerEntryId: ledger?.id ?? null }),
+      invoice: serializeInvoice(updated as InvoiceWithItems, ledgerIds),
     }),
     requestId
   );

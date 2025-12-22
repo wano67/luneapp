@@ -1490,6 +1490,13 @@ paths:
                 allowViewerExport: { type: boolean }
                 integrationStripeEnabled: { type: boolean }
                 integrationStripePublicKey: { type: string, nullable: true }
+                accountInventoryCode: { type: string }
+                accountCogsCode: { type: string }
+                accountCashCode: { type: string }
+                accountRevenueCode: { type: string }
+                ledgerSalesAccountCode: { type: string }
+                ledgerVatCollectedAccountCode: { type: string }
+                ledgerCashAccountCode: { type: string }
       responses:
         '200':
           description: Paramètres mis à jour
@@ -2001,7 +2008,7 @@ paths:
           schema: { type: string, format: date-time, nullable: true }
         - in: query
           name: sourceType
-          schema: { type: string, enum: [INVENTORY_MOVEMENT, INVOICE_STOCK_CONSUMPTION], nullable: true }
+          schema: { type: string, enum: [INVENTORY_MOVEMENT, INVOICE_STOCK_CONSUMPTION, INVOICE_CASH_SALE], nullable: true }
         - in: query
           name: sourceId
           schema: { type: string, nullable: true }
@@ -2522,6 +2529,7 @@ components:
           nullable: true
           description: 'SENT réserve le stock, PAID le consomme'
         consumptionLedgerEntryId: { type: string, nullable: true }
+        cashSaleLedgerEntryId: { type: string, nullable: true }
     Finance:
       type: object
       properties:
@@ -2596,7 +2604,7 @@ components:
         businessId: { type: string }
         date: { type: string, format: date-time }
         memo: { type: string, nullable: true }
-        sourceType: { type: string, enum: [INVENTORY_MOVEMENT, INVOICE_STOCK_CONSUMPTION] }
+        sourceType: { type: string, enum: [INVENTORY_MOVEMENT, INVOICE_STOCK_CONSUMPTION, INVOICE_CASH_SALE] }
         sourceId: { type: string, nullable: true }
         createdAt: { type: string, format: date-time }
         lines:
@@ -2701,6 +2709,9 @@ components:
         accountCogsCode: { type: string }
         accountCashCode: { type: string }
         accountRevenueCode: { type: string }
+        ledgerSalesAccountCode: { type: string }
+        ledgerVatCollectedAccountCode: { type: string }
+        ledgerCashAccountCode: { type: string }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
     TreasurySummary:

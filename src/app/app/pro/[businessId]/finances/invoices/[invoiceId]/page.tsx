@@ -43,6 +43,7 @@ type InvoiceDetail = {
   createdAt: string;
   updatedAt: string;
   consumptionLedgerEntryId?: string | null;
+  cashSaleLedgerEntryId?: string | null;
   items: InvoiceItem[];
 };
 
@@ -219,6 +220,14 @@ export default function InvoiceDetailPage() {
                       className="underline"
                     >
                       Écriture comptable
+                    </Link>
+                  ) : null}
+                  {invoice.cashSaleLedgerEntryId ? (
+                    <Link
+                      href={`/api/pro/businesses/${businessId}/ledger/${invoice.cashSaleLedgerEntryId}`}
+                      className="underline"
+                    >
+                      Écriture vente (caisse)
                     </Link>
                   ) : null}
                 </div>
