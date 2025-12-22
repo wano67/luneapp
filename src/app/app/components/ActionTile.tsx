@@ -4,21 +4,34 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { Card } from '@/components/ui/card';
+import { useIsActivePath } from './useIsActivePath';
 
 type ActionTileProps = {
   icon: ReactNode;
   title: string;
   description: string;
   href: string;
+  activeHref?: string | string[];
   badge?: string;
   helper?: string;
 };
 
-export function ActionTile({ icon, title, description, href, badge, helper }: ActionTileProps) {
+export function ActionTile({
+  icon,
+  title,
+  description,
+  href,
+  activeHref,
+  badge,
+  helper,
+}: ActionTileProps) {
+  const isActive = useIsActivePath(activeHref ?? href);
+
   return (
     <Link
       href={href}
       className="card-interactive group block"
+      data-active={isActive || undefined}
       aria-label={`${title} - ${description}`}
     >
       <Card className="h-full rounded-2xl border border-[var(--border)] bg-[var(--surface)]/70 p-4">

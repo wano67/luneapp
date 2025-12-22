@@ -1,8 +1,8 @@
 // src/app/app/pro/ProHomeClient.tsx
 'use client';
 
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -75,6 +75,7 @@ type CreateBusinessDraft = {
 
 export default function ProHomeClient() {
   const router = useRouter();
+  const pathname = usePathname() || '';
   const searchParams = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -108,6 +109,10 @@ export default function ProHomeClient() {
   /* ---------- DATA ---------- */
   const items = useMemo(() => businesses?.items ?? [], [businesses]);
   const defaultBusinessId = useMemo(() => activeId ?? items[0]?.business.id ?? null, [activeId, items]);
+  const isActivePath = useCallback(
+    (target: string) => pathname === target || pathname.startsWith(`${target}/`),
+    [pathname]
+  );
 
   const createValidation = useMemo(() => {
     const issues: string[] = [];
@@ -526,6 +531,9 @@ export default function ProHomeClient() {
                     }
                   }}
                   className="card-interactive flex h-full flex-col gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)]/70 p-4"
+                  data-active={
+                    isActivePath(`/app/pro/${business.id}`) || business.id === activeId ? true : undefined
+                  }
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex min-w-0 items-start gap-3">
