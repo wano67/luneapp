@@ -69,10 +69,13 @@ export async function GET(
     return withRequestId(notFound('Entreprise introuvable.'), requestId);
   }
 
-  return jsonNoStore({
-    ...serializeBusiness(business),
-    role: membership.role,
-  });
+  return withRequestId(
+    jsonNoStore({
+      ...serializeBusiness(business),
+      role: membership.role,
+    }),
+    requestId
+  );
 }
 
 export async function DELETE(
