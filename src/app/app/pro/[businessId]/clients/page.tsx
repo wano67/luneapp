@@ -16,6 +16,7 @@ import { ReferencePicker } from '../references/ReferencePicker';
 import { useRowSelection } from '../../../components/selection/useRowSelection';
 import { BulkActionBar } from '../../../components/selection/BulkActionBar';
 import { FaviconAvatar } from '../../../components/FaviconAvatar';
+import { PageHeader } from '../../../components/PageHeader';
 
 type Client = {
   id: string;
@@ -71,14 +72,6 @@ export default function ClientsPage() {
   const { selectedCount, toggle, toggleAll, clear, isSelected } = useRowSelection();
 
   const fetchController = useRef<AbortController | null>(null);
-
-  function formatDate(value: string) {
-    try {
-      return new Intl.DateTimeFormat('fr-FR').format(new Date(value));
-    } catch {
-      return value;
-    }
-  }
 
   async function loadClients(signal?: AbortSignal) {
     const controller = signal ? null : new AbortController();
@@ -240,38 +233,26 @@ export default function ClientsPage() {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="mx-auto max-w-6xl space-y-5 px-4 py-4">
       <RoleBanner role={role} />
-      <Card className="space-y-3 p-5">
-        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-[var(--text-secondary)]">
-              Clients
-            </p>
-            <h1 className="text-lg font-semibold text-[var(--text-primary)]">Base clients</h1>
-            <p className="text-sm text-[var(--text-secondary)]">
-              Centralise tes clients pour lier projets et facturation.
-            </p>
-          </div>
-          <div className="flex flex-col items-start gap-1">
-            <Button
-              onClick={() => {
-                if (!isAdmin) {
-                  setReadOnlyInfo(readOnlyMessage);
-                  return;
-                }
-                setCreateOpen(true);
-              }}
-              disabled={!isAdmin}
-            >
-              Ajouter un client
-            </Button>
-            {!isAdmin ? (
-              <p className="text-[11px] text-[var(--text-secondary)]">Lecture seule : demande un rôle admin.</p>
-            ) : null}
-          </div>
-        </div>
+      <PageHeader
+        backHref="/app/pro"
+        backLabel="Studio"
+        title="Clients"
+        subtitle="Centralise tes clients pour lier projets et facturation."
+        primaryAction={{
+          label: 'Nouveau client',
+          onClick: () => {
+            if (!isAdmin) {
+              setReadOnlyInfo(readOnlyMessage);
+              return;
+            }
+            setCreateOpen(true);
+          },
+        }}
+      />
 
+      <Card className="space-y-3 p-5">
         <form onSubmit={handleSearch} className="flex flex-col gap-2 md:flex-row md:items-center">
           <Input
             label="Recherche"
@@ -340,19 +321,21 @@ export default function ClientsPage() {
             <p className="text-sm text-[var(--text-secondary)]">
               Aucun client pour le moment. Ajoute-en un pour commencer.
             </p>
-            <Button
-              size="sm"
-              onClick={() => {
-                if (!isAdmin) {
-                  setReadOnlyInfo(readOnlyMessage);
-                  return;
-                }
-                setCreateOpen(true);
-              }}
-              disabled={!isAdmin}
-            >
-              Ajouter un client
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                onClick={() => {
+                  if (!isAdmin) {
+                    setReadOnlyInfo(readOnlyMessage);
+                    return;
+                  }
+                  setCreateOpen(true);
+                }}
+                disabled={!isAdmin}
+              >
+                Créer un client
+              </Button>
+            </div>
           </div>
         ) : (
           <div className="space-y-3">
@@ -370,11 +353,11 @@ export default function ClientsPage() {
               <BulkActionBar
                 count={selectedCount}
                 onClear={clear}
-                actions={[
-                  {
-                    label: 'Actions bulk indisponibles',
-                    onClick: handleBulkUnavailable,
-                    variant: 'outline',
+                  actions={[
+                    {
+                      label: 'Actions bulk indisponibles',
+                      onClick: handleBulkUnavailable,
+                      variant: 'outline',
                   },
                 ]}
               />
@@ -383,54 +366,54 @@ export default function ClientsPage() {
               <Link
                 key={client.id}
                 href={`/app/pro/${businessId}/clients/${client.id}`}
-                className="flex flex-col gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface)]/70 p-3 transition hover:border-[var(--accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)] sm:flex-row sm:items-center sm:justify-between"
+                className="card-interactive block rounded-xl"
               >
-                <div className="flex items-start gap-3">
-                  <input
-                    type="checkbox"
-                    className="mt-1 h-4 w-4 accent-[var(--accent)]"
-                    checked={isSelected(client.id)}
-                    onChange={(e) => {
-                      e.stopPropagation();
-                      toggle(client.id);
-                    }}
-                    onClick={(e) => e.stopPropagation()}
-                    aria-label="Sélectionner"
-                  />
-                  <FaviconAvatar name={client.name} websiteUrl={client.websiteUrl} size={36} />
-                  <div className="space-y-1">
-                    <span className="font-semibold text-[var(--text-primary)]">{client.name}</span>
-                    <p className="text-xs text-[var(--text-secondary)]">Créé le {formatDate(client.createdAt)}</p>
-                    {client.websiteUrl ? (
-                      <p className="text-[11px] text-[var(--text-secondary)] truncate max-w-xs">
-                        {client.websiteUrl}
-                      </p>
-                    ) : null}
-                    {client.notes ? (
-                      <p className="text-xs text-[var(--text-secondary)] line-clamp-2">{client.notes}</p>
-                    ) : null}
-                    <div className="flex flex-wrap gap-1">
-                      {client.categoryReferenceName ? (
-                        <Badge variant="neutral" className="bg-indigo-50 text-indigo-700">
-                          {client.categoryReferenceName}
-                        </Badge>
+                <div className="flex flex-col gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface)]/70 p-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-start gap-3">
+                    <input
+                      type="checkbox"
+                      className="mt-1 h-4 w-4 accent-[var(--accent)]"
+                      checked={isSelected(client.id)}
+                      onChange={(e) => {
+                        e.stopPropagation();
+                        toggle(client.id);
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                      aria-label="Sélectionner"
+                    />
+                    <FaviconAvatar name={client.name} websiteUrl={client.websiteUrl} size={36} />
+                    <div className="space-y-1">
+                      <span className="font-semibold text-[var(--text-primary)]">{client.name}</span>
+                      <div className="flex flex-wrap gap-1">
+                        {client.categoryReferenceName ? (
+                          <Badge variant="neutral" className="bg-indigo-50 text-indigo-700">
+                            {client.categoryReferenceName}
+                          </Badge>
+                        ) : null}
+                        {client.tagReferences?.map((tag) => (
+                          <Badge key={tag.id} variant="neutral" className="bg-emerald-50 text-emerald-700">
+                            {tag.name}
+                          </Badge>
+                        ))}
+                      </div>
+                      {client.notes ? (
+                        <p className="text-xs text-[var(--text-secondary)] line-clamp-2">{client.notes}</p>
                       ) : null}
-                      {client.tagReferences?.map((tag) => (
-                        <Badge key={tag.id} variant="neutral" className="bg-emerald-50 text-emerald-700">
-                          {tag.name}
-                        </Badge>
-                      ))}
                     </div>
                   </div>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant="neutral">{client.email || 'Email ?'}</Badge>
-                  {client.phone ? <Badge variant="neutral">{client.phone}</Badge> : <Badge variant="neutral">Phone ?</Badge>}
-                  {client.websiteUrl ? (
-                    <Badge variant="neutral" className="max-w-[180px] truncate bg-[var(--surface-2)]">
-                      {client.websiteUrl}
-                    </Badge>
-                  ) : null}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant="neutral">{client.email || 'Email ?'}</Badge>
+                    {client.phone ? (
+                      <Badge variant="neutral">{client.phone}</Badge>
+                    ) : (
+                      <Badge variant="neutral">Phone ?</Badge>
+                    )}
+                    {client.websiteUrl ? (
+                      <Badge variant="neutral" className="max-w-[180px] truncate bg-[var(--surface-2)]">
+                        {client.websiteUrl}
+                      </Badge>
+                    ) : null}
+                  </div>
                 </div>
               </Link>
             ))}
