@@ -5,11 +5,13 @@ import { assertSameOrigin, jsonNoStore } from '@/server/security/csrf';
 import { rateLimit } from '@/server/security/rateLimit';
 import { requireAuthPro } from '@/server/auth/requireAuthPro';
 import { badRequest, getErrorMessage, getRequestId, unauthorized, withRequestId } from '@/server/http/apiUtils';
+import { normalizeWebsiteUrl } from '@/lib/website';
 
 function serializeBusiness(b: Business) {
   return {
     id: b.id.toString(),
     name: b.name,
+    websiteUrl: b.websiteUrl,
     ownerId: b.ownerId.toString(),
     createdAt: b.createdAt.toISOString(),
     updatedAt: b.updatedAt.toISOString(),
@@ -81,10 +83,17 @@ export async function POST(request: NextRequest) {
     return withRequestId(badRequest('Le nom de l’entreprise ne peut pas être vide.'), requestId);
   }
 
+  const websiteRaw = (body as Record<string, unknown>).websiteUrl;
+  const normalizedWebsite = normalizeWebsiteUrl(websiteRaw);
+  if (normalizedWebsite.error) {
+    return withRequestId(badRequest(normalizedWebsite.error), requestId);
+  }
+
   try {
     const business = await prisma.business.create({
       data: {
         name,
+        websiteUrl: normalizedWebsite.value ?? undefined,
         ownerId: BigInt(userId),
         memberships: {
           create: {

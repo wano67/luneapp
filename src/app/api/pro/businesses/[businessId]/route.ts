@@ -12,6 +12,8 @@ import {
   unauthorized,
   withRequestId,
 } from '@/server/http/apiUtils';
+import { rateLimit } from '@/server/security/rateLimit';
+import { normalizeWebsiteUrl } from '@/lib/website';
 
 function parseId(param: string | undefined) {
   if (!param || !/^\d+$/.test(param)) return null;
@@ -20,6 +22,24 @@ function parseId(param: string | undefined) {
   } catch {
     return null;
   }
+}
+
+function serializeBusiness(business: {
+  id: bigint;
+  name: string;
+  websiteUrl: string | null;
+  ownerId: bigint;
+  createdAt: Date;
+  updatedAt: Date;
+}) {
+  return {
+    id: business.id.toString(),
+    name: business.name,
+    websiteUrl: business.websiteUrl,
+    ownerId: business.ownerId.toString(),
+    createdAt: business.createdAt.toISOString(),
+    updatedAt: business.updatedAt.toISOString(),
+  };
 }
 
 export async function GET(
@@ -50,11 +70,7 @@ export async function GET(
   }
 
   return jsonNoStore({
-    id: business.id.toString(),
-    name: business.name,
-    ownerId: business.ownerId.toString(),
-    createdAt: business.createdAt.toISOString(),
-    updatedAt: business.updatedAt.toISOString(),
+    ...serializeBusiness(business),
     role: membership.role,
   });
 }
@@ -96,4 +112,70 @@ export async function DELETE(
   ]);
 
   return withRequestId(NextResponse.json({ deleted: true }), requestId);
+}
+
+export async function PATCH(
+  request: NextRequest,
+  context: { params: Promise<{ businessId: string }> }
+) {
+  const requestId = getRequestId(request);
+  const csrf = assertSameOrigin(request);
+  if (csrf) return withRequestId(csrf, requestId);
+
+  const { businessId: businessIdParam } = await context.params;
+  const businessIdBigInt = parseId(businessIdParam);
+  if (!businessIdBigInt) return withRequestId(badRequest('businessId invalide.'), requestId);
+
+  let userId: string;
+  try {
+    ({ userId } = await requireAuthPro(request));
+  } catch {
+    return withRequestId(unauthorized(), requestId);
+  }
+
+  const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'ADMIN');
+  if (!membership) return withRequestId(forbidden(), requestId);
+
+  const limited = rateLimit(request, {
+    key: `pro:business:update:${businessIdBigInt}:${userId}`,
+    limit: 60,
+    windowMs: 60 * 60 * 1000,
+  });
+  if (limited) return withRequestId(limited, requestId);
+
+  const body = await request.json().catch(() => null);
+  if (!body || typeof body !== 'object') {
+    return withRequestId(badRequest('Payload invalide.'), requestId);
+  }
+
+  const data: Record<string, unknown> = {};
+
+  if (Object.prototype.hasOwnProperty.call(body, 'name')) {
+    if (typeof (body as Record<string, unknown>).name !== 'string') {
+      return withRequestId(badRequest('Nom invalide.'), requestId);
+    }
+    const name = (body as Record<string, unknown>).name?.toString().trim();
+    if (!name) return withRequestId(badRequest('Nom requis.'), requestId);
+    if (name.length > 200) return withRequestId(badRequest('Nom trop long (200 max).'), requestId);
+    data.name = name;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(body, 'websiteUrl')) {
+    const normalizedWebsite = normalizeWebsiteUrl((body as Record<string, unknown>).websiteUrl);
+    if (normalizedWebsite.error) {
+      return withRequestId(badRequest(normalizedWebsite.error), requestId);
+    }
+    data.websiteUrl = normalizedWebsite.value;
+  }
+
+  if (Object.keys(data).length === 0) {
+    return withRequestId(badRequest('Aucune modification.'), requestId);
+  }
+
+  const updated = await prisma.business.update({
+    where: { id: businessIdBigInt },
+    data,
+  });
+
+  return withRequestId(jsonNoStore({ item: serializeBusiness(updated) }), requestId);
 }

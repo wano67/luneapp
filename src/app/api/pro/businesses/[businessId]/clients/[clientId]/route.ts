@@ -13,6 +13,7 @@ import {
 import { assertSameOrigin, jsonNoStore, withNoStore } from '@/server/security/csrf';
 import { rateLimit } from '@/server/security/rateLimit';
 import { BusinessReferenceType, ClientStatus, LeadSource } from '@/generated/prisma/client';
+import { normalizeWebsiteUrl } from '@/lib/website';
 
 function parseId(param: string | undefined) {
   if (!param || !/^\d+$/.test(param)) {
@@ -91,6 +92,7 @@ function serializeClient(client: {
   businessId: bigint;
   name: string;
   email: string | null;
+  websiteUrl: string | null;
   phone: string | null;
   notes: string | null;
   sector: string | null;
@@ -115,6 +117,7 @@ function serializeClient(client: {
       : [],
     name: client.name,
     email: client.email,
+    websiteUrl: client.websiteUrl,
     phone: client.phone,
     notes: client.notes,
     sector: client.sector,
@@ -261,6 +264,14 @@ export async function PATCH(
     } else {
       return withNoStore(withRequestId(badRequest('Téléphone invalide.'), requestId));
     }
+  }
+
+  if ('websiteUrl' in body) {
+    const normalized = normalizeWebsiteUrl((body as Record<string, unknown>).websiteUrl);
+    if (normalized.error) {
+      return withNoStore(withRequestId(badRequest(normalized.error), requestId));
+    }
+    data.websiteUrl = normalized.value;
   }
 
   if ('notes' in body) {

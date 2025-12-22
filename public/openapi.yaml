@@ -413,7 +413,9 @@ paths:
             schema:
               type: object
               required: [name]
-              properties: { name: { type: string } }
+              properties:
+                name: { type: string }
+                websiteUrl: { type: string, nullable: true, example: 'https://example.com' }
       responses:
         '201':
           description: Créé
@@ -436,6 +438,28 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Business' }
+    patch:
+      tags: [Pro / Business]
+      security: [ { cookieAuth: [] } ]
+      summary: Met à jour un business (nom / site)
+      parameters: [ { $ref: '#/components/parameters/BusinessId' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                websiteUrl: { type: string, nullable: true, example: 'https://example.com' }
+      responses:
+        '200':
+          description: Business mis à jour
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { item: { $ref: '#/components/schemas/Business' } }
     delete:
       tags: [Pro / Business]
       security: [ { cookieAuth: [] } ]
@@ -2386,6 +2410,7 @@ components:
       properties:
         id: { type: string }
         name: { type: string }
+        websiteUrl: { type: string, nullable: true, example: 'https://example.com' }
         ownerId: { type: string }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
@@ -2399,6 +2424,7 @@ components:
         businessId: { type: string }
         name: { type: string }
         email: { type: string, nullable: true }
+        websiteUrl: { type: string, nullable: true, example: 'https://example.com' }
         phone: { type: string, nullable: true }
         notes: { type: string, nullable: true }
         status: { type: string, enum: [ACTIVE, PAUSED, FORMER] }
@@ -2420,6 +2446,7 @@ components:
       properties:
         name: { type: string }
         email: { type: string, format: email, nullable: true }
+        websiteUrl: { type: string, nullable: true, example: 'https://example.com' }
         phone: { type: string, nullable: true }
         notes: { type: string, nullable: true }
         status: { type: string, enum: [ACTIVE, PAUSED, FORMER], nullable: true }
@@ -2433,6 +2460,7 @@ components:
       properties:
         name: { type: string }
         email: { type: string, format: email, nullable: true }
+        websiteUrl: { type: string, nullable: true, example: 'https://example.com' }
         phone: { type: string, nullable: true }
         notes: { type: string, nullable: true }
         status: { type: string, enum: [ACTIVE, PAUSED, FORMER], nullable: true }

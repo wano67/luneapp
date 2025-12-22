@@ -6,6 +6,7 @@ import { rateLimit } from '@/server/security/rateLimit';
 import { requireAuthPro } from '@/server/auth/requireAuthPro';
 import { badRequest, getRequestId, unauthorized, withRequestId } from '@/server/http/apiUtils';
 import { BusinessReferenceType, ClientStatus, LeadSource } from '@/generated/prisma/client';
+import { normalizeWebsiteUrl } from '@/lib/website';
 
 function forbidden() {
   return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -90,6 +91,7 @@ function serializeClient(client: {
   businessId: bigint;
   name: string;
   email: string | null;
+  websiteUrl: string | null;
   phone: string | null;
   notes: string | null;
   sector: string | null;
@@ -114,6 +116,7 @@ function serializeClient(client: {
       : [],
     name: client.name,
     email: client.email,
+    websiteUrl: client.websiteUrl,
     phone: client.phone,
     notes: client.notes,
     sector: client.sector,
@@ -262,6 +265,11 @@ export async function POST(
     return withRequestId(badRequest('Notes trop longues (max 2000).'), requestId);
   }
 
+  const websiteNormalized = normalizeWebsiteUrl((body as Record<string, unknown>).websiteUrl);
+  if (websiteNormalized.error) {
+    return withRequestId(badRequest(websiteNormalized.error), requestId);
+  }
+
   const sector = normalizeStr(body.sector);
   const status =
     typeof body.status === 'string' && STATUS_VALUES.has(body.status as ClientStatus)
@@ -311,6 +319,7 @@ export async function POST(
       email,
       phone,
       notes,
+      websiteUrl: websiteNormalized.value ?? undefined,
       sector: sector || undefined,
       status: status ?? undefined,
       leadSource,
