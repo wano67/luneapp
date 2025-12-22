@@ -25,6 +25,7 @@
     "smoke:references-consumption": "pnpm tsx scripts/smoke-references-consumption.ts",
     "smoke:settings": "pnpm tsx scripts/smoke-settings.ts",
     "smoke:website": "pnpm tsx scripts/smoke-website.ts",
+    "smoke:services-import": "pnpm tsx scripts/smoke-services-import.ts",
     "smoke:finance-advanced": "pnpm tsx scripts/smoke-finance-advanced.ts",
     "smoke:processes": "pnpm tsx scripts/smoke-processes.ts",
     "smoke:team": "pnpm tsx scripts/smoke-team-employees.ts",
@@ -41,6 +42,7 @@
     "jose": "^6.1.3",
     "lucide-react": "^0.462.0",
     "next": "16.0.10",
+    "papaparse": "^5.5.3",
     "pdf-lib": "^1.17.1",
     "pg": "^8.16.3",
     "react": "19.2.1",
@@ -51,6 +53,7 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
+    "@types/papaparse": "^5.5.2",
     "@types/pg": "^8.15.6",
     "@types/react": "^19",
     "@types/react-dom": "^19",

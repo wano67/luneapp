@@ -1583,6 +1583,23 @@ paths:
                 vatRate: { type: integer, nullable: true }
       responses:
         '201': { $ref: '#/components/responses/Ok' }
+  /api/pro/businesses/{businessId}/services/import:
+    post:
+      tags: [Pro / Services]
+      security: [ { cookieAuth: [] } ]
+      summary: Import CSV des services
+      parameters: [ { $ref: '#/components/parameters/BusinessId' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ServiceImportRequest' }
+      responses:
+        '200':
+          description: Résultat import
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ServiceImportResponse' }
   /api/pro/businesses/{businessId}/services/{serviceId}:
     get:
       tags: [Pro / Services]
@@ -2942,7 +2959,7 @@ components:
         id: { type: string }
         code: { type: string }
         name: { type: string }
-        type: { type: string }
+        type: { type: string, nullable: true }
         categoryReferenceId: { type: string, nullable: true }
         categoryReferenceName: { type: string, nullable: true }
         tagReferences:
@@ -2953,6 +2970,45 @@ components:
               id: { type: string }
               name: { type: string }
         defaultPriceCents: { type: string, nullable: true }
+        tjmCents: { type: string, nullable: true }
+        durationHours: { type: integer, nullable: true }
+        vatRate: { type: integer, nullable: true }
+        description: { type: string, nullable: true }
+    ServiceImportRequest:
+      type: object
+      properties:
+        mapping:
+          type: object
+          properties:
+            code: { type: string }
+            name: { type: string }
+            description: { type: string }
+            price: { type: string }
+            vat: { type: string }
+            duration: { type: string }
+            type: { type: string }
+            category: { type: string }
+        rows:
+          type: array
+          items: { type: object, additionalProperties: true }
+        options:
+          type: object
+          properties:
+            createMissingCategories: { type: boolean }
+      required: [mapping, rows]
+    ServiceImportResponse:
+      type: object
+      properties:
+        createdCount: { type: integer }
+        updatedCount: { type: integer }
+        skippedCount: { type: integer }
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              row: { type: integer }
+              message: { type: string }
     PersonalAccount:
       type: object
       properties:
