@@ -1986,6 +1986,65 @@ paths:
                     type: array
                     items: { $ref: '#/components/schemas/InventorySummaryRow' }
 
+  /api/pro/businesses/{businessId}/ledger:
+    get:
+      tags: [Pro / Ledger]
+      security: [ { cookieAuth: [] } ]
+      summary: Liste des écritures comptables
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+        - in: query
+          name: from
+          schema: { type: string, format: date-time, nullable: true }
+        - in: query
+          name: to
+          schema: { type: string, format: date-time, nullable: true }
+        - in: query
+          name: sourceType
+          schema: { type: string, enum: [INVENTORY_MOVEMENT, INVOICE_STOCK_CONSUMPTION], nullable: true }
+        - in: query
+          name: sourceId
+          schema: { type: string, nullable: true }
+        - in: query
+          name: limit
+          schema: { type: integer, default: 50 }
+        - in: query
+          name: cursor
+          schema: { type: string, nullable: true }
+      responses:
+        '200':
+          description: Écritures
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/LedgerEntry' }
+                  nextCursor: { type: string, nullable: true }
+
+  /api/pro/businesses/{businessId}/ledger/{entryId}:
+    get:
+      tags: [Pro / Ledger]
+      security: [ { cookieAuth: [] } ]
+      summary: Détail d'une écriture comptable
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+        - name: entryId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Entrée comptable
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  item: { $ref: '#/components/schemas/LedgerEntry' }
+
   /api/pro/businesses/{businessId}/invites:
     get:
       tags: [Pro / Invites]
@@ -2462,6 +2521,7 @@ components:
           enum: [ACTIVE, RELEASED, CONSUMED]
           nullable: true
           description: 'SENT réserve le stock, PAID le consomme'
+        consumptionLedgerEntryId: { type: string, nullable: true }
     Finance:
       type: object
       properties:
@@ -2519,6 +2579,29 @@ components:
         hourlyCostCents: { type: string, nullable: true }
         status: { type: string, enum: [ACTIVE, INACTIVE] }
         notes: { type: string, nullable: true }
+    LedgerLine:
+      type: object
+      properties:
+        id: { type: string }
+        accountCode: { type: string }
+        accountName: { type: string, nullable: true }
+        debitCents: { type: string, nullable: true }
+        creditCents: { type: string, nullable: true }
+        metadata: {}
+        createdAt: { type: string, format: date-time }
+    LedgerEntry:
+      type: object
+      properties:
+        id: { type: string }
+        businessId: { type: string }
+        date: { type: string, format: date-time }
+        memo: { type: string, nullable: true }
+        sourceType: { type: string, enum: [INVENTORY_MOVEMENT, INVOICE_STOCK_CONSUMPTION] }
+        sourceId: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+        lines:
+          type: array
+          items: { $ref: '#/components/schemas/LedgerLine' }
     Member:
       type: object
       properties:
@@ -2614,6 +2697,10 @@ components:
         allowViewerExport: { type: boolean }
         integrationStripeEnabled: { type: boolean }
         integrationStripePublicKey: { type: string, nullable: true }
+        accountInventoryCode: { type: string }
+        accountCogsCode: { type: string }
+        accountCashCode: { type: string }
+        accountRevenueCode: { type: string }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
     TreasurySummary:

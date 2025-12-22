@@ -4,6 +4,7 @@ import {
   FinanceType,
   InvoiceStatus,
   InventoryReservationStatus,
+  LedgerSourceType,
 } from '@/generated/prisma/client';
 import { requireAuthPro } from '@/server/auth/requireAuthPro';
 import { requireBusinessRole } from '@/server/auth/businessRole';
@@ -23,6 +24,7 @@ import {
   releaseReservation,
   upsertReservationFromInvoice,
 } from '@/server/services/inventoryReservations';
+import { createLedgerForInvoiceConsumption } from '@/server/services/ledger';
 
 function parseId(param: string | undefined) {
   if (!param || !/^\d+$/.test(param)) return null;
@@ -55,7 +57,7 @@ type InvoiceWithItems = NonNullable<
   reservation?: { status: InventoryReservationStatus } | null;
 };
 
-function serializeInvoice(invoice: InvoiceWithItems) {
+function serializeInvoice(invoice: InvoiceWithItems, opts?: { consumptionLedgerEntryId?: bigint | null }) {
   if (!invoice) return null;
   return {
     id: invoice.id.toString(),
@@ -88,6 +90,9 @@ function serializeInvoice(invoice: InvoiceWithItems) {
       updatedAt: item.updatedAt.toISOString(),
     })),
     reservationStatus: invoice.reservation?.status ?? null,
+    consumptionLedgerEntryId: opts?.consumptionLedgerEntryId
+      ? opts.consumptionLedgerEntryId.toString()
+      : null,
   };
 }
 
@@ -121,7 +126,21 @@ export async function GET(
   });
   if (!invoice) return withIdNoStore(notFound('Facture introuvable.'), requestId);
 
-  return withIdNoStore(jsonNoStore({ invoice: serializeInvoice(invoice as InvoiceWithItems) }), requestId);
+  const ledger = await prisma.ledgerEntry.findFirst({
+    where: {
+      businessId: businessIdBigInt,
+      sourceType: LedgerSourceType.INVOICE_STOCK_CONSUMPTION,
+      sourceId: invoiceIdBigInt,
+    },
+    select: { id: true },
+  });
+
+  return withIdNoStore(
+    jsonNoStore({
+      invoice: serializeInvoice(invoice as InvoiceWithItems, { consumptionLedgerEntryId: ledger?.id ?? null }),
+    }),
+    requestId
+  );
 }
 
 // PATCH /api/pro/businesses/{businessId}/invoices/{invoiceId}
@@ -302,7 +321,17 @@ export async function PATCH(
           }),
         },
       });
-      await consumeReservation(tx, { invoice: invoice as InvoiceWithItems, userId: BigInt(userId) });
+      const consumption = await consumeReservation(tx, { invoice: invoice as InvoiceWithItems, userId: BigInt(userId) });
+      if (consumption.items.length) {
+        await createLedgerForInvoiceConsumption(tx, {
+          invoiceId: invoice.id,
+          businessId: invoice.businessId,
+          projectId: invoice.projectId,
+          items: consumption.items,
+          createdByUserId: BigInt(userId),
+          date: paidAt,
+        });
+      }
     }
 
     const refreshed = await tx.invoice.findUnique({
@@ -313,5 +342,19 @@ export async function PATCH(
     return refreshed ?? invoice;
   });
 
-  return withIdNoStore(jsonNoStore({ invoice: serializeInvoice(updated as InvoiceWithItems) }), requestId);
+  const ledger = await prisma.ledgerEntry.findFirst({
+    where: {
+      businessId: businessIdBigInt,
+      sourceType: LedgerSourceType.INVOICE_STOCK_CONSUMPTION,
+      sourceId: invoiceIdBigInt,
+    },
+    select: { id: true },
+  });
+
+  return withIdNoStore(
+    jsonNoStore({
+      invoice: serializeInvoice(updated as InvoiceWithItems, { consumptionLedgerEntryId: ledger?.id ?? null }),
+    }),
+    requestId
+  );
 }

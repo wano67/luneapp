@@ -42,6 +42,7 @@ type InvoiceDetail = {
   paidAt: string | null;
   createdAt: string;
   updatedAt: string;
+  consumptionLedgerEntryId?: string | null;
   items: InvoiceItem[];
 };
 
@@ -212,6 +213,14 @@ export default function InvoiceDetailPage() {
                   <span>Projet: {invoice.projectId}</span>
                   <span>Client: {invoice.clientId ?? '—'}</span>
                   <span>Devis: {invoice.quoteId ?? '—'}</span>
+                  {invoice.consumptionLedgerEntryId ? (
+                    <Link
+                      href={`/api/pro/businesses/${businessId}/ledger/${invoice.consumptionLedgerEntryId}`}
+                      className="underline"
+                    >
+                      Écriture comptable
+                    </Link>
+                  ) : null}
                 </div>
               </div>
               <div className="flex flex-wrap gap-2">

@@ -29,6 +29,7 @@
     "smoke:team": "pnpm tsx scripts/smoke-team-employees.ts",
     "smoke:stock": "pnpm tsx scripts/smoke-stock.ts",
     "smoke:invoice-reservation": "pnpm tsx scripts/smoke-invoice-reservation.ts",
+    "smoke:ledger": "pnpm tsx scripts/smoke-ledger.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {

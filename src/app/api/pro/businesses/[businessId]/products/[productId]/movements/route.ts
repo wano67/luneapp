@@ -13,6 +13,7 @@ import {
   unauthorized,
   withRequestId,
 } from '@/server/http/apiUtils';
+import { upsertLedgerForMovement } from '@/server/services/ledger';
 
 function parseId(param: string | undefined) {
   if (!param || !/^\d+$/.test(param)) return null;
@@ -245,6 +246,19 @@ export async function POST(
         },
       });
     }
+
+    await upsertLedgerForMovement(tx, {
+      movement: {
+        id: created.id,
+        businessId: businessIdBigInt,
+        type,
+        quantity,
+        unitCostCents,
+        date,
+      },
+      product: { name: product.name, sku: product.sku },
+      createdByUserId: BigInt(userId),
+    });
 
     return created;
   });

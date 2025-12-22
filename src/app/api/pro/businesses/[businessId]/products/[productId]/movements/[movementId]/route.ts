@@ -13,6 +13,7 @@ import {
   unauthorized,
   withRequestId,
 } from '@/server/http/apiUtils';
+import { upsertLedgerForMovement } from '@/server/services/ledger';
 
 function parseId(param: string | undefined) {
   if (!param || !/^\d+$/.test(param)) return null;
@@ -192,6 +193,19 @@ export async function PATCH(
       });
     }
 
+    await upsertLedgerForMovement(tx, {
+      movement: {
+        id: updatedMovement.id,
+        businessId: updatedMovement.businessId,
+        type: updatedMovement.type,
+        quantity: updatedMovement.quantity,
+        unitCostCents: updatedMovement.unitCostCents ?? null,
+        date: updatedMovement.date,
+      },
+      product: { name: movement.product.name, sku: movement.product.sku },
+      createdByUserId: BigInt(userId),
+    });
+
     return updatedMovement;
   });
 
@@ -239,6 +253,9 @@ export async function DELETE(
 
   await prisma.$transaction(async (tx) => {
     await tx.finance.deleteMany({ where: { inventoryMovementId: movementIdBigInt } });
+    await tx.ledgerEntry.deleteMany({
+      where: { sourceType: 'INVENTORY_MOVEMENT', sourceId: movementIdBigInt },
+    });
     await tx.inventoryMovement.delete({ where: { id: movementIdBigInt } });
   });
 

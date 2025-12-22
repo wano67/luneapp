@@ -80,7 +80,7 @@ export async function releaseReservation(tx: TxClient, invoiceId: bigint) {
 export async function consumeReservation(
   tx: TxClient,
   params: { invoice: InvoiceWithItems; userId: bigint }
-): Promise<ReservationWithItems | null> {
+): Promise<{ reservation: ReservationWithItems | null; items: Array<{ productId: bigint; quantity: number; unitCostHint?: bigint | null }> }> {
   const existing = await tx.inventoryReservation.findUnique({
     where: { invoiceId: params.invoice.id },
     include: { items: true },
@@ -91,14 +91,20 @@ export async function consumeReservation(
       ? existing
       : await upsertReservationFromInvoice(tx, params.invoice);
 
-  if (!reservation) return null;
-  if (reservation.status === InventoryReservationStatus.CONSUMED) return reservation;
+  if (!reservation) return { reservation: null, items: [] };
+  const itemsPayload = reservation.items.map((item) => ({
+    productId: item.productId,
+    quantity: item.quantity,
+    unitCostHint: item.unitPriceCents ?? undefined,
+  }));
+
+  if (reservation.status === InventoryReservationStatus.CONSUMED) return { reservation, items: itemsPayload };
   if (!reservation.items.length) {
     await tx.inventoryReservation.update({
       where: { id: reservation.id },
       data: { status: InventoryReservationStatus.CONSUMED },
     });
-    return reservation;
+    return { reservation, items: itemsPayload };
   }
 
   const date = params.invoice.paidAt ?? new Date();
@@ -121,5 +127,5 @@ export async function consumeReservation(
     where: { id: reservation.id },
     data: { status: InventoryReservationStatus.CONSUMED },
     include: { items: true },
-  });
+  }).then((r) => ({ reservation: r, items: itemsPayload }));
 }

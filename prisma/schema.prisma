@@ -55,6 +55,11 @@ enum InventoryReservationStatus {
   CONSUMED
 }
 
+enum LedgerSourceType {
+  INVENTORY_MOVEMENT
+  INVOICE_STOCK_CONSUMPTION
+}
+
 enum InventoryMovementSource {
   MANUAL
   PURCHASE
@@ -133,6 +138,7 @@ model User {
   personalCategories   PersonalCategory[]
   interactionsCreated  Interaction[] @relation("InteractionCreatedBy")
   inventoryMovements   InventoryMovement[]
+  ledgerEntriesCreated LedgerEntry[]
 }
 
 /**
@@ -162,6 +168,7 @@ model Business {
   products    Product[]
   inventoryMovements InventoryMovement[]
   inventoryReservations InventoryReservation[]
+  ledgerEntries        LedgerEntry[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -743,6 +750,43 @@ model FinanceTag {
   @@index([referenceId])
 }
 
+model LedgerEntry {
+  id             BigInt          @id @default(autoincrement())
+  businessId     BigInt
+  date           DateTime
+  memo           String?
+  sourceType     LedgerSourceType
+  sourceId       BigInt?
+  createdByUserId BigInt?
+  lines          LedgerLine[]
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  createdBy User?   @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([businessId, date])
+  @@index([sourceType, sourceId])
+  @@unique([sourceType, sourceId])
+}
+
+model LedgerLine {
+  id          BigInt  @id @default(autoincrement())
+  entryId     BigInt
+  accountCode String
+  accountName String?
+  debitCents  BigInt?
+  creditCents BigInt?
+  metadata    Json?
+
+  entry LedgerEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([entryId])
+}
+
 model BusinessSettings {
   id                     BigInt   @id @default(autoincrement())
   businessId             BigInt   @unique
@@ -759,6 +803,10 @@ model BusinessSettings {
   allowViewerExport      Boolean  @default(false)
   integrationStripeEnabled    Boolean  @default(false)
   integrationStripePublicKey  String?
+  accountInventoryCode   String   @default("3700")
+  accountCogsCode        String   @default("6000")
+  accountCashCode        String   @default("5300")
+  accountRevenueCode     String   @default("7000")
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
 

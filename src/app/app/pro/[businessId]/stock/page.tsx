@@ -140,6 +140,11 @@ export default function StockListPage() {
         <p className="text-sm text-[var(--text-secondary)]">
           Suis les produits et leurs mouvements de stock.
         </p>
+        <div className="flex items-center gap-2 text-xs text-[var(--text-secondary)]">
+          <Link href={`/app/pro/${businessId}/finances/ledger`} className="underline">
+            Voir les écritures comptables
+          </Link>
+        </div>
       </Card>
 
       <Card className="p-5 space-y-3">
