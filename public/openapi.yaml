@@ -98,6 +98,36 @@ paths:
               schema:
                 type: object
                 properties: { status: { type: string, example: logged_out } }
+  /api/pro/overview:
+    get:
+      tags: ['Pro / Business']
+      summary: Vue globale multi-entreprises pour l'utilisateur connecté
+      security: [ { cookieAuth: [] } ]
+      responses:
+        '200':
+          description: Totaux et tâches à venir
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  totals:
+                    type: object
+                    properties:
+                      businessesCount: { type: integer, example: 2 }
+                      projectsActiveCount: { type: integer, example: 5 }
+                      totalNetCents: { type: string, example: "123400" }
+                  upcomingTasks:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string }
+                        title: { type: string }
+                        status: { type: string }
+                        dueDate: { type: string, format: date-time, nullable: true }
+                        businessId: { type: string }
+                        businessName: { type: string, nullable: true }
   /api/favicon:
     get:
       tags: [Public]

@@ -10,9 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Modal } from '@/components/ui/modal';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import SwitchBusinessModal from './SwitchBusinessModal';
-import { useActiveBusiness } from './ActiveBusinessProvider';
 import { PageHeader } from '../components/PageHeader';
-import { ActionTile } from '../components/ActionTile';
 import { FaviconAvatar } from '../components/FaviconAvatar';
 
 /* ===================== TYPES ===================== */
@@ -50,6 +48,23 @@ type BusinessInviteAcceptResponse = {
   role: string;
 };
 
+type OverviewResponse = {
+  totals: {
+    businessesCount: number;
+    projectsActiveCount: number;
+    totalNetCents: string;
+  };
+  upcomingTasks: Array<{
+    id: string;
+    title: string;
+    status: string;
+    dueDate: string | null;
+    businessId: string;
+    businessName: string | null;
+    websiteUrl: string | null;
+  }>;
+};
+
 type CreateBusinessDraft = {
   name: string;
   websiteUrl: string;
@@ -60,13 +75,12 @@ type CreateBusinessDraft = {
 export default function ProHomeClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const activeCtx = useActiveBusiness({ optional: true });
-
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const [me, setMe] = useState<AuthMeResponse | null>(null);
   const [businesses, setBusinesses] = useState<BusinessesResponse | null>(null);
+  const [overview, setOverview] = useState<OverviewResponse | null>(null);
   const loadController = useRef<AbortController | null>(null);
   const [lastVisitedId, setLastVisitedId] = useState<string | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -152,9 +166,10 @@ export default function ProHomeClient() {
         setLoading(true);
         setError(null);
 
-        const [meRes, bizRes] = await Promise.all([
+        const [meRes, bizRes, overviewRes] = await Promise.all([
           fetchJson<AuthMeResponse>('/api/auth/me', {}, controller.signal),
           fetchJson<BusinessesResponse>('/api/pro/businesses', {}, controller.signal),
+          fetchJson<OverviewResponse>('/api/pro/overview', {}, controller.signal),
         ]);
 
         if (controller.signal.aborted) return;
@@ -165,15 +180,16 @@ export default function ProHomeClient() {
           return;
         }
 
-        if (!meRes.ok || !bizRes.ok || !meRes.data || !bizRes.data) {
-          const ref = meRes.requestId ?? bizRes.requestId;
-          const message = bizRes.error || meRes.error || 'Impossible de charger l’espace PRO.';
+        if (!meRes.ok || !bizRes.ok || !overviewRes.ok || !meRes.data || !bizRes.data || !overviewRes.data) {
+          const ref = meRes.requestId ?? bizRes.requestId ?? overviewRes.requestId;
+          const message = bizRes.error || meRes.error || overviewRes.error || 'Impossible de charger l’espace PRO.';
           setError(ref ? `${message} (Ref: ${ref})` : message);
           return;
         }
 
         setMe(meRes.data);
         setBusinesses(bizRes.data);
+        setOverview(overviewRes.data);
       } catch (err) {
         if (controller.signal.aborted) return;
         console.error(err);
@@ -337,6 +353,25 @@ export default function ProHomeClient() {
     return items[0];
   }, [items, lastVisitedId]);
 
+  const upcomingTasks = useMemo(() => overview?.upcomingTasks ?? [], [overview]);
+  const groupedTasks = useMemo(() => {
+    const buckets: Record<string, typeof upcomingTasks> = {};
+    for (const task of upcomingTasks) {
+      const due = task.dueDate ? new Date(task.dueDate) : null;
+      const key = due ? due.toISOString().slice(0, 10) : 'Aucune date';
+      if (!buckets[key]) buckets[key] = [];
+      buckets[key].push(task);
+    }
+    return Object.entries(buckets)
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([date, tasks]) => ({ date, tasks }));
+  }, [upcomingTasks]);
+
+  const formatCurrency = (cents: string | number) =>
+    new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(
+      Number(cents) / 100
+    );
+
   /* ===================== UI ===================== */
 
   return (
@@ -364,6 +399,114 @@ export default function ProHomeClient() {
             </p>
           ) : null}
 
+          <section className="space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
+                Aperçu global
+              </h3>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    const targetId = activeId ?? continueBusiness?.business.id;
+                    if (targetId) rememberAndGo(targetId, `/app/pro/${targetId}`);
+                  }}
+                >
+                  Ouvrir Studio
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => setCreateOpen(true)}>
+                  Créer
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setJoinOpen(true)}>
+                  Rejoindre
+                </Button>
+              </div>
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-3">
+              <Card className="space-y-1 rounded-2xl border border-[var(--border)] bg-[var(--surface)]/70 p-4">
+                <p className="text-xs uppercase tracking-[0.2em] text-[var(--text-secondary)]">Solde net (finances)</p>
+                <p className="text-2xl font-semibold text-[var(--text-primary)]">
+                  {overview ? formatCurrency(overview.totals.totalNetCents) : '—'}
+                </p>
+              </Card>
+              <Card className="space-y-1 rounded-2xl border border-[var(--border)] bg-[var(--surface)]/70 p-4">
+                <p className="text-xs uppercase tracking-[0.2em] text-[var(--text-secondary)]">Projets actifs</p>
+                <p className="text-2xl font-semibold text-[var(--text-primary)]">
+                  {overview?.totals.projectsActiveCount ?? '—'}
+                </p>
+              </Card>
+              <Card className="space-y-1 rounded-2xl border border-[var(--border)] bg-[var(--surface)]/70 p-4">
+                <p className="text-xs uppercase tracking-[0.2em] text-[var(--text-secondary)]">Entreprises</p>
+                <p className="text-2xl font-semibold text-[var(--text-primary)]">
+                  {overview?.totals.businessesCount ?? items.length}
+                </p>
+              </Card>
+            </div>
+
+            <Card className="space-y-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)]/70 p-4">
+              <div className="flex items-center justify-between">
+                <h4 className="text-sm font-semibold text-[var(--text-primary)]">Tâches à venir (7 jours)</h4>
+                <Badge variant="neutral" className="text-[11px]">
+                  {upcomingTasks.length} tâche{upcomingTasks.length > 1 ? 's' : ''}
+                </Badge>
+              </div>
+              {groupedTasks.length === 0 ? (
+                <p className="text-xs text-[var(--text-secondary)]">Aucune tâche planifiée sur les 7 prochains jours.</p>
+              ) : (
+                <div className="space-y-3">
+                  {groupedTasks.map(({ date, tasks }) => {
+                    const label =
+                      date === 'Aucune date'
+                        ? 'Sans date'
+                        : new Date(date).toLocaleDateString('fr-FR', {
+                            weekday: 'long',
+                            day: 'numeric',
+                            month: 'short',
+                          });
+                    return (
+                      <div key={date} className="space-y-2">
+                        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--text-secondary)]">
+                          {label}
+                        </p>
+                        <div className="space-y-2">
+                          {tasks.map((task) => (
+                            <div
+                              key={task.id}
+                              className="flex items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm"
+                            >
+                              <div className="flex min-w-0 items-center gap-3">
+                                <FaviconAvatar
+                                  name={task.businessName ?? 'Entreprise'}
+                                  websiteUrl={task.websiteUrl ?? null}
+                                  size={28}
+                                />
+                                <div className="min-w-0">
+                                  <p className="truncate font-medium text-[var(--text-primary)]">{task.title}</p>
+                                  <p className="truncate text-xs text-[var(--text-secondary)]">
+                                    {task.businessName ?? 'Entreprise'}
+                                  </p>
+                                </div>
+                              </div>
+                              {task.dueDate ? (
+                                <Badge variant="neutral" className="shrink-0">
+                                  {new Date(task.dueDate).toLocaleDateString('fr-FR', {
+                                    day: '2-digit',
+                                    month: '2-digit',
+                                  })}
+                                </Badge>
+                              ) : null}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </Card>
+          </section>
+
       {process.env.NODE_ENV !== 'production' ? (
         <Card className="flex flex-col gap-2 border-dashed border-[var(--border)] bg-transparent p-4">
           <p className="text-sm font-semibold text-[var(--text-primary)]">Mode dev</p>
@@ -379,58 +522,6 @@ export default function ProHomeClient() {
           {seedError ? <p className="text-xs text-rose-500">{seedError}</p> : null}
         </Card>
       ) : null}
-
-      <section className="space-y-3">
-        <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
-          Continuer
-        </h3>
-        <div className="grid gap-3 md:grid-cols-2">
-          {activeId ? (
-            <ActionTile
-              icon={
-                <FaviconAvatar
-                  name={activeCtx?.activeBusiness?.name ?? 'Entreprise active'}
-                  websiteUrl={activeCtx?.activeBusiness?.websiteUrl}
-                  size={32}
-                />
-              }
-              title={activeCtx?.activeBusiness?.name ?? 'Entreprise active'}
-              description="Espace de travail actuel"
-              href={`/app/pro/${activeId}`}
-              badge="Active"
-              helper="Changer depuis le header ou le bouton dédié"
-            />
-          ) : null}
-          {continueBusiness ? (
-            <ActionTile
-              icon={
-                <FaviconAvatar
-                  name={continueBusiness.business.name}
-                  websiteUrl={continueBusiness.business.websiteUrl}
-                  size={32}
-                />
-              }
-              title={continueBusiness.business.name}
-              description="Dernière entreprise visitée"
-              href={`/app/pro/${continueBusiness.business.id}`}
-              badge={continueBusiness.role}
-              helper="Accès rapide au dashboard et pipeline"
-            />
-          ) : null}
-          {!activeId && !continueBusiness ? (
-            <Card className="rounded-2xl border border-dashed border-[var(--border)] bg-transparent p-4">
-              <p className="text-sm font-semibold text-[var(--text-primary)]">Aucune entreprise sélectionnée</p>
-              <p className="text-xs text-[var(--text-secondary)]">Crée ou rejoins pour commencer.</p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <Button size="sm" onClick={() => setCreateOpen(true)}>Créer</Button>
-                <Button size="sm" variant="outline" onClick={() => setJoinOpen(true)}>
-                  Rejoindre
-                </Button>
-              </div>
-            </Card>
-          ) : null}
-        </div>
-      </section>
 
       <section className="space-y-3">
         <div className="flex items-center justify-between">
