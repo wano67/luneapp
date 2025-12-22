@@ -7,6 +7,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useActiveBusiness } from './ActiveBusinessProvider';
+import { FaviconAvatar } from '../components/FaviconAvatar';
 
 export default function SwitchBusinessModal() {
   const ctx = useActiveBusiness({ optional: true });
@@ -61,13 +62,20 @@ export default function SwitchBusinessModal() {
             {businesses.map((item) => (
               <Card key={item.business.id} className="p-3 space-y-2">
                 <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="truncate font-semibold text-[var(--text-primary)]">
-                      {item.business.name}
-                    </p>
-                    <p className="text-[10px] text-[var(--text-secondary)]">
-                      ID {item.business.id}
-                    </p>
+                  <div className="flex min-w-0 items-start gap-2">
+                    <FaviconAvatar
+                      name={item.business.name}
+                      websiteUrl={item.business.websiteUrl}
+                      size={32}
+                    />
+                    <div className="min-w-0">
+                      <p className="truncate font-semibold text-[var(--text-primary)]">
+                        {item.business.name}
+                      </p>
+                      <p className="text-[10px] text-[var(--text-secondary)]">
+                        ID {item.business.id}
+                      </p>
+                    </div>
                   </div>
                   <Badge variant="neutral">{item.role}</Badge>
                 </div>
@@ -78,6 +86,7 @@ export default function SwitchBusinessModal() {
                       id: item.business.id,
                       name: item.business.name,
                       role: item.role,
+                      websiteUrl: item.business.websiteUrl,
                     });
                     closeSwitchModal();
                     window.location.href = `/app/pro/${item.business.id}`;

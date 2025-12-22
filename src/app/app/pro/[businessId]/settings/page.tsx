@@ -3,6 +3,7 @@
 import { useParams } from 'next/navigation';
 import { SettingsForm } from './SettingsForm';
 import { PageHeader } from '../../../components/PageHeader';
+import { BusinessInfoForm } from './BusinessInfoForm';
 
 export default function BusinessSettingsPage() {
   const params = useParams();
@@ -15,7 +16,8 @@ export default function BusinessSettingsPage() {
         title="Paramètres entreprise"
         subtitle="Configurez les préfixes, délais de paiement, TVA et autorisations globales."
       />
-      <div className="max-w-4xl">
+      <div className="max-w-4xl space-y-4">
+        <BusinessInfoForm businessId={businessId} />
         <SettingsForm
           businessId={businessId}
           title="Paramètres entreprise"
