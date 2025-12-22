@@ -18,12 +18,17 @@ export function FaviconAvatar({ name, websiteUrl, size = 32, className }: Props)
   const initials =
     name?.trim().split(/\s+/).map((part) => part[0] || '')?.join('').slice(0, 2).toUpperCase() ||
     '?';
+  const showFallback = !favicon || errored;
+  const hint = showFallback
+    ? 'Aucune icône trouvée (site inaccessible ou pas de favicon)'
+    : undefined;
 
   return (
     <span
       className={`inline-flex items-center justify-center rounded-lg bg-[var(--surface-2)] text-[var(--text-secondary)] ${className ?? ''}`}
       style={{ width: size, height: size, minWidth: size }}
       aria-hidden
+      title={hint}
     >
       {favicon && !errored ? (
         <img

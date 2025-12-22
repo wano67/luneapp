@@ -3,6 +3,7 @@
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -82,7 +83,6 @@ export default function ProHomeClient() {
   const [businesses, setBusinesses] = useState<BusinessesResponse | null>(null);
   const [overview, setOverview] = useState<OverviewResponse | null>(null);
   const loadController = useRef<AbortController | null>(null);
-  const [lastVisitedId, setLastVisitedId] = useState<string | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
 
   /* ---------- CREATE MODAL ---------- */
@@ -107,6 +107,7 @@ export default function ProHomeClient() {
 
   /* ---------- DATA ---------- */
   const items = useMemo(() => businesses?.items ?? [], [businesses]);
+  const defaultBusinessId = useMemo(() => activeId ?? items[0]?.business.id ?? null, [activeId, items]);
 
   const createValidation = useMemo(() => {
     const issues: string[] = [];
@@ -118,8 +119,6 @@ export default function ProHomeClient() {
     // hydrate once on mount
     if (typeof window === 'undefined') return;
     try {
-      const storedLast = localStorage.getItem('lastProBusinessId');
-      if (storedLast) setLastVisitedId(storedLast);
       const storedActive = localStorage.getItem('activeProBusinessId');
       if (storedActive) setActiveId(storedActive);
     } catch {
@@ -220,9 +219,7 @@ export default function ProHomeClient() {
   function rememberAndGo(businessId: string, path: string) {
     if (typeof window !== 'undefined') {
       try {
-        localStorage.setItem('lastProBusinessId', businessId);
         localStorage.setItem('activeProBusinessId', businessId);
-        setLastVisitedId(businessId);
         setActiveId(businessId);
       } catch {
         // ignore storage errors
@@ -344,15 +341,6 @@ export default function ProHomeClient() {
     }
   }
 
-  const continueBusiness = useMemo(() => {
-    if (items.length === 0) return null;
-    if (lastVisitedId) {
-      const match = items.find((b) => b.business.id === lastVisitedId);
-      if (match) return match;
-    }
-    return items[0];
-  }, [items, lastVisitedId]);
-
   const upcomingTasks = useMemo(() => overview?.upcomingTasks ?? [], [overview]);
   const groupedTasks = useMemo(() => {
     const buckets: Record<string, typeof upcomingTasks> = {};
@@ -400,28 +388,9 @@ export default function ProHomeClient() {
           ) : null}
 
           <section className="space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
-                Aperçu global
-              </h3>
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  size="sm"
-                  onClick={() => {
-                    const targetId = activeId ?? continueBusiness?.business.id;
-                    if (targetId) rememberAndGo(targetId, `/app/pro/${targetId}`);
-                  }}
-                >
-                  Ouvrir Studio
-                </Button>
-                <Button size="sm" variant="outline" onClick={() => setCreateOpen(true)}>
-                  Créer
-                </Button>
-                <Button size="sm" variant="ghost" onClick={() => setJoinOpen(true)}>
-                  Rejoindre
-                </Button>
-              </div>
-            </div>
+            <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
+              Aperçu global
+            </h3>
 
             <div className="grid gap-3 md:grid-cols-3">
               <Card className="space-y-1 rounded-2xl border border-[var(--border)] bg-[var(--surface)]/70 p-4">
@@ -452,7 +421,18 @@ export default function ProHomeClient() {
                 </Badge>
               </div>
               {groupedTasks.length === 0 ? (
-                <p className="text-xs text-[var(--text-secondary)]">Aucune tâche planifiée sur les 7 prochains jours.</p>
+                <div className="space-y-2">
+                  <p className="text-xs text-[var(--text-secondary)]">Aucune tâche planifiée sur les 7 prochains jours.</p>
+                  {defaultBusinessId ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => rememberAndGo(defaultBusinessId, `/app/pro/${defaultBusinessId}/tasks`)}
+                    >
+                      Créer une tâche
+                    </Button>
+                  ) : null}
+                </div>
               ) : (
                 <div className="space-y-3">
                   {groupedTasks.map(({ date, tasks }) => {
@@ -470,34 +450,49 @@ export default function ProHomeClient() {
                           {label}
                         </p>
                         <div className="space-y-2">
-                          {tasks.map((task) => (
-                            <div
-                              key={task.id}
-                              className="flex items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm"
-                            >
-                              <div className="flex min-w-0 items-center gap-3">
-                                <FaviconAvatar
-                                  name={task.businessName ?? 'Entreprise'}
-                                  websiteUrl={task.websiteUrl ?? null}
-                                  size={28}
-                                />
-                                <div className="min-w-0">
-                                  <p className="truncate font-medium text-[var(--text-primary)]">{task.title}</p>
-                                  <p className="truncate text-xs text-[var(--text-secondary)]">
-                                    {task.businessName ?? 'Entreprise'}
-                                  </p>
+                          {tasks.map((task) => {
+                            const taskHref =
+                              task.businessId && task.id
+                                ? `/app/pro/${task.businessId}/tasks/${task.id}`
+                                : task.businessId
+                                  ? `/app/pro/${task.businessId}`
+                                  : null;
+                            const content = (
+                              <div className="flex items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm transition hover:border-[var(--accent)] hover:bg-[var(--surface-2)]">
+                                <div className="flex min-w-0 items-center gap-3">
+                                  <FaviconAvatar
+                                    name={task.businessName ?? 'Entreprise'}
+                                    websiteUrl={task.websiteUrl ?? null}
+                                    size={28}
+                                  />
+                                  <div className="min-w-0 space-y-0.5">
+                                    <p className="truncate font-medium text-[var(--text-primary)]">{task.title}</p>
+                                    <div className="flex items-center gap-2 text-xs text-[var(--text-secondary)]">
+                                      <span className="truncate">{task.businessName ?? 'Entreprise'}</span>
+                                      <Badge variant="neutral" className="shrink-0">
+                                        {task.status}
+                                      </Badge>
+                                    </div>
+                                  </div>
                                 </div>
+                                {task.dueDate ? (
+                                  <Badge variant="neutral" className="shrink-0">
+                                    {new Date(task.dueDate).toLocaleDateString('fr-FR', {
+                                      day: '2-digit',
+                                      month: '2-digit',
+                                    })}
+                                  </Badge>
+                                ) : null}
                               </div>
-                              {task.dueDate ? (
-                                <Badge variant="neutral" className="shrink-0">
-                                  {new Date(task.dueDate).toLocaleDateString('fr-FR', {
-                                    day: '2-digit',
-                                    month: '2-digit',
-                                  })}
-                                </Badge>
-                              ) : null}
-                            </div>
-                          ))}
+                            );
+                            return taskHref ? (
+                              <Link key={task.id} href={taskHref} className="block focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]">
+                                {content}
+                              </Link>
+                            ) : (
+                              <div key={task.id}>{content}</div>
+                            );
+                          })}
                         </div>
                       </div>
                     );
@@ -506,23 +501,6 @@ export default function ProHomeClient() {
               )}
             </Card>
           </section>
-
-      {process.env.NODE_ENV !== 'production' ? (
-        <Card className="flex flex-col gap-2 border-dashed border-[var(--border)] bg-transparent p-4">
-          <p className="text-sm font-semibold text-[var(--text-primary)]">Mode dev</p>
-          <p className="text-xs text-[var(--text-secondary)]">
-            Crée un compte admin local + business demo (admin@local.test / admintest).
-          </p>
-          <div className="flex flex-wrap gap-2">
-            <Button variant="outline" size="sm" onClick={triggerDevSeed} disabled={seeding}>
-              {seeding ? 'Seed en cours…' : 'Créer un compte admin de test'}
-            </Button>
-          </div>
-          {seedMessage ? <p className="text-xs text-emerald-500">{seedMessage}</p> : null}
-          {seedError ? <p className="text-xs text-rose-500">{seedError}</p> : null}
-        </Card>
-      ) : null}
-
       <section className="space-y-3">
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
@@ -535,7 +513,6 @@ export default function ProHomeClient() {
         {items.length > 0 ? (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {items.map(({ business, role }) => {
-              const isAdmin = role === 'ADMIN' || role === 'OWNER';
               return (
                 <Card
                   key={business.id}
@@ -555,58 +532,23 @@ export default function ProHomeClient() {
                       <FaviconAvatar name={business.name} websiteUrl={business.websiteUrl} size={38} />
                       <div className="min-w-0 space-y-1">
                         <p className="truncate font-semibold text-[var(--text-primary)]">{business.name}</p>
-                        <p className="text-xs text-[var(--text-secondary)]">
-                          Créée le {new Date(business.createdAt).toLocaleDateString('fr-FR')}
-                        </p>
                       </div>
                     </div>
-                    <Badge variant="neutral" className="shrink-0">
-                      {role}
-                    </Badge>
-                  </div>
-
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      size="sm"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        rememberAndGo(business.id, `/app/pro/${business.id}`);
-                      }}
-                    >
-                      Ouvrir
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        rememberAndGo(business.id, `/app/pro/${business.id}/projects`);
-                      }}
-                    >
-                      Projets
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        rememberAndGo(business.id, `/app/pro/${business.id}/prospects`);
-                      }}
-                    >
-                      Prospects
-                    </Button>
-                    {isAdmin ? (
+                    <div className="flex items-center gap-2">
+                      <Badge variant="neutral" className="shrink-0">
+                        {role}
+                      </Badge>
                       <Button
                         size="sm"
                         variant="ghost"
                         onClick={(e) => {
                           e.stopPropagation();
-                          rememberAndGo(business.id, `/app/pro/${business.id}/invites`);
+                          rememberAndGo(business.id, `/app/pro/${business.id}/settings`);
                         }}
                       >
-                        Invitations
+                        Gérer
                       </Button>
-                    ) : null}
+                    </div>
                   </div>
                 </Card>
               );
@@ -626,6 +568,22 @@ export default function ProHomeClient() {
           </Card>
         )}
       </section>
+
+      {process.env.NODE_ENV !== 'production' ? (
+        <Card className="mt-6 flex flex-col gap-2 border-dashed border-[var(--border)] bg-transparent p-4">
+          <p className="text-sm font-semibold text-[var(--text-primary)]">Mode dev</p>
+          <p className="text-xs text-[var(--text-secondary)]">
+            Crée un compte admin local + business demo (admin@local.test / admintest).
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" onClick={triggerDevSeed} disabled={seeding}>
+              {seeding ? 'Seed en cours…' : 'Créer un compte admin de test'}
+            </Button>
+          </div>
+          {seedMessage ? <p className="text-xs text-emerald-500">{seedMessage}</p> : null}
+          {seedError ? <p className="text-xs text-rose-500">{seedError}</p> : null}
+        </Card>
+      ) : null}
 
       {/* CREATE MODAL */}
       <Modal
