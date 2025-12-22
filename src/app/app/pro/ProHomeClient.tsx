@@ -525,7 +525,7 @@ export default function ProHomeClient() {
                       rememberAndGo(business.id, `/app/pro/${business.id}`);
                     }
                   }}
-                  className="flex h-full flex-col gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)]/70 p-4 transition hover:border-[var(--accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
+                  className="card-interactive flex h-full flex-col gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)]/70 p-4"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex min-w-0 items-start gap-3">

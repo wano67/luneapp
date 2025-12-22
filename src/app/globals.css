@@ -94,3 +94,19 @@ a {
 a:hover {
   text-decoration: underline;
 }
+
+@layer components {
+  .card-interactive {
+    @apply cursor-pointer transition duration-200 ease-out;
+    @apply hover:bg-[var(--surface-hover)] hover:border-[var(--accent)] hover:shadow-md hover:shadow-black/10;
+    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)];
+    @apply active:shadow-sm motion-safe:hover:-translate-y-[1px];
+  }
+  .card-interactive .card-interactive__icon {
+    @apply transition-colors duration-200;
+  }
+  .card-interactive:hover .card-interactive__icon,
+  .card-interactive:focus-visible .card-interactive__icon {
+    @apply border-[var(--accent)] text-[var(--accent-strong)];
+  }
+}
