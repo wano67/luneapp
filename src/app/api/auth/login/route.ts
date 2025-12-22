@@ -10,6 +10,21 @@ import { assertSameOrigin } from '@/server/security/csrf';
 import { NextRequest, NextResponse } from 'next/server';
 import { badRequest, getRequestId, withRequestId } from '@/server/http/apiUtils';
 
+function normalizeEmail(email: string) {
+  return email.trim().toLowerCase();
+}
+
+function isValidEmail(email: string) {
+  if (!email || email.length > 254) return false;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+function isValidPassword(password: string) {
+  if (typeof password !== 'string') return false;
+  const trimmed = password.trim();
+  return trimmed.length >= 8 && trimmed.length <= 128;
+}
+
 export async function POST(request: NextRequest) {
   const requestId = getRequestId(request);
   const limited = rateLimit(request, {
@@ -27,7 +42,9 @@ export async function POST(request: NextRequest) {
   if (
     !body ||
     typeof body.email !== 'string' ||
-    typeof body.password !== 'string'
+    typeof body.password !== 'string' ||
+    !isValidEmail(body.email) ||
+    !isValidPassword(body.password)
   ) {
     const res = withRequestId(badRequest('Email et mot de passe sont requis.'), requestId);
     res.headers.set('Cache-Control', 'no-store');
@@ -36,7 +53,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const user = await authenticateUser({
-      email: body.email,
+      email: normalizeEmail(body.email),
       password: body.password,
     });
 

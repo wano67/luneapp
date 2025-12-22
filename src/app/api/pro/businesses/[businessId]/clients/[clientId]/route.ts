@@ -98,6 +98,7 @@ function serializeClient(client: {
   sector: string | null;
   status: ClientStatus;
   leadSource: LeadSource | null;
+  archivedAt: Date | null;
   categoryReferenceId?: bigint | null;
   categoryReference?: { id: bigint; name: string | null } | null;
   tags?: Array<{ referenceId: bigint; reference: { id: bigint; name: string } }>;
@@ -123,6 +124,7 @@ function serializeClient(client: {
     sector: client.sector,
     status: client.status,
     leadSource: client.leadSource,
+    archivedAt: client.archivedAt ? client.archivedAt.toISOString() : null,
     createdAt: client.createdAt.toISOString(),
     updatedAt: client.updatedAt.toISOString(),
   };
@@ -356,6 +358,27 @@ export async function PATCH(
 
   if (!tagsInstruction && Object.keys(data).length === 0) {
     return withNoStore(withRequestId(badRequest('Aucune modification.'), requestId));
+  }
+
+  if ('archive' in body) {
+    if (typeof body.archive !== 'boolean') {
+      return withNoStore(withRequestId(badRequest('archive doit être un booléen.'), requestId));
+    }
+    data.archivedAt = body.archive ? new Date() : null;
+  }
+
+  if ('archivedAt' in body) {
+    if (body.archivedAt === null || body.archivedAt === '') {
+      data.archivedAt = null;
+    } else if (typeof body.archivedAt === 'string') {
+      const parsed = new Date(body.archivedAt);
+      if (Number.isNaN(parsed.getTime())) {
+        return withNoStore(withRequestId(badRequest('archivedAt invalide.'), requestId));
+      }
+      data.archivedAt = parsed;
+    } else {
+      return withNoStore(withRequestId(badRequest('archivedAt invalide.'), requestId));
+    }
   }
 
   const updated = await prisma.client.update({

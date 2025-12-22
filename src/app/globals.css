@@ -92,5 +92,27 @@ a {
 }
 
 a:hover {
-  text-decoration: underline;
+  text-decoration: none;
+  color: var(--accent);
+}
+
+@layer components {
+  .card-interactive {
+    @apply cursor-pointer border border-[var(--border)] bg-[var(--surface)] transition duration-200 ease-out;
+    @apply hover:bg-[var(--surface-hover)] hover:border-[var(--accent)] hover:shadow-md hover:shadow-black/10;
+    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)];
+    @apply active:shadow-sm motion-safe:hover:-translate-y-[1px];
+    text-decoration: none;
+  }
+  .card-interactive.is-active,
+  .card-interactive[data-active='true'] {
+    @apply bg-[var(--surface-2)] border-[var(--accent)];
+  }
+  .card-interactive .card-interactive__icon {
+    @apply transition-colors duration-200;
+  }
+  .card-interactive:hover .card-interactive__icon,
+  .card-interactive:focus-visible .card-interactive__icon {
+    @apply border-[var(--accent)] text-[var(--accent-strong)];
+  }
 }

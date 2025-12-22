@@ -4,14 +4,14 @@ export const AUTH_COOKIE_NAME = 'auth_token';
 
 const JWT_ISSUER = 'luneapp';
 const JWT_AUDIENCE = 'luneapp';
-const DEFAULT_EXPIRATION = '7d';
+const DEFAULT_EXPIRATION = '1d';
 
 export const authCookieOptions = {
   httpOnly: true,
   secure: process.env.NODE_ENV === 'production',
   sameSite: 'lax' as const,
   path: '/',
-  maxAge: 60 * 60 * 24 * 7, // 7 days
+  maxAge: 60 * 60 * 24, // 1 day
 };
 
 export type AuthTokenPayload = JWTPayload & {

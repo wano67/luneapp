@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { KpiCard } from '@/components/ui/kpi-card';
 import CashflowChart from './charts/CashflowChart';
 import TasksDonut from './charts/TasksDonut';
 import PipelineBar from './charts/PipelineBar';
@@ -229,8 +228,6 @@ export default function ProDashboard({ businessId }: { businessId: string }) {
 
   const activeProjects = dashboard?.kpis?.projectsActiveCount ?? dashboard?.kpis?.activeProjectsCount ?? 0;
   const openTasks = dashboard?.kpis?.openTasksCount ?? 0;
-  const nextInteractionsCount = dashboard?.nextActions?.interactions?.length ?? 0;
-
   const tasksByStatus = useMemo(() => countByStatus(tasks), [tasks]);
   const lateTasksCount = useMemo(() => countLateTasks(tasks), [tasks]);
   const pipelineData = useMemo(() => groupPipeline(prospects), [prospects]);
@@ -241,6 +238,33 @@ export default function ProDashboard({ businessId }: { businessId: string }) {
   );
   const upcomingTasks = dashboard?.latestTasks ?? dashboard?.nextActions?.tasks ?? [];
   const monthlySeries = dashboard?.monthlySeries ?? [];
+
+  const statTiles = [
+    {
+      label: 'Solde net',
+      value: formatCurrency(net),
+      hint: 'Finances · trésorerie',
+      href: `/app/pro/${businessId}/finances/treasury`,
+    },
+    {
+      label: 'Revenus (période)',
+      value: formatCurrency(income),
+      hint: 'Détail finances',
+      href: `/app/pro/${businessId}/finances`,
+    },
+    {
+      label: 'Projets actifs',
+      value: String(activeProjects),
+      hint: 'Voir les projets',
+      href: `/app/pro/${businessId}/projects`,
+    },
+    {
+      label: 'Tâches ouvertes',
+      value: String(openTasks),
+      hint: 'Voir les tâches',
+      href: `/app/pro/${businessId}/tasks`,
+    },
+  ];
 
   return (
     <div className="mx-auto max-w-6xl space-y-5 px-4 py-4">
@@ -279,24 +303,28 @@ export default function ProDashboard({ businessId }: { businessId: string }) {
           title="Nouveau client"
           description="Ajoute un contact et démarre un projet"
           href={`/app/pro/${businessId}/clients`}
+          activeHref={`/app/pro/${businessId}/clients`}
         />
         <ActionTile
           icon={<Briefcase size={18} />}
           title="Nouveau projet"
           description="Crée un devis ou une mission"
           href={`/app/pro/${businessId}/projects`}
+          activeHref={`/app/pro/${businessId}/projects`}
         />
         <ActionTile
           icon={<Wallet2 size={18} />}
           title="Enregistrer un paiement"
           description="Paiements et finances"
-          href={`/app/pro/${businessId}/finances/payments`}
+          href={`/app/pro/${businessId}/finances`}
+          activeHref={`/app/pro/${businessId}/finances`}
         />
         <ActionTile
           icon={<Building2 size={18} />}
           title="Pipeline prospects"
           description="Suivre les leads en cours"
           href={`/app/pro/${businessId}/prospects`}
+          activeHref={`/app/pro/${businessId}/prospects`}
         />
       </div>
 
@@ -311,13 +339,22 @@ export default function ProDashboard({ businessId }: { businessId: string }) {
         </Card>
       ) : (
         <>
-          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-            <KpiCard label="Revenus" value={formatCurrency(income)} />
-            <KpiCard label="Dépenses" value={formatCurrency(expense)} />
-            <KpiCard label="Net" value={formatCurrency(net)} />
-            <KpiCard label="Projets actifs" value={String(activeProjects)} />
-            <KpiCard label="Tâches ouvertes" value={String(openTasks)} />
-            <KpiCard label="Prochains points (7j)" value={String(nextInteractionsCount)} />
+          <div className="grid gap-3 sm:grid-cols-2">
+            {statTiles.map((tile) => (
+              <Link
+                key={tile.label}
+                href={tile.href}
+                className="card-interactive block rounded-2xl"
+              >
+                <div className="space-y-1 rounded-2xl border border-[var(--border)] bg-[var(--surface)]/70 p-4">
+                  <p className="text-xs uppercase tracking-[0.16em] text-[var(--text-secondary)]">
+                    {tile.label}
+                  </p>
+                  <p className="text-2xl font-semibold text-[var(--text-primary)]">{tile.value}</p>
+                  <p className="text-[11px] text-[var(--text-secondary)]">{tile.hint}</p>
+                </div>
+              </Link>
+            ))}
           </div>
 
           <div className="grid gap-4 lg:grid-cols-3">
@@ -371,18 +408,21 @@ export default function ProDashboard({ businessId }: { businessId: string }) {
                   <p className="text-sm text-[var(--text-secondary)]">Aucune tâche à venir.</p>
                 ) : (
                   upcomingTasks.map((t) => (
-                    <div
+                    <Link
                       key={t.id}
-                      className="flex flex-col gap-1 rounded-xl border border-[var(--border)] bg-[var(--surface)]/60 p-3 md:flex-row md:items-center md:justify-between"
+                      href={`/app/pro/${businessId}/tasks/${t.id}`}
+                      className="card-interactive block rounded-xl"
                     >
-                      <div>
-                        <p className="text-sm font-semibold text-[var(--text-primary)]">{t.title}</p>
-                        <p className="text-[11px] text-[var(--text-secondary)]">
-                          {t.projectName ?? 'Projet ?'} · {formatDate(t.dueDate)}
-                        </p>
+                      <div className="flex flex-col gap-1 rounded-xl border border-[var(--border)] bg-[var(--surface)]/60 p-3 md:flex-row md:items-center md:justify-between">
+                        <div>
+                          <p className="text-sm font-semibold text-[var(--text-primary)]">{t.title}</p>
+                          <p className="text-[11px] text-[var(--text-secondary)]">
+                            {t.projectName ?? 'Projet ?'} · {formatDate(t.dueDate)}
+                          </p>
+                        </div>
+                        <Badge variant="neutral">{STATUS_LABELS[t.status]}</Badge>
                       </div>
-                      <Badge variant="neutral">{STATUS_LABELS[t.status]}</Badge>
-                    </div>
+                    </Link>
                   ))
                 )}
               </div>
@@ -402,15 +442,18 @@ export default function ProDashboard({ businessId }: { businessId: string }) {
                   <p className="text-sm text-[var(--text-secondary)]">Aucun client récent.</p>
                 ) : (
                   clientsRecent.map((c) => (
-                    <div
+                    <Link
                       key={c.id}
-                      className="flex flex-col gap-1 rounded-xl border border-[var(--border)] bg-[var(--surface)]/60 p-3"
+                      href={`/app/pro/${businessId}/clients/${c.id}`}
+                      className="card-interactive block rounded-xl"
                     >
-                      <p className="text-sm font-semibold text-[var(--text-primary)]">{c.name}</p>
-                      <p className="text-[11px] text-[var(--text-secondary)]">
-                        {c.email ?? 'Email manquant'} · {formatDate(c.createdAt)}
-                      </p>
-                    </div>
+                      <div className="flex flex-col gap-1 rounded-xl border border-[var(--border)] bg-[var(--surface)]/60 p-3">
+                        <p className="text-sm font-semibold text-[var(--text-primary)]">{c.name}</p>
+                        <p className="text-[11px] text-[var(--text-secondary)]">
+                          {c.email ?? 'Email manquant'} · {formatDate(c.createdAt)}
+                        </p>
+                      </div>
+                    </Link>
                   ))
                 )}
               </div>
@@ -418,22 +461,36 @@ export default function ProDashboard({ businessId }: { businessId: string }) {
 
             <Card className="space-y-3 p-5">
               <div className="flex items-center justify-between">
-                <p className="text-sm font-semibold text-[var(--text-primary)]">Alertes</p>
-                <Badge variant="neutral">{lateTasksCount > 0 ? `${lateTasksCount} tâches en retard` : 'RAS'}</Badge>
+                <p className="text-sm font-semibold text-[var(--text-primary)]">À faire ensuite</p>
+                <Badge variant="neutral">{lateTasksCount > 0 ? `${lateTasksCount} urgences` : 'Prêt'}</Badge>
               </div>
-              <div className="space-y-2">
-                <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)]/60 p-3">
-                  <p className="text-sm font-semibold text-[var(--text-primary)]">Cash-flow</p>
-                  <p className="text-xs text-[var(--text-secondary)]">
-                    {net < 0 ? 'Négatif sur la période' : 'Positif'}
-                  </p>
-                </div>
-                <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)]/60 p-3">
-                  <p className="text-sm font-semibold text-[var(--text-primary)]">Tâches en retard</p>
-                  <p className="text-xs text-[var(--text-secondary)]">
-                    {lateTasksCount > 0 ? `${lateTasksCount} tâche(s) à traiter` : 'Aucune tâche en retard.'}
-                  </p>
-                </div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <Link href={`/app/pro/${businessId}/clients`} className="card-interactive block rounded-xl">
+                  <div className="space-y-1 rounded-xl border border-[var(--border)] bg-[var(--surface)]/60 p-3">
+                    <p className="text-sm font-semibold text-[var(--text-primary)]">Créer un client</p>
+                    <p className="text-xs text-[var(--text-secondary)]">Démarrer un dossier rapidement.</p>
+                  </div>
+                </Link>
+                <Link href={`/app/pro/${businessId}/projects`} className="card-interactive block rounded-xl">
+                  <div className="space-y-1 rounded-xl border border-[var(--border)] bg-[var(--surface)]/60 p-3">
+                    <p className="text-sm font-semibold text-[var(--text-primary)]">Créer un projet/devis</p>
+                    <p className="text-xs text-[var(--text-secondary)]">Planifier la prochaine mission.</p>
+                  </div>
+                </Link>
+                <Link href={`/app/pro/${businessId}/finances`} className="card-interactive block rounded-xl">
+                  <div className="space-y-1 rounded-xl border border-[var(--border)] bg-[var(--surface)]/60 p-3">
+                    <p className="text-sm font-semibold text-[var(--text-primary)]">Ajouter une opération</p>
+                    <p className="text-xs text-[var(--text-secondary)]">Encaisser ou enregistrer une dépense.</p>
+                  </div>
+                </Link>
+                <Link href={`/app/pro/${businessId}/tasks`} className="card-interactive block rounded-xl">
+                  <div className="space-y-1 rounded-xl border border-[var(--border)] bg-[var(--surface)]/60 p-3">
+                    <p className="text-sm font-semibold text-[var(--text-primary)]">Tâches en retard</p>
+                    <p className="text-xs text-[var(--text-secondary)]">
+                      {lateTasksCount > 0 ? `${lateTasksCount} à traiter` : 'Aucune, continue !'}
+                    </p>
+                  </div>
+                </Link>
               </div>
             </Card>
           </div>

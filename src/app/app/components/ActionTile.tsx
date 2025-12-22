@@ -4,27 +4,40 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { Card } from '@/components/ui/card';
+import { useIsActivePath } from './useIsActivePath';
 
 type ActionTileProps = {
   icon: ReactNode;
   title: string;
   description: string;
   href: string;
+  activeHref?: string | string[];
   badge?: string;
   helper?: string;
 };
 
-export function ActionTile({ icon, title, description, href, badge, helper }: ActionTileProps) {
+export function ActionTile({
+  icon,
+  title,
+  description,
+  href,
+  activeHref,
+  badge,
+  helper,
+}: ActionTileProps) {
+  const isActive = useIsActivePath(activeHref ?? href);
+
   return (
     <Link
       href={href}
-      className="group block focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
+      className="card-interactive group block"
+      data-active={isActive || undefined}
       aria-label={`${title} - ${description}`}
     >
-      <Card className="h-full rounded-2xl border border-[var(--border)] bg-[var(--surface)]/70 p-4 transition hover:border-[var(--accent)] hover:bg-[var(--surface-hover)]">
+      <Card className="h-full rounded-2xl border border-[var(--border)] bg-[var(--surface)]/70 p-4">
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-start gap-2 text-[var(--text-primary)]">
-            <span className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] p-2 text-[var(--text-secondary)] group-hover:border-[var(--accent)]">
+            <span className="card-interactive__icon rounded-lg border border-[var(--border)] bg-[var(--surface-2)] p-2 text-[var(--text-secondary)]">
               {icon}
             </span>
             <div className="min-w-0 space-y-1">

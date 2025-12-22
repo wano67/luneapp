@@ -1,10 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getRequestId, withIdNoStore } from '@/server/http/apiUtils';
 
 const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
-
-function forbidden() {
-  return NextResponse.json({ error: 'Forbidden (CSRF origin)' }, { status: 403 });
-}
 
 function normalizeOrigin(value: string): string | null {
   try {
@@ -42,19 +39,43 @@ export function assertSameOrigin(request: NextRequest): NextResponse | null {
   const method = request.method.toUpperCase();
   if (!MUTATING_METHODS.has(method)) return null;
 
-  const allowed = getAllowedOrigins();
-  const isProd = process.env.NODE_ENV === 'production';
+  const requestId = getRequestId(request);
 
-  if (allowed.length === 0 && isProd) return forbidden();
+  const allowed = getAllowedOrigins();
+  const enforce = process.env.NODE_ENV !== 'development';
+
+  if (allowed.length === 0 && enforce) {
+    return withIdNoStore(
+      NextResponse.json({ error: 'Forbidden (CSRF origin)' }, { status: 403 }),
+      requestId
+    );
+  }
   if (allowed.length === 0) return null; // dev sans config: on laisse passer
 
   const candidateHeader = request.headers.get('origin') ?? request.headers.get('referer');
-  if (!candidateHeader) return forbidden();
+  if (!candidateHeader) {
+    return withIdNoStore(
+      NextResponse.json({ error: 'Forbidden (CSRF origin)' }, { status: 403 }),
+      requestId
+    );
+  }
 
   const candidateOrigin = normalizeOrigin(candidateHeader);
-  if (!candidateOrigin) return forbidden();
+  if (!candidateOrigin) {
+    return withIdNoStore(
+      NextResponse.json({ error: 'Forbidden (CSRF origin)' }, { status: 403 }),
+      requestId
+    );
+  }
 
-  return allowed.includes(candidateOrigin) ? null : forbidden();
+  if (!allowed.includes(candidateOrigin)) {
+    return withIdNoStore(
+      NextResponse.json({ error: 'Forbidden (CSRF origin)' }, { status: 403 }),
+      requestId
+    );
+  }
+
+  return null;
 }
 
 export function withNoStore<T extends NextResponse>(response: T): T {

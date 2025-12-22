@@ -29,7 +29,7 @@ export function getFaviconUrl(websiteUrl: string | null | undefined): string | n
   try {
     const normalized = normalizeWebsiteUrl(websiteUrl).value;
     if (!normalized) return null;
-    return `https://www.google.com/s2/favicons?sz=64&domain_url=${encodeURIComponent(normalized)}`;
+    return `/api/favicon?url=${encodeURIComponent(normalized)}`;
   } catch {
     return null;
   }

@@ -16,6 +16,8 @@ import { ReferencePicker } from '../references/ReferencePicker';
 import { useRowSelection } from '../../../components/selection/useRowSelection';
 import { BulkActionBar } from '../../../components/selection/BulkActionBar';
 import { FaviconAvatar } from '../../../components/FaviconAvatar';
+import { PageHeader } from '../../../components/PageHeader';
+import { ExternalLink } from 'lucide-react';
 
 type Client = {
   id: string;
@@ -68,17 +70,12 @@ export default function ClientsPage() {
   const [tagReferenceIds, setTagReferenceIds] = useState<string[]>([]);
   const [readOnlyInfo, setReadOnlyInfo] = useState<string | null>(null);
   const [bulkError, setBulkError] = useState<string | null>(null);
-  const { selectedCount, toggle, toggleAll, clear, isSelected } = useRowSelection();
+  const { selectedCount, selectedArray, toggle, toggleAll, clear, isSelected, allSelected } = useRowSelection();
 
   const fetchController = useRef<AbortController | null>(null);
-
-  function formatDate(value: string) {
-    try {
-      return new Intl.DateTimeFormat('fr-FR').format(new Date(value));
-    } catch {
-      return value;
-    }
-  }
+  const [sortBy, setSortBy] = useState<'name' | 'createdAt' | 'updatedAt'>('name');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+  const [showArchived, setShowArchived] = useState(false);
 
   async function loadClients(signal?: AbortSignal) {
     const controller = signal ? null : new AbortController();
@@ -96,6 +93,9 @@ export default function ClientsPage() {
       if (search.trim()) query.set('search', search.trim());
       if (categoryFilter) query.set('categoryReferenceId', categoryFilter);
       if (tagFilter) query.set('tagReferenceId', tagFilter);
+      query.set('sortBy', sortBy);
+      query.set('sortDir', sortDir);
+      if (showArchived) query.set('archived', '1');
 
       const res = await fetchJson<ClientListResponse>(
         `/api/pro/businesses/${businessId}/clients${query.toString() ? `?${query.toString()}` : ''}`,
@@ -138,7 +138,11 @@ export default function ClientsPage() {
     void loadClients();
     return () => fetchController.current?.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [businessId, categoryFilter, tagFilter]);
+  }, [businessId, categoryFilter, tagFilter, sortBy, sortDir, showArchived]);
+
+  useEffect(() => {
+    clear();
+  }, [showArchived, clear]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -231,47 +235,113 @@ export default function ClientsPage() {
     }
   }
 
-  function handleBulkUnavailable() {
+  async function handleBulkArchive() {
     if (!isAdmin) {
       setReadOnlyInfo(readOnlyMessage);
       return;
     }
-    setBulkError('Aucune action bulk disponible pour les clients (pas d’API de suppression/archivage).');
+    if (selectedArray.length === 0) return;
+    const confirmArchive = window.confirm(`Archiver ${selectedArray.length} client(s) ?`);
+    if (!confirmArchive) return;
+    setBulkError(null);
+    const res = await fetchJson<{ updatedCount: number }>(
+      `/api/pro/businesses/${businessId}/clients/bulk`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientIds: selectedArray, action: 'ARCHIVE' }),
+      }
+    );
+    if (!res.ok) {
+      setBulkError(
+        res.requestId ? `${res.error ?? 'Archiver impossible.'} (Ref: ${res.requestId})` : res.error ?? 'Archiver impossible.'
+      );
+      return;
+    }
+    await loadClients();
+    clear();
+  }
+
+  async function handleBulkUnarchive() {
+    if (!isAdmin) {
+      setReadOnlyInfo(readOnlyMessage);
+      return;
+    }
+    if (selectedArray.length === 0) return;
+    const confirmRestore = window.confirm(`Restaurer ${selectedArray.length} client(s) ?`);
+    if (!confirmRestore) return;
+    setBulkError(null);
+    const res = await fetchJson<{ updatedCount: number }>(
+      `/api/pro/businesses/${businessId}/clients/bulk`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientIds: selectedArray, action: 'UNARCHIVE' }),
+      }
+    );
+    if (!res.ok) {
+      setBulkError(
+        res.requestId ? `${res.error ?? 'Restaurer impossible.'} (Ref: ${res.requestId})` : res.error ?? 'Restaurer impossible.'
+      );
+      return;
+    }
+    await loadClients();
+    clear();
+  }
+
+  async function handleBulkDelete() {
+    if (!isAdmin) {
+      setReadOnlyInfo(readOnlyMessage);
+      return;
+    }
+    if (selectedArray.length === 0) return;
+    const confirmDelete = window.confirm(`Supprimer définitivement ${selectedArray.length} client(s) ?`);
+    if (!confirmDelete) return;
+    setBulkError(null);
+    const res = await fetchJson<{ deletedCount: number; failed?: Array<{ id: string; reason: string }> }>(
+      `/api/pro/businesses/${businessId}/clients/bulk`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientIds: selectedArray, action: 'DELETE' }),
+      }
+    );
+    if (!res.ok) {
+      setBulkError(
+        res.requestId ? `${res.error ?? 'Suppression impossible.'} (Ref: ${res.requestId})` : res.error ?? 'Suppression impossible.'
+      );
+      return;
+    }
+    const failed = res.data?.failed ?? [];
+    if (failed.length) {
+      const reasons = failed.map((f) => `${f.id}: ${f.reason}`).join(' ; ');
+      setBulkError(`Certains clients n'ont pas été supprimés: ${reasons}`);
+    }
+    await loadClients();
+    clear();
   }
 
   return (
-    <div className="space-y-5">
+    <div className="mx-auto max-w-6xl space-y-5 px-4 py-4">
       <RoleBanner role={role} />
-      <Card className="space-y-3 p-5">
-        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-[var(--text-secondary)]">
-              Clients
-            </p>
-            <h1 className="text-lg font-semibold text-[var(--text-primary)]">Base clients</h1>
-            <p className="text-sm text-[var(--text-secondary)]">
-              Centralise tes clients pour lier projets et facturation.
-            </p>
-          </div>
-          <div className="flex flex-col items-start gap-1">
-            <Button
-              onClick={() => {
-                if (!isAdmin) {
-                  setReadOnlyInfo(readOnlyMessage);
-                  return;
-                }
-                setCreateOpen(true);
-              }}
-              disabled={!isAdmin}
-            >
-              Ajouter un client
-            </Button>
-            {!isAdmin ? (
-              <p className="text-[11px] text-[var(--text-secondary)]">Lecture seule : demande un rôle admin.</p>
-            ) : null}
-          </div>
-        </div>
+      <PageHeader
+        backHref="/app/pro"
+        backLabel="Studio"
+        title="Clients"
+        subtitle="Centralise tes clients pour lier projets et facturation."
+        primaryAction={{
+          label: 'Nouveau client',
+          onClick: () => {
+            if (!isAdmin) {
+              setReadOnlyInfo(readOnlyMessage);
+              return;
+            }
+            setCreateOpen(true);
+          },
+        }}
+      />
 
+      <Card className="space-y-3 p-5">
         <form onSubmit={handleSearch} className="flex flex-col gap-2 md:flex-row md:items-center">
           <Input
             label="Recherche"
@@ -314,6 +384,49 @@ export default function ClientsPage() {
               ))}
             </select>
           </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-semibold text-[var(--text-secondary)]">Trier par</label>
+            <div className="flex flex-col gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm sm:flex-row sm:items-center sm:gap-2">
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+                className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-2 py-1 text-sm sm:w-auto"
+              >
+                <option value="name">Nom</option>
+                <option value="createdAt">Plus récents</option>
+                <option value="updatedAt">Dernière mise à jour</option>
+              </select>
+              <select
+                value={sortDir}
+                onChange={(e) => setSortDir(e.target.value as typeof sortDir)}
+                className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-2 py-1 text-sm sm:w-auto"
+              >
+                <option value="asc">Asc</option>
+                <option value="desc">Desc</option>
+              </select>
+            </div>
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-semibold text-[var(--text-secondary)]">Vue</label>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant={!showArchived ? 'primary' : 'outline'}
+                onClick={() => setShowArchived(false)}
+              >
+                Actifs
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={showArchived ? 'primary' : 'outline'}
+                onClick={() => setShowArchived(true)}
+              >
+                Archivés
+              </Button>
+            </div>
+          </div>
           {referenceError ? (
             <p className="text-xs text-rose-500">
               {referenceError}
@@ -340,19 +453,21 @@ export default function ClientsPage() {
             <p className="text-sm text-[var(--text-secondary)]">
               Aucun client pour le moment. Ajoute-en un pour commencer.
             </p>
-            <Button
-              size="sm"
-              onClick={() => {
-                if (!isAdmin) {
-                  setReadOnlyInfo(readOnlyMessage);
-                  return;
-                }
-                setCreateOpen(true);
-              }}
-              disabled={!isAdmin}
-            >
-              Ajouter un client
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                onClick={() => {
+                  if (!isAdmin) {
+                    setReadOnlyInfo(readOnlyMessage);
+                    return;
+                  }
+                  setCreateOpen(true);
+                }}
+                disabled={!isAdmin}
+              >
+                Créer un client
+              </Button>
+            </div>
           </div>
         ) : (
           <div className="space-y-3">
@@ -362,7 +477,7 @@ export default function ClientsPage() {
                 <input
                   type="checkbox"
                   className="h-4 w-4 accent-[var(--accent)]"
-                  checked={clients.length > 0 && clients.every((c) => isSelected(c.id))}
+                  checked={clients.length > 0 && allSelected(clients.map((c) => c.id))}
                   onChange={() => toggleAll(clients.map((c) => c.id))}
                 />
                 Tout sélectionner
@@ -370,67 +485,90 @@ export default function ClientsPage() {
               <BulkActionBar
                 count={selectedCount}
                 onClear={clear}
-                actions={[
-                  {
-                    label: 'Actions bulk indisponibles',
-                    onClick: handleBulkUnavailable,
-                    variant: 'outline',
-                  },
-                ]}
+                actions={
+                  showArchived
+                    ? [
+                        {
+                          label: 'Restaurer',
+                          onClick: handleBulkUnarchive,
+                          variant: 'outline',
+                        },
+                        {
+                          label: 'Supprimer définitivement',
+                          onClick: handleBulkDelete,
+                          variant: 'danger',
+                        },
+                      ]
+                    : [
+                        {
+                          label: 'Archiver',
+                          onClick: handleBulkArchive,
+                          variant: 'outline',
+                        },
+                      ]
+                }
               />
             </div>
             {clients.map((client) => (
               <Link
                 key={client.id}
                 href={`/app/pro/${businessId}/clients/${client.id}`}
-                className="flex flex-col gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface)]/70 p-3 transition hover:border-[var(--accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)] sm:flex-row sm:items-center sm:justify-between"
+                className="card-interactive block rounded-xl"
               >
-                <div className="flex items-start gap-3">
-                  <input
-                    type="checkbox"
-                    className="mt-1 h-4 w-4 accent-[var(--accent)]"
-                    checked={isSelected(client.id)}
-                    onChange={(e) => {
-                      e.stopPropagation();
-                      toggle(client.id);
-                    }}
-                    onClick={(e) => e.stopPropagation()}
-                    aria-label="Sélectionner"
-                  />
-                  <FaviconAvatar name={client.name} websiteUrl={client.websiteUrl} size={36} />
-                  <div className="space-y-1">
-                    <span className="font-semibold text-[var(--text-primary)]">{client.name}</span>
-                    <p className="text-xs text-[var(--text-secondary)]">Créé le {formatDate(client.createdAt)}</p>
-                    {client.websiteUrl ? (
-                      <p className="text-[11px] text-[var(--text-secondary)] truncate max-w-xs">
-                        {client.websiteUrl}
-                      </p>
-                    ) : null}
-                    {client.notes ? (
-                      <p className="text-xs text-[var(--text-secondary)] line-clamp-2">{client.notes}</p>
-                    ) : null}
-                    <div className="flex flex-wrap gap-1">
-                      {client.categoryReferenceName ? (
-                        <Badge variant="neutral" className="bg-indigo-50 text-indigo-700">
-                          {client.categoryReferenceName}
-                        </Badge>
+                <div className="flex flex-col gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface)]/70 p-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-start gap-3">
+                    <input
+                      type="checkbox"
+                      className="mt-1 h-4 w-4 accent-[var(--accent)]"
+                      checked={isSelected(client.id)}
+                      onChange={(e) => {
+                        e.stopPropagation();
+                        toggle(client.id);
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                      aria-label="Sélectionner"
+                    />
+                    <FaviconAvatar name={client.name} websiteUrl={client.websiteUrl} size={36} />
+                    <div className="space-y-1">
+                      <span className="font-semibold text-[var(--text-primary)]">{client.name}</span>
+                      <div className="flex flex-wrap gap-1">
+                        {client.categoryReferenceName ? (
+                          <Badge variant="neutral" className="bg-indigo-50 text-indigo-700">
+                            {client.categoryReferenceName}
+                          </Badge>
+                        ) : null}
+                        {client.tagReferences?.map((tag) => (
+                          <Badge key={tag.id} variant="neutral" className="bg-emerald-50 text-emerald-700">
+                            {tag.name}
+                          </Badge>
+                        ))}
+                      </div>
+                      {client.notes ? (
+                        <p className="text-xs text-[var(--text-secondary)] line-clamp-2">{client.notes}</p>
                       ) : null}
-                      {client.tagReferences?.map((tag) => (
-                        <Badge key={tag.id} variant="neutral" className="bg-emerald-50 text-emerald-700">
-                          {tag.name}
-                        </Badge>
-                      ))}
                     </div>
                   </div>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant="neutral">{client.email || 'Email ?'}</Badge>
-                  {client.phone ? <Badge variant="neutral">{client.phone}</Badge> : <Badge variant="neutral">Phone ?</Badge>}
-                  {client.websiteUrl ? (
-                    <Badge variant="neutral" className="max-w-[180px] truncate bg-[var(--surface-2)]">
-                      {client.websiteUrl}
-                    </Badge>
-                  ) : null}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant="neutral">{client.email || 'Email ?'}</Badge>
+                    {client.phone ? (
+                      <Badge variant="neutral">{client.phone}</Badge>
+                    ) : (
+                      <Badge variant="neutral">Phone ?</Badge>
+                    )}
+                    {client.websiteUrl ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        asChild
+                        className="h-8"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <a href={client.websiteUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1">
+                          <ExternalLink size={14} /> Site
+                        </a>
+                      </Button>
+                    ) : null}
+                  </div>
                 </div>
               </Link>
             ))}

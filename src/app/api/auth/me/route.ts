@@ -59,12 +59,11 @@ export async function GET(request: NextRequest) {
       return withRequestId(unauthorized('user_inactive'), requestId);
     }
 
-    // Pour l’instant, on renvoie un memberships vide.
-    // /api/pro/businesses reste la source de vérité pour les entreprises.
-    return jsonNoStore({
+    const res = jsonNoStore({
       user: toPublicUser(user),
       memberships: [],
     });
+    return withRequestId(res, requestId);
   } catch (error) {
     console.error('[auth/me] Error loading user', error);
     return withRequestId(

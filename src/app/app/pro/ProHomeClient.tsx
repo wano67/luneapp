@@ -1,8 +1,9 @@
 // src/app/app/pro/ProHomeClient.tsx
 'use client';
 
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -10,9 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Modal } from '@/components/ui/modal';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import SwitchBusinessModal from './SwitchBusinessModal';
-import { useActiveBusiness } from './ActiveBusinessProvider';
 import { PageHeader } from '../components/PageHeader';
-import { ActionTile } from '../components/ActionTile';
 import { FaviconAvatar } from '../components/FaviconAvatar';
 
 /* ===================== TYPES ===================== */
@@ -50,6 +49,23 @@ type BusinessInviteAcceptResponse = {
   role: string;
 };
 
+type OverviewResponse = {
+  totals: {
+    businessesCount: number;
+    projectsActiveCount: number;
+    totalNetCents: string;
+  };
+  upcomingTasks: Array<{
+    id: string;
+    title: string;
+    status: string;
+    dueDate: string | null;
+    businessId: string;
+    businessName: string | null;
+    websiteUrl: string | null;
+  }>;
+};
+
 type CreateBusinessDraft = {
   name: string;
   websiteUrl: string;
@@ -59,16 +75,15 @@ type CreateBusinessDraft = {
 
 export default function ProHomeClient() {
   const router = useRouter();
+  const pathname = usePathname() || '';
   const searchParams = useSearchParams();
-  const activeCtx = useActiveBusiness({ optional: true });
-
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const [me, setMe] = useState<AuthMeResponse | null>(null);
   const [businesses, setBusinesses] = useState<BusinessesResponse | null>(null);
+  const [overview, setOverview] = useState<OverviewResponse | null>(null);
   const loadController = useRef<AbortController | null>(null);
-  const [lastVisitedId, setLastVisitedId] = useState<string | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
 
   /* ---------- CREATE MODAL ---------- */
@@ -93,6 +108,11 @@ export default function ProHomeClient() {
 
   /* ---------- DATA ---------- */
   const items = useMemo(() => businesses?.items ?? [], [businesses]);
+  const defaultBusinessId = useMemo(() => activeId ?? items[0]?.business.id ?? null, [activeId, items]);
+  const isActivePath = useCallback(
+    (target: string) => pathname === target || pathname.startsWith(`${target}/`),
+    [pathname]
+  );
 
   const createValidation = useMemo(() => {
     const issues: string[] = [];
@@ -104,8 +124,6 @@ export default function ProHomeClient() {
     // hydrate once on mount
     if (typeof window === 'undefined') return;
     try {
-      const storedLast = localStorage.getItem('lastProBusinessId');
-      if (storedLast) setLastVisitedId(storedLast);
       const storedActive = localStorage.getItem('activeProBusinessId');
       if (storedActive) setActiveId(storedActive);
     } catch {
@@ -152,9 +170,10 @@ export default function ProHomeClient() {
         setLoading(true);
         setError(null);
 
-        const [meRes, bizRes] = await Promise.all([
+        const [meRes, bizRes, overviewRes] = await Promise.all([
           fetchJson<AuthMeResponse>('/api/auth/me', {}, controller.signal),
           fetchJson<BusinessesResponse>('/api/pro/businesses', {}, controller.signal),
+          fetchJson<OverviewResponse>('/api/pro/overview', {}, controller.signal),
         ]);
 
         if (controller.signal.aborted) return;
@@ -165,15 +184,16 @@ export default function ProHomeClient() {
           return;
         }
 
-        if (!meRes.ok || !bizRes.ok || !meRes.data || !bizRes.data) {
-          const ref = meRes.requestId ?? bizRes.requestId;
-          const message = bizRes.error || meRes.error || 'Impossible de charger l’espace PRO.';
+        if (!meRes.ok || !bizRes.ok || !overviewRes.ok || !meRes.data || !bizRes.data || !overviewRes.data) {
+          const ref = meRes.requestId ?? bizRes.requestId ?? overviewRes.requestId;
+          const message = bizRes.error || meRes.error || overviewRes.error || 'Impossible de charger l’espace PRO.';
           setError(ref ? `${message} (Ref: ${ref})` : message);
           return;
         }
 
         setMe(meRes.data);
         setBusinesses(bizRes.data);
+        setOverview(overviewRes.data);
       } catch (err) {
         if (controller.signal.aborted) return;
         console.error(err);
@@ -204,9 +224,7 @@ export default function ProHomeClient() {
   function rememberAndGo(businessId: string, path: string) {
     if (typeof window !== 'undefined') {
       try {
-        localStorage.setItem('lastProBusinessId', businessId);
         localStorage.setItem('activeProBusinessId', businessId);
-        setLastVisitedId(businessId);
         setActiveId(businessId);
       } catch {
         // ignore storage errors
@@ -328,14 +346,24 @@ export default function ProHomeClient() {
     }
   }
 
-  const continueBusiness = useMemo(() => {
-    if (items.length === 0) return null;
-    if (lastVisitedId) {
-      const match = items.find((b) => b.business.id === lastVisitedId);
-      if (match) return match;
+  const upcomingTasks = useMemo(() => overview?.upcomingTasks ?? [], [overview]);
+  const groupedTasks = useMemo(() => {
+    const buckets: Record<string, typeof upcomingTasks> = {};
+    for (const task of upcomingTasks) {
+      const due = task.dueDate ? new Date(task.dueDate) : null;
+      const key = due ? due.toISOString().slice(0, 10) : 'Aucune date';
+      if (!buckets[key]) buckets[key] = [];
+      buckets[key].push(task);
     }
-    return items[0];
-  }, [items, lastVisitedId]);
+    return Object.entries(buckets)
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([date, tasks]) => ({ date, tasks }));
+  }, [upcomingTasks]);
+
+  const formatCurrency = (cents: string | number) =>
+    new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(
+      Number(cents) / 100
+    );
 
   /* ===================== UI ===================== */
 
@@ -364,74 +392,120 @@ export default function ProHomeClient() {
             </p>
           ) : null}
 
-      {process.env.NODE_ENV !== 'production' ? (
-        <Card className="flex flex-col gap-2 border-dashed border-[var(--border)] bg-transparent p-4">
-          <p className="text-sm font-semibold text-[var(--text-primary)]">Mode dev</p>
-          <p className="text-xs text-[var(--text-secondary)]">
-            Crée un compte admin local + business demo (admin@local.test / admintest).
-          </p>
-          <div className="flex flex-wrap gap-2">
-            <Button variant="outline" size="sm" onClick={triggerDevSeed} disabled={seeding}>
-              {seeding ? 'Seed en cours…' : 'Créer un compte admin de test'}
-            </Button>
-          </div>
-          {seedMessage ? <p className="text-xs text-emerald-500">{seedMessage}</p> : null}
-          {seedError ? <p className="text-xs text-rose-500">{seedError}</p> : null}
-        </Card>
-      ) : null}
+          <section className="space-y-3">
+            <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
+              Aperçu global
+            </h3>
 
-      <section className="space-y-3">
-        <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
-          Continuer
-        </h3>
-        <div className="grid gap-3 md:grid-cols-2">
-          {activeId ? (
-            <ActionTile
-              icon={
-                <FaviconAvatar
-                  name={activeCtx?.activeBusiness?.name ?? 'Entreprise active'}
-                  websiteUrl={activeCtx?.activeBusiness?.websiteUrl}
-                  size={32}
-                />
-              }
-              title={activeCtx?.activeBusiness?.name ?? 'Entreprise active'}
-              description="Espace de travail actuel"
-              href={`/app/pro/${activeId}`}
-              badge="Active"
-              helper="Changer depuis le header ou le bouton dédié"
-            />
-          ) : null}
-          {continueBusiness ? (
-            <ActionTile
-              icon={
-                <FaviconAvatar
-                  name={continueBusiness.business.name}
-                  websiteUrl={continueBusiness.business.websiteUrl}
-                  size={32}
-                />
-              }
-              title={continueBusiness.business.name}
-              description="Dernière entreprise visitée"
-              href={`/app/pro/${continueBusiness.business.id}`}
-              badge={continueBusiness.role}
-              helper="Accès rapide au dashboard et pipeline"
-            />
-          ) : null}
-          {!activeId && !continueBusiness ? (
-            <Card className="rounded-2xl border border-dashed border-[var(--border)] bg-transparent p-4">
-              <p className="text-sm font-semibold text-[var(--text-primary)]">Aucune entreprise sélectionnée</p>
-              <p className="text-xs text-[var(--text-secondary)]">Crée ou rejoins pour commencer.</p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <Button size="sm" onClick={() => setCreateOpen(true)}>Créer</Button>
-                <Button size="sm" variant="outline" onClick={() => setJoinOpen(true)}>
-                  Rejoindre
-                </Button>
+            <div className="grid gap-3 md:grid-cols-3">
+              <Card className="space-y-1 rounded-2xl border border-[var(--border)] bg-[var(--surface)]/70 p-4">
+                <p className="text-xs uppercase tracking-[0.2em] text-[var(--text-secondary)]">Solde net (finances)</p>
+                <p className="text-2xl font-semibold text-[var(--text-primary)]">
+                  {overview ? formatCurrency(overview.totals.totalNetCents) : '—'}
+                </p>
+              </Card>
+              <Card className="space-y-1 rounded-2xl border border-[var(--border)] bg-[var(--surface)]/70 p-4">
+                <p className="text-xs uppercase tracking-[0.2em] text-[var(--text-secondary)]">Projets actifs</p>
+                <p className="text-2xl font-semibold text-[var(--text-primary)]">
+                  {overview?.totals.projectsActiveCount ?? '—'}
+                </p>
+              </Card>
+              <Card className="space-y-1 rounded-2xl border border-[var(--border)] bg-[var(--surface)]/70 p-4">
+                <p className="text-xs uppercase tracking-[0.2em] text-[var(--text-secondary)]">Entreprises</p>
+                <p className="text-2xl font-semibold text-[var(--text-primary)]">
+                  {overview?.totals.businessesCount ?? items.length}
+                </p>
+              </Card>
+            </div>
+
+            <Card className="space-y-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)]/70 p-4">
+              <div className="flex items-center justify-between">
+                <h4 className="text-sm font-semibold text-[var(--text-primary)]">Tâches à venir (7 jours)</h4>
+                <Badge variant="neutral" className="text-[11px]">
+                  {upcomingTasks.length} tâche{upcomingTasks.length > 1 ? 's' : ''}
+                </Badge>
               </div>
+              {groupedTasks.length === 0 ? (
+                <div className="space-y-2">
+                  <p className="text-xs text-[var(--text-secondary)]">Aucune tâche planifiée sur les 7 prochains jours.</p>
+                  {defaultBusinessId ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => rememberAndGo(defaultBusinessId, `/app/pro/${defaultBusinessId}/tasks`)}
+                    >
+                      Créer une tâche
+                    </Button>
+                  ) : null}
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {groupedTasks.map(({ date, tasks }) => {
+                    const label =
+                      date === 'Aucune date'
+                        ? 'Sans date'
+                        : new Date(date).toLocaleDateString('fr-FR', {
+                            weekday: 'long',
+                            day: 'numeric',
+                            month: 'short',
+                          });
+                    return (
+                      <div key={date} className="space-y-2">
+                        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--text-secondary)]">
+                          {label}
+                        </p>
+                        <div className="space-y-2">
+                          {tasks.map((task) => {
+                            const taskHref =
+                              task.businessId && task.id
+                                ? `/app/pro/${task.businessId}/tasks/${task.id}`
+                                : task.businessId
+                                  ? `/app/pro/${task.businessId}`
+                                  : null;
+                            const content = (
+                              <div className="flex items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm transition hover:border-[var(--accent)] hover:bg-[var(--surface-2)]">
+                                <div className="flex min-w-0 items-center gap-3">
+                                  <FaviconAvatar
+                                    name={task.businessName ?? 'Entreprise'}
+                                    websiteUrl={task.websiteUrl ?? null}
+                                    size={28}
+                                  />
+                                  <div className="min-w-0 space-y-0.5">
+                                    <p className="truncate font-medium text-[var(--text-primary)]">{task.title}</p>
+                                    <div className="flex items-center gap-2 text-xs text-[var(--text-secondary)]">
+                                      <span className="truncate">{task.businessName ?? 'Entreprise'}</span>
+                                      <Badge variant="neutral" className="shrink-0">
+                                        {task.status}
+                                      </Badge>
+                                    </div>
+                                  </div>
+                                </div>
+                                {task.dueDate ? (
+                                  <Badge variant="neutral" className="shrink-0">
+                                    {new Date(task.dueDate).toLocaleDateString('fr-FR', {
+                                      day: '2-digit',
+                                      month: '2-digit',
+                                    })}
+                                  </Badge>
+                                ) : null}
+                              </div>
+                            );
+                            return taskHref ? (
+                              <Link key={task.id} href={taskHref} className="block focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]">
+                                {content}
+                              </Link>
+                            ) : (
+                              <div key={task.id}>{content}</div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </Card>
-          ) : null}
-        </div>
-      </section>
-
+          </section>
       <section className="space-y-3">
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
@@ -444,7 +518,6 @@ export default function ProHomeClient() {
         {items.length > 0 ? (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {items.map(({ business, role }) => {
-              const isAdmin = role === 'ADMIN' || role === 'OWNER';
               return (
                 <Card
                   key={business.id}
@@ -457,65 +530,33 @@ export default function ProHomeClient() {
                       rememberAndGo(business.id, `/app/pro/${business.id}`);
                     }
                   }}
-                  className="flex h-full flex-col gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)]/70 p-4 transition hover:border-[var(--accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
+                  className="card-interactive flex h-full flex-col gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)]/70 p-4"
+                  data-active={
+                    isActivePath(`/app/pro/${business.id}`) || business.id === activeId ? true : undefined
+                  }
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex min-w-0 items-start gap-3">
                       <FaviconAvatar name={business.name} websiteUrl={business.websiteUrl} size={38} />
                       <div className="min-w-0 space-y-1">
                         <p className="truncate font-semibold text-[var(--text-primary)]">{business.name}</p>
-                        <p className="text-xs text-[var(--text-secondary)]">
-                          Créée le {new Date(business.createdAt).toLocaleDateString('fr-FR')}
-                        </p>
                       </div>
                     </div>
-                    <Badge variant="neutral" className="shrink-0">
-                      {role}
-                    </Badge>
-                  </div>
-
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      size="sm"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        rememberAndGo(business.id, `/app/pro/${business.id}`);
-                      }}
-                    >
-                      Ouvrir
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        rememberAndGo(business.id, `/app/pro/${business.id}/projects`);
-                      }}
-                    >
-                      Projets
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        rememberAndGo(business.id, `/app/pro/${business.id}/prospects`);
-                      }}
-                    >
-                      Prospects
-                    </Button>
-                    {isAdmin ? (
+                    <div className="flex items-center gap-2">
+                      <Badge variant="neutral" className="shrink-0">
+                        {role}
+                      </Badge>
                       <Button
                         size="sm"
                         variant="ghost"
                         onClick={(e) => {
                           e.stopPropagation();
-                          rememberAndGo(business.id, `/app/pro/${business.id}/invites`);
+                          rememberAndGo(business.id, `/app/pro/${business.id}/settings`);
                         }}
                       >
-                        Invitations
+                        Gérer
                       </Button>
-                    ) : null}
+                    </div>
                   </div>
                 </Card>
               );
@@ -535,6 +576,22 @@ export default function ProHomeClient() {
           </Card>
         )}
       </section>
+
+      {process.env.NODE_ENV !== 'production' ? (
+        <Card className="mt-6 flex flex-col gap-2 border-dashed border-[var(--border)] bg-transparent p-4">
+          <p className="text-sm font-semibold text-[var(--text-primary)]">Mode dev</p>
+          <p className="text-xs text-[var(--text-secondary)]">
+            Crée un compte admin local + business demo (admin@local.test / admintest).
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" onClick={triggerDevSeed} disabled={seeding}>
+              {seeding ? 'Seed en cours…' : 'Créer un compte admin de test'}
+            </Button>
+          </div>
+          {seedMessage ? <p className="text-xs text-emerald-500">{seedMessage}</p> : null}
+          {seedError ? <p className="text-xs text-rose-500">{seedError}</p> : null}
+        </Card>
+      ) : null}
 
       {/* CREATE MODAL */}
       <Modal

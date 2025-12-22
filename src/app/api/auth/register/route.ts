@@ -10,8 +10,20 @@ import { rateLimit, makeIpKey } from '@/server/security/rateLimit';
 import { assertSameOrigin } from '@/server/security/csrf';
 import { NextRequest, NextResponse } from 'next/server';
 import { badRequest, getRequestId, withRequestId } from '@/server/http/apiUtils';
+import { authenticateUser } from '@/server/auth/auth.service';
 
 const MIN_PASSWORD_LENGTH = 8;
+const MAX_PASSWORD_LENGTH = 128;
+const MAX_EMAIL_LENGTH = 254;
+
+function normalizeEmail(email: string) {
+  return email.trim().toLowerCase();
+}
+
+function isValidEmail(email: string) {
+  if (!email || email.length > MAX_EMAIL_LENGTH) return false;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
 
 export async function POST(request: NextRequest) {
   const requestId = getRequestId(request);
@@ -37,11 +49,23 @@ export async function POST(request: NextRequest) {
     return res;
   }
 
-  const { email, password } = body;
+  const email = normalizeEmail(body.email);
+  const password = body.password.trim();
   const name = typeof body.name === 'string' ? body.name : undefined;
+
+  if (!isValidEmail(email)) {
+    const res = withRequestId(badRequest('Email invalide.'), requestId);
+    res.headers.set('Cache-Control', 'no-store');
+    return res;
+  }
 
   if (password.length < MIN_PASSWORD_LENGTH) {
     const res = withRequestId(badRequest('Le mot de passe doit contenir au moins 8 caractères.'), requestId);
+    res.headers.set('Cache-Control', 'no-store');
+    return res;
+  }
+  if (password.length > MAX_PASSWORD_LENGTH) {
+    const res = withRequestId(badRequest('Mot de passe trop long.'), requestId);
     res.headers.set('Cache-Control', 'no-store');
     return res;
   }
@@ -63,11 +87,27 @@ export async function POST(request: NextRequest) {
     response.headers.set('Cache-Control', 'no-store');
     return withRequestId(response, requestId);
   } catch (error) {
-    if (
-      error instanceof Prisma.PrismaClientKnownRequestError &&
-      error.code === 'P2002'
-    ) {
-      const res = NextResponse.json({ error: 'Cet email est déjà utilisé.' }, { status: 409 });
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      // Email déjà utilisé : comportement non-énumérable, on tente un login silencieux si le mot de passe correspond.
+      const existing = await authenticateUser({ email, password });
+      if (existing) {
+        const token = await createSessionToken(existing);
+        const response = NextResponse.json(
+          { user: toPublicUser(existing) },
+          { status: 200 }
+        );
+        response.cookies.set({
+          name: AUTH_COOKIE_NAME,
+          value: token,
+          ...authCookieOptions,
+        });
+        response.headers.set('Cache-Control', 'no-store');
+        return withRequestId(response, requestId);
+      }
+      const res = NextResponse.json(
+        { message: 'Si un compte existe déjà, utilisez la connexion.' },
+        { status: 200 }
+      );
       res.headers.set('Cache-Control', 'no-store');
       return withRequestId(res, requestId);
     }

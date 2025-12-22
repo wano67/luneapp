@@ -98,6 +98,56 @@ paths:
               schema:
                 type: object
                 properties: { status: { type: string, example: logged_out } }
+  /api/pro/overview:
+    get:
+      tags: ['Pro / Business']
+      summary: Vue globale multi-entreprises pour l'utilisateur connecté
+      security: [ { cookieAuth: [] } ]
+      responses:
+        '200':
+          description: Totaux et tâches à venir
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  totals:
+                    type: object
+                    properties:
+                      businessesCount: { type: integer, example: 2 }
+                      projectsActiveCount: { type: integer, example: 5 }
+                      totalNetCents: { type: string, example: "123400" }
+                  upcomingTasks:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string }
+                        title: { type: string }
+                        status: { type: string }
+                        dueDate: { type: string, format: date-time, nullable: true }
+                        businessId: { type: string }
+                        businessName: { type: string, nullable: true }
+  /api/favicon:
+    get:
+      tags: [Public]
+      summary: Proxy de favicon pour une URL de site
+      parameters:
+        - in: query
+          name: url
+          required: true
+          schema: { type: string }
+          description: URL du site dont extraire l'icône
+      responses:
+        '200':
+          description: Icône renvoyée
+          content:
+            image/*:
+              schema:
+                type: string
+                format: binary
+        '204':
+          description: Aucune icône disponible
   /api/auth/me:
     get:
       tags: [Auth]
@@ -507,6 +557,18 @@ paths:
           name: tagReferenceId
           required: false
           schema: { type: string }
+        - in: query
+          name: archived
+          required: false
+          schema: { type: string, enum: ['0', '1', 'true', 'false'] }
+        - in: query
+          name: sortBy
+          required: false
+          schema: { type: string, enum: [name, createdAt, updatedAt], default: name }
+        - in: query
+          name: sortDir
+          required: false
+          schema: { type: string, enum: [asc, desc], default: asc }
       responses:
         '200':
           description: Liste
@@ -534,6 +596,44 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Client' }
+  /api/pro/businesses/{businessId}/clients/bulk:
+    post:
+      tags: [Pro / Clients]
+      security: [ { cookieAuth: [] } ]
+      summary: Actions bulk clients (archive/unarchive)
+      parameters: [ { $ref: '#/components/parameters/BusinessId' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [clientIds, action]
+              properties:
+                clientIds:
+                  type: array
+                  items: { type: string }
+                action:
+                  type: string
+                  enum: [ARCHIVE, UNARCHIVE, DELETE]
+      responses:
+        '200':
+          description: Résultat bulk
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  updatedCount: { type: integer, nullable: true }
+                  deletedCount: { type: integer, nullable: true }
+                  action: { type: string, nullable: true }
+                  failed:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string }
+                        reason: { type: string }
   /api/pro/businesses/{businessId}/clients/{clientId}:
     get:
       tags: [Pro / Clients]
@@ -2455,6 +2555,7 @@ components:
             properties:
               id: { type: string }
               name: { type: string }
+        archivedAt: { type: string, format: date-time, nullable: true }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
     ClientCreate:
@@ -2472,6 +2573,8 @@ components:
         tagReferenceIds:
           type: array
           items: { type: string }
+        archive: { type: boolean, nullable: true }
+        archivedAt: { type: string, format: date-time, nullable: true }
     ClientUpdate:
       type: object
       properties:
