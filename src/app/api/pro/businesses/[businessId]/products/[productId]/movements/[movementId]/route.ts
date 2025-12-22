@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { InventoryMovementType } from '@/generated/prisma/client';
+import { FinanceType, InventoryMovementType } from '@/generated/prisma/client';
 import { prisma } from '@/server/db/client';
 import { requireAuthPro } from '@/server/auth/requireAuthPro';
 import { requireBusinessRole } from '@/server/auth/businessRole';
@@ -86,6 +86,23 @@ export async function PATCH(
 
   const movement = await prisma.inventoryMovement.findFirst({
     where: { id: movementIdBigInt, productId: productIdBigInt, businessId: businessIdBigInt },
+    include: {
+      product: {
+        select: {
+          id: true,
+          sku: true,
+          name: true,
+          purchasePriceCents: true,
+          salePriceCents: true,
+        },
+      },
+      financeEntry: {
+        select: {
+          id: true,
+          type: true,
+        },
+      },
+    },
   });
   if (!movement) return withIdNoStore(notFound('Mouvement introuvable.'), requestId);
 
@@ -121,13 +138,61 @@ export async function PATCH(
     data.date = d;
   }
 
+  const unitCostRaw = (body as { unitCostCents?: unknown }).unitCostCents;
+  if (unitCostRaw !== undefined) {
+    const parsed =
+      typeof unitCostRaw === 'number' && Number.isFinite(unitCostRaw)
+        ? BigInt(Math.trunc(unitCostRaw))
+        : typeof unitCostRaw === 'string' && unitCostRaw.trim() && /^\d+$/.test(unitCostRaw.trim())
+          ? BigInt(unitCostRaw.trim())
+          : null;
+    if (parsed === null) {
+      return withIdNoStore(badRequest('unitCostCents invalide.'), requestId);
+    }
+    data.unitCostCents = parsed;
+  }
+
   if (Object.keys(data).length === 0) {
     return withIdNoStore(badRequest('Aucun champ valide fourni.'), requestId);
   }
 
-  const updated = await prisma.inventoryMovement.update({
-    where: { id: movementIdBigInt },
-    data,
+  const updated = await prisma.$transaction(async (tx) => {
+    const updatedMovement = await tx.inventoryMovement.update({
+      where: { id: movementIdBigInt },
+      data,
+    });
+
+    if (movement.financeEntry) {
+      const amountPerUnit =
+        (data.unitCostCents as bigint | undefined) ??
+        updatedMovement.unitCostCents ??
+        movement.product.purchasePriceCents ??
+        movement.product.salePriceCents ??
+        BigInt(0);
+      const amount = amountPerUnit * BigInt(Math.abs(updatedMovement.quantity));
+      await tx.finance.update({
+        where: { inventoryMovementId: movementIdBigInt },
+        data: {
+          amountCents: amount,
+          date: updatedMovement.date,
+          inventoryProductId: movement.productId,
+          category: movement.financeEntry.type === FinanceType.EXPENSE ? 'INVENTORY' : 'PRODUCT_SALE',
+          note: JSON.stringify({
+            auto: true,
+            source: 'inventory_movement',
+            productId: movement.productId.toString(),
+            productName: movement.product.name,
+            movementId: movementIdBigInt.toString(),
+            movementType: updatedMovement.type,
+            sku: movement.product.sku,
+            quantity: updatedMovement.quantity,
+            unitCostCents: amountPerUnit.toString(),
+          }),
+        },
+      });
+    }
+
+    return updatedMovement;
   });
 
   return withIdNoStore(jsonNoStore({ movement: serializeMovement(updated) }), requestId);
@@ -172,7 +237,10 @@ export async function DELETE(
   });
   if (!movement) return withIdNoStore(notFound('Mouvement introuvable.'), requestId);
 
-  await prisma.inventoryMovement.delete({ where: { id: movementIdBigInt } });
+  await prisma.$transaction(async (tx) => {
+    await tx.finance.deleteMany({ where: { inventoryMovementId: movementIdBigInt } });
+    await tx.inventoryMovement.delete({ where: { id: movementIdBigInt } });
+  });
 
   return withIdNoStore(new NextResponse(null, { status: 204 }), requestId);
 }

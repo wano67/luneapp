@@ -1890,8 +1890,14 @@ paths:
                 unitCostCents: { type: string, nullable: true }
                 reason: { type: string, nullable: true }
                 date: { type: string, format: date-time, nullable: true }
-                createFinanceEntry: { type: boolean }
-                financeType: { type: string, enum: [INCOME, EXPENSE], nullable: true }
+                createFinanceEntry:
+                  type: boolean
+                  description: Crée une écriture Finance liée (inventoryMovementId) avec metadata auto=true
+                financeType:
+                  type: string
+                  enum: [INCOME, EXPENSE]
+                  nullable: true
+                  description: Forcé si fourni, sinon IN => EXPENSE, OUT => INCOME
       responses:
         '201':
           description: Mouvement créé
@@ -1906,7 +1912,7 @@ paths:
     patch:
       tags: [Pro / Stock]
       security: [ { cookieAuth: [] } ]
-      summary: Met à jour un mouvement (quantité/raison/date)
+      summary: Met à jour un mouvement (quantité/raison/date/coût) et recalcule la finance liée
       parameters:
         - $ref: '#/components/parameters/BusinessId'
         - name: productId
@@ -1927,6 +1933,7 @@ paths:
                 quantity: { type: number }
                 reason: { type: string, nullable: true }
                 date: { type: string, format: date-time, nullable: true }
+                unitCostCents: { type: string, nullable: true }
       responses:
         '200':
           description: Mouvement mis à jour
@@ -1939,7 +1946,7 @@ paths:
     delete:
       tags: [Pro / Stock]
       security: [ { cookieAuth: [] } ]
-      summary: Supprime un mouvement
+      summary: Supprime un mouvement et nettoie la finance auto associée
       parameters:
         - $ref: '#/components/parameters/BusinessId'
         - name: productId
@@ -2449,6 +2456,8 @@ components:
         businessId: { type: string }
         projectId: { type: string, nullable: true }
         projectName: { type: string, nullable: true }
+        inventoryMovementId: { type: string, nullable: true, description: 'Lié à un mouvement de stock auto-généré' }
+        inventoryProductId: { type: string, nullable: true }
         type: { type: string, enum: [INCOME, EXPENSE] }
         amountCents: { type: string }
         amount: { type: number }
@@ -2546,6 +2555,7 @@ components:
         unitCostCents: { type: string, nullable: true }
         reason: { type: string, nullable: true }
         date: { type: string, format: date-time }
+        createdByUserId: { type: string, nullable: true }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
     InventorySummaryRow:

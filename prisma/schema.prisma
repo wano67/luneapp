@@ -460,6 +460,8 @@ model Finance {
   businessId BigInt
   projectId  BigInt?
   categoryReferenceId BigInt?
+  inventoryMovementId BigInt? @unique
+  inventoryProductId  BigInt?
   type       FinanceType
   amountCents BigInt
   category   String
@@ -469,6 +471,8 @@ model Finance {
   business Business @relation(fields: [businessId], references: [id])
   project  Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
   categoryReference BusinessReference? @relation("FinanceCategoryReference", fields: [categoryReferenceId], references: [id], onDelete: SetNull)
+  inventoryMovement  InventoryMovement? @relation("InventoryMovementFinance", fields: [inventoryMovementId], references: [id], onDelete: SetNull)
+  inventoryProduct   Product?           @relation("ProductFinance", fields: [inventoryProductId], references: [id], onDelete: SetNull)
   tags     FinanceTag[]
 
   createdAt DateTime @default(now())
@@ -477,6 +481,7 @@ model Finance {
   @@index([businessId, date])
   @@index([businessId, type])
   @@index([businessId, categoryReferenceId])
+  @@index([businessId, inventoryProductId])
 }
 
 /**
@@ -523,6 +528,7 @@ model Product {
   purchasePriceCents BigInt?
   isArchived         Boolean      @default(false)
   movements          InventoryMovement[]
+  inventoryFinances  Finance[]    @relation("ProductFinance")
   createdAt          DateTime     @default(now())
   updatedAt          DateTime     @updatedAt
 
@@ -541,6 +547,7 @@ model InventoryMovement {
   reason          String?
   date            DateTime
   createdByUserId BigInt?
+  financeEntry    Finance?                @relation("InventoryMovementFinance")
 
   business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
   product  Product  @relation(fields: [productId], references: [id], onDelete: Cascade)

@@ -144,6 +144,8 @@ function serializeFinance(finance: {
   id: bigint;
   businessId: bigint;
   projectId: bigint | null;
+  inventoryMovementId?: bigint | null;
+  inventoryProductId?: bigint | null;
   type: FinanceType;
   amountCents: bigint;
   category: string;
@@ -163,6 +165,8 @@ function serializeFinance(finance: {
     businessId: finance.businessId.toString(),
     projectId: finance.projectId ? finance.projectId.toString() : null,
     projectName: finance.project?.name ?? null,
+    inventoryMovementId: finance.inventoryMovementId ? finance.inventoryMovementId.toString() : null,
+    inventoryProductId: finance.inventoryProductId ? finance.inventoryProductId.toString() : null,
     categoryReferenceId: finance.categoryReferenceId ? finance.categoryReferenceId.toString() : null,
     categoryReferenceName: finance.categoryReference?.name ?? null,
     tagReferences: finance.tags
