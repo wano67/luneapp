@@ -339,24 +339,16 @@ export default function ClientsPage() {
         ) : (
           <div className="space-y-2">
             {clients.map((client) => (
-              <div
+              <Link
                 key={client.id}
-                className="flex flex-col gap-1 rounded-xl border border-[var(--border)] bg-[var(--surface)]/70 p-3 sm:flex-row sm:items-center sm:justify-between"
+                href={`/app/pro/${businessId}/clients/${client.id}`}
+                className="flex flex-col gap-1 rounded-xl border border-[var(--border)] bg-[var(--surface)]/70 p-3 transition hover:border-[var(--accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)] sm:flex-row sm:items-center sm:justify-between"
               >
                 <div className="space-y-1">
-                  <Link
-                    href={`/app/pro/${businessId}/clients/${client.id}`}
-                    className="font-semibold text-[var(--text-primary)] hover:underline"
-                  >
-                    {client.name}
-                  </Link>
-                  <p className="text-xs text-[var(--text-secondary)]">
-                    Créé le {formatDate(client.createdAt)}
-                  </p>
+                  <span className="font-semibold text-[var(--text-primary)]">{client.name}</span>
+                  <p className="text-xs text-[var(--text-secondary)]">Créé le {formatDate(client.createdAt)}</p>
                   {client.notes ? (
-                    <p className="text-xs text-[var(--text-secondary)] line-clamp-2">
-                      {client.notes}
-                    </p>
+                    <p className="text-xs text-[var(--text-secondary)] line-clamp-2">{client.notes}</p>
                   ) : null}
                   <div className="flex flex-wrap gap-1">
                     {client.categoryReferenceName ? (
@@ -374,13 +366,9 @@ export default function ClientsPage() {
 
                 <div className="flex items-center gap-2">
                   <Badge variant="neutral">{client.email || 'Email ?'}</Badge>
-                  {client.phone ? (
-                    <Badge variant="neutral">{client.phone}</Badge>
-                  ) : (
-                    <Badge variant="neutral">Phone ?</Badge>
-                  )}
+                  {client.phone ? <Badge variant="neutral">{client.phone}</Badge> : <Badge variant="neutral">Phone ?</Badge>}
                 </div>
-              </div>
+              </Link>
             ))}
           </div>
         )}

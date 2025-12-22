@@ -2,8 +2,7 @@
 'use client';
 
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -90,6 +89,7 @@ function probabilityLabel(value: number | null | undefined) {
 export default function BusinessProspectsPage() {
   const params = useParams();
   const businessId = (params?.businessId ?? '') as string;
+  const router = useRouter();
   const activeCtx = useActiveBusiness({ optional: true });
   const role = activeCtx?.activeBusiness?.role ?? null;
   const isAdmin = role === 'ADMIN' || role === 'OWNER';
@@ -334,48 +334,56 @@ export default function BusinessProspectsPage() {
             </Button>
           </Card>
         ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Entreprise</TableHead>
-                <TableHead>Contact</TableHead>
-                <TableHead>Statut</TableHead>
-                <TableHead>Proba</TableHead>
-                <TableHead>Prochaine action</TableHead>
-                <TableHead>Créé</TableHead>
-                <TableHead className="text-right">Ouvrir</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {prospects.map((p) => (
-                <TableRow key={p.id}>
-                  <TableCell className="space-y-1">
-                    <div className="font-semibold text-[var(--text-primary)]">{p.name}</div>
-                    {p.title ? (
-                      <div className="text-xs text-[var(--text-secondary)]">{p.title}</div>
-                    ) : null}
-                  </TableCell>
-                  <TableCell className="space-y-1">
-                    <div className="text-sm">{p.contactName ?? '—'}</div>
-                    <div className="text-xs text-[var(--text-secondary)]">{p.contactEmail ?? p.contactPhone ?? ''}</div>
-                  </TableCell>
-                  <TableCell className="space-x-1">
-                    <Badge variant="neutral">{p.pipelineStatus}</Badge>
-                    <Badge variant="neutral">{p.status}</Badge>
-                  </TableCell>
-                  <TableCell>{probabilityLabel(p.probability)}</TableCell>
-                  <TableCell>{formatDate(p.nextActionDate)}</TableCell>
-                  <TableCell className="text-xs text-[var(--text-secondary)]">{formatDate(p.createdAt)}</TableCell>
-                  <TableCell className="text-right">
-                    <Button variant="outline" size="sm" asChild>
-                      <Link href={`/app/pro/${businessId}/prospects/${p.id}`}>Ouvrir</Link>
-                    </Button>
-                  </TableCell>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Entreprise</TableHead>
+                  <TableHead>Contact</TableHead>
+                  <TableHead>Statut</TableHead>
+                  <TableHead>Proba</TableHead>
+                  <TableHead>Prochaine action</TableHead>
+                  <TableHead>Créé</TableHead>
                 </TableRow>
-              ))}
-              {prospects.length === 0 ? <TableEmpty>Aucun prospect.</TableEmpty> : null}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {prospects.map((p) => (
+                  <TableRow
+                    key={p.id}
+                    role="link"
+                    tabIndex={0}
+                    className="cursor-pointer transition hover:bg-[var(--surface-hover)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
+                    onClick={() => router.push(`/app/pro/${businessId}/prospects/${p.id}`)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        router.push(`/app/pro/${businessId}/prospects/${p.id}`);
+                      }
+                    }}
+                  >
+                    <TableCell className="space-y-1">
+                      <div className="font-semibold text-[var(--text-primary)]">{p.name}</div>
+                      {p.title ? (
+                        <div className="text-xs text-[var(--text-secondary)]">{p.title}</div>
+                      ) : null}
+                    </TableCell>
+                    <TableCell className="space-y-1">
+                      <div className="text-sm">{p.contactName ?? '—'}</div>
+                      <div className="text-xs text-[var(--text-secondary)]">{p.contactEmail ?? p.contactPhone ?? ''}</div>
+                    </TableCell>
+                    <TableCell className="space-x-1">
+                      <Badge variant="neutral">{p.pipelineStatus}</Badge>
+                      <Badge variant="neutral">{p.status}</Badge>
+                    </TableCell>
+                    <TableCell>{probabilityLabel(p.probability)}</TableCell>
+                    <TableCell>{formatDate(p.nextActionDate)}</TableCell>
+                    <TableCell className="text-xs text-[var(--text-secondary)]">{formatDate(p.createdAt)}</TableCell>
+                  </TableRow>
+                ))}
+                {prospects.length === 0 ? <TableEmpty>Aucun prospect.</TableEmpty> : null}
+              </TableBody>
+            </Table>
+          </div>
         )}
         {requestId ? (
           <p className="text-[10px] text-[var(--text-faint)]">Req: {requestId}</p>
