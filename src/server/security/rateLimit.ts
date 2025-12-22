@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getRequestId, withIdNoStore } from '@/server/http/apiUtils';
 
 type Bucket = {
   tokens: number;
@@ -24,20 +25,23 @@ function getIp(req: NextRequest): string {
   return 'unknown';
 }
 
-function errorResponse(limit: number, windowMs: number, retryAfterSeconds: number) {
+function errorResponse(limit: number, windowMs: number, retryAfterSeconds: number, requestId: string) {
   const headers = new Headers();
   headers.set('Retry-After', String(retryAfterSeconds));
   headers.set('X-RateLimit-Limit', String(limit));
   headers.set('X-RateLimit-Remaining', '0');
   headers.set('X-RateLimit-Reset', String(Math.ceil(Date.now() / 1000 + retryAfterSeconds)));
 
-  return NextResponse.json(
+  const res = NextResponse.json(
     { error: { code: 'RATE_LIMITED', message: 'Too many requests. Please retry later.' } },
     { status: 429, headers }
   );
+
+  return withIdNoStore(res, requestId);
 }
 
 export function rateLimit(req: NextRequest, opts: RateLimitOptions): NextResponse | null {
+  const requestId = getRequestId(req);
   const now = Date.now();
   const key = `${opts.key}`;
   const bucket = buckets.get(key) ?? { tokens: opts.limit, updatedAt: now };
@@ -53,7 +57,7 @@ export function rateLimit(req: NextRequest, opts: RateLimitOptions): NextRespons
   if (bucket.tokens < 1) {
     const retryAfter = Math.ceil((opts.windowMs / opts.limit) / 1000);
     buckets.set(key, bucket);
-    return errorResponse(opts.limit, opts.windowMs, retryAfter);
+    return errorResponse(opts.limit, opts.windowMs, retryAfter, requestId);
   }
 
   bucket.tokens -= 1;

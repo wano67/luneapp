@@ -18,6 +18,7 @@
     "seed:dev": "ENABLE_DEV_SEED=1 pnpm tsx scripts/seed-dev.ts",
     "smoke:wiring": "pnpm tsx scripts/smoke-wiring.ts",
     "smoke:dev-routes": "pnpm tsx scripts/smoke-dev-routes.ts",
+    "smoke:auth": "pnpm tsx scripts/smoke-auth.ts",
     "smoke:invites": "pnpm tsx scripts/smoke-invites.ts",
     "smoke:finance": "pnpm tsx scripts/smoke-finance-wiring.ts",
     "smoke:billing": "pnpm tsx scripts/smoke-billing-wiring.ts",
