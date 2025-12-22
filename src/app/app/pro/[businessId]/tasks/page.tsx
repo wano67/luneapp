@@ -15,6 +15,8 @@ import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import { useActiveBusiness } from '../../ActiveBusinessProvider';
 import RoleBanner from '@/components/RoleBanner';
 import { ReferencePicker } from '../references/ReferencePicker';
+import { useRowSelection } from '../../../components/selection/useRowSelection';
+import { BulkActionBar } from '../../../components/selection/BulkActionBar';
 
 type TaskStatus = 'TODO' | 'IN_PROGRESS' | 'DONE';
 
@@ -93,6 +95,9 @@ export default function TasksPage() {
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const fetchController = useRef<AbortController | null>(null);
   const [readOnlyInfo, setReadOnlyInfo] = useState<string | null>(null);
+  const [bulkError, setBulkError] = useState<string | null>(null);
+  const [bulkLoading, setBulkLoading] = useState(false);
+  const { selectedArray, selectedCount, toggle, toggleAll, clear, isSelected } = useRowSelection();
 
   const filteredTasks = useMemo(() => {
     return statusFilter === 'ALL' ? tasks : tasks.filter((t) => t.status === statusFilter);
@@ -306,6 +311,35 @@ function openEdit(task: Task) {
     await loadTasks();
   }
 
+  async function handleBulkDelete(ids: string[]) {
+    if (!ids.length) return;
+    if (!isAdmin) {
+      setReadOnlyInfo(readOnlyMessage);
+      return;
+    }
+    const ok = window.confirm(ids.length === 1 ? 'Supprimer cette tâche ?' : `Supprimer ${ids.length} tâches ?`);
+    if (!ok) return;
+    setBulkLoading(true);
+    setBulkError(null);
+    setInfo(null);
+    let failed = 0;
+    for (const id of ids) {
+      const res = await fetchJson<null>(`/api/pro/businesses/${businessId}/tasks/${id}`, { method: 'DELETE' });
+      if (!res.ok) {
+        failed += 1;
+        setBulkError((prev) => prev ?? `Suppression partielle. Ref: ${res.requestId ?? 'N/A'}`);
+      }
+    }
+    setBulkLoading(false);
+    clear();
+    await loadTasks();
+    if (failed) {
+      setBulkError((prev) => prev ?? 'Certaines suppressions ont échoué.');
+    } else {
+      setInfo('Tâches supprimées.');
+    }
+  }
+
   return (
     <div className="space-y-5">
       <RoleBanner role={actorRole} />
@@ -397,100 +431,134 @@ function openEdit(task: Task) {
         {loading ? (
           <p className="text-sm text-[var(--text-secondary)]">Chargement des tâches…</p>
         ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Titre</TableHead>
-                <TableHead>Projet</TableHead>
-                <TableHead>Assignee</TableHead>
-                <TableHead>Références</TableHead>
-                <TableHead>Échéance</TableHead>
-                <TableHead>Statut</TableHead>
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredTasks.length === 0 ? (
-                <TableEmpty>Aucune tâche.</TableEmpty>
-              ) : (
-                filteredTasks.map((task) => (
-                  <TableRow key={task.id}>
-                    <TableCell className="font-semibold text-[var(--text-primary)]">
-                      <Link href={`/app/pro/${businessId}/tasks/${task.id}`} className="hover:underline">
-                        {task.title}
-                      </Link>
-                      <p className="text-[10px] text-[var(--text-secondary)]">
-                        Créée le {formatDate(task.createdAt)}
-                      </p>
-                    </TableCell>
-                    <TableCell>{task.projectName ?? '—'}</TableCell>
-                    <TableCell>{task.assigneeEmail ?? task.assigneeName ?? '—'}</TableCell>
-                    <TableCell>
-                      <div className="flex flex-wrap gap-1">
-                        {task.categoryReferenceName ? (
-                          <Badge variant="neutral" className="bg-indigo-50 text-indigo-700">
-                            {task.categoryReferenceName}
-                          </Badge>
-                        ) : null}
-                        {task.tagReferences?.map((tag) => (
-                          <Badge key={tag.id} variant="neutral" className="bg-emerald-50 text-emerald-700">
-                            {tag.name}
-                          </Badge>
-                        ))}
-                      </div>
-                    </TableCell>
-                    <TableCell>{formatDate(task.dueDate)}</TableCell>
-                    <TableCell>
-                      <Badge
-                        variant="neutral"
-                        className={
-                          task.status === 'DONE'
-                            ? 'bg-emerald-100 text-emerald-700'
-                            : task.status === 'IN_PROGRESS'
-                              ? 'bg-blue-100 text-blue-700'
-                              : 'bg-amber-100 text-amber-700'
-                        }
-                      >
-                        {STATUS_OPTIONS.find((s) => s.value === task.status)?.label ?? task.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-wrap gap-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => {
-                            if (!isAdmin) {
-                              setReadOnlyInfo(readOnlyMessage);
-                              return;
-                            }
-                            openEdit(task);
-                          }}
-                          disabled={!isAdmin}
+          <div className="space-y-2">
+            {bulkError ? <p className="text-xs font-semibold text-rose-500">{bulkError}</p> : null}
+            <BulkActionBar
+              count={selectedCount}
+              onClear={clear}
+              actions={[
+                {
+                  label: bulkLoading ? 'Suppression…' : 'Supprimer',
+                  onClick: () => handleBulkDelete(selectedArray),
+                  variant: 'danger',
+                  disabled: !isAdmin || bulkLoading,
+                },
+              ]}
+            />
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-10">
+                    <input
+                      type="checkbox"
+                      aria-label="Tout sélectionner"
+                      className="h-4 w-4 accent-[var(--accent)]"
+                      checked={filteredTasks.length > 0 && filteredTasks.every((t) => isSelected(t.id))}
+                      onChange={() => toggleAll(filteredTasks.map((t) => t.id))}
+                    />
+                  </TableHead>
+                  <TableHead>Titre</TableHead>
+                  <TableHead>Projet</TableHead>
+                  <TableHead>Assignee</TableHead>
+                  <TableHead>Références</TableHead>
+                  <TableHead>Échéance</TableHead>
+                  <TableHead>Statut</TableHead>
+                  <TableHead>Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredTasks.length === 0 ? (
+                  <TableEmpty>Aucune tâche.</TableEmpty>
+                ) : (
+                  filteredTasks.map((task) => (
+                    <TableRow key={task.id}>
+                      <TableCell onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 accent-[var(--accent)]"
+                          checked={isSelected(task.id)}
+                          onChange={() => toggle(task.id)}
+                          aria-label="Sélectionner"
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                      </TableCell>
+                      <TableCell className="font-semibold text-[var(--text-primary)]">
+                        <Link href={`/app/pro/${businessId}/tasks/${task.id}`} className="hover:underline">
+                          {task.title}
+                        </Link>
+                        <p className="text-[10px] text-[var(--text-secondary)]">
+                          Créée le {formatDate(task.createdAt)}
+                        </p>
+                      </TableCell>
+                      <TableCell>{task.projectName ?? '—'}</TableCell>
+                      <TableCell>{task.assigneeEmail ?? task.assigneeName ?? '—'}</TableCell>
+                      <TableCell>
+                        <div className="flex flex-wrap gap-1">
+                          {task.categoryReferenceName ? (
+                            <Badge variant="neutral" className="bg-indigo-50 text-indigo-700">
+                              {task.categoryReferenceName}
+                            </Badge>
+                          ) : null}
+                          {task.tagReferences?.map((tag) => (
+                            <Badge key={tag.id} variant="neutral" className="bg-emerald-50 text-emerald-700">
+                              {tag.name}
+                            </Badge>
+                          ))}
+                        </div>
+                      </TableCell>
+                      <TableCell>{formatDate(task.dueDate)}</TableCell>
+                      <TableCell>
+                        <Badge
+                          variant="neutral"
+                          className={
+                            task.status === 'DONE'
+                              ? 'bg-emerald-100 text-emerald-700'
+                              : task.status === 'IN_PROGRESS'
+                                ? 'bg-blue-100 text-blue-700'
+                                : 'bg-amber-100 text-amber-700'
+                          }
                         >
-                          Modifier
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => {
-                            if (!isAdmin) {
-                              setReadOnlyInfo(readOnlyMessage);
-                              return;
-                            }
-                            setDeleteModal(task);
-                          }}
-                          disabled={!isAdmin}
-                        >
-                          Supprimer
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+                          {STATUS_OPTIONS.find((s) => s.value === task.status)?.label ?? task.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              if (!isAdmin) {
+                                setReadOnlyInfo(readOnlyMessage);
+                                return;
+                              }
+                              openEdit(task);
+                            }}
+                            disabled={!isAdmin}
+                          >
+                            Modifier
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              if (!isAdmin) {
+                                setReadOnlyInfo(readOnlyMessage);
+                                return;
+                              }
+                              setDeleteModal(task);
+                            }}
+                            disabled={!isAdmin}
+                          >
+                            Supprimer
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
         )}
       </Card>
 

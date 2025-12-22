@@ -13,6 +13,8 @@ import { Table, TableBody, TableCell, TableEmpty, TableHead, TableHeader, TableR
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import { useActiveBusiness } from '../../ActiveBusinessProvider';
 import RoleBanner from '@/components/RoleBanner';
+import { useRowSelection } from '../../../components/selection/useRowSelection';
+import { BulkActionBar } from '../../../components/selection/BulkActionBar';
 
 type ProspectStatus = 'NEW' | 'FOLLOW_UP' | 'WON' | 'LOST';
 type ProspectPipelineStatus = 'NEW' | 'IN_DISCUSSION' | 'OFFER_SENT' | 'FOLLOW_UP' | 'CLOSED';
@@ -111,6 +113,16 @@ export default function BusinessProspectsPage() {
   const [formError, setFormError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [readOnlyInfo, setReadOnlyInfo] = useState<string | null>(null);
+  const [bulkError, setBulkError] = useState<string | null>(null);
+  const [bulkLoading, setBulkLoading] = useState(false);
+  const {
+    selectedArray,
+    selectedCount,
+    toggle,
+    toggleAll,
+    clear,
+    isSelected,
+  } = useRowSelection();
 
   const fetchController = useRef<AbortController | null>(null);
 
@@ -217,6 +229,34 @@ export default function BusinessProspectsPage() {
     setForm(emptyForm);
     setCreating(false);
     await loadProspects();
+  }
+
+  async function handleBulkDelete(ids: string[]) {
+    if (!ids.length) return;
+    if (!isAdmin) {
+      setReadOnlyInfo(readOnlyMessage);
+      return;
+    }
+    const ok = window.confirm(ids.length === 1 ? 'Supprimer ce prospect ?' : `Supprimer ${ids.length} prospects ?`);
+    if (!ok) return;
+    setBulkLoading(true);
+    setBulkError(null);
+    let failed = 0;
+    for (const id of ids) {
+      const res = await fetchJson<null>(`/api/pro/businesses/${businessId}/prospects/${id}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) {
+        failed += 1;
+        setBulkError((prev) => prev ?? `Suppression partielle. Ref: ${res.requestId ?? 'N/A'}`);
+      }
+    }
+    setBulkLoading(false);
+    clear();
+    await loadProspects();
+    if (failed) {
+      setBulkError((prev) => prev ?? 'Certaines suppressions ont échoué.');
+    }
   }
 
   return (
@@ -334,55 +374,89 @@ export default function BusinessProspectsPage() {
             </Button>
           </Card>
         ) : (
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Entreprise</TableHead>
-                  <TableHead>Contact</TableHead>
-                  <TableHead>Statut</TableHead>
-                  <TableHead>Proba</TableHead>
-                  <TableHead>Prochaine action</TableHead>
-                  <TableHead>Créé</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {prospects.map((p) => (
-                  <TableRow
-                    key={p.id}
-                    role="link"
-                    tabIndex={0}
-                    className="cursor-pointer transition hover:bg-[var(--surface-hover)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
-                    onClick={() => router.push(`/app/pro/${businessId}/prospects/${p.id}`)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        router.push(`/app/pro/${businessId}/prospects/${p.id}`);
-                      }
-                    }}
-                  >
-                    <TableCell className="space-y-1">
-                      <div className="font-semibold text-[var(--text-primary)]">{p.name}</div>
-                      {p.title ? (
-                        <div className="text-xs text-[var(--text-secondary)]">{p.title}</div>
-                      ) : null}
-                    </TableCell>
-                    <TableCell className="space-y-1">
-                      <div className="text-sm">{p.contactName ?? '—'}</div>
-                      <div className="text-xs text-[var(--text-secondary)]">{p.contactEmail ?? p.contactPhone ?? ''}</div>
-                    </TableCell>
-                    <TableCell className="space-x-1">
-                      <Badge variant="neutral">{p.pipelineStatus}</Badge>
-                      <Badge variant="neutral">{p.status}</Badge>
-                    </TableCell>
-                    <TableCell>{probabilityLabel(p.probability)}</TableCell>
-                    <TableCell>{formatDate(p.nextActionDate)}</TableCell>
-                    <TableCell className="text-xs text-[var(--text-secondary)]">{formatDate(p.createdAt)}</TableCell>
+          <div className="space-y-3">
+            <BulkActionBar
+              count={selectedCount}
+              onClear={clear}
+              actions={[
+                {
+                  label: bulkLoading ? 'Suppression…' : 'Supprimer',
+                  onClick: () => handleBulkDelete(selectedArray),
+                  variant: 'danger',
+                  disabled: !isAdmin || bulkLoading,
+                },
+              ]}
+            />
+            {bulkError ? <p className="text-xs font-semibold text-rose-500">{bulkError}</p> : null}
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-10">
+                      <input
+                        type="checkbox"
+                        aria-label="Tout sélectionner"
+                        className="h-4 w-4 accent-[var(--accent)]"
+                        checked={prospects.length > 0 && prospects.every((p) => isSelected(p.id))}
+                        onChange={() => toggleAll(prospects.map((p) => p.id))}
+                      />
+                    </TableHead>
+                    <TableHead>Entreprise</TableHead>
+                    <TableHead>Contact</TableHead>
+                    <TableHead>Statut</TableHead>
+                    <TableHead>Proba</TableHead>
+                    <TableHead>Prochaine action</TableHead>
+                    <TableHead>Créé</TableHead>
                   </TableRow>
-                ))}
-                {prospects.length === 0 ? <TableEmpty>Aucun prospect.</TableEmpty> : null}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {prospects.map((p) => (
+                    <TableRow
+                      key={p.id}
+                      role="link"
+                      tabIndex={0}
+                      className="cursor-pointer transition hover:bg-[var(--surface-hover)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
+                      onClick={() => router.push(`/app/pro/${businessId}/prospects/${p.id}`)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          router.push(`/app/pro/${businessId}/prospects/${p.id}`);
+                        }
+                      }}
+                    >
+                      <TableCell onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 accent-[var(--accent)]"
+                          checked={isSelected(p.id)}
+                          onChange={() => toggle(p.id)}
+                          aria-label="Sélectionner"
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                      </TableCell>
+                      <TableCell className="space-y-1">
+                        <div className="font-semibold text-[var(--text-primary)]">{p.name}</div>
+                        {p.title ? (
+                          <div className="text-xs text-[var(--text-secondary)]">{p.title}</div>
+                        ) : null}
+                      </TableCell>
+                      <TableCell className="space-y-1">
+                        <div className="text-sm">{p.contactName ?? '—'}</div>
+                        <div className="text-xs text-[var(--text-secondary)]">{p.contactEmail ?? p.contactPhone ?? ''}</div>
+                      </TableCell>
+                      <TableCell className="space-x-1">
+                        <Badge variant="neutral">{p.pipelineStatus}</Badge>
+                        <Badge variant="neutral">{p.status}</Badge>
+                      </TableCell>
+                      <TableCell>{probabilityLabel(p.probability)}</TableCell>
+                      <TableCell>{formatDate(p.nextActionDate)}</TableCell>
+                      <TableCell className="text-xs text-[var(--text-secondary)]">{formatDate(p.createdAt)}</TableCell>
+                    </TableRow>
+                  ))}
+                  {prospects.length === 0 ? <TableEmpty>Aucun prospect.</TableEmpty> : null}
+                </TableBody>
+              </Table>
+            </div>
           </div>
         )}
         {requestId ? (

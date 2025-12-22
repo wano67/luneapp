@@ -14,6 +14,8 @@ import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import { useActiveBusiness } from '../../ActiveBusinessProvider';
 import RoleBanner from '@/components/RoleBanner';
 import { ReferencePicker } from '../references/ReferencePicker';
+import { useRowSelection } from '../../../components/selection/useRowSelection';
+import { BulkActionBar } from '../../../components/selection/BulkActionBar';
 
 type ProjectStatus = 'PLANNED' | 'ACTIVE' | 'ON_HOLD' | 'COMPLETED' | 'CANCELLED';
 type ProjectQuoteStatus = 'DRAFT' | 'SENT' | 'ACCEPTED' | 'SIGNED';
@@ -114,6 +116,9 @@ export default function ProjectsPage() {
   const [editing, setEditing] = useState<Project | null>(null);
   const [deleting, setDeleting] = useState<Project | null>(null);
   const [readOnlyInfo, setReadOnlyInfo] = useState<string | null>(null);
+  const [bulkError, setBulkError] = useState<string | null>(null);
+  const [bulkLoading, setBulkLoading] = useState(false);
+  const { selectedArray, selectedCount, toggle, toggleAll, clear, isSelected } = useRowSelection();
 
   const fetchController = useRef<AbortController | null>(null);
 
@@ -399,6 +404,36 @@ export default function ProjectsPage() {
     }
   }
 
+  async function handleBulkDelete(ids: string[]) {
+    if (!ids.length) return;
+    if (!isAdmin) {
+      setReadOnlyInfo('Lecture seule : suppression réservée aux admins.');
+      return;
+    }
+    const ok = window.confirm(ids.length === 1 ? 'Supprimer ce projet ?' : `Supprimer ${ids.length} projets ?`);
+    if (!ok) return;
+    setBulkLoading(true);
+    setBulkError(null);
+    setSuccess(null);
+    let failed = 0;
+    for (const id of ids) {
+      const res = await fetchJson(`/api/pro/businesses/${businessId}/projects/${id}`, { method: 'DELETE' });
+      if (!res.ok) {
+        failed += 1;
+        setBulkError((prev) => prev ?? `Suppression partielle. Ref: ${res.requestId ?? 'N/A'}`);
+      }
+    }
+    setBulkLoading(false);
+    clear();
+    await loadProjects();
+    if (failed) {
+      setSuccess(null);
+      setBulkError((prev) => prev ?? 'Certaines suppressions ont échoué.');
+    } else {
+      setSuccess('Projets supprimés.');
+    }
+  }
+
   return (
     <div className="space-y-5">
       <RoleBanner role={activeCtx?.activeBusiness?.role} />
@@ -530,7 +565,31 @@ export default function ProjectsPage() {
             </Button>
           </div>
         ) : (
-          <div className="space-y-2">
+          <div className="space-y-3">
+            {bulkError ? <p className="text-xs font-semibold text-rose-500">{bulkError}</p> : null}
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <label className="flex items-center gap-2 text-xs text-[var(--text-secondary)]">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 accent-[var(--accent)]"
+                  checked={projects.length > 0 && projects.every((p) => isSelected(p.id))}
+                  onChange={() => toggleAll(projects.map((p) => p.id))}
+                />
+                Tout sélectionner
+              </label>
+              <BulkActionBar
+                count={selectedCount}
+                onClear={clear}
+                actions={[
+                  {
+                    label: bulkLoading ? 'Suppression…' : 'Supprimer',
+                    onClick: () => handleBulkDelete(selectedArray),
+                    variant: 'danger',
+                    disabled: !isAdmin || bulkLoading,
+                  },
+                ]}
+              />
+            </div>
             {projects.map((project) => {
               const detailUrl = `/app/pro/${businessId}/projects/${project.id}`;
               return (
@@ -547,29 +606,42 @@ export default function ProjectsPage() {
                   }}
                   className="flex flex-col gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface)]/70 p-3 transition hover:border-[var(--accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)] md:flex-row md:items-center md:justify-between"
                 >
-                  <div className="space-y-1">
-                    <div className="font-semibold text-[var(--text-primary)]">{project.name}</div>
-                    <p className="text-xs text-[var(--text-secondary)]">
-                      Client : {project.clientName ?? 'Non assigné'}
-                    </p>
-                    <div className="flex flex-wrap gap-1">
-                      {project.categoryReferenceName ? (
-                        <Badge variant="neutral" className="bg-indigo-50 text-indigo-700">
-                          {project.categoryReferenceName}
-                        </Badge>
-                      ) : null}
-                      {project.tagReferences?.map((tag) => (
-                        <Badge key={tag.id} variant="neutral" className="bg-emerald-50 text-emerald-700">
-                          {tag.name}
-                        </Badge>
-                      ))}
+                  <div className="flex items-start gap-3">
+                    <input
+                      type="checkbox"
+                      className="mt-1 h-4 w-4 accent-[var(--accent)]"
+                      checked={isSelected(project.id)}
+                      onChange={(e) => {
+                        e.stopPropagation();
+                        toggle(project.id);
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                      aria-label="Sélectionner"
+                    />
+                    <div className="space-y-1">
+                      <div className="font-semibold text-[var(--text-primary)]">{project.name}</div>
+                      <p className="text-xs text-[var(--text-secondary)]">
+                        Client : {project.clientName ?? 'Non assigné'}
+                      </p>
+                      <div className="flex flex-wrap gap-1">
+                        {project.categoryReferenceName ? (
+                          <Badge variant="neutral" className="bg-indigo-50 text-indigo-700">
+                            {project.categoryReferenceName}
+                          </Badge>
+                        ) : null}
+                        {project.tagReferences?.map((tag) => (
+                          <Badge key={tag.id} variant="neutral" className="bg-emerald-50 text-emerald-700">
+                            {tag.name}
+                          </Badge>
+                        ))}
+                      </div>
+                      <p className="text-[10px] text-[var(--text-secondary)]">
+                        {formatDate(project.startDate)} → {formatDate(project.endDate)}
+                      </p>
+                      <p className="text-[11px] text-[var(--text-secondary)]">
+                        Avancement : {project.progress ?? project.tasksSummary?.progressPct ?? 0}%
+                      </p>
                     </div>
-                    <p className="text-[10px] text-[var(--text-secondary)]">
-                      {formatDate(project.startDate)} → {formatDate(project.endDate)}
-                    </p>
-                    <p className="text-[11px] text-[var(--text-secondary)]">
-                      Avancement : {project.progress ?? project.tasksSummary?.progressPct ?? 0}%
-                    </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge variant="neutral">{statusLabel(project.status)}</Badge>

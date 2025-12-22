@@ -11,6 +11,8 @@ import { Select } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import { useActiveBusiness } from '../../ActiveBusinessProvider';
+import { useRowSelection } from '../../../components/selection/useRowSelection';
+import { BulkActionBar } from '../../../components/selection/BulkActionBar';
 
 type Product = {
   id: string;
@@ -47,9 +49,16 @@ export default function StockListPage() {
   const [draft, setDraft] = useState({ sku: '', name: '', unit: 'PIECE', salePriceCents: '', purchasePriceCents: '' });
   const [actionError, setActionError] = useState<string | null>(null);
   const controllerRef = useRef<AbortController | null>(null);
+  const [bulkError, setBulkError] = useState<string | null>(null);
+  const [bulkInfo, setBulkInfo] = useState<string | null>(null);
+  const [bulkLoading, setBulkLoading] = useState(false);
+  const { selectedArray, selectedCount, toggle, toggleAll, clear, isSelected } = useRowSelection();
 
   const active = useActiveBusiness({ optional: true });
   const businessId = active?.activeBusiness?.id;
+  const role = active?.activeBusiness?.role ?? null;
+  const isAdmin = role === 'ADMIN' || role === 'OWNER';
+  const readOnlyMessage = 'Action réservée aux admins/owners.';
 
   const sorted = useMemo(
     () => [...products].sort((a, b) => a.name.localeCompare(b.name)),
@@ -126,6 +135,35 @@ export default function StockListPage() {
     }
   }
 
+  async function handleBulkDelete(ids: string[]) {
+    if (!ids.length || !businessId) return;
+    if (!isAdmin) {
+      setActionError(readOnlyMessage);
+      return;
+    }
+    const ok = window.confirm(ids.length === 1 ? 'Supprimer ce produit ?' : `Supprimer ${ids.length} produits ?`);
+    if (!ok) return;
+    setBulkLoading(true);
+    setBulkError(null);
+    setBulkInfo(null);
+    let failed = 0;
+    for (const id of ids) {
+      const res = await fetchJson<null>(`/api/pro/businesses/${businessId}/products/${id}`, { method: 'DELETE' });
+      if (!res.ok) {
+        failed += 1;
+        setBulkError((prev) => prev ?? `Suppression partielle. Ref: ${res.requestId ?? 'N/A'}`);
+      }
+    }
+    setBulkLoading(false);
+    clear();
+    await load();
+    if (failed) {
+      setBulkError((prev) => prev ?? 'Certaines suppressions ont échoué.');
+    } else {
+      setBulkInfo('Produits supprimés.');
+    }
+  }
+
   if (!businessId) {
     return <p className="text-sm text-[var(--text-secondary)]">Aucune entreprise active.</p>;
   }
@@ -173,7 +211,32 @@ export default function StockListPage() {
         ) : sorted.length === 0 ? (
           <p className="text-sm text-[var(--text-secondary)]">Aucun produit.</p>
         ) : (
-          <div className="space-y-2">
+          <div className="space-y-3">
+            {bulkInfo ? <p className="text-xs font-semibold text-emerald-500">{bulkInfo}</p> : null}
+            {bulkError ? <p className="text-xs font-semibold text-rose-500">{bulkError}</p> : null}
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <label className="flex items-center gap-2 text-xs text-[var(--text-secondary)]">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 accent-[var(--accent)]"
+                  checked={sorted.length > 0 && sorted.every((p) => isSelected(p.id))}
+                  onChange={() => toggleAll(sorted.map((p) => p.id))}
+                />
+                Tout sélectionner
+              </label>
+              <BulkActionBar
+                count={selectedCount}
+                onClear={clear}
+                actions={[
+                  {
+                    label: bulkLoading ? 'Suppression…' : 'Supprimer',
+                    onClick: () => handleBulkDelete(selectedArray),
+                    variant: 'danger',
+                    disabled: !isAdmin || bulkLoading,
+                  },
+                ]}
+              />
+            </div>
             {sorted.map((p) => {
               const sum = summary[p.id];
               return (
@@ -181,15 +244,28 @@ export default function StockListPage() {
                   key={p.id}
                   className="flex flex-col gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface)]/70 p-3 md:flex-row md:items-center md:justify-between"
                 >
-                  <div>
-                    <p className="text-sm font-semibold text-[var(--text-primary)]">
-                      {p.name} <span className="text-[var(--text-secondary)]">({p.sku})</span>
-                    </p>
-                    <p className="text-[11px] text-[var(--text-secondary)]">
-                      Stock phys.: {sum?.onHand ?? sum?.stock ?? 0} · Réservé: {sum?.reserved ?? 0} · Dispo:{' '}
-                      {sum?.available ?? (sum?.onHand ?? sum?.stock ?? 0) - (sum?.reserved ?? 0)} {p.unit.toLowerCase()}
-                      {sum?.lastMovementAt ? ` · Dernier: ${new Date(sum.lastMovementAt).toLocaleDateString('fr-FR')}` : ''}
-                    </p>
+                  <div className="flex items-start gap-3">
+                    <input
+                      type="checkbox"
+                      className="mt-1 h-4 w-4 accent-[var(--accent)]"
+                      checked={isSelected(p.id)}
+                      onChange={(e) => {
+                        e.stopPropagation();
+                        toggle(p.id);
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                      aria-label="Sélectionner"
+                    />
+                    <div>
+                      <p className="text-sm font-semibold text-[var(--text-primary)]">
+                        {p.name} <span className="text-[var(--text-secondary)]">({p.sku})</span>
+                      </p>
+                      <p className="text-[11px] text-[var(--text-secondary)]">
+                        Stock phys.: {sum?.onHand ?? sum?.stock ?? 0} · Réservé: {sum?.reserved ?? 0} · Dispo:{' '}
+                        {sum?.available ?? (sum?.onHand ?? sum?.stock ?? 0) - (sum?.reserved ?? 0)} {p.unit.toLowerCase()}
+                        {sum?.lastMovementAt ? ` · Dernier: ${new Date(sum.lastMovementAt).toLocaleDateString('fr-FR')}` : ''}
+                      </p>
+                    </div>
                   </div>
                   <div className="flex items-center gap-2">
                     {p.isArchived ? <Badge variant="neutral">Archivé</Badge> : null}

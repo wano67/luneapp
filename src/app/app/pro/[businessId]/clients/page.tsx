@@ -13,6 +13,8 @@ import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import RoleBanner from '@/components/RoleBanner';
 import { useActiveBusiness } from '../../ActiveBusinessProvider';
 import { ReferencePicker } from '../references/ReferencePicker';
+import { useRowSelection } from '../../../components/selection/useRowSelection';
+import { BulkActionBar } from '../../../components/selection/BulkActionBar';
 
 type Client = {
   id: string;
@@ -62,6 +64,8 @@ export default function ClientsPage() {
   const [categoryReferenceId, setCategoryReferenceId] = useState<string>('');
   const [tagReferenceIds, setTagReferenceIds] = useState<string[]>([]);
   const [readOnlyInfo, setReadOnlyInfo] = useState<string | null>(null);
+  const [bulkError, setBulkError] = useState<string | null>(null);
+  const { selectedCount, toggle, toggleAll, clear, isSelected } = useRowSelection();
 
   const fetchController = useRef<AbortController | null>(null);
 
@@ -221,6 +225,14 @@ export default function ClientsPage() {
     }
   }
 
+  function handleBulkUnavailable() {
+    if (!isAdmin) {
+      setReadOnlyInfo(readOnlyMessage);
+      return;
+    }
+    setBulkError('Aucune action bulk disponible pour les clients (pas d’API de suppression/archivage).');
+  }
+
   return (
     <div className="space-y-5">
       <RoleBanner role={role} />
@@ -337,13 +349,48 @@ export default function ClientsPage() {
             </Button>
           </div>
         ) : (
-          <div className="space-y-2">
+          <div className="space-y-3">
+            {bulkError ? <p className="text-xs font-semibold text-rose-500">{bulkError}</p> : null}
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <label className="flex items-center gap-2 text-xs text-[var(--text-secondary)]">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 accent-[var(--accent)]"
+                  checked={clients.length > 0 && clients.every((c) => isSelected(c.id))}
+                  onChange={() => toggleAll(clients.map((c) => c.id))}
+                />
+                Tout sélectionner
+              </label>
+              <BulkActionBar
+                count={selectedCount}
+                onClear={clear}
+                actions={[
+                  {
+                    label: 'Actions bulk indisponibles',
+                    onClick: handleBulkUnavailable,
+                    variant: 'outline',
+                  },
+                ]}
+              />
+            </div>
             {clients.map((client) => (
               <Link
                 key={client.id}
                 href={`/app/pro/${businessId}/clients/${client.id}`}
                 className="flex flex-col gap-1 rounded-xl border border-[var(--border)] bg-[var(--surface)]/70 p-3 transition hover:border-[var(--accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)] sm:flex-row sm:items-center sm:justify-between"
-              >
+                >
+                <div className="flex items-start gap-3">
+                  <input
+                    type="checkbox"
+                    className="mt-1 h-4 w-4 accent-[var(--accent)]"
+                    checked={isSelected(client.id)}
+                    onChange={(e) => {
+                      e.stopPropagation();
+                      toggle(client.id);
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                    aria-label="Sélectionner"
+                  />
                 <div className="space-y-1">
                   <span className="font-semibold text-[var(--text-primary)]">{client.name}</span>
                   <p className="text-xs text-[var(--text-secondary)]">Créé le {formatDate(client.createdAt)}</p>
@@ -363,7 +410,7 @@ export default function ClientsPage() {
                     ))}
                   </div>
                 </div>
-
+                </div>
                 <div className="flex items-center gap-2">
                   <Badge variant="neutral">{client.email || 'Email ?'}</Badge>
                   {client.phone ? <Badge variant="neutral">{client.phone}</Badge> : <Badge variant="neutral">Phone ?</Badge>}
