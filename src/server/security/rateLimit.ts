@@ -43,21 +43,24 @@ function errorResponse(limit: number, windowMs: number, retryAfterSeconds: numbe
 export function rateLimit(req: NextRequest, opts: RateLimitOptions): NextResponse | null {
   const requestId = getRequestId(req);
   const now = Date.now();
-  const key = `${opts.key}`;
-  const bucket = buckets.get(key) ?? { tokens: opts.limit, updatedAt: now };
+  const baseKey = `${opts.key}`;
+  const ip = getIp(req);
+  const key = ip === 'unknown' ? `${baseKey}:unknown` : baseKey;
+  const effectiveLimit = ip === 'unknown' ? Math.min(opts.limit, 5) : opts.limit;
+  const bucket = buckets.get(key) ?? { tokens: effectiveLimit, updatedAt: now };
 
   // Refill tokens
   const elapsed = now - bucket.updatedAt;
   if (elapsed > 0) {
     const refill = (elapsed / opts.windowMs) * opts.limit;
-    bucket.tokens = Math.min(opts.limit, bucket.tokens + refill);
+    bucket.tokens = Math.min(effectiveLimit, bucket.tokens + refill);
     bucket.updatedAt = now;
   }
 
   if (bucket.tokens < 1) {
-    const retryAfter = Math.ceil((opts.windowMs / opts.limit) / 1000);
+    const retryAfter = Math.ceil((opts.windowMs / effectiveLimit) / 1000);
     buckets.set(key, bucket);
-    return errorResponse(opts.limit, opts.windowMs, retryAfter, requestId);
+    return errorResponse(effectiveLimit, opts.windowMs, retryAfter, requestId);
   }
 
   bucket.tokens -= 1;

@@ -42,9 +42,9 @@ export function assertSameOrigin(request: NextRequest): NextResponse | null {
   const requestId = getRequestId(request);
 
   const allowed = getAllowedOrigins();
-  const isProd = process.env.NODE_ENV === 'production';
+  const enforce = process.env.NODE_ENV !== 'development';
 
-  if (allowed.length === 0 && isProd) {
+  if (allowed.length === 0 && enforce) {
     return withIdNoStore(
       NextResponse.json({ error: 'Forbidden (CSRF origin)' }, { status: 403 }),
       requestId

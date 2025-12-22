@@ -38,7 +38,7 @@ export async function GET(
     });
 
     if (!account) {
-      return NextResponse.json({ error: 'Account not found' }, { status: 404 });
+      return withRequestId(NextResponse.json({ error: 'Account not found' }, { status: 404 }), requestId);
     }
 
     const now = new Date();

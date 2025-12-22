@@ -67,6 +67,9 @@ export function getRequestId(req: NextRequest): string {
 
 export function withRequestId(res: NextResponse, requestId: string) {
   res.headers.set('x-request-id', requestId);
+  res.headers.set('Cache-Control', 'no-store');
+  res.headers.set('Pragma', 'no-cache');
+  res.headers.set('Expires', '0');
   return res;
 }
 
