@@ -14,6 +14,8 @@ import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import { useActiveBusiness } from '../../../ActiveBusinessProvider';
 import RoleBanner from '@/components/RoleBanner';
 import { ReferencePicker } from '../../references/ReferencePicker';
+import { PageHeader } from '../../../../components/PageHeader';
+import { BusinessContextChip } from '../../../../components/BusinessContextChip';
 
 type ProjectStatus = 'PLANNED' | 'ACTIVE' | 'ON_HOLD' | 'COMPLETED' | 'CANCELLED';
 type ProjectQuoteStatus = 'DRAFT' | 'SENT' | 'ACCEPTED' | 'SIGNED';
@@ -301,6 +303,33 @@ function interactionTypeLabel(value: InteractionType) {
     default:
       return value;
   }
+}
+
+type KpiTileProps = {
+  title: string;
+  value: string;
+  helper?: string;
+  href?: string;
+};
+
+function KpiTile({ title, value, helper, href }: KpiTileProps) {
+  const content = (
+    <div className="card-interactive block rounded-lg border border-[var(--border)] bg-[var(--surface)] p-4">
+      <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-secondary)]">{title}</p>
+      <p className="text-xl font-semibold text-[var(--text-primary)]">{value}</p>
+      {helper ? <p className="text-xs text-[var(--text-secondary)]">{helper}</p> : null}
+    </div>
+  );
+
+  if (href) {
+    return (
+      <Link href={href} className="block">
+        {content}
+      </Link>
+    );
+  }
+
+  return content;
 }
 
 export default function ProjectDetailPage() {
@@ -712,6 +741,18 @@ export default function ProjectDetailPage() {
 
   const progress = useMemo(() => computeProgress(project?.tasksSummary, tasks), [project, tasks]);
 
+  const billedTotal = useMemo(
+    () =>
+      invoices
+        .filter((inv) => inv.status === 'PAID')
+        .reduce((acc, inv) => acc + centsToNumber(inv.totalCents), 0),
+    [invoices]
+  );
+
+  const toInvoice = useMemo(() => centsToNumber(pricing?.balanceCents ?? '0'), [pricing]);
+
+  const piecesCount = useMemo(() => quotes.length + invoices.length, [quotes, invoices]);
+
   const servicesTotal = useMemo(() => {
     if (pricing) return Number(pricing.totalCents);
     return services.reduce((acc, s) => {
@@ -1080,55 +1121,98 @@ export default function ProjectDetailPage() {
     (project.quoteStatus === 'SIGNED' || project.quoteStatus === 'ACCEPTED') &&
     (project.depositStatus === 'PAID' || project.depositStatus === 'NOT_REQUIRED');
 
+  const businessContextChip = activeCtx?.activeBusiness ? (
+    <BusinessContextChip
+      businessName={activeCtx.activeBusiness.name}
+      websiteUrl={activeCtx.activeBusiness.websiteUrl}
+      roleLabel={activeCtx.activeBusiness.role}
+    />
+  ) : null;
+
+  const headerSubtitle = project.clientName ? `Client : ${project.clientName}` : 'Client non assigné';
+
   return (
-    <div className="space-y-5">
+    <div className="mx-auto max-w-6xl space-y-6 px-4 py-4">
       <RoleBanner role={activeCtx?.activeBusiness?.role} />
+
+      <PageHeader
+        backHref={`/app/pro/${businessId}/projects`}
+        backLabel="Projets"
+        title={project.name}
+        subtitle={headerSubtitle}
+        context={businessContextChip}
+      />
+
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge variant="neutral">{STATUS_LABELS[project.status]}</Badge>
+        <Badge variant="neutral">Devis {QUOTE_LABELS[project.quoteStatus]}</Badge>
+        <Badge variant="neutral">Acompte {DEPOSIT_LABELS[project.depositStatus]}</Badge>
+        {project.startedAt ? <Badge variant="neutral">Démarré {formatDate(project.startedAt)}</Badge> : null}
+        {project.archivedAt ? <Badge variant="performance">Archivé</Badge> : null}
+        <Badge variant="neutral">ID {project.id}</Badge>
+        {requestId ? <Badge variant="neutral">Ref {requestId}</Badge> : null}
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <KpiTile title="Facturé" value={formatCurrency(billedTotal)} helper="Total payé" />
+        <KpiTile
+          title="À facturer"
+          value={formatCurrency(toInvoice)}
+          helper={pricing ? 'Solde restant' : 'Pricing à calculer'}
+        />
+        <KpiTile
+          title="Tâches"
+          value={`${progress.done}/${progress.total || 0}`}
+          helper={`${progress.progressPct}% complété`}
+          href={`/app/pro/${businessId}/tasks?projectId=${project.id}`}
+        />
+        <KpiTile title="Pièces" value={`${piecesCount}`} helper="Devis + factures" />
+      </div>
+
       <Card className="space-y-3 p-5">
-        <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-          <div className="space-y-1">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-[var(--text-secondary)]">
-              Projet · Pilotage
-            </p>
-            <h1 className="text-xl font-semibold text-[var(--text-primary)]">{project.name}</h1>
-            <p className="text-sm text-[var(--text-secondary)]">Client : {project.clientName ?? 'Non assigné'}</p>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {project.categoryReferenceName ? (
+              <Badge variant="neutral">Catégorie : {project.categoryReferenceName}</Badge>
+            ) : (
+              <Badge variant="neutral">Sans catégorie</Badge>
+            )}
+            {project.tagReferences?.length ? (
+              project.tagReferences.map((tag) => (
+                <Badge key={tag.id} variant="neutral" className="bg-[var(--surface-hover)]">
+                  #{tag.name}
+                </Badge>
+              ))
+            ) : (
+              <Badge variant="neutral">Aucun tag</Badge>
+            )}
           </div>
-          <div className="flex flex-col items-end gap-2">
-            <div className="flex flex-wrap justify-end gap-2">
-              <Badge variant="neutral">{STATUS_LABELS[project.status]}</Badge>
-              <Badge variant="neutral">Devis {QUOTE_LABELS[project.quoteStatus]}</Badge>
-              <Badge variant="neutral">Acompte {DEPOSIT_LABELS[project.depositStatus]}</Badge>
-              {project.startedAt ? <Badge variant="neutral">Démarré {formatDate(project.startedAt)}</Badge> : null}
-              {project.archivedAt ? <Badge variant="performance">Archivé</Badge> : null}
-              <Badge variant="neutral">ID {project.id}</Badge>
-              {requestId ? <Badge variant="neutral">Ref {requestId}</Badge> : null}
-            </div>
-            <div className="flex flex-wrap justify-end gap-2">
-              {project.archivedAt ? (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    setArchiveAction('unarchive');
-                    setArchiveError(null);
-                  }}
-                  disabled={!isAdmin}
-                >
-                  Restaurer
-                </Button>
-              ) : (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    setArchiveAction('archive');
-                    setArchiveError(null);
-                  }}
-                  disabled={!isAdmin}
-                >
-                  Archiver
-                </Button>
-              )}
-            </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {project.archivedAt ? (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setArchiveAction('unarchive');
+                  setArchiveError(null);
+                }}
+                disabled={!isAdmin}
+              >
+                Restaurer
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setArchiveAction('archive');
+                  setArchiveError(null);
+                }}
+                disabled={!isAdmin}
+              >
+                Archiver
+              </Button>
+            )}
             {!isAdmin ? (
               <p className="text-[11px] text-[var(--text-secondary)]">
                 Lecture seule : archiver/restaurer nécessite ADMIN/OWNER.
@@ -1161,22 +1245,6 @@ export default function ProjectDetailPage() {
               {progress.done} terminée(s) · {progress.open} ouverte(s)
             </p>
           </Card>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {project.categoryReferenceName ? (
-            <Badge variant="neutral">Catégorie : {project.categoryReferenceName}</Badge>
-          ) : (
-            <Badge variant="neutral">Sans catégorie</Badge>
-          )}
-          {project.tagReferences?.length ? (
-            project.tagReferences.map((tag) => (
-              <Badge key={tag.id} variant="neutral" className="bg-[var(--surface-hover)]">
-                #{tag.name}
-              </Badge>
-            ))
-          ) : (
-            <Badge variant="neutral">Aucun tag</Badge>
-          )}
         </div>
       </Card>
 
