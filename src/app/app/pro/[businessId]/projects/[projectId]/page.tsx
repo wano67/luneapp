@@ -15,7 +15,6 @@ import { useActiveBusiness } from '../../../ActiveBusinessProvider';
 import RoleBanner from '@/components/RoleBanner';
 import { ReferencePicker } from '../../references/ReferencePicker';
 import { PageHeader } from '../../../../components/PageHeader';
-import { BusinessContextChip } from '../../../../components/BusinessContextChip';
 
 type ProjectStatus = 'PLANNED' | 'ACTIVE' | 'ON_HOLD' | 'COMPLETED' | 'CANCELLED';
 type ProjectQuoteStatus = 'DRAFT' | 'SENT' | 'ACCEPTED' | 'SIGNED';
@@ -1121,14 +1120,6 @@ export default function ProjectDetailPage() {
     (project.quoteStatus === 'SIGNED' || project.quoteStatus === 'ACCEPTED') &&
     (project.depositStatus === 'PAID' || project.depositStatus === 'NOT_REQUIRED');
 
-  const businessContextChip = activeCtx?.activeBusiness ? (
-    <BusinessContextChip
-      businessName={activeCtx.activeBusiness.name}
-      websiteUrl={activeCtx.activeBusiness.websiteUrl}
-      roleLabel={activeCtx.activeBusiness.role}
-    />
-  ) : null;
-
   const headerSubtitle = project.clientName ? `Client : ${project.clientName}` : 'Client non assigné';
 
   return (
@@ -1140,7 +1131,6 @@ export default function ProjectDetailPage() {
         backLabel="Projets"
         title={project.name}
         subtitle={headerSubtitle}
-        context={businessContextChip}
       />
 
       <div className="flex flex-wrap items-center gap-2">
