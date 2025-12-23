@@ -17,7 +17,7 @@ import { useBodyScrollLock } from '@/lib/scrollLock';
 import { LogoMark } from '@/components/marketing/LogoMark';
 import { FileDropProvider } from '@/components/file-drop/FileDropProvider';
 import { ActiveBusinessProvider, useActiveBusiness } from './pro/ActiveBusinessProvider';
-import { BusinessContextChip } from './components/BusinessContextChip';
+import { ActiveBusinessTopBar } from './components/ActiveBusinessTopBar';
 
 function getCurrentSpace(pathname: string): Space {
   if (pathname.startsWith('/app/pro')) return 'pro';
@@ -417,29 +417,6 @@ function AppShellInner({ children }: { children: ReactNode }) {
           </div>
         </div>
 
-        {showBusinessContext && activeBusiness ? (
-          <div className="mx-auto flex max-w-6xl items-center gap-2 px-3 pb-2 pt-1 md:hidden">
-            <div className="min-w-0 flex-1">
-              <BusinessContextChip
-                businessName={activeBusiness.name}
-                websiteUrl={activeBusiness.websiteUrl}
-                roleLabel={activeBusiness.role}
-              />
-            </div>
-            <button
-              type="button"
-              onClick={() => businessCtx?.openSwitchModal()}
-              className={[
-                'inline-flex items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)]',
-                'hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]',
-                'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]',
-              ].join(' ')}
-            >
-              Changer
-            </button>
-          </div>
-        ) : null}
-
         {/* -------- DESKTOP HEADER (restauré) -------- */}
         <div className="mx-auto hidden h-14 max-w-6xl items-center justify-between px-4 md:flex md:max-w-none md:px-6">
           {/* Left: logo / identité */}
@@ -487,27 +464,6 @@ function AppShellInner({ children }: { children: ReactNode }) {
 
           {/* Right */}
           <div className="flex min-w-0 items-center gap-2">
-            {showBusinessContext && activeBusiness ? (
-              <div className="flex min-w-0 items-center gap-2">
-                <BusinessContextChip
-                  businessName={activeBusiness.name}
-                  websiteUrl={activeBusiness.websiteUrl}
-                  roleLabel={activeBusiness.role}
-                />
-                <button
-                  type="button"
-                  onClick={() => businessCtx?.openSwitchModal()}
-                  className={[
-                    'hidden items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)]',
-                    'hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]',
-                    'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]',
-                    'lg:inline-flex',
-                  ].join(' ')}
-                >
-                  Changer
-                </button>
-              </div>
-            ) : null}
             <Link
               href="/app/account"
               className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
@@ -633,6 +589,19 @@ function AppShellInner({ children }: { children: ReactNode }) {
           'md:pl-[var(--dock-pl)]',
         ].join(' ')}
       >
+        {showBusinessContext && activeBusiness ? (
+          <div className="sticky top-14 z-40 border-b border-[var(--border)] bg-[var(--background-alt)]/85 backdrop-blur-md">
+            <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-3 md:px-6">
+              <ActiveBusinessTopBar
+                businessName={activeBusiness.name}
+                websiteUrl={activeBusiness.websiteUrl}
+                roleLabel={activeBusiness.role}
+                onChange={() => businessCtx?.openSwitchModal()}
+                hubHref="/app/pro"
+              />
+            </div>
+          </div>
+        ) : null}
         <div className="p-4 md:p-6">{children}</div>
       </main>
     </div>
