@@ -1,7 +1,6 @@
 // src/app/app/pro/[businessId]/projects/page.tsx
 'use client';
 
-import Link from 'next/link';
 import { useEffect, useRef, useState, type FormEvent, type ChangeEvent } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Card } from '@/components/ui/card';
@@ -16,6 +15,8 @@ import RoleBanner from '@/components/RoleBanner';
 import { ReferencePicker } from '../references/ReferencePicker';
 import { useRowSelection } from '../../../components/selection/useRowSelection';
 import { BulkActionBar } from '../../../components/selection/BulkActionBar';
+import { PageHeader } from '../../../components/PageHeader';
+import { FaviconAvatar } from '../../../components/FaviconAvatar';
 
 type ProjectStatus = 'PLANNED' | 'ACTIVE' | 'ON_HOLD' | 'COMPLETED' | 'CANCELLED';
 type ProjectQuoteStatus = 'DRAFT' | 'SENT' | 'ACCEPTED' | 'SIGNED';
@@ -55,19 +56,6 @@ const STATUS_OPTIONS: { value: ProjectStatus; label: string }[] = [
   { value: 'CANCELLED', label: 'Annulé' },
 ];
 
-const QUOTE_LABELS: Record<ProjectQuoteStatus, string> = {
-  DRAFT: 'Devis brouillon',
-  SENT: 'Devis envoyé',
-  ACCEPTED: 'Devis accepté',
-  SIGNED: 'Devis signé',
-};
-
-const DEPOSIT_LABELS: Record<ProjectDepositStatus, string> = {
-  NOT_REQUIRED: 'Acompte non requis',
-  PENDING: 'Acompte en attente',
-  PAID: 'Acompte payé',
-};
-
 function statusLabel(status: ProjectStatus) {
   return STATUS_OPTIONS.find((opt) => opt.value === status)?.label ?? status;
 }
@@ -94,14 +82,10 @@ export default function ProjectsPage() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  const [statusFilter, setStatusFilter] = useState<ProjectStatus | 'ALL'>('ALL');
-  const [categoryFilter, setCategoryFilter] = useState<string>('');
-  const [tagFilter, setTagFilter] = useState<string>('');
-  const [categoryOptions, setCategoryOptions] = useState<Array<{ id: string; name: string }>>([]);
-  const [tagOptions, setTagOptions] = useState<Array<{ id: string; name: string }>>([]);
-  const [referenceError, setReferenceError] = useState<string | null>(null);
-  const [referenceRequestId, setReferenceRequestId] = useState<string | null>(null);
-  const [archivedFilter, setArchivedFilter] = useState<'all' | 'true' | 'false'>('false');
+  const [archivedFilter, setArchivedFilter] = useState<'true' | 'false'>('false');
+  const [search, setSearch] = useState('');
+  const [sortBy, setSortBy] = useState<'name' | 'createdAt' | 'updatedAt'>('name');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
 
   const [createOpen, setCreateOpen] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -118,7 +102,9 @@ export default function ProjectsPage() {
   const [readOnlyInfo, setReadOnlyInfo] = useState<string | null>(null);
   const [bulkError, setBulkError] = useState<string | null>(null);
   const [bulkLoading, setBulkLoading] = useState(false);
-  const { selectedArray, selectedCount, toggle, toggleAll, clear, isSelected } = useRowSelection();
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const { selectedArray, selectedCount, toggle, toggleAll, clear, isSelected, allSelected, someSelected } =
+    useRowSelection();
 
   const fetchController = useRef<AbortController | null>(null);
 
@@ -153,10 +139,8 @@ export default function ProjectsPage() {
       setLoading(true);
       setError(null);
       const query = new URLSearchParams();
-      if (statusFilter !== 'ALL') query.set('status', statusFilter);
-      if (archivedFilter !== 'all') query.set('archived', archivedFilter);
-      if (categoryFilter) query.set('categoryReferenceId', categoryFilter);
-      if (tagFilter) query.set('tagReferenceId', tagFilter);
+      query.set('archived', archivedFilter);
+      if (search.trim()) query.set('q', search.trim());
 
       const res = await fetchJson<ProjectListResponse>(
         `/api/pro/businesses/${businessId}/projects${query.toString() ? `?${query.toString()}` : ''}`,
@@ -182,7 +166,15 @@ export default function ProjectsPage() {
         return;
       }
 
-      setProjects(res.data.items.map((item) => ({ ...item, tagReferences: item.tagReferences ?? [] })));
+      const fetched = res.data.items.map((item) => ({ ...item, tagReferences: item.tagReferences ?? [] }));
+      const sorted = [...fetched].sort((a, b) => {
+        const dir = sortDir === 'asc' ? 1 : -1;
+        if (sortBy === 'name') return a.name.localeCompare(b.name) * dir;
+        const aDate = sortBy === 'createdAt' ? new Date(a.createdAt).getTime() : new Date(a.updatedAt).getTime();
+        const bDate = sortBy === 'createdAt' ? new Date(b.createdAt).getTime() : new Date(b.updatedAt).getTime();
+        return (aDate - bDate) * dir;
+      });
+      setProjects(sorted);
     } catch (err) {
       if (effectiveSignal?.aborted) return;
       console.error(err);
@@ -196,38 +188,11 @@ export default function ProjectsPage() {
     void loadProjects();
     return () => fetchController.current?.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [businessId, statusFilter, archivedFilter, categoryFilter, tagFilter]);
+  }, [businessId, archivedFilter, search, sortBy, sortDir]);
 
   useEffect(() => {
-    const controller = new AbortController();
-    async function loadRefs() {
-      setReferenceError(null);
-      setReferenceRequestId(null);
-      const [catRes, tagRes] = await Promise.all([
-        fetchJson<{ items: Array<{ id: string; name: string }> }>(
-          `/api/pro/businesses/${businessId}/references?type=CATEGORY`,
-          {},
-          controller.signal
-        ),
-        fetchJson<{ items: Array<{ id: string; name: string }> }>(
-          `/api/pro/businesses/${businessId}/references?type=TAG`,
-          {},
-          controller.signal
-        ),
-      ]);
-      if (controller.signal.aborted) return;
-      setReferenceRequestId(catRes.requestId || tagRes.requestId || null);
-      if (!catRes.ok || !tagRes.ok || !catRes.data || !tagRes.data) {
-        const msg = catRes.error || tagRes.error || 'Impossible de charger les références.';
-        setReferenceError(catRes.requestId || tagRes.requestId ? `${msg} (Ref: ${catRes.requestId || tagRes.requestId})` : msg);
-        return;
-      }
-      setCategoryOptions(catRes.data.items);
-      setTagOptions(tagRes.data.items);
-    }
-    void loadRefs();
-    return () => controller.abort();
-  }, [businessId]);
+    clear();
+  }, [archivedFilter, clear]);
 
   async function handleCreate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -404,13 +369,101 @@ export default function ProjectsPage() {
     }
   }
 
-  async function handleBulkDelete(ids: string[]) {
+  const isArchivedView = archivedFilter === 'true';
+
+  async function handleArchive(projectId: string) {
+    if (!isAdmin) {
+      setReadOnlyInfo('Lecture seule : archivage réservé aux admins.');
+      return;
+    }
+    const res = await fetchJson(`/api/pro/businesses/${businessId}/projects/${projectId}/archive`, { method: 'POST' });
+    if (!res.ok) {
+      setActionError(res.requestId ? `${res.error ?? 'Archivage impossible.'} (Ref: ${res.requestId})` : res.error ?? 'Archivage impossible.');
+      return;
+    }
+    await loadProjects();
+  }
+
+  async function handleRestore(projectId: string) {
+    if (!isAdmin) {
+      setReadOnlyInfo('Lecture seule : restauration réservée aux admins.');
+      return;
+    }
+    const res = await fetchJson(`/api/pro/businesses/${businessId}/projects/${projectId}/unarchive`, { method: 'POST' });
+    if (!res.ok) {
+      setActionError(res.requestId ? `${res.error ?? 'Restauration impossible.'} (Ref: ${res.requestId})` : res.error ?? 'Restauration impossible.');
+      return;
+    }
+    await loadProjects();
+  }
+
+  async function handleBulkArchive(ids: string[]) {
     if (!ids.length) return;
+    if (!isAdmin) {
+      setReadOnlyInfo('Lecture seule : archivage réservé aux admins.');
+      return;
+    }
+    if (!window.confirm(ids.length === 1 ? 'Archiver ce projet ?' : `Archiver ${ids.length} projets ?`)) return;
+    setBulkLoading(true);
+    setBulkError(null);
+    setSuccess(null);
+    let failed = 0;
+    for (const id of ids) {
+      const res = await fetchJson(`/api/pro/businesses/${businessId}/projects/${id}/archive`, { method: 'POST' });
+      if (!res.ok) {
+        failed += 1;
+        setBulkError((prev) => prev ?? `Archivage partiel. Ref: ${res.requestId ?? 'N/A'}`);
+      }
+    }
+    setBulkLoading(false);
+    clear();
+    await loadProjects();
+    if (failed) {
+      setSuccess(null);
+      setBulkError((prev) => prev ?? 'Certains projets non archivés.');
+    } else {
+      setSuccess('Projets archivés.');
+    }
+  }
+
+  async function handleBulkRestore(ids: string[]) {
+    if (!ids.length) return;
+    if (!isAdmin) {
+      setReadOnlyInfo('Lecture seule : restauration réservée aux admins.');
+      return;
+    }
+    if (!window.confirm(ids.length === 1 ? 'Restaurer ce projet ?' : `Restaurer ${ids.length} projets ?`)) return;
+    setBulkLoading(true);
+    setBulkError(null);
+    setSuccess(null);
+    let failed = 0;
+    for (const id of ids) {
+      const res = await fetchJson(`/api/pro/businesses/${businessId}/projects/${id}/unarchive`, { method: 'POST' });
+      if (!res.ok) {
+        failed += 1;
+        setBulkError((prev) => prev ?? `Restauration partielle. Ref: ${res.requestId ?? 'N/A'}`);
+      }
+    }
+    setBulkLoading(false);
+    clear();
+    await loadProjects();
+    if (failed) {
+      setSuccess(null);
+      setBulkError((prev) => prev ?? 'Certains projets non restaurés.');
+    } else {
+      setSuccess('Projets restaurés.');
+    }
+  }
+
+  async function handleBulkDelete(ids: string[]) {
+    if (!ids.length || !isArchivedView) return;
     if (!isAdmin) {
       setReadOnlyInfo('Lecture seule : suppression réservée aux admins.');
       return;
     }
-    const ok = window.confirm(ids.length === 1 ? 'Supprimer ce projet ?' : `Supprimer ${ids.length} projets ?`);
+    const ok = window.confirm(
+      ids.length === 1 ? 'Supprimer définitivement ce projet archivé ?' : `Supprimer définitivement ${ids.length} projets ?`
+    );
     if (!ok) return;
     setBulkLoading(true);
     setBulkError(null);
@@ -435,107 +488,70 @@ export default function ProjectsPage() {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="mx-auto max-w-6xl space-y-5 px-4 py-4">
       <RoleBanner role={activeCtx?.activeBusiness?.role} />
-      <Card className="space-y-3 p-5">
-        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-[var(--text-secondary)]">
-              Projets
-            </p>
-            <h1 className="text-lg font-semibold text-[var(--text-primary)]">Portefeuille projets</h1>
-            <p className="text-sm text-[var(--text-secondary)]">
-              Suis l’avancement et crée de nouveaux projets clients.
-            </p>
-          </div>
-          <div className="flex flex-col items-start gap-1">
-            <Button
-              onClick={() => {
-                if (!isAdmin) {
-                  setReadOnlyInfo('Lecture seule : demande un rôle admin pour créer ou modifier des projets.');
-                  return;
-                }
-                setCreateOpen(true);
-              }}
-              disabled={!isAdmin}
-            >
-              Nouveau projet
-            </Button>
-            {!isAdmin ? (
-              <p className="text-[11px] text-[var(--text-secondary)]">Lecture seule : création réservée aux admins.</p>
-            ) : null}
-          </div>
-        </div>
+      <PageHeader
+        backHref="/app/pro"
+        backLabel="Studio"
+        title="Projets"
+        subtitle="Suivez vos missions client, leurs tâches et leur facturation."
+        primaryAction={{
+          label: 'Nouveau projet',
+          onClick: () => {
+            if (!isAdmin) {
+              setReadOnlyInfo('Lecture seule : demande un rôle admin pour créer ou modifier des projets.');
+              return;
+            }
+            setCreateOpen(true);
+          },
+        }}
+      />
 
-        <div className="flex flex-wrap gap-2">
-          {[{ value: 'ALL', label: 'Tous' }, ...STATUS_OPTIONS].map((opt) => (
-            <Button
-              key={opt.value}
-              size="sm"
-              variant="outline"
-              onClick={() => setStatusFilter(opt.value as ProjectStatus | 'ALL')}
-            >
-              {opt.label}
-            </Button>
-          ))}
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {[
-            { value: 'false', label: 'Actifs' },
-            { value: 'true', label: 'Archivés' },
-            { value: 'all', label: 'Tous' },
-          ].map((opt) => (
-            <Button
-              key={opt.value}
-              size="sm"
-              variant={archivedFilter === opt.value ? 'primary' : 'outline'}
-              onClick={() => setArchivedFilter(opt.value as 'all' | 'true' | 'false')}
-            >
-              {opt.label}
-            </Button>
-          ))}
+      <Card className="space-y-3 p-4">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div className="flex flex-wrap items-center gap-2">
+            {[
+              { value: 'false', label: 'Actifs' },
+              { value: 'true', label: 'Archivés' },
+            ].map((opt) => (
+              <Button
+                key={opt.value}
+                size="sm"
+                variant={archivedFilter === opt.value ? 'primary' : 'outline'}
+                onClick={() => setArchivedFilter(opt.value as 'true' | 'false')}
+              >
+                {opt.label}
+              </Button>
+            ))}
+          </div>
+          <div className="flex w-full flex-col gap-2 md:w-auto md:flex-row md:items-center md:gap-3">
+            <Input
+              placeholder="Rechercher un projet…"
+              value={search}
+              onChange={(e: ChangeEvent<HTMLInputElement>) => setSearch(e.target.value)}
+              className="md:w-64"
+            />
+            <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-2">
+              <Select label="Trier par" value={sortBy} onChange={(e) => setSortBy(e.target.value as typeof sortBy)}>
+                <option value="name">Nom</option>
+                <option value="createdAt">Créé le</option>
+                <option value="updatedAt">Mis à jour</option>
+              </Select>
+              <Select label="Ordre" value={sortDir} onChange={(e) => setSortDir(e.target.value as typeof sortDir)}>
+                <option value="asc">Ascendant</option>
+                <option value="desc">Descendant</option>
+              </Select>
+            </div>
+          </div>
         </div>
       </Card>
 
-      <Card className="p-5">
-        <div className="flex flex-wrap items-center justify-between gap-2 pb-3">
-          <p className="text-sm font-semibold text-[var(--text-primary)]">Projets</p>
-          <Button asChild size="sm" variant="outline">
-            <Link href={`/app/pro/${businessId}/services`}>Catalogue de services</Link>
-          </Button>
-        </div>
-        {success ? <p className="text-xs font-semibold text-emerald-500">{success}</p> : null}
-        {readOnlyInfo ? <p className="text-xs text-[var(--text-secondary)]">{readOnlyInfo}</p> : null}
-        <div className="grid gap-3 md:grid-cols-3 pb-3">
-          <Select
-            label="Catégorie"
-            value={categoryFilter}
-            onChange={(e) => setCategoryFilter(e.target.value)}
-          >
-            <option value="">Toutes</option>
-            {categoryOptions.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </Select>
-          <Select label="Tag" value={tagFilter} onChange={(e) => setTagFilter(e.target.value)}>
-            <option value="">Tous</option>
-            {tagOptions.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name}
-              </option>
-            ))}
-          </Select>
-          {referenceError ? (
-            <p className="text-xs text-rose-500">
-              {referenceError}
-              {referenceRequestId ? ` (Ref: ${referenceRequestId})` : ''}
-            </p>
-          ) : referenceRequestId ? (
-            <p className="text-[10px] text-[var(--text-secondary)]">Refs Req: {referenceRequestId}</p>
-          ) : null}
-        </div>
+      {success ? <p className="text-xs font-semibold text-emerald-500">{success}</p> : null}
+      {actionError ? <p className="text-xs font-semibold text-rose-500">{actionError}</p> : null}
+      {readOnlyInfo ? <p className="text-xs text-[var(--text-secondary)]">{readOnlyInfo}</p> : null}
+
+      <div className="space-y-3">
+        {bulkError ? <p className="text-xs font-semibold text-rose-500">{bulkError}</p> : null}
         {loading ? (
           <p className="text-sm text-[var(--text-secondary)]">Chargement des projets…</p>
         ) : error ? (
@@ -546,141 +562,248 @@ export default function ProjectsPage() {
             </Button>
           </div>
         ) : projects.length === 0 ? (
-          <div className="space-y-3">
-            <p className="text-sm text-[var(--text-secondary)]">
-              Aucun projet pour le moment. Crée ton premier projet.
-            </p>
-            <Button
-              size="sm"
-              onClick={() => {
-                if (!isAdmin) {
-                  setReadOnlyInfo('Lecture seule : demande un rôle admin pour créer un projet.');
-                  return;
-                }
-                setCreateOpen(true);
-              }}
-              disabled={!isAdmin}
-            >
-              Créer un projet
-            </Button>
+          <div className="space-y-3 rounded-xl border border-dashed border-[var(--border)] bg-[var(--surface-2)] p-5 text-sm text-[var(--text-secondary)]">
+            <p>{archivedFilter === 'true' ? 'Aucun projet archivé.' : 'Aucun projet en cours.'}</p>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                onClick={() => {
+                  if (!isAdmin) {
+                    setReadOnlyInfo('Lecture seule : demande un rôle admin pour créer un projet.');
+                    return;
+                  }
+                  setCreateOpen(true);
+                }}
+                disabled={!isAdmin}
+              >
+                Créer un projet
+              </Button>
+            </div>
           </div>
         ) : (
-          <div className="space-y-3">
-            {bulkError ? <p className="text-xs font-semibold text-rose-500">{bulkError}</p> : null}
-            <div className="flex flex-wrap items-center justify-between gap-2">
+          <>
+            <div className="flex items-center justify-between">
               <label className="flex items-center gap-2 text-xs text-[var(--text-secondary)]">
                 <input
                   type="checkbox"
                   className="h-4 w-4 accent-[var(--accent)]"
-                  checked={projects.length > 0 && projects.every((p) => isSelected(p.id))}
+                  checked={allSelected(projects.map((p) => p.id))}
+                  ref={(el) => {
+                    if (!el) return;
+                    el.indeterminate = someSelected(projects.map((p) => p.id)) && !allSelected(projects.map((p) => p.id));
+                  }}
                   onChange={() => toggleAll(projects.map((p) => p.id))}
                 />
-                Tout sélectionner
+                Sélectionner tout
               </label>
-              <BulkActionBar
-                count={selectedCount}
-                onClear={clear}
-                actions={[
-                  {
-                    label: bulkLoading ? 'Suppression…' : 'Supprimer',
-                    onClick: () => handleBulkDelete(selectedArray),
-                    variant: 'danger',
-                    disabled: !isAdmin || bulkLoading,
-                  },
-                ]}
-              />
+              {selectedCount > 0 ? (
+                <BulkActionBar
+                  count={selectedCount}
+                  onClear={clear}
+                  actions={
+                    archivedFilter === 'true'
+                      ? [
+                          {
+                            label: bulkLoading ? 'Restauration…' : 'Restaurer',
+                            onClick: () => handleBulkRestore(selectedArray),
+                            disabled: bulkLoading || !isAdmin,
+                          },
+                          {
+                            label: bulkLoading ? 'Suppression…' : 'Supprimer définitivement',
+                            onClick: () => handleBulkDelete(selectedArray),
+                            variant: 'danger',
+                            disabled: bulkLoading || !isAdmin,
+                          },
+                        ]
+                      : [
+                          {
+                            label: bulkLoading ? 'Archivage…' : 'Archiver',
+                            onClick: () => handleBulkArchive(selectedArray),
+                            disabled: bulkLoading || !isAdmin,
+                          },
+                        ]
+                  }
+                />
+              ) : null}
             </div>
-            {projects.map((project) => {
-              const detailUrl = `/app/pro/${businessId}/projects/${project.id}`;
-              return (
-                <div
-                  key={project.id}
-                  role="link"
-                  tabIndex={0}
-                  onClick={() => router.push(detailUrl)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      router.push(detailUrl);
-                    }
-                  }}
-                  className="flex flex-col gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface)]/70 p-3 transition hover:border-[var(--accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)] md:flex-row md:items-center md:justify-between"
-                >
-                  <div className="flex items-start gap-3">
-                    <input
-                      type="checkbox"
-                      className="mt-1 h-4 w-4 accent-[var(--accent)]"
-                      checked={isSelected(project.id)}
-                      onChange={(e) => {
-                        e.stopPropagation();
-                        toggle(project.id);
-                      }}
-                      onClick={(e) => e.stopPropagation()}
-                      aria-label="Sélectionner"
-                    />
-                    <div className="space-y-1">
-                      <div className="font-semibold text-[var(--text-primary)]">{project.name}</div>
-                      <p className="text-xs text-[var(--text-secondary)]">
-                        Client : {project.clientName ?? 'Non assigné'}
-                      </p>
-                      <div className="flex flex-wrap gap-1">
-                        {project.categoryReferenceName ? (
-                          <Badge variant="neutral" className="bg-indigo-50 text-indigo-700">
-                            {project.categoryReferenceName}
-                          </Badge>
-                        ) : null}
-                        {project.tagReferences?.map((tag) => (
-                          <Badge key={tag.id} variant="neutral" className="bg-emerald-50 text-emerald-700">
-                            {tag.name}
-                          </Badge>
-                        ))}
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {projects.map((project) => {
+                const detailUrl = `/app/pro/${businessId}/projects/${project.id}`;
+                const progressPct = project.progress ?? project.tasksSummary?.progressPct ?? 0;
+                const tasksTotal = project.tasksSummary?.total ?? 0;
+                const tasksDone = project.tasksSummary?.done ?? 0;
+                return (
+                  <div
+                    key={project.id}
+                    role="link"
+                    tabIndex={0}
+                    onClick={() => router.push(detailUrl)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        router.push(detailUrl);
+                      }
+                    }}
+                    className="relative card-interactive rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4"
+                  >
+                    <div className="absolute left-3 top-3">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 accent-[var(--accent)]"
+                        checked={isSelected(project.id)}
+                        onChange={(e) => {
+                          e.stopPropagation();
+                          toggle(project.id);
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                        aria-label="Sélectionner"
+                      />
+                    </div>
+                    <div className="absolute right-3 top-3">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setOpenMenuId((prev) => (prev === project.id ? null : project.id));
+                        }}
+                        aria-label="Menu projet"
+                      >
+                        ⋯
+                      </Button>
+                      {openMenuId === project.id ? (
+                        <div
+                          className="absolute right-0 z-10 mt-2 w-44 rounded-xl border border-[var(--border)] bg-[var(--surface)] shadow-md"
+                          onClick={(e) => e.stopPropagation()}
+                          onMouseLeave={() => setOpenMenuId(null)}
+                        >
+                          <button
+                            className="w-full px-3 py-2 text-left text-sm hover:bg-[var(--surface-hover)]"
+                            onClick={() => {
+                              setOpenMenuId(null);
+                              openEdit(project);
+                            }}
+                            disabled={!isAdmin}
+                          >
+                            Modifier
+                          </button>
+                          <button
+                            className="w-full px-3 py-2 text-left text-sm hover:bg-[var(--surface-hover)]"
+                            onClick={() => {
+                              setOpenMenuId(null);
+                              router.push(detailUrl);
+                            }}
+                          >
+                            Ouvrir
+                          </button>
+                          <button
+                            className="w-full px-3 py-2 text-left text-sm hover:bg-[var(--surface-hover)]"
+                            onClick={() => {
+                              setOpenMenuId(null);
+                              router.push(`/app/pro/${businessId}/tasks?projectId=${project.id}`);
+                            }}
+                          >
+                            Voir tâches
+                          </button>
+                          <button
+                            className="w-full px-3 py-2 text-left text-sm hover:bg-[var(--surface-hover)]"
+                            onClick={() => {
+                              setOpenMenuId(null);
+                              router.push(`/app/pro/${businessId}/finances`);
+                            }}
+                          >
+                            Voir facturation
+                          </button>
+                          {archivedFilter === 'true' ? (
+                            <>
+                              <button
+                                className="w-full px-3 py-2 text-left text-sm hover:bg-[var(--surface-hover)]"
+                                onClick={() => {
+                                  setOpenMenuId(null);
+                                  handleRestore(project.id);
+                                }}
+                              >
+                                Restaurer
+                              </button>
+                              <button
+                                className="w-full px-3 py-2 text-left text-sm text-rose-600 hover:bg-rose-50"
+                                onClick={() => {
+                                  setOpenMenuId(null);
+                                  setDeleting(project);
+                                }}
+                              >
+                                Supprimer définitivement
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              className="w-full px-3 py-2 text-left text-sm hover:bg-[var(--surface-hover)]"
+                              onClick={() => {
+                                setOpenMenuId(null);
+                                handleArchive(project.id);
+                              }}
+                            >
+                              Archiver
+                            </button>
+                          )}
+                        </div>
+                      ) : null}
+                    </div>
+
+                    <div className="flex flex-col gap-3 pt-4">
+                      <div className="flex items-center gap-2 pr-10">
+                        <div className="font-semibold text-[var(--text-primary)]">{project.name}</div>
+                        <Badge variant="neutral">{statusLabel(project.status)}</Badge>
+                        {project.archivedAt ? <Badge variant="neutral">Archivé</Badge> : null}
                       </div>
-                      <p className="text-[10px] text-[var(--text-secondary)]">
-                        {formatDate(project.startDate)} → {formatDate(project.endDate)}
-                      </p>
-                      <p className="text-[11px] text-[var(--text-secondary)]">
-                        Avancement : {project.progress ?? project.tasksSummary?.progressPct ?? 0}%
-                      </p>
+                      <div className="flex items-center gap-2">
+                        <FaviconAvatar name={project.clientName ?? 'Client'} size={32} />
+                        <div className="text-sm text-[var(--text-secondary)]">
+                          {project.clientName ?? 'Client anonymisé ou non assigné'}
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between text-xs text-[var(--text-secondary)]">
+                          <span>Progression tâches</span>
+                          <span>{tasksDone}/{tasksTotal}</span>
+                        </div>
+                        <div className="h-2 rounded-full bg-[var(--surface-2)]">
+                          <div
+                            className="h-2 rounded-full bg-[var(--accent)] transition-all"
+                            style={{ width: `${Math.min(100, Math.max(0, progressPct))}%` }}
+                          />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 text-xs text-[var(--text-secondary)] sm:grid-cols-4">
+                        <div className="rounded-lg bg-[var(--surface-2)] px-3 py-2">
+                          <p className="font-semibold text-[var(--text-primary)]">{project.tasksSummary?.total ?? 0}</p>
+                          <p>Tâches</p>
+                        </div>
+                        <div className="rounded-lg bg-[var(--surface-2)] px-3 py-2">
+                          <p className="font-semibold text-[var(--text-primary)]">—</p>
+                          <p>Services</p>
+                        </div>
+                        <div className="rounded-lg bg-[var(--surface-2)] px-3 py-2">
+                          <p className="font-semibold text-[var(--text-primary)]">—</p>
+                          <p>Devis</p>
+                        </div>
+                        <div className="rounded-lg bg-[var(--surface-2)] px-3 py-2">
+                          <p className="font-semibold text-[var(--text-primary)]">—</p>
+                          <p>Factures</p>
+                        </div>
+                      </div>
+                      <div className="text-xs text-[var(--text-secondary)]">
+                        Dernière activité : {formatDate(project.updatedAt)}
+                      </div>
                     </div>
                   </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge variant="neutral">{statusLabel(project.status)}</Badge>
-                    <Badge variant="neutral">{QUOTE_LABELS[project.quoteStatus]}</Badge>
-                    <Badge variant="neutral">{DEPOSIT_LABELS[project.depositStatus]}</Badge>
-                    {project.archivedAt ? <Badge variant="neutral">Archivé</Badge> : null}
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openEdit(project);
-                      }}
-                      disabled={!isAdmin}
-                    >
-                      Modifier
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (!isAdmin) {
-                          setReadOnlyInfo('Lecture seule : suppression réservée aux admins.');
-                          return;
-                        }
-                        setDeleting(project);
-                      }}
-                      disabled={!isAdmin}
-                    >
-                      Supprimer
-                    </Button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          </>
         )}
-      </Card>
+      </div>
 
       <Modal
         open={createOpen}
