@@ -4,10 +4,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useParams } from 'next/navigation';
 import { fetchJson } from '@/lib/apiClient';
-import {
-  ActiveBusinessProvider,
-  type ActiveBusiness,
-} from '../ActiveBusinessProvider';
+import { useActiveBusiness } from '../ActiveBusinessProvider';
 import ActiveBusinessBanner from '../ActiveBusinessBanner';
 import SwitchBusinessModal from '../SwitchBusinessModal';
 
@@ -71,20 +68,27 @@ export default function BusinessLayout({ children }: BusinessLayoutProps) {
     return () => controller.abort();
   }, [businessId]);
 
-  const initialActive: ActiveBusiness | null = business
-    ? { id: business.id, name: business.name, role, websiteUrl: business.websiteUrl }
-    : null;
+  const activeCtx = useActiveBusiness({ optional: true });
+
+  useEffect(() => {
+    if (business) {
+      activeCtx?.setActiveBusiness({
+        id: business.id,
+        name: business.name,
+        role,
+        websiteUrl: business.websiteUrl,
+      });
+    }
+  }, [activeCtx, business, role]);
 
   return (
-    <ActiveBusinessProvider initialBusiness={initialActive}>
-      <div className="space-y-3">
-        <ActiveBusinessBanner />
-        {error ? (
-          <p className="text-xs text-rose-400">{error}</p>
-        ) : null}
-        <div>{children}</div>
-        <SwitchBusinessModal />
-      </div>
-    </ActiveBusinessProvider>
+    <div className="space-y-3">
+      <ActiveBusinessBanner />
+      {error ? (
+        <p className="text-xs text-rose-400">{error}</p>
+      ) : null}
+      <div>{children}</div>
+      <SwitchBusinessModal />
+    </div>
   );
 }

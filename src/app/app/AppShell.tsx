@@ -16,6 +16,8 @@ import {
 import { useBodyScrollLock } from '@/lib/scrollLock';
 import { LogoMark } from '@/components/marketing/LogoMark';
 import { FileDropProvider } from '@/components/file-drop/FileDropProvider';
+import { ActiveBusinessProvider, useActiveBusiness } from './pro/ActiveBusinessProvider';
+import { BusinessContextChip } from './components/BusinessContextChip';
 
 function getCurrentSpace(pathname: string): Space {
   if (pathname.startsWith('/app/pro')) return 'pro';
@@ -35,11 +37,22 @@ function getBusinessIdFromPathname(pathname: string): string | null {
 }
 
 export default function AppShell({ children }: { children: ReactNode }) {
+  return (
+    <ActiveBusinessProvider>
+      <AppShellInner>{children}</AppShellInner>
+    </ActiveBusinessProvider>
+  );
+}
+
+function AppShellInner({ children }: { children: ReactNode }) {
   const pathname = usePathname() ?? '';
   const router = useRouter();
 
   const space = getCurrentSpace(pathname);
   const businessId = getBusinessIdFromPathname(pathname);
+  const businessCtx = useActiveBusiness({ optional: true });
+  const activeBusiness = businessCtx?.activeBusiness;
+  const showBusinessContext = space === 'pro' && !!activeBusiness;
 
   /* ---------------- DESKTOP DOCK ---------------- */
   const [dockOpen, setDockOpen] = useState(false);
@@ -404,6 +417,29 @@ export default function AppShell({ children }: { children: ReactNode }) {
           </div>
         </div>
 
+        {showBusinessContext && activeBusiness ? (
+          <div className="mx-auto flex max-w-6xl items-center gap-2 px-3 pb-2 pt-1 md:hidden">
+            <div className="min-w-0 flex-1">
+              <BusinessContextChip
+                businessName={activeBusiness.name}
+                websiteUrl={activeBusiness.websiteUrl}
+                roleLabel={activeBusiness.role}
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => businessCtx?.openSwitchModal()}
+              className={[
+                'inline-flex items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)]',
+                'hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]',
+                'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]',
+              ].join(' ')}
+            >
+              Changer
+            </button>
+          </div>
+        ) : null}
+
         {/* -------- DESKTOP HEADER (restauré) -------- */}
         <div className="mx-auto hidden h-14 max-w-6xl items-center justify-between px-4 md:flex md:max-w-none md:px-6">
           {/* Left: logo / identité */}
@@ -450,7 +486,28 @@ export default function AppShell({ children }: { children: ReactNode }) {
           </nav>
 
           {/* Right */}
-          <div className="flex items-center gap-2">
+          <div className="flex min-w-0 items-center gap-2">
+            {showBusinessContext && activeBusiness ? (
+              <div className="flex min-w-0 items-center gap-2">
+                <BusinessContextChip
+                  businessName={activeBusiness.name}
+                  websiteUrl={activeBusiness.websiteUrl}
+                  roleLabel={activeBusiness.role}
+                />
+                <button
+                  type="button"
+                  onClick={() => businessCtx?.openSwitchModal()}
+                  className={[
+                    'hidden items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)]',
+                    'hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]',
+                    'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]',
+                    'lg:inline-flex',
+                  ].join(' ')}
+                >
+                  Changer
+                </button>
+              </div>
+            ) : null}
             <Link
               href="/app/account"
               className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
