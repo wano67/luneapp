@@ -33,9 +33,18 @@ type PageHeaderProps = {
   subtitle?: string;
   primaryAction?: Action;
   secondaryAction?: Action;
+  context?: ReactNode;
 };
 
-export function PageHeader({ backHref, backLabel, title, subtitle, primaryAction, secondaryAction }: PageHeaderProps) {
+export function PageHeader({
+  backHref,
+  backLabel,
+  title,
+  subtitle,
+  primaryAction,
+  secondaryAction,
+  context,
+}: PageHeaderProps) {
   return (
     <div className="flex flex-col gap-3">
       {backHref && backLabel ? (
@@ -48,47 +57,50 @@ export function PageHeader({ backHref, backLabel, title, subtitle, primaryAction
         </Link>
       ) : null}
 
-      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-        <div className="space-y-1">
-          <h1 className="text-2xl font-semibold text-[var(--text-primary)]">{title}</h1>
+      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between md:gap-4">
+        <div className="space-y-1 min-w-0">
+          <h1 className="truncate text-2xl font-semibold text-[var(--text-primary)]">{title}</h1>
           {subtitle ? <p className="text-sm text-[var(--text-secondary)]">{subtitle}</p> : null}
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {secondaryAction ? (
-            'href' in secondaryAction ? (
-              <Button asChild variant={secondaryAction.variant ?? 'outline'} size="sm">
-                <Link href={secondaryAction.href} className="flex items-center gap-2">
+        <div className="flex flex-col items-start gap-2 md:items-end">
+          {context ? <div className="w-full min-w-0 md:w-auto">{context}</div> : null}
+          <div className="flex flex-wrap items-center justify-start gap-2 md:justify-end">
+            {secondaryAction ? (
+              'href' in secondaryAction ? (
+                <Button asChild variant={secondaryAction.variant ?? 'outline'} size="sm">
+                  <Link href={secondaryAction.href} className="flex items-center gap-2">
+                    {secondaryAction.icon}
+                    <span>{secondaryAction.label}</span>
+                  </Link>
+                </Button>
+              ) : (
+                <Button
+                  variant={secondaryAction.variant ?? 'outline'}
+                  size="sm"
+                  onClick={secondaryAction.onClick}
+                  className="flex items-center gap-2"
+                >
                   {secondaryAction.icon}
                   <span>{secondaryAction.label}</span>
-                </Link>
-              </Button>
-            ) : (
-              <Button
-                variant={secondaryAction.variant ?? 'outline'}
-                size="sm"
-                onClick={secondaryAction.onClick}
-                className="flex items-center gap-2"
-              >
-                {secondaryAction.icon}
-                <span>{secondaryAction.label}</span>
-              </Button>
-            )
-          ) : null}
-          {primaryAction ? (
-            'href' in primaryAction ? (
-              <Button asChild size="sm" className={cls('flex items-center gap-2')}>
-                <Link href={primaryAction.href}>
+                </Button>
+              )
+            ) : null}
+            {primaryAction ? (
+              'href' in primaryAction ? (
+                <Button asChild size="sm" className={cls('flex items-center gap-2')}>
+                  <Link href={primaryAction.href}>
+                    {primaryAction.icon}
+                    <span>{primaryAction.label}</span>
+                  </Link>
+                </Button>
+              ) : (
+                <Button size="sm" className="flex items-center gap-2" onClick={primaryAction.onClick}>
                   {primaryAction.icon}
                   <span>{primaryAction.label}</span>
-                </Link>
-              </Button>
-            ) : (
-              <Button size="sm" className="flex items-center gap-2" onClick={primaryAction.onClick}>
-                {primaryAction.icon}
-                <span>{primaryAction.label}</span>
-              </Button>
-            )
-          ) : null}
+                </Button>
+              )
+            ) : null}
+          </div>
         </div>
       </div>
     </div>
