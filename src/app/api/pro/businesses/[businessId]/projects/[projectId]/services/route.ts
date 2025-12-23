@@ -6,10 +6,6 @@ import { assertSameOrigin, jsonNoStore, withNoStore } from '@/server/security/cs
 import { badRequest, getRequestId, unauthorized, withRequestId } from '@/server/http/apiUtils';
 import { rateLimit } from '@/server/security/rateLimit';
 
-function forbidden() {
-  return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-}
-
 function parseId(param: string | undefined) {
   if (!param || !/^\d+$/.test(param)) return null;
   try {
@@ -25,6 +21,10 @@ function isRecord(v: unknown): v is Record<string, unknown> {
 
 function withIdNoStore(res: NextResponse, requestId: string) {
   return withNoStore(withRequestId(res, requestId));
+}
+
+function forbidden(requestId: string) {
+  return withIdNoStore(NextResponse.json({ error: 'Forbidden' }, { status: 403 }), requestId);
 }
 
 // GET /api/pro/businesses/{businessId}/projects/{projectId}/services
@@ -46,7 +46,7 @@ export async function GET(
   if (!businessIdBigInt || !projectIdBigInt) return withIdNoStore(badRequest('Ids invalides.'), requestId);
 
   const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'VIEWER');
-  if (!membership) return withIdNoStore(forbidden(), requestId);
+  if (!membership) return forbidden(requestId);
 
   const project = await prisma.project.findFirst({
     where: { id: projectIdBigInt, businessId: businessIdBigInt },
@@ -105,7 +105,7 @@ export async function POST(
   if (!businessIdBigInt || !projectIdBigInt) return withIdNoStore(badRequest('Ids invalides.'), requestId);
 
   const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'ADMIN');
-  if (!membership) return withIdNoStore(forbidden(), requestId);
+  if (!membership) return forbidden(requestId);
 
   const limited = rateLimit(request, {
     key: `pro:project-services:create:${businessIdBigInt}:${userId}`,

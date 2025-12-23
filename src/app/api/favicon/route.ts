@@ -1,3 +1,4 @@
+import { isIP } from 'node:net';
 import { NextRequest, NextResponse } from 'next/server';
 import { getRequestId } from '@/server/http/apiUtils';
 import { normalizeWebsiteUrl } from '@/lib/website';
@@ -14,6 +15,34 @@ function buildJson(body: unknown, status: number, requestId: string) {
   return res;
 }
 
+const MAX_ICON_BYTES = 200_000; // ~200 KB
+
+function isBlockedHost(hostname: string) {
+  const host = hostname.toLowerCase();
+  if (
+    host === 'localhost' ||
+    host === '127.0.0.1' ||
+    host === '::1' ||
+    host === '0.0.0.0' ||
+    host.endsWith('.local')
+  ) {
+    return true;
+  }
+
+  const ipType = isIP(host);
+  if (ipType === 4) {
+    if (host.startsWith('10.') || host.startsWith('192.168.') || host.startsWith('169.254.')) return true;
+    const parts = host.split('.').map((p) => Number.parseInt(p, 10));
+    if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true;
+  }
+  if (ipType === 6) {
+    if (host === '::1' || host === '::' || host.startsWith('fd') || host.startsWith('fc') || host.startsWith('fe80:')) {
+      return true;
+    }
+  }
+  return false;
+}
+
 async function fetchBuffer(url: string, accept: string) {
   const res = await fetch(url, {
     redirect: 'follow',
@@ -23,8 +52,34 @@ async function fetchBuffer(url: string, accept: string) {
     },
   });
   if (!res.ok) return null;
-  const buf = await res.arrayBuffer();
-  return { res, buf };
+  const contentLength = res.headers.get('content-length');
+  if (contentLength && Number(contentLength) > MAX_ICON_BYTES) return null;
+
+  if (!res.body) {
+    const buf = await res.arrayBuffer();
+    if (buf.byteLength > MAX_ICON_BYTES) return null;
+    return { res, buf };
+  }
+
+  const reader = res.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (value) {
+      total += value.byteLength;
+      if (total > MAX_ICON_BYTES) return null;
+      chunks.push(value);
+    }
+  }
+  const combined = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    combined.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return { res, buf: combined.buffer };
 }
 
 async function fetchFavicon(url: string) {
@@ -98,13 +153,24 @@ export async function GET(request: NextRequest) {
     return buildJson({ error: 'url requis' }, 400, requestId);
   }
 
-  let host: string;
   let baseUrl: URL;
   try {
     baseUrl = new URL(target);
-    host = baseUrl.host;
   } catch {
     return buildJson({ error: 'url invalide' }, 400, requestId);
+  }
+
+  if (baseUrl.protocol !== 'http:' && baseUrl.protocol !== 'https:') {
+    return buildJson({ error: 'Protocol non supporté' }, 400, requestId);
+  }
+
+  if (baseUrl.port && baseUrl.port !== '80' && baseUrl.port !== '443') {
+    return buildJson({ error: 'Port non autorisé' }, 403, requestId);
+  }
+
+  const host = baseUrl.hostname;
+  if (isBlockedHost(host)) {
+    return buildJson({ error: 'Host non autorisé' }, 403, requestId);
   }
 
   const candidates = new Set<string>([

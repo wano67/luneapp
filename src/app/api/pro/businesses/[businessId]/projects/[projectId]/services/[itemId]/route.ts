@@ -6,10 +6,6 @@ import { assertSameOrigin, jsonNoStore, withNoStore } from '@/server/security/cs
 import { badRequest, getRequestId, unauthorized, withRequestId } from '@/server/http/apiUtils';
 import { rateLimit } from '@/server/security/rateLimit';
 
-function forbidden() {
-  return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-}
-
 function parseId(param: string | undefined) {
   if (!param || !/^\d+$/.test(param)) return null;
   try {
@@ -25,6 +21,10 @@ function isRecord(v: unknown): v is Record<string, unknown> {
 
 function withIdNoStore(res: NextResponse, requestId: string) {
   return withNoStore(withRequestId(res, requestId));
+}
+
+function forbidden(requestId: string) {
+  return withIdNoStore(NextResponse.json({ error: 'Forbidden' }, { status: 403 }), requestId);
 }
 
 async function getItem(businessId: bigint, projectId: bigint, itemId: bigint) {
@@ -63,7 +63,7 @@ export async function PATCH(
   }
 
   const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'ADMIN');
-  if (!membership) return withIdNoStore(forbidden(), requestId);
+  if (!membership) return forbidden(requestId);
 
   const limited = rateLimit(request, {
     key: `pro:project-services:update:${businessIdBigInt}:${userId}`,
@@ -144,7 +144,7 @@ export async function DELETE(
   }
 
   const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'ADMIN');
-  if (!membership) return withIdNoStore(forbidden(), requestId);
+  if (!membership) return forbidden(requestId);
 
   const limited = rateLimit(request, {
     key: `pro:project-services:delete:${businessIdBigInt}:${userId}`,
