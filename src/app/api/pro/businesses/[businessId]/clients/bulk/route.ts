@@ -59,8 +59,8 @@ export async function POST(
   }
 
   const action = (body as { action?: string }).action;
-  if (action !== 'ARCHIVE' && action !== 'UNARCHIVE' && action !== 'DELETE') {
-    return withNoStore(withRequestId(badRequest('Action invalide (ARCHIVE|UNARCHIVE|DELETE).'), requestId));
+  if (action !== 'ARCHIVE' && action !== 'UNARCHIVE' && action !== 'DELETE' && action !== 'ANONYMIZE') {
+    return withNoStore(withRequestId(badRequest('Action invalide (ARCHIVE|UNARCHIVE|DELETE|ANONYMIZE).'), requestId));
   }
 
   const clientIdsRaw = Array.isArray((body as { clientIds?: unknown }).clientIds)
@@ -145,6 +145,70 @@ export async function POST(
       withRequestId(
         jsonNoStore({
           deletedCount,
+          failed,
+        }),
+        requestId
+      )
+    );
+  }
+
+  if (action === 'ANONYMIZE') {
+    const reasonRaw = typeof (body as { reason?: unknown }).reason === 'string' ? (body as { reason?: string }).reason?.trim() : '';
+    const clients = await prisma.client.findMany({
+      where: { businessId: businessIdBigInt, id: { in: clientIds } },
+      select: { id: true, archivedAt: true, name: true },
+    });
+    const clientIdsFound = clients.map((c) => c.id.toString());
+    const failed: Array<{ id: string; reason: string }> = [];
+    const toAnonymize = clients.filter((c) => {
+      if (!c.archivedAt) {
+        failed.push({ id: c.id.toString(), reason: 'Client must be archived first' });
+        return false;
+      }
+      return true;
+    });
+
+    clientIds.forEach((id) => {
+      const asStr = id.toString();
+      if (!clientIdsFound.includes(asStr)) {
+        failed.push({ id: asStr, reason: 'Client not found' });
+      }
+    });
+
+    let anonymizedCount = 0;
+    const now = new Date();
+    if (toAnonymize.length) {
+      await Promise.all(
+        toAnonymize.map((c) =>
+          prisma.client.update({
+            where: { id: c.id, businessId: businessIdBigInt },
+            data: {
+              name: 'Client anonymisé',
+              email: null,
+              phone: null,
+              websiteUrl: null,
+              companyName: null,
+              mainContactName: null,
+              address: null,
+              sector: null,
+              needsType: null,
+              notes: null,
+              categoryReferenceId: null,
+              tags: { deleteMany: { clientId: c.id } },
+              anonymizedAt: now,
+              anonymizedByUserId: BigInt(userId),
+              anonymizationReason: reasonRaw || null,
+            },
+          })
+        )
+      );
+      anonymizedCount = toAnonymize.length;
+    }
+
+    return withNoStore(
+      withRequestId(
+        jsonNoStore({
+          anonymizedCount,
           failed,
         }),
         requestId

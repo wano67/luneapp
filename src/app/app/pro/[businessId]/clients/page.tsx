@@ -30,6 +30,9 @@ type Client = {
   websiteUrl: string | null;
   phone: string | null;
   notes: string | null;
+  archivedAt: string | null;
+  anonymizedAt: string | null;
+  anonymizationReason: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -123,6 +126,9 @@ export default function ClientsPage() {
         categoryReferenceName: item.categoryReferenceName ?? null,
         websiteUrl: item.websiteUrl ?? null,
         tagReferences: item.tagReferences ?? [],
+        archivedAt: item.archivedAt ?? null,
+        anonymizedAt: item.anonymizedAt ?? null,
+        anonymizationReason: item.anonymizationReason ?? null,
       }));
       setClients(normalized);
     } catch (err) {
@@ -295,7 +301,9 @@ export default function ClientsPage() {
       return;
     }
     if (selectedArray.length === 0) return;
-    const confirmDelete = window.confirm(`Supprimer définitivement ${selectedArray.length} client(s) ?`);
+    const confirmDelete = window.confirm(
+      `Supprimer définitivement ${selectedArray.length} client(s) ? Cette action est irréversible.`
+    );
     if (!confirmDelete) return;
     setBulkError(null);
     const res = await fetchJson<{ deletedCount: number; failed?: Array<{ id: string; reason: string }> }>(
@@ -315,7 +323,40 @@ export default function ClientsPage() {
     const failed = res.data?.failed ?? [];
     if (failed.length) {
       const reasons = failed.map((f) => `${f.id}: ${f.reason}`).join(' ; ');
-      setBulkError(`Certains clients n'ont pas été supprimés: ${reasons}`);
+      setBulkError(`Certains clients n'ont pas été supprimés: ${reasons}. Pense à les anonymiser si nécessaire.`);
+    }
+    await loadClients();
+    clear();
+  }
+
+  async function handleBulkAnonymize() {
+    if (!isAdmin) {
+      setReadOnlyInfo(readOnlyMessage);
+      return;
+    }
+    if (selectedArray.length === 0) return;
+    const reason = window.prompt('Raison de l’anonymisation ? (optionnel)') ?? '';
+    const confirmAnon = window.confirm(`Anonymiser ${selectedArray.length} client(s) ?`);
+    if (!confirmAnon) return;
+    setBulkError(null);
+    const res = await fetchJson<{ anonymizedCount: number; failed?: Array<{ id: string; reason: string }> }>(
+      `/api/pro/businesses/${businessId}/clients/bulk`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientIds: selectedArray, action: 'ANONYMIZE', reason }),
+      }
+    );
+    if (!res.ok) {
+      setBulkError(
+        res.requestId ? `${res.error ?? 'Anonymisation impossible.'} (Ref: ${res.requestId})` : res.error ?? 'Anonymisation impossible.'
+      );
+      return;
+    }
+    const failed = res.data?.failed ?? [];
+    if (failed.length) {
+      const reasons = failed.map((f) => `${f.id}: ${f.reason}`).join(' ; ');
+      setBulkError(`Certains clients n'ont pas été anonymisés: ${reasons}`);
     }
     await loadClients();
     clear();
@@ -494,6 +535,11 @@ export default function ClientsPage() {
                           variant: 'outline',
                         },
                         {
+                          label: 'Anonymiser (RGPD)',
+                          onClick: handleBulkAnonymize,
+                          variant: 'outline',
+                        },
+                        {
                           label: 'Supprimer définitivement',
                           onClick: handleBulkDelete,
                           variant: 'danger',
@@ -530,7 +576,14 @@ export default function ClientsPage() {
                     />
                     <FaviconAvatar name={client.name} websiteUrl={client.websiteUrl} size={36} />
                     <div className="space-y-1">
-                      <span className="font-semibold text-[var(--text-primary)]">{client.name}</span>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-semibold text-[var(--text-primary)]">{client.name}</span>
+                        {client.anonymizedAt ? (
+                          <Badge variant="neutral" className="bg-[var(--surface-2)] text-[11px]">
+                            Anonymisé
+                          </Badge>
+                        ) : null}
+                      </div>
                       <div className="flex flex-wrap gap-1">
                         {client.categoryReferenceName ? (
                           <Badge variant="neutral" className="bg-indigo-50 text-indigo-700">

@@ -140,6 +140,7 @@ model User {
   interactionsCreated  Interaction[] @relation("InteractionCreatedBy")
   inventoryMovements   InventoryMovement[]
   ledgerEntriesCreated LedgerEntry[]
+  clientsAnonymized    Client[] @relation("ClientAnonymizedBy")
 }
 
 /**
@@ -365,9 +366,13 @@ model Client {
   notes           String?
   status          ClientStatus @default(ACTIVE)
   archivedAt      DateTime?
+  anonymizedAt    DateTime?
+  anonymizedByUserId BigInt?
+  anonymizationReason String?
 
   business Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
   categoryReference BusinessReference? @relation("ClientCategoryReference", fields: [categoryReferenceId], references: [id], onDelete: SetNull)
+  anonymizedBy   User?     @relation("ClientAnonymizedBy", fields: [anonymizedByUserId], references: [id], onDelete: SetNull)
   tags       ClientTag[]
   projects Project[]
   interactions Interaction[]
@@ -380,6 +385,7 @@ model Client {
   @@index([businessId, name])
   @@index([businessId, categoryReferenceId])
   @@index([businessId, archivedAt])
+  @@index([businessId, anonymizedAt])
 }
 
 model Project {

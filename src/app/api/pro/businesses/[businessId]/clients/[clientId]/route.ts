@@ -99,6 +99,8 @@ function serializeClient(client: {
   status: ClientStatus;
   leadSource: LeadSource | null;
   archivedAt: Date | null;
+  anonymizedAt: Date | null;
+  anonymizationReason: string | null;
   categoryReferenceId?: bigint | null;
   categoryReference?: { id: bigint; name: string | null } | null;
   tags?: Array<{ referenceId: bigint; reference: { id: bigint; name: string } }>;
@@ -125,6 +127,8 @@ function serializeClient(client: {
     status: client.status,
     leadSource: client.leadSource,
     archivedAt: client.archivedAt ? client.archivedAt.toISOString() : null,
+    anonymizedAt: client.anonymizedAt ? client.anonymizedAt.toISOString() : null,
+    anonymizationReason: client.anonymizationReason,
     createdAt: client.createdAt.toISOString(),
     updatedAt: client.updatedAt.toISOString(),
   };
