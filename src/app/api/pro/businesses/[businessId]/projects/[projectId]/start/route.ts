@@ -3,7 +3,7 @@ import { prisma } from '@/server/db/client';
 import { requireAuthPro } from '@/server/auth/requireAuthPro';
 import { requireBusinessRole } from '@/server/auth/businessRole';
 import { assertSameOrigin, withNoStore } from '@/server/security/csrf';
-import { badRequest, getRequestId, unauthorized, withRequestId } from '@/server/http/apiUtils';
+import { badRequest, getRequestId, notFound, unauthorized, withRequestId } from '@/server/http/apiUtils';
 import { rateLimit } from '@/server/security/rateLimit';
 import type { TaskPhase } from '@/generated/prisma/client';
 
@@ -64,11 +64,11 @@ export async function POST(
     },
   });
   if (!project) {
-    return withIdNoStore(NextResponse.json({ error: 'Projet introuvable.' }, { status: 404 }), requestId);
+    return withIdNoStore(notFound('Projet introuvable.'), requestId);
   }
 
   if (project.archivedAt) {
-    return withIdNoStore(NextResponse.json({ error: 'Projet archivé : démarrage impossible.' }, { status: 400 }), requestId);
+    return withIdNoStore(badRequest('Projet archivé : démarrage impossible.'), requestId);
   }
 
   if (project.startedAt) {

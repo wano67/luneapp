@@ -3,7 +3,7 @@ import { prisma } from '@/server/db/client';
 import { requireAuthPro } from '@/server/auth/requireAuthPro';
 import { requireBusinessRole } from '@/server/auth/businessRole';
 import { assertSameOrigin, jsonNoStore, withNoStore } from '@/server/security/csrf';
-import { badRequest, getRequestId, unauthorized, withRequestId } from '@/server/http/apiUtils';
+import { badRequest, getRequestId, notFound, unauthorized, withRequestId } from '@/server/http/apiUtils';
 import { rateLimit } from '@/server/security/rateLimit';
 
 function parseId(param: string | undefined) {
@@ -52,7 +52,7 @@ export async function GET(
     where: { id: projectIdBigInt, businessId: businessIdBigInt },
   });
   if (!project) {
-    return withIdNoStore(NextResponse.json({ error: 'Projet introuvable.' }, { status: 404 }), requestId);
+    return withIdNoStore(notFound('Projet introuvable.'), requestId);
   }
 
   const items = await prisma.projectService.findMany({
@@ -139,7 +139,7 @@ export async function POST(
     where: { id: serviceIdBigInt, businessId: businessIdBigInt },
   });
   if (!service) {
-    return withIdNoStore(NextResponse.json({ error: 'Service introuvable.' }, { status: 404 }), requestId);
+    return withIdNoStore(notFound('Service introuvable.'), requestId);
   }
 
   const created = await prisma.projectService.create({
