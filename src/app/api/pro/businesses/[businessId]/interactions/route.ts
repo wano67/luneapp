@@ -7,15 +7,15 @@ import { rateLimit } from '@/server/security/rateLimit';
 import { badRequest, getRequestId, unauthorized, withRequestId } from '@/server/http/apiUtils';
 import { InteractionType } from '@/generated/prisma/client';
 
-function forbidden() {
-  return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-}
-
 function withIdNoStore(res: NextResponse, requestId: string) {
   res.headers.set('Cache-Control', 'no-store');
   res.headers.set('Pragma', 'no-cache');
   res.headers.set('Expires', '0');
   return withRequestId(res, requestId);
+}
+
+function forbidden(requestId: string) {
+  return withIdNoStore(NextResponse.json({ error: 'Forbidden' }, { status: 403 }), requestId);
 }
 
 function parseId(param: string | undefined) {
@@ -49,7 +49,7 @@ export async function GET(
   if (!businessIdBigInt) return withIdNoStore(badRequest('businessId invalide.'), requestId);
 
   const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'VIEWER');
-  if (!membership) return withIdNoStore(forbidden(), requestId);
+  if (!membership) return forbidden(requestId);
 
   const { searchParams } = new URL(request.url);
   const clientId = parseId(searchParams.get('clientId') ?? undefined);
@@ -139,7 +139,7 @@ export async function POST(
   if (!businessIdBigInt) return withIdNoStore(badRequest('businessId invalide.'), requestId);
 
   const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'ADMIN');
-  if (!membership) return withIdNoStore(forbidden(), requestId);
+  if (!membership) return forbidden(requestId);
 
   const limited = rateLimit(request, {
     key: `pro:interactions:create:${businessIdBigInt}:${userId}`,

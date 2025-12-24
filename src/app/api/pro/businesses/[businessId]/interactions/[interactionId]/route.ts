@@ -6,15 +6,15 @@ import { assertSameOrigin, jsonNoStore } from '@/server/security/csrf';
 import { rateLimit } from '@/server/security/rateLimit';
 import { badRequest, getRequestId, unauthorized, withRequestId } from '@/server/http/apiUtils';
 
-function forbidden() {
-  return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-}
-
 function withIdNoStore(res: NextResponse, requestId: string) {
   res.headers.set('Cache-Control', 'no-store');
   res.headers.set('Pragma', 'no-cache');
   res.headers.set('Expires', '0');
   return withRequestId(res, requestId);
+}
+
+function forbidden(requestId: string) {
+  return withIdNoStore(NextResponse.json({ error: 'Forbidden' }, { status: 403 }), requestId);
 }
 
 function parseId(param: string | undefined) {
@@ -60,7 +60,7 @@ export async function PATCH(
   }
 
   const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'ADMIN');
-  if (!membership) return withIdNoStore(forbidden(), requestId);
+  if (!membership) return forbidden(requestId);
 
   const existing = await getInteraction(businessIdBigInt, interactionIdBigInt);
   if (!existing) {
@@ -154,7 +154,7 @@ export async function DELETE(
   }
 
   const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'ADMIN');
-  if (!membership) return withIdNoStore(forbidden(), requestId);
+  if (!membership) return forbidden(requestId);
 
   const existing = await getInteraction(businessIdBigInt, interactionIdBigInt);
   if (!existing) {

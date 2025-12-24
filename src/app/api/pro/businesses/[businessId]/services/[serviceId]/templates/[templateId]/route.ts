@@ -7,10 +7,6 @@ import { rateLimit } from '@/server/security/rateLimit';
 import { badRequest, getRequestId, unauthorized, withRequestId } from '@/server/http/apiUtils';
 import { TaskPhase } from '@/generated/prisma/client';
 
-function forbidden() {
-  return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-}
-
 function parseId(param: string | undefined) {
   if (!param || !/^\d+$/.test(param)) return null;
   try {
@@ -22,6 +18,10 @@ function parseId(param: string | undefined) {
 
 function withIdNoStore(res: NextResponse, requestId: string) {
   return withNoStore(withRequestId(res, requestId));
+}
+
+function forbidden(requestId: string) {
+  return withIdNoStore(NextResponse.json({ error: 'Forbidden' }, { status: 403 }), requestId);
 }
 
 function normalizeStr(value: unknown) {
@@ -137,7 +137,7 @@ export async function PATCH(
   }
 
   const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'ADMIN');
-  if (!membership) return withIdNoStore(forbidden(), requestId);
+  if (!membership) return forbidden(requestId);
 
   const existing = await getTemplate(businessIdBigInt, serviceIdBigInt, templateIdBigInt);
   if (!existing) {
@@ -215,7 +215,7 @@ export async function DELETE(
   }
 
   const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'ADMIN');
-  if (!membership) return withIdNoStore(forbidden(), requestId);
+  if (!membership) return forbidden(requestId);
 
   const existing = await getTemplate(businessIdBigInt, serviceIdBigInt, templateIdBigInt);
   if (!existing) {

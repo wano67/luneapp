@@ -4,7 +4,7 @@
   "private": true,
   "packageManager": "pnpm@10.21.0",
   "engines": {
-    "node": ">=20.19 <23"
+    "node": ">=20.19 <25"
   },
   "scripts": {
     "clean": "node -e \"const dir=process.env.NEXT_DIST_DIR||'.next';require('fs').rmSync(dir,{recursive:true,force:true});\"",
@@ -34,7 +34,8 @@
     "smoke:invoice-reservation": "pnpm tsx scripts/smoke-invoice-reservation.ts",
     "smoke:ledger": "pnpm tsx scripts/smoke-ledger.ts",
     "postinstall": "prisma generate",
-    "smoke:clients-delete": "pnpm tsx scripts/smoke-clients-delete.ts"
+    "smoke:clients-delete": "pnpm tsx scripts/smoke-clients-delete.ts",
+    "smoke:clients-gdpr": "pnpm tsx scripts/smoke-clients-gdpr.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.1.0",

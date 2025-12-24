@@ -3,13 +3,9 @@ import { prisma } from '@/server/db/client';
 import { requireAuthPro } from '@/server/auth/requireAuthPro';
 import { requireBusinessRole } from '@/server/auth/businessRole';
 import { assertSameOrigin, withNoStore } from '@/server/security/csrf';
-import { badRequest, getRequestId, unauthorized, withRequestId } from '@/server/http/apiUtils';
+import { badRequest, getRequestId, notFound, unauthorized, withRequestId } from '@/server/http/apiUtils';
 import { rateLimit } from '@/server/security/rateLimit';
 import type { TaskPhase } from '@/generated/prisma/client';
-
-function forbidden() {
-  return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-}
 
 function parseId(param: string | undefined) {
   if (!param || !/^\d+$/.test(param)) return null;
@@ -22,6 +18,10 @@ function parseId(param: string | undefined) {
 
 function withIdNoStore(res: NextResponse, requestId: string) {
   return withNoStore(withRequestId(res, requestId));
+}
+
+function forbidden(requestId: string) {
+  return withIdNoStore(NextResponse.json({ error: 'Forbidden' }, { status: 403 }), requestId);
 }
 
 // POST /api/pro/businesses/{businessId}/projects/{projectId}/start
@@ -48,7 +48,7 @@ export async function POST(
   }
 
   const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'ADMIN');
-  if (!membership) return withIdNoStore(forbidden(), requestId);
+  if (!membership) return forbidden(requestId);
 
   const limited = rateLimit(request, {
     key: `pro:projects:start:${businessIdBigInt}:${userId}`,
@@ -64,11 +64,11 @@ export async function POST(
     },
   });
   if (!project) {
-    return withIdNoStore(NextResponse.json({ error: 'Projet introuvable.' }, { status: 404 }), requestId);
+    return withIdNoStore(notFound('Projet introuvable.'), requestId);
   }
 
   if (project.archivedAt) {
-    return withIdNoStore(NextResponse.json({ error: 'Projet archivé : démarrage impossible.' }, { status: 400 }), requestId);
+    return withIdNoStore(badRequest('Projet archivé : démarrage impossible.'), requestId);
   }
 
   if (project.startedAt) {

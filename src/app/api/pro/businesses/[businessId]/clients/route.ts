@@ -4,12 +4,12 @@ import { requireBusinessRole } from '@/server/auth/businessRole';
 import { assertSameOrigin, jsonNoStore } from '@/server/security/csrf';
 import { rateLimit } from '@/server/security/rateLimit';
 import { requireAuthPro } from '@/server/auth/requireAuthPro';
-import { badRequest, getRequestId, unauthorized, withRequestId } from '@/server/http/apiUtils';
+import { badRequest, getRequestId, unauthorized, withIdNoStore, withRequestId } from '@/server/http/apiUtils';
 import { BusinessReferenceType, ClientStatus, LeadSource } from '@/generated/prisma/client';
 import { normalizeWebsiteUrl } from '@/lib/website';
 
-function forbidden() {
-  return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+function forbidden(requestId: string) {
+  return withIdNoStore(NextResponse.json({ error: 'Forbidden' }, { status: 403 }), requestId);
 }
 
 function isRecord(v: unknown): v is Record<string, unknown> {
@@ -98,6 +98,8 @@ function serializeClient(client: {
   status: ClientStatus;
   leadSource: LeadSource | null;
   archivedAt: Date | null;
+  anonymizedAt: Date | null;
+  anonymizationReason: string | null;
   categoryReferenceId?: bigint | null;
   categoryReference?: { id: bigint; name: string | null } | null;
   tags?: Array<{ referenceId: bigint; reference: { id: bigint; name: string } }>;
@@ -124,6 +126,8 @@ function serializeClient(client: {
     status: client.status,
     leadSource: client.leadSource,
     archivedAt: client.archivedAt ? client.archivedAt.toISOString() : null,
+    anonymizedAt: client.anonymizedAt ? client.anonymizedAt.toISOString() : null,
+    anonymizationReason: client.anonymizationReason,
     createdAt: client.createdAt.toISOString(),
     updatedAt: client.updatedAt.toISOString(),
   };
@@ -154,7 +158,7 @@ export async function GET(
   }
 
   const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'VIEWER');
-  if (!membership) return withRequestId(forbidden(), requestId);
+  if (!membership) return forbidden(requestId);
 
   const { searchParams } = new URL(request.url);
   const search = searchParams.get('q')?.trim() ?? searchParams.get('search')?.trim();
@@ -240,7 +244,7 @@ export async function POST(
   }
 
   const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'ADMIN');
-  if (!membership) return withRequestId(forbidden(), requestId);
+  if (!membership) return forbidden(requestId);
 
   const limited = rateLimit(request, {
     key: `pro:clients:create:${businessIdBigInt}:${userId.toString()}`,

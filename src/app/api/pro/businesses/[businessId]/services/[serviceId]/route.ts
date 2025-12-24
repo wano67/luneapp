@@ -7,12 +7,12 @@ import { rateLimit } from '@/server/security/rateLimit';
 import { badRequest, getRequestId, unauthorized, withRequestId } from '@/server/http/apiUtils';
 import { BusinessReferenceType, TaskPhase } from '@/generated/prisma/client';
 
-function forbidden() {
-  return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-}
-
 function withIdNoStore(res: NextResponse, requestId: string) {
   return withNoStore(withRequestId(res, requestId));
+}
+
+function forbidden(requestId: string) {
+  return withIdNoStore(NextResponse.json({ error: 'Forbidden' }, { status: 403 }), requestId);
 }
 
 function parseId(param: string | undefined) {
@@ -241,7 +241,7 @@ export async function GET(
   if (delegateError) return delegateError;
 
   const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'VIEWER');
-  if (!membership) return forbidden();
+  if (!membership) return forbidden(requestId);
 
   const service = await ensureService(businessIdBigInt, serviceIdBigInt);
   if (!service) {
@@ -298,7 +298,7 @@ export async function PATCH(
   }
 
   const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'ADMIN');
-  if (!membership) return forbidden();
+  if (!membership) return forbidden(requestId);
 
   const delegateError = ensureServiceDelegate(requestId);
   if (delegateError) return delegateError;
@@ -427,7 +427,7 @@ export async function DELETE(
   }
 
   const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'ADMIN');
-  if (!membership) return forbidden();
+  if (!membership) return forbidden(requestId);
 
   const delegateError = ensureServiceDelegate(requestId);
   if (delegateError) return delegateError;

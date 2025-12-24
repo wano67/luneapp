@@ -5,10 +5,6 @@ import { requireBusinessRole } from '@/server/auth/businessRole';
 import { assertSameOrigin, withNoStore } from '@/server/security/csrf';
 import { badRequest, getRequestId, unauthorized, withRequestId } from '@/server/http/apiUtils';
 
-function forbidden() {
-  return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-}
-
 function parseId(param: string | undefined) {
   if (!param || !/^\d+$/.test(param)) return null;
   try {
@@ -20,6 +16,10 @@ function parseId(param: string | undefined) {
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return !!v && typeof v === 'object';
+}
+
+function forbidden(requestId: string) {
+  return withNoStore(withRequestId(NextResponse.json({ error: 'Forbidden' }, { status: 403 }), requestId));
 }
 
 // POST /api/pro/businesses/{businessId}/prospects/{prospectId}/convert
@@ -44,7 +44,7 @@ export async function POST(
   if (!businessIdBigInt || !prospectIdBigInt) return withRequestId(badRequest('Ids invalides.'), requestId);
 
   const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'ADMIN');
-  if (!membership) return forbidden();
+  if (!membership) return forbidden(requestId);
 
   const body = await request.json().catch(() => null);
   const existingClientId =

@@ -3,12 +3,8 @@ import { prisma } from '@/server/db/client';
 import { requireAuthPro } from '@/server/auth/requireAuthPro';
 import { requireBusinessRole } from '@/server/auth/businessRole';
 import { assertSameOrigin, jsonNoStore, withNoStore } from '@/server/security/csrf';
-import { badRequest, getRequestId, unauthorized, withRequestId } from '@/server/http/apiUtils';
+import { badRequest, getRequestId, notFound, unauthorized, withRequestId } from '@/server/http/apiUtils';
 import { rateLimit } from '@/server/security/rateLimit';
-
-function forbidden() {
-  return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-}
 
 function parseId(param: string | undefined) {
   if (!param || !/^\d+$/.test(param)) return null;
@@ -25,6 +21,10 @@ function isRecord(v: unknown): v is Record<string, unknown> {
 
 function withIdNoStore(res: NextResponse, requestId: string) {
   return withNoStore(withRequestId(res, requestId));
+}
+
+function forbidden(requestId: string) {
+  return withIdNoStore(NextResponse.json({ error: 'Forbidden' }, { status: 403 }), requestId);
 }
 
 // GET /api/pro/businesses/{businessId}/projects/{projectId}/services
@@ -46,13 +46,13 @@ export async function GET(
   if (!businessIdBigInt || !projectIdBigInt) return withIdNoStore(badRequest('Ids invalides.'), requestId);
 
   const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'VIEWER');
-  if (!membership) return withIdNoStore(forbidden(), requestId);
+  if (!membership) return forbidden(requestId);
 
   const project = await prisma.project.findFirst({
     where: { id: projectIdBigInt, businessId: businessIdBigInt },
   });
   if (!project) {
-    return withIdNoStore(NextResponse.json({ error: 'Projet introuvable.' }, { status: 404 }), requestId);
+    return withIdNoStore(notFound('Projet introuvable.'), requestId);
   }
 
   const items = await prisma.projectService.findMany({
@@ -105,7 +105,7 @@ export async function POST(
   if (!businessIdBigInt || !projectIdBigInt) return withIdNoStore(badRequest('Ids invalides.'), requestId);
 
   const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'ADMIN');
-  if (!membership) return withIdNoStore(forbidden(), requestId);
+  if (!membership) return forbidden(requestId);
 
   const limited = rateLimit(request, {
     key: `pro:project-services:create:${businessIdBigInt}:${userId}`,
@@ -139,7 +139,7 @@ export async function POST(
     where: { id: serviceIdBigInt, businessId: businessIdBigInt },
   });
   if (!service) {
-    return withIdNoStore(NextResponse.json({ error: 'Service introuvable.' }, { status: 404 }), requestId);
+    return withIdNoStore(notFound('Service introuvable.'), requestId);
   }
 
   const created = await prisma.projectService.create({
