@@ -309,11 +309,24 @@ type KpiTileProps = {
   value: string;
   helper?: string;
   href?: string;
+  onClick?: () => void;
 };
 
-function KpiTile({ title, value, helper, href }: KpiTileProps) {
+function KpiTile({ title, value, helper, href, onClick }: KpiTileProps) {
   const content = (
-    <div className="card-interactive block rounded-lg border border-[var(--border)] bg-[var(--surface)] p-4">
+    <div
+      className="card-interactive block rounded-lg border border-[var(--border)] bg-[var(--surface)] p-4"
+      onClick={onClick}
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={(e) => {
+        if (!onClick) return;
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onClick();
+        }
+      }}
+    >
       <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-secondary)]">{title}</p>
       <p className="text-xl font-semibold text-[var(--text-primary)]">{value}</p>
       {helper ? <p className="text-xs text-[var(--text-secondary)]">{helper}</p> : null}
@@ -349,7 +362,6 @@ export default function ProjectDetailPage() {
   const [loading, setLoading] = useState(true);
   const [tasksLoading, setTasksLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [requestId, setRequestId] = useState<string | null>(null);
   const [categoryReferenceId, setCategoryReferenceId] = useState<string>('');
   const [tagReferenceIds, setTagReferenceIds] = useState<string[]>([]);
   const [referencesSaving, setReferencesSaving] = useState(false);
@@ -687,7 +699,6 @@ export default function ProjectDetailPage() {
         setServices([]);
         return;
       }
-      setRequestId(res.requestId ?? null);
       setProject(res.data.item);
       setCategoryReferenceId(res.data.item.categoryReferenceId ?? '');
       setTagReferenceIds(res.data.item.tagReferences?.map((t) => t.id) ?? []);
@@ -754,8 +765,6 @@ export default function ProjectDetailPage() {
 
   const toInvoice = useMemo(() => centsToNumber(pricing?.balanceCents ?? '0'), [pricing]);
 
-  const piecesCount = useMemo(() => quotes.length + invoices.length, [quotes, invoices]);
-
   const servicesTotal = useMemo(() => {
     if (pricing) return Number(pricing.totalCents);
     return services.reduce((acc, s) => {
@@ -771,6 +780,14 @@ export default function ProjectDetailPage() {
         (a, b) => new Date(a.nextActionDate ?? '').getTime() - new Date(b.nextActionDate ?? '').getTime()
       );
     return upcoming.length ? upcoming[0] : null;
+  }, [interactions]);
+
+  const lastInteraction = useMemo(() => {
+    if (!interactions.length) return null;
+    const sorted = [...interactions].sort(
+      (a, b) => new Date(b.happenedAt).getTime() - new Date(a.happenedAt).getTime()
+    );
+    return sorted[0] ?? null;
   }, [interactions]);
 
   const eligibleQuoteForInvoice = useMemo(() => {
@@ -1154,32 +1171,6 @@ export default function ProjectDetailPage() {
         subtitle={headerSubtitle}
       />
 
-      <div className="flex flex-wrap items-center gap-2">
-        <Badge variant="neutral">{STATUS_LABELS[project.status]}</Badge>
-        <Badge variant="neutral">Devis {QUOTE_LABELS[project.quoteStatus]}</Badge>
-        <Badge variant="neutral">Acompte {DEPOSIT_LABELS[project.depositStatus]}</Badge>
-        {project.startedAt ? <Badge variant="neutral">Démarré {formatDate(project.startedAt)}</Badge> : null}
-        {project.archivedAt ? <Badge variant="performance">Archivé</Badge> : null}
-        <Badge variant="neutral">ID {project.id}</Badge>
-        {requestId ? <Badge variant="neutral">Ref {requestId}</Badge> : null}
-      </div>
-
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <KpiTile title="Facturé" value={formatCurrency(billedTotal)} helper="Total payé" />
-        <KpiTile
-          title="À facturer"
-          value={formatCurrency(toInvoice)}
-          helper={pricing ? 'Solde restant' : 'Pricing à calculer'}
-        />
-        <KpiTile
-          title="Tâches"
-          value={`${progress.done}/${progress.total || 0}`}
-          helper={`${progress.progressPct}% complété`}
-          href={`/app/pro/${businessId}/tasks?projectId=${project.id}`}
-        />
-        <KpiTile title="Pièces" value={`${piecesCount}`} helper="Devis + factures" />
-      </div>
-
       <div className="sticky top-[116px] z-30 -mx-4 border-b border-[var(--border)] bg-[var(--background)]/90 px-4 py-2 backdrop-blur md:-mx-6 md:px-6">
         <div className="flex flex-wrap gap-2 text-sm font-medium text-[var(--text-secondary)]">
           {(
@@ -1214,6 +1205,196 @@ export default function ProjectDetailPage() {
       {activeTab === 'overview' ? (
         <>
           <section id="overview" className="space-y-3">
+            <Card className="space-y-4 bg-[var(--surface-2)] p-5">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--text-secondary)]">Projet</p>
+                  <p className="text-xl font-semibold text-[var(--text-primary)]">{project.name}</p>
+                  <div className="flex flex-wrap items-center gap-2 text-[13px] text-[var(--text-secondary)]">
+                    <span>Client : {project.clientName ?? 'Non assigné'}</span>
+                    <span>·</span>
+                    <span>Début {formatDate(project.startDate)}</span>
+                    <span>·</span>
+                    <span>Échéance {formatDate(project.endDate)}</span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant="neutral">{STATUS_LABELS[project.status]}</Badge>
+                    <Badge variant="neutral">Devis {QUOTE_LABELS[project.quoteStatus]}</Badge>
+                    <Badge variant="neutral">Acompte {DEPOSIT_LABELS[project.depositStatus]}</Badge>
+                    {project.startedAt ? <Badge variant="neutral">Démarré {formatDate(project.startedAt)}</Badge> : null}
+                    {project.archivedAt ? <Badge variant="performance">Archivé</Badge> : null}
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  {quotes.length === 0 ? (
+                    <Button size="sm" variant="primary" onClick={createQuote} disabled={!isAdmin || billingLoading}>
+                      Créer un devis
+                    </Button>
+                  ) : (
+                    <Button size="sm" variant="primary" onClick={() => setActiveTab('billing')}>
+                      Ouvrir la facturation
+                    </Button>
+                  )}
+                  <Button size="sm" variant="ghost" onClick={() => setActiveTab('tasks')}>
+                    Voir les tâches
+                  </Button>
+                  {project.archivedAt ? (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        setArchiveAction('unarchive');
+                        setArchiveError(null);
+                      }}
+                      disabled={!isAdmin}
+                    >
+                      Restaurer
+                    </Button>
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        setArchiveAction('archive');
+                        setArchiveError(null);
+                      }}
+                      disabled={!isAdmin}
+                    >
+                      Archiver
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </Card>
+
+            <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
+              <KpiTile
+                title="Facturé"
+                value={formatCurrency(billedTotal)}
+                helper="Déjà encaissé"
+                onClick={() => setActiveTab('billing')}
+              />
+              <KpiTile
+                title="À encaisser"
+                value={formatCurrency(toInvoice)}
+                helper={pricing ? 'Solde restant' : 'Pricing à calculer'}
+                onClick={() => setActiveTab('billing')}
+              />
+              <KpiTile
+                title="Tâches à faire"
+                value={`${Math.max(progress.total - progress.done, 0)} en cours`}
+                helper={`${progress.done}/${progress.total || 0} terminées`}
+                onClick={() => setActiveTab('tasks')}
+              />
+              <KpiTile
+                title="Dernière activité"
+                value={lastInteraction ? formatDateTime(lastInteraction.happenedAt) : 'Aucune'}
+                helper={nextAction ? `Next ${formatDate(nextAction.nextActionDate)}` : 'Planifie une action'}
+                onClick={() => setActiveTab('activity')}
+              />
+            </div>
+
+            <Card className="space-y-3 p-5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <p className="text-sm font-semibold text-[var(--text-primary)]">À faire ensuite</p>
+                  <p className="text-xs text-[var(--text-secondary)]">Focus sur les urgences : tâches, devis, acompte.</p>
+                </div>
+                <Button size="sm" variant="outline" onClick={() => setActiveTab('tasks')}>
+                  Aller aux tâches
+                </Button>
+              </div>
+              <div className="space-y-2">
+                {(() => {
+                  const items: { label: string; action: () => void; tone: 'primary' | 'secondary' }[] = [];
+                  const overdue = tasks.filter((t) => {
+                    if (!t.dueDate) return false;
+                    const due = new Date(t.dueDate);
+                    return !Number.isNaN(due.getTime()) && due < new Date() && t.status !== 'DONE';
+                  });
+                  if (overdue.length) {
+                    items.push({
+                      label: `${overdue.length} tâche(s) en retard`,
+                      action: () => {
+                        setTaskFilter('overdue');
+                        setActiveTab('tasks');
+                      },
+                      tone: 'primary',
+                    });
+                  }
+                  const weekAhead = new Date();
+                  weekAhead.setDate(weekAhead.getDate() + 7);
+                  const weekTasks = tasks.filter((t) => {
+                    if (!t.dueDate) return false;
+                    const due = new Date(t.dueDate);
+                    return !Number.isNaN(due.getTime()) && due >= new Date() && due <= weekAhead && t.status !== 'DONE';
+                  });
+                  if (weekTasks.length) {
+                    items.push({
+                      label: `${weekTasks.length} tâche(s) cette semaine`,
+                      action: () => {
+                        setTaskFilter('week');
+                        setActiveTab('tasks');
+                      },
+                      tone: 'secondary',
+                    });
+                  }
+                  const drafts = quotes.filter((q) => q.status === 'DRAFT' || q.status === 'SENT');
+                  if (drafts.length) {
+                    items.push({
+                      label: `${drafts.length} devis à finaliser`,
+                      action: () => setActiveTab('billing'),
+                      tone: 'secondary',
+                    });
+                  }
+                  if (project.depositStatus !== 'PAID' && project.depositStatus !== 'NOT_REQUIRED') {
+                    items.push({
+                      label: 'Acompte à valider',
+                      action: () => setActiveTab('billing'),
+                      tone: 'secondary',
+                    });
+                  }
+                  if (!items.length) {
+                    items.push({
+                      label: 'Aucune urgence. Continuez le suivi.',
+                      action: () => setActiveTab('activity'),
+                      tone: 'secondary',
+                    });
+                  }
+                  return items.map((item, idx) =>
+                    item.tone === 'primary' ? (
+                      <Button
+                        key={idx}
+                        size="sm"
+                        className="w-full justify-between"
+                        onClick={item.action}
+                      >
+                        <span>{item.label}</span>
+                        <span className="text-xs text-[var(--text-secondary)]">→</span>
+                      </Button>
+                    ) : (
+                      <div
+                        key={idx}
+                        className="card-interactive flex items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--surface)]/70 px-3 py-2"
+                        onClick={item.action}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            item.action();
+                          }
+                        }}
+                      >
+                        <span className="text-sm text-[var(--text-primary)]">{item.label}</span>
+                        <span className="text-xs text-[var(--text-secondary)]">→</span>
+                      </div>
+                    )
+                  );
+                })()}
+              </div>
+            </Card>
+
             <Card className="space-y-3 p-5">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex flex-wrap items-center gap-2">
@@ -1232,38 +1413,7 @@ export default function ProjectDetailPage() {
                     <Badge variant="neutral">Aucun tag</Badge>
                   )}
                 </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  {project.archivedAt ? (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        setArchiveAction('unarchive');
-                        setArchiveError(null);
-                      }}
-                      disabled={!isAdmin}
-                    >
-                      Restaurer
-                    </Button>
-                  ) : (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        setArchiveAction('archive');
-                        setArchiveError(null);
-                      }}
-                      disabled={!isAdmin}
-                    >
-                      Archiver
-                    </Button>
-                  )}
-                  {!isAdmin ? (
-                    <p className="text-[11px] text-[var(--text-secondary)]">
-                      Lecture seule : archiver/restaurer nécessite ADMIN/OWNER.
-                    </p>
-                  ) : null}
-                </div>
+                <div className="flex flex-wrap items-center gap-2" />
               </div>
 
               <div className="grid gap-3 md:grid-cols-3">
@@ -1551,15 +1701,39 @@ export default function ProjectDetailPage() {
                 Devis du projet
               </p>
               {quotes.length === 0 ? (
-                <p className="text-sm text-[var(--text-secondary)]">
-                  Aucun devis. Ajoute des services puis crée un devis pour ce projet.
-                </p>
+                <div className="space-y-2 rounded-lg border border-dashed border-[var(--border)] bg-[var(--surface)]/40 p-3">
+                  <p className="text-sm text-[var(--text-secondary)]">
+                    Aucun devis. Ajoute des services puis crée un devis pour ce projet.
+                  </p>
+                  <Button size="sm" onClick={createQuote} disabled={!isAdmin || billingLoading}>
+                    Créer un devis
+                  </Button>
+                </div>
               ) : (
                 <div className="space-y-2">
                   {quotes.map((quote) => (
                     <div
                       key={quote.id}
                       className="card-interactive flex flex-col gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface)]/60 p-3 md:flex-row md:items-center md:justify-between"
+                      onClick={() =>
+                        window.open(
+                          `/api/pro/businesses/${businessId}/quotes/${quote.id}/pdf`,
+                          '_blank',
+                          'noopener,noreferrer'
+                        )
+                      }
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          window.open(
+                            `/api/pro/businesses/${businessId}/quotes/${quote.id}/pdf`,
+                            '_blank',
+                            'noopener,noreferrer'
+                          );
+                        }
+                      }}
                     >
                       <div>
                         <p className="text-sm font-semibold text-[var(--text-primary)]">
@@ -1639,6 +1813,25 @@ export default function ProjectDetailPage() {
                     <div
                       key={invoice.id}
                       className="card-interactive flex flex-col gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface)]/60 p-3 md:flex-row md:items-center md:justify-between"
+                      onClick={() =>
+                        window.open(
+                          `/api/pro/businesses/${businessId}/invoices/${invoice.id}/pdf`,
+                          '_blank',
+                          'noopener,noreferrer'
+                        )
+                      }
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          window.open(
+                            `/api/pro/businesses/${businessId}/invoices/${invoice.id}/pdf`,
+                            '_blank',
+                            'noopener,noreferrer'
+                          );
+                        }
+                      }}
                     >
                       <div>
                         <p className="text-sm font-semibold text-[var(--text-primary)]">

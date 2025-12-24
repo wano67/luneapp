@@ -21,8 +21,8 @@ export function ActiveBusinessTopBar({
   hubHref = '/app/pro',
 }: Props) {
   return (
-    <div className="flex min-w-0 flex-wrap items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)]/85 px-3 py-2">
-      <FaviconAvatar name={businessName} websiteUrl={websiteUrl} size={32} className="bg-[var(--surface-2)]" />
+    <div className="flex min-w-0 flex-wrap items-center gap-3 px-1">
+      <FaviconAvatar name={businessName} websiteUrl={websiteUrl} size={32} className="bg-[var(--surface)]" />
       <div className="min-w-0">
         <p className="text-[11px] text-[var(--text-secondary)]">Entreprise active</p>
         <div className="flex items-center gap-2">
