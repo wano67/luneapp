@@ -29,6 +29,7 @@
     "smoke:services-import": "pnpm tsx scripts/smoke-services-import.ts",
     "smoke:finance-advanced": "pnpm tsx scripts/smoke-finance-advanced.ts",
     "smoke:processes": "pnpm tsx scripts/smoke-processes.ts",
+    "smoke:process-implicit": "pnpm tsx scripts/smoke-process-implicit.ts",
     "smoke:team": "pnpm tsx scripts/smoke-team-employees.ts",
     "smoke:stock": "pnpm tsx scripts/smoke-stock.ts",
     "smoke:invoice-reservation": "pnpm tsx scripts/smoke-invoice-reservation.ts",
