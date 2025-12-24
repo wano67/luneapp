@@ -1095,24 +1095,27 @@ export default function ProjectDetailPage() {
     setReferencesSaving(false);
   }
 
-  if (loading) {
-    return (
+  const loadingView = (
+    <div className="mx-auto max-w-6xl space-y-4 px-4 py-4">
       <Card className="p-5">
         <p className="text-sm text-[var(--text-secondary)]">Chargement du projet…</p>
       </Card>
-    );
-  }
+    </div>
+  );
 
-  if (!project) {
-    return (
+  const notFoundView = (
+    <div className="mx-auto max-w-6xl space-y-4 px-4 py-4">
       <Card className="space-y-2 p-5">
         <p className="text-sm font-semibold text-rose-400">{error ?? 'Projet introuvable.'}</p>
         <Button variant="outline" size="sm" asChild>
           <Link href={`/app/pro/${businessId}/projects`}>Retour à la liste</Link>
         </Button>
       </Card>
-    );
-  }
+    </div>
+  );
+
+  if (loading) return loadingView;
+  if (!project) return notFoundView;
 
   const canStart =
     !project.startedAt &&
@@ -1159,84 +1162,106 @@ export default function ProjectDetailPage() {
         <KpiTile title="Pièces" value={`${piecesCount}`} helper="Devis + factures" />
       </div>
 
-      <Card className="space-y-3 p-5">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex flex-wrap items-center gap-2">
-            {project.categoryReferenceName ? (
-              <Badge variant="neutral">Catégorie : {project.categoryReferenceName}</Badge>
-            ) : (
-              <Badge variant="neutral">Sans catégorie</Badge>
-            )}
-            {project.tagReferences?.length ? (
-              project.tagReferences.map((tag) => (
-                <Badge key={tag.id} variant="neutral" className="bg-[var(--surface-hover)]">
-                  #{tag.name}
-                </Badge>
-              ))
-            ) : (
-              <Badge variant="neutral">Aucun tag</Badge>
-            )}
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            {project.archivedAt ? (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => {
-                  setArchiveAction('unarchive');
-                  setArchiveError(null);
-                }}
-                disabled={!isAdmin}
-              >
-                Restaurer
-              </Button>
-            ) : (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => {
-                  setArchiveAction('archive');
-                  setArchiveError(null);
-                }}
-                disabled={!isAdmin}
-              >
-                Archiver
-              </Button>
-            )}
-            {!isAdmin ? (
-              <p className="text-[11px] text-[var(--text-secondary)]">
-                Lecture seule : archiver/restaurer nécessite ADMIN/OWNER.
-              </p>
-            ) : null}
-          </div>
+      <div className="sticky top-[116px] z-30 -mx-4 border-b border-[var(--border)] bg-[var(--background)]/90 px-4 py-2 backdrop-blur md:-mx-6 md:px-6">
+        <div className="flex flex-wrap gap-2 text-sm font-medium text-[var(--text-secondary)]">
+          <a className="card-interactive rounded-md px-3 py-1 no-underline" href="#overview">
+            Aperçu
+          </a>
+          <a className="card-interactive rounded-md px-3 py-1 no-underline" href="#services">
+            Services
+          </a>
+          <a className="card-interactive rounded-md px-3 py-1 no-underline" href="#billing">
+            Facturation
+          </a>
+          <a className="card-interactive rounded-md px-3 py-1 no-underline" href="#tasks">
+            Tâches
+          </a>
+          <a className="card-interactive rounded-md px-3 py-1 no-underline" href="#activity">
+            Activité
+          </a>
         </div>
+      </div>
 
-        <div className="grid gap-3 md:grid-cols-3">
-          <Card className="border-dashed border-[var(--border)] bg-transparent p-3">
-            <p className="text-xs font-semibold text-[var(--text-secondary)]">Début</p>
-            <p className="text-sm text-[var(--text-primary)]">{formatDate(project.startDate)}</p>
-          </Card>
-          <Card className="border-dashed border-[var(--border)] bg-transparent p-3">
-            <p className="text-xs font-semibold text-[var(--text-secondary)]">Échéance</p>
-            <p className="text-sm text-[var(--text-primary)]">{formatDate(project.endDate)}</p>
-          </Card>
-          <Card className="border-dashed border-[var(--border)] bg-transparent p-3 space-y-1">
-            <div className="flex items-center justify-between text-xs text-[var(--text-secondary)]">
-              <span>Avancement</span>
-              <span className="font-semibold text-[var(--text-primary)]">{progress.progressPct}%</span>
+      <section id="overview" className="space-y-3">
+        <Card className="space-y-3 p-5">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              {project.categoryReferenceName ? (
+                <Badge variant="neutral">Catégorie : {project.categoryReferenceName}</Badge>
+              ) : (
+                <Badge variant="neutral">Sans catégorie</Badge>
+              )}
+              {project.tagReferences?.length ? (
+                project.tagReferences.map((tag) => (
+                  <Badge key={tag.id} variant="neutral" className="bg-[var(--surface-hover)]">
+                    #{tag.name}
+                  </Badge>
+                ))
+              ) : (
+                <Badge variant="neutral">Aucun tag</Badge>
+              )}
             </div>
-            <div className="h-2 rounded-full bg-[var(--surface)]">
-              <div
-                className="h-2 rounded-full bg-blue-500 transition-all"
-                style={{ width: `${progress.progressPct}%` }}
-              />
+            <div className="flex flex-wrap items-center gap-2">
+              {project.archivedAt ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setArchiveAction('unarchive');
+                    setArchiveError(null);
+                  }}
+                  disabled={!isAdmin}
+                >
+                  Restaurer
+                </Button>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setArchiveAction('archive');
+                    setArchiveError(null);
+                  }}
+                  disabled={!isAdmin}
+                >
+                  Archiver
+                </Button>
+              )}
+              {!isAdmin ? (
+                <p className="text-[11px] text-[var(--text-secondary)]">
+                  Lecture seule : archiver/restaurer nécessite ADMIN/OWNER.
+                </p>
+              ) : null}
             </div>
-            <p className="text-[11px] text-[var(--text-secondary)]">
-              {progress.done} terminée(s) · {progress.open} ouverte(s)
-            </p>
-          </Card>
-        </div>
-      </Card>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-3">
+            <Card className="border-dashed border-[var(--border)] bg-transparent p-3">
+              <p className="text-xs font-semibold text-[var(--text-secondary)]">Début</p>
+              <p className="text-sm text-[var(--text-primary)]">{formatDate(project.startDate)}</p>
+            </Card>
+            <Card className="border-dashed border-[var(--border)] bg-transparent p-3">
+              <p className="text-xs font-semibold text-[var(--text-secondary)]">Échéance</p>
+              <p className="text-sm text-[var(--text-primary)]">{formatDate(project.endDate)}</p>
+            </Card>
+            <Card className="border-dashed border-[var(--border)] bg-transparent p-3 space-y-1">
+              <div className="flex items-center justify-between text-xs text-[var(--text-secondary)]">
+                <span>Avancement</span>
+                <span className="font-semibold text-[var(--text-primary)]">{progress.progressPct}%</span>
+              </div>
+              <div className="h-2 rounded-full bg-[var(--surface)]">
+                <div
+                  className="h-2 rounded-full bg-blue-500 transition-all"
+                  style={{ width: `${progress.progressPct}%` }}
+                />
+              </div>
+              <p className="text-[11px] text-[var(--text-secondary)]">
+                {progress.done} terminée(s) · {progress.open} ouverte(s)
+              </p>
+            </Card>
+          </div>
+        </Card>
+      </section>
 
       <Card className="space-y-3 p-5">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1494,7 +1519,7 @@ export default function ProjectDetailPage() {
               )}
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-2 overflow-x-auto">
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--text-secondary)]">
                 Devis du projet
               </p>
@@ -1575,7 +1600,7 @@ export default function ProjectDetailPage() {
               )}
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-2 overflow-x-auto">
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--text-secondary)]">
                 Factures du projet
               </p>
@@ -1651,7 +1676,7 @@ export default function ProjectDetailPage() {
               )}
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-2 overflow-x-auto">
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--text-secondary)]">
                 Finances liées au projet
               </p>
