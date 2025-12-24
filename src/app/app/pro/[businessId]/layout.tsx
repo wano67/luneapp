@@ -4,8 +4,13 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useParams } from 'next/navigation';
 import { fetchJson } from '@/lib/apiClient';
-import { useActiveBusiness } from '../ActiveBusinessProvider';
+import {
+  ActiveBusinessProvider,
+  type ActiveBusiness,
+  useActiveBusiness,
+} from '../ActiveBusinessProvider';
 import SwitchBusinessModal from '../SwitchBusinessModal';
+import { ActiveBusinessTopBar } from '../../components/ActiveBusinessTopBar';
 
 type Business = {
   id: string;
@@ -67,24 +72,47 @@ export default function BusinessLayout({ children }: BusinessLayoutProps) {
     return () => controller.abort();
   }, [businessId]);
 
-  const activeCtx = useActiveBusiness({ optional: true });
+  const initialActive: ActiveBusiness | null = business
+    ? { id: business.id, name: business.name, role, websiteUrl: business.websiteUrl }
+    : null;
 
-  useEffect(() => {
-    if (business) {
-      activeCtx?.setActiveBusiness({
-        id: business.id,
-        name: business.name,
-        role,
-        websiteUrl: business.websiteUrl,
-      });
-    }
-  }, [activeCtx, business, role]);
+  return (
+    <ActiveBusinessProvider initialBusiness={initialActive}>
+      <LayoutContent error={error} initialActive={initialActive}>
+        {children}
+      </LayoutContent>
+    </ActiveBusinessProvider>
+  );
+}
+
+function LayoutContent({
+  children,
+  error,
+  initialActive,
+}: {
+  children: ReactNode;
+  error: string | null;
+  initialActive: ActiveBusiness | null;
+}) {
+  const ctx = useActiveBusiness({ optional: true });
+  const activeForDisplay = ctx?.activeBusiness ?? initialActive;
 
   return (
     <div className="space-y-3">
-      {error ? (
-        <p className="text-xs text-rose-400">{error}</p>
+      {activeForDisplay ? (
+        <div className="sticky top-14 z-40 border-b border-[var(--border)] bg-[var(--background-alt)]/85 backdrop-blur-md">
+          <div className="mx-auto max-w-6xl px-4 py-3 md:px-6">
+            <ActiveBusinessTopBar
+              businessName={activeForDisplay.name}
+              websiteUrl={activeForDisplay.websiteUrl}
+              roleLabel={activeForDisplay.role}
+              onChange={() => ctx?.openSwitchModal?.()}
+              hubHref="/app/pro"
+            />
+          </div>
+        </div>
       ) : null}
+      {error ? <p className="text-xs text-rose-400">{error}</p> : null}
       <div>{children}</div>
       <SwitchBusinessModal />
     </div>

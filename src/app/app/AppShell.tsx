@@ -16,8 +16,6 @@ import {
 import { useBodyScrollLock } from '@/lib/scrollLock';
 import { LogoMark } from '@/components/marketing/LogoMark';
 import { FileDropProvider } from '@/components/file-drop/FileDropProvider';
-import { ActiveBusinessProvider, useActiveBusiness } from './pro/ActiveBusinessProvider';
-import { ActiveBusinessTopBar } from './components/ActiveBusinessTopBar';
 
 function getCurrentSpace(pathname: string): Space {
   if (pathname.startsWith('/app/pro')) return 'pro';
@@ -37,22 +35,11 @@ function getBusinessIdFromPathname(pathname: string): string | null {
 }
 
 export default function AppShell({ children }: { children: ReactNode }) {
-  return (
-    <ActiveBusinessProvider>
-      <AppShellInner>{children}</AppShellInner>
-    </ActiveBusinessProvider>
-  );
-}
-
-function AppShellInner({ children }: { children: ReactNode }) {
   const pathname = usePathname() ?? '';
   const router = useRouter();
 
   const space = getCurrentSpace(pathname);
   const businessId = getBusinessIdFromPathname(pathname);
-  const businessCtx = useActiveBusiness({ optional: true });
-  const activeBusiness = businessCtx?.activeBusiness;
-  const showBusinessContext = space === 'pro' && !!activeBusiness;
 
   /* ---------------- DESKTOP DOCK ---------------- */
   const [dockOpen, setDockOpen] = useState(false);
@@ -463,7 +450,7 @@ function AppShellInner({ children }: { children: ReactNode }) {
           </nav>
 
           {/* Right */}
-          <div className="flex min-w-0 items-center gap-2">
+          <div className="flex items-center gap-2">
             <Link
               href="/app/account"
               className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
@@ -589,19 +576,6 @@ function AppShellInner({ children }: { children: ReactNode }) {
           'md:pl-[var(--dock-pl)]',
         ].join(' ')}
       >
-        {showBusinessContext && activeBusiness ? (
-          <div className="sticky top-14 z-40 border-b border-[var(--border)] bg-[var(--background-alt)]/85 backdrop-blur-md">
-            <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-3 md:px-6">
-              <ActiveBusinessTopBar
-                businessName={activeBusiness.name}
-                websiteUrl={activeBusiness.websiteUrl}
-                roleLabel={activeBusiness.role}
-                onChange={() => businessCtx?.openSwitchModal()}
-                hubHref="/app/pro"
-              />
-            </div>
-          </div>
-        ) : null}
         <div className="p-4 md:p-6">{children}</div>
       </main>
     </div>
