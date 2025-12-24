@@ -858,8 +858,31 @@ paths:
               properties:
                 serviceId: { type: string }
                 quantity: { type: integer, minimum: 1 }
+                generateTasks: { type: boolean, default: true }
       responses:
-        '201': { $ref: '#/components/responses/Ok' }
+        '201':
+          description: Service ajouté au projet
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: string }
+                  projectId: { type: string }
+                  serviceId: { type: string }
+                  quantity: { type: integer }
+                  priceCents: { type: string, nullable: true }
+                  notes: { type: string, nullable: true }
+                  createdAt: { type: string, format: date-time }
+                  service:
+                    type: object
+                    properties:
+                      id: { type: string }
+                      code: { type: string }
+                      name: { type: string }
+                      type: { type: string }
+                  generatedStepsCount: { type: integer }
+                  generatedTasksCount: { type: integer }
   /api/pro/businesses/{businessId}/projects/{projectId}/services/{itemId}:
     patch:
       tags: [Pro / Projects]
@@ -1804,6 +1827,56 @@ paths:
         - $ref: '#/components/parameters/ServiceId'
       responses:
         '200': { $ref: '#/components/responses/Ok' }
+
+  /api/pro/businesses/{businessId}/services/{serviceId}/process-template:
+    get:
+      tags: [Pro / Services]
+      security: [ { cookieAuth: [] } ]
+      summary: Récupère le template de process d’un service
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+        - name: serviceId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Template ou null
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  item:
+                    oneOf:
+                      - $ref: '#/components/schemas/ServiceProcessTemplate'
+                      - type: 'null'
+    put:
+      tags: [Pro / Services]
+      security: [ { cookieAuth: [] } ]
+      summary: Upsert le template de process d’un service
+      description: ADMIN/OWNER, CSRF requis. Écrase le template existant si présent.
+      parameters:
+        - $ref: '#/components/parameters/BusinessId'
+        - name: serviceId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ServiceProcessTemplateInput'
+      responses:
+        '200':
+          description: Template sauvegardé
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  item: { $ref: '#/components/schemas/ServiceProcessTemplate' }
 
   /api/pro/businesses/{businessId}/members:
     get:
@@ -2975,6 +3048,10 @@ components:
         projectName: { type: string, nullable: true }
         projectServiceId: { type: string, nullable: true }
         projectServiceName: { type: string, nullable: true }
+        projectServiceStepId: { type: string, nullable: true }
+        projectServiceStepName: { type: string, nullable: true }
+        projectServiceStepPhaseName: { type: string, nullable: true }
+        projectServiceStepIsBillableMilestone: { type: boolean, nullable: true }
         assigneeUserId: { type: string, nullable: true }
         assigneeEmail: { type: string, nullable: true }
         assigneeName: { type: string, nullable: true }
@@ -2995,6 +3072,87 @@ components:
         completedAt: { type: string, format: date-time, nullable: true }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
+
+    ProjectServiceStep:
+      type: object
+      properties:
+        id: { type: string }
+        projectServiceId: { type: string }
+        name: { type: string }
+        order: { type: integer }
+        phaseName: { type: string, nullable: true }
+        isBillableMilestone: { type: boolean }
+        createdAt: { type: string, format: date-time }
+
+    ServiceProcessTaskTemplate:
+      type: object
+      properties:
+        id: { type: string }
+        title: { type: string }
+        order: { type: integer }
+        description: { type: string, nullable: true }
+        dueOffsetDays: { type: integer, nullable: true }
+        defaultAssigneeRole: { type: string, nullable: true }
+
+    ServiceProcessStepTemplate:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        order: { type: integer }
+        isBillableMilestone: { type: boolean }
+        tasks:
+          type: array
+          items: { $ref: '#/components/schemas/ServiceProcessTaskTemplate' }
+
+    ServiceProcessPhaseTemplate:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        order: { type: integer }
+        steps:
+          type: array
+          items: { $ref: '#/components/schemas/ServiceProcessStepTemplate' }
+
+    ServiceProcessTemplate:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        phases:
+          type: array
+          items: { $ref: '#/components/schemas/ServiceProcessPhaseTemplate' }
+
+    ServiceProcessTemplateInput:
+      type: object
+      properties:
+        name: { type: string }
+        phases:
+          type: array
+          items:
+            type: object
+            properties:
+              name: { type: string }
+              order: { type: integer }
+              steps:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    name: { type: string }
+                    order: { type: integer }
+                    isBillableMilestone: { type: boolean }
+                    tasks:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          title: { type: string }
+                          order: { type: integer }
+                          description: { type: string, nullable: true }
+                          dueOffsetDays: { type: integer, nullable: true }
+                          defaultAssigneeRole: { type: string, nullable: true }
     ProcessStatus:
       type: string
       enum: [ACTIVE, ARCHIVED]
