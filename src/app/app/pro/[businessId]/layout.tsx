@@ -100,8 +100,8 @@ function LayoutContent({
   return (
     <div className="space-y-3">
       {activeForDisplay ? (
-        <div className="sticky top-14 z-40 border-b border-[var(--border)] bg-[var(--background-alt)]/85 backdrop-blur-md">
-          <div className="mx-auto max-w-6xl px-4 py-3 md:px-6">
+        <div className="sticky top-14 z-40 border-b border-[var(--border)] bg-[var(--background)]/85 backdrop-blur-md">
+          <div className="mx-auto max-w-6xl px-4 py-2 md:px-6">
             <ActiveBusinessTopBar
               businessName={activeForDisplay.name}
               websiteUrl={activeForDisplay.websiteUrl}

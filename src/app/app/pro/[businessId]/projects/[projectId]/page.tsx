@@ -362,7 +362,6 @@ export default function ProjectDetailPage() {
   const [loading, setLoading] = useState(true);
   const [tasksLoading, setTasksLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [requestId, setRequestId] = useState<string | null>(null);
   const [categoryReferenceId, setCategoryReferenceId] = useState<string>('');
   const [tagReferenceIds, setTagReferenceIds] = useState<string[]>([]);
   const [referencesSaving, setReferencesSaving] = useState(false);
@@ -700,7 +699,6 @@ export default function ProjectDetailPage() {
         setServices([]);
         return;
       }
-      setRequestId(res.requestId ?? null);
       setProject(res.data.item);
       setCategoryReferenceId(res.data.item.categoryReferenceId ?? '');
       setTagReferenceIds(res.data.item.tagReferences?.map((t) => t.id) ?? []);
@@ -1173,16 +1171,6 @@ export default function ProjectDetailPage() {
         subtitle={headerSubtitle}
       />
 
-      <div className="flex flex-wrap items-center gap-2">
-        <Badge variant="neutral">{STATUS_LABELS[project.status]}</Badge>
-        <Badge variant="neutral">Devis {QUOTE_LABELS[project.quoteStatus]}</Badge>
-        <Badge variant="neutral">Acompte {DEPOSIT_LABELS[project.depositStatus]}</Badge>
-        {project.startedAt ? <Badge variant="neutral">Démarré {formatDate(project.startedAt)}</Badge> : null}
-        {project.archivedAt ? <Badge variant="performance">Archivé</Badge> : null}
-        <Badge variant="neutral">ID {project.id}</Badge>
-        {requestId ? <Badge variant="neutral">Ref {requestId}</Badge> : null}
-      </div>
-
       <div className="sticky top-[116px] z-30 -mx-4 border-b border-[var(--border)] bg-[var(--background)]/90 px-4 py-2 backdrop-blur md:-mx-6 md:px-6">
         <div className="flex flex-wrap gap-2 text-sm font-medium text-[var(--text-secondary)]">
           {(
@@ -1217,22 +1205,24 @@ export default function ProjectDetailPage() {
       {activeTab === 'overview' ? (
         <>
           <section id="overview" className="space-y-3">
-            <Card className="space-y-3 bg-[var(--surface-2)] p-5">
+            <Card className="space-y-4 bg-[var(--surface-2)] p-5">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="space-y-2">
-                  <p className="text-sm font-semibold text-[var(--text-secondary)]">Client</p>
-                  <p className="text-lg font-semibold text-[var(--text-primary)]">{project.clientName ?? 'Non assigné'}</p>
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--text-secondary)]">Projet</p>
+                  <p className="text-xl font-semibold text-[var(--text-primary)]">{project.name}</p>
+                  <div className="flex flex-wrap items-center gap-2 text-[13px] text-[var(--text-secondary)]">
+                    <span>Client : {project.clientName ?? 'Non assigné'}</span>
+                    <span>·</span>
+                    <span>Début {formatDate(project.startDate)}</span>
+                    <span>·</span>
+                    <span>Échéance {formatDate(project.endDate)}</span>
+                  </div>
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge variant="neutral">{STATUS_LABELS[project.status]}</Badge>
                     <Badge variant="neutral">Devis {QUOTE_LABELS[project.quoteStatus]}</Badge>
                     <Badge variant="neutral">Acompte {DEPOSIT_LABELS[project.depositStatus]}</Badge>
                     {project.startedAt ? <Badge variant="neutral">Démarré {formatDate(project.startedAt)}</Badge> : null}
                     {project.archivedAt ? <Badge variant="performance">Archivé</Badge> : null}
-                  </div>
-                  <div className="flex flex-wrap gap-2 text-xs text-[var(--text-secondary)]">
-                    <span>Début {formatDate(project.startDate)}</span>
-                    <span>·</span>
-                    <span>Échéance {formatDate(project.endDate)}</span>
                   </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
@@ -1711,15 +1701,39 @@ export default function ProjectDetailPage() {
                 Devis du projet
               </p>
               {quotes.length === 0 ? (
-                <p className="text-sm text-[var(--text-secondary)]">
-                  Aucun devis. Ajoute des services puis crée un devis pour ce projet.
-                </p>
+                <div className="space-y-2 rounded-lg border border-dashed border-[var(--border)] bg-[var(--surface)]/40 p-3">
+                  <p className="text-sm text-[var(--text-secondary)]">
+                    Aucun devis. Ajoute des services puis crée un devis pour ce projet.
+                  </p>
+                  <Button size="sm" onClick={createQuote} disabled={!isAdmin || billingLoading}>
+                    Créer un devis
+                  </Button>
+                </div>
               ) : (
                 <div className="space-y-2">
                   {quotes.map((quote) => (
                     <div
                       key={quote.id}
                       className="card-interactive flex flex-col gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface)]/60 p-3 md:flex-row md:items-center md:justify-between"
+                      onClick={() =>
+                        window.open(
+                          `/api/pro/businesses/${businessId}/quotes/${quote.id}/pdf`,
+                          '_blank',
+                          'noopener,noreferrer'
+                        )
+                      }
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          window.open(
+                            `/api/pro/businesses/${businessId}/quotes/${quote.id}/pdf`,
+                            '_blank',
+                            'noopener,noreferrer'
+                          );
+                        }
+                      }}
                     >
                       <div>
                         <p className="text-sm font-semibold text-[var(--text-primary)]">
@@ -1799,6 +1813,25 @@ export default function ProjectDetailPage() {
                     <div
                       key={invoice.id}
                       className="card-interactive flex flex-col gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface)]/60 p-3 md:flex-row md:items-center md:justify-between"
+                      onClick={() =>
+                        window.open(
+                          `/api/pro/businesses/${businessId}/invoices/${invoice.id}/pdf`,
+                          '_blank',
+                          'noopener,noreferrer'
+                        )
+                      }
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          window.open(
+                            `/api/pro/businesses/${businessId}/invoices/${invoice.id}/pdf`,
+                            '_blank',
+                            'noopener,noreferrer'
+                          );
+                        }
+                      }}
                     >
                       <div>
                         <p className="text-sm font-semibold text-[var(--text-primary)]">
