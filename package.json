@@ -35,7 +35,8 @@
     "smoke:ledger": "pnpm tsx scripts/smoke-ledger.ts",
     "postinstall": "prisma generate",
     "smoke:clients-delete": "pnpm tsx scripts/smoke-clients-delete.ts",
-    "smoke:clients-gdpr": "pnpm tsx scripts/smoke-clients-gdpr.ts"
+    "smoke:clients-gdpr": "pnpm tsx scripts/smoke-clients-gdpr.ts",
+    "smoke:tasks-billing-link": "pnpm tsx scripts/smoke-tasks-billing-link.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.1.0",

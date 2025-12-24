@@ -1231,6 +1231,7 @@ paths:
                 status: { type: string, enum: [TODO, IN_PROGRESS, DONE], nullable: true }
                 progress: { type: integer, nullable: true }
                 projectId: { type: string, nullable: true }
+                projectServiceId: { type: string, nullable: true, description: 'Doit appartenir au même projet, sinon 400.' }
                 assigneeUserId: { type: string, nullable: true }
                 dueDate: { type: string, format: date-time, nullable: true }
                 phase: { type: string, nullable: true }
@@ -2972,6 +2973,8 @@ components:
         businessId: { type: string }
         projectId: { type: string, nullable: true }
         projectName: { type: string, nullable: true }
+        projectServiceId: { type: string, nullable: true }
+        projectServiceName: { type: string, nullable: true }
         assigneeUserId: { type: string, nullable: true }
         assigneeEmail: { type: string, nullable: true }
         assigneeName: { type: string, nullable: true }

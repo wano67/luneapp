@@ -86,6 +86,7 @@ function serializeTask(task: {
   id: bigint;
   businessId: bigint;
   projectId: bigint | null;
+  projectServiceId?: bigint | null;
   assigneeUserId: bigint | null;
   title: string;
   phase: TaskPhase | null;
@@ -97,6 +98,7 @@ function serializeTask(task: {
   createdAt: Date;
   updatedAt: Date;
   project?: { name: string | null } | null;
+  projectService?: { id: bigint; service: { name: string } } | null;
   assignee?: { id: bigint; email: string; name: string | null } | null;
   categoryReferenceId?: bigint | null;
   categoryReference?: { id: bigint; name: string | null } | null;
@@ -107,6 +109,8 @@ function serializeTask(task: {
     businessId: task.businessId.toString(),
     projectId: task.projectId ? task.projectId.toString() : null,
     projectName: task.project?.name ?? null,
+    projectServiceId: task.projectServiceId ? task.projectServiceId.toString() : null,
+    projectServiceName: task.projectService?.service.name ?? null,
     assigneeUserId: task.assigneeUserId ? task.assigneeUserId.toString() : null,
     assigneeEmail: task.assignee?.email ?? null,
     assigneeName: task.assignee?.name ?? null,
@@ -161,6 +165,7 @@ export async function GET(
     where: { id: taskIdBigInt, businessId: businessIdBigInt },
     include: {
       project: { select: { name: true } },
+      projectService: { select: { id: true, service: { select: { name: true } } } },
       assignee: { select: { id: true, email: true, name: true } },
       categoryReference: { select: { id: true, name: true } },
       tags: { include: { reference: { select: { id: true, name: true } } } },
@@ -282,6 +287,41 @@ export async function PATCH(
       data.projectId = projectId;
     } else {
       return withIdNoStore(badRequest('projectId invalide.'), requestId);
+    }
+  }
+
+  if ('projectServiceId' in body) {
+    const raw = (body as { projectServiceId?: unknown }).projectServiceId;
+    if (raw === null || raw === undefined || raw === '') {
+      data.projectServiceId = null;
+    } else if (typeof raw === 'string' && /^\d+$/.test(raw)) {
+      const projectServiceId = BigInt(raw);
+      const projectService = await prisma.projectService.findFirst({
+        where: { id: projectServiceId },
+        select: { projectId: true, project: { select: { businessId: true } } },
+      });
+      if (!projectService || projectService.project.businessId !== businessIdBigInt) {
+        return withIdNoStore(
+          badRequest('projectServiceId doit appartenir au business et au projet.'),
+          requestId
+        );
+      }
+      if (data.projectId && data.projectId !== projectService.projectId) {
+        return withIdNoStore(
+          badRequest('projectServiceId doit appartenir au même projet.'),
+          requestId
+        );
+      }
+      const targetProjectId = data.projectId ?? existing.projectId;
+      if (targetProjectId && targetProjectId !== projectService.projectId) {
+        return withIdNoStore(
+          badRequest('projectServiceId doit appartenir au même projet.'),
+          requestId
+        );
+      }
+      data.projectServiceId = projectServiceId;
+    } else {
+      return withIdNoStore(badRequest('projectServiceId invalide.'), requestId);
     }
   }
 
