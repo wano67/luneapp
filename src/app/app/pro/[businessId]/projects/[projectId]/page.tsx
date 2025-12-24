@@ -331,6 +331,8 @@ function KpiTile({ title, value, helper, href }: KpiTileProps) {
   return content;
 }
 
+type ProjectTab = 'overview' | 'services' | 'billing' | 'tasks' | 'activity';
+
 export default function ProjectDetailPage() {
   const params = useParams();
   const businessId = (params?.businessId ?? '') as string;
@@ -342,6 +344,7 @@ export default function ProjectDetailPage() {
   const [project, setProject] = useState<Project | null>(null);
   const [services, setServices] = useState<ProjectServiceItem[]>([]);
   const [tasks, setTasks] = useState<TaskItem[]>([]);
+  const [taskFilter, setTaskFilter] = useState<'all' | 'overdue' | 'week'>('all');
   const [serviceOptions, setServiceOptions] = useState<ServiceOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [tasksLoading, setTasksLoading] = useState(true);
@@ -401,6 +404,7 @@ export default function ProjectDetailPage() {
   const [billingLoading, setBillingLoading] = useState(true);
   const [billingError, setBillingError] = useState<string | null>(null);
   const [billingInfo, setBillingInfo] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<ProjectTab>('overview');
 
   function resetServiceForm() {
     setEditingService(null);
@@ -772,6 +776,20 @@ export default function ProjectDetailPage() {
   const eligibleQuoteForInvoice = useMemo(() => {
     return quotes.find((q) => q.status === 'SIGNED') ?? quotes.find((q) => q.status === 'SENT') ?? null;
   }, [quotes]);
+
+  const filteredTasks = useMemo(() => {
+    if (taskFilter === 'all') return tasks;
+    const now = new Date();
+    const weekAhead = new Date();
+    weekAhead.setDate(now.getDate() + 7);
+    return tasks.filter((t) => {
+      if (!t.dueDate) return false;
+      const due = new Date(t.dueDate);
+      if (Number.isNaN(due.getTime())) return false;
+      if (taskFilter === 'overdue') return due < now;
+      return due >= now && due <= weekAhead;
+    });
+  }, [taskFilter, tasks]);
 
   async function openServiceModal(existing?: ProjectServiceItem) {
     if (!isAdmin) {
@@ -1164,292 +1182,310 @@ export default function ProjectDetailPage() {
 
       <div className="sticky top-[116px] z-30 -mx-4 border-b border-[var(--border)] bg-[var(--background)]/90 px-4 py-2 backdrop-blur md:-mx-6 md:px-6">
         <div className="flex flex-wrap gap-2 text-sm font-medium text-[var(--text-secondary)]">
-          <a className="card-interactive rounded-md px-3 py-1 no-underline" href="#overview">
-            Aperçu
-          </a>
-          <a className="card-interactive rounded-md px-3 py-1 no-underline" href="#services">
-            Services
-          </a>
-          <a className="card-interactive rounded-md px-3 py-1 no-underline" href="#billing">
-            Facturation
-          </a>
-          <a className="card-interactive rounded-md px-3 py-1 no-underline" href="#tasks">
-            Tâches
-          </a>
-          <a className="card-interactive rounded-md px-3 py-1 no-underline" href="#activity">
-            Activité
-          </a>
+          {(
+            [
+              { key: 'overview', label: 'Aperçu' },
+              { key: 'services', label: 'Services' },
+              { key: 'billing', label: 'Facturation' },
+              { key: 'tasks', label: 'Tâches' },
+              { key: 'activity', label: 'Activité' },
+            ] as const
+          ).map((tab) => {
+            const active = activeTab === tab.key;
+            return (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => setActiveTab(tab.key)}
+                className={[
+                  'rounded-md px-3 py-1 transition',
+                  active
+                    ? 'bg-[var(--surface-hover)] text-[var(--text-primary)]'
+                    : 'text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]',
+                ].join(' ')}
+              >
+                {tab.label}
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      <section id="overview" className="space-y-3">
+      {activeTab === 'overview' ? (
+        <>
+          <section id="overview" className="space-y-3">
+            <Card className="space-y-3 p-5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  {project.categoryReferenceName ? (
+                    <Badge variant="neutral">Catégorie : {project.categoryReferenceName}</Badge>
+                  ) : (
+                    <Badge variant="neutral">Sans catégorie</Badge>
+                  )}
+                  {project.tagReferences?.length ? (
+                    project.tagReferences.map((tag) => (
+                      <Badge key={tag.id} variant="neutral" className="bg-[var(--surface-hover)]">
+                        #{tag.name}
+                      </Badge>
+                    ))
+                  ) : (
+                    <Badge variant="neutral">Aucun tag</Badge>
+                  )}
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  {project.archivedAt ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setArchiveAction('unarchive');
+                        setArchiveError(null);
+                      }}
+                      disabled={!isAdmin}
+                    >
+                      Restaurer
+                    </Button>
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setArchiveAction('archive');
+                        setArchiveError(null);
+                      }}
+                      disabled={!isAdmin}
+                    >
+                      Archiver
+                    </Button>
+                  )}
+                  {!isAdmin ? (
+                    <p className="text-[11px] text-[var(--text-secondary)]">
+                      Lecture seule : archiver/restaurer nécessite ADMIN/OWNER.
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-3">
+                <Card className="border-dashed border-[var(--border)] bg-transparent p-3">
+                  <p className="text-xs font-semibold text-[var(--text-secondary)]">Début</p>
+                  <p className="text-sm text-[var(--text-primary)]">{formatDate(project.startDate)}</p>
+                </Card>
+                <Card className="border-dashed border-[var(--border)] bg-transparent p-3">
+                  <p className="text-xs font-semibold text-[var(--text-secondary)]">Échéance</p>
+                  <p className="text-sm text-[var(--text-primary)]">{formatDate(project.endDate)}</p>
+                </Card>
+                <Card className="border-dashed border-[var(--border)] bg-transparent p-3 space-y-1">
+                  <div className="flex items-center justify-between text-xs text-[var(--text-secondary)]">
+                    <span>Avancement</span>
+                    <span className="font-semibold text-[var(--text-primary)]">{progress.progressPct}%</span>
+                  </div>
+                  <div className="h-2 rounded-full bg-[var(--surface)]">
+                    <div
+                      className="h-2 rounded-full bg-blue-500 transition-all"
+                      style={{ width: `${progress.progressPct}%` }}
+                    />
+                  </div>
+                  <p className="text-[11px] text-[var(--text-secondary)]">
+                    {progress.done} terminée(s) · {progress.open} ouverte(s)
+                  </p>
+                </Card>
+              </div>
+            </Card>
+          </section>
+
+          <Card className="space-y-3 p-5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <p className="text-sm font-semibold text-[var(--text-primary)]">Références</p>
+                <p className="text-xs text-[var(--text-secondary)]">Catégorie + tags utilisés pour filtrer et organiser.</p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                {referencesMessage ? <span className="text-[11px] text-emerald-600">{referencesMessage}</span> : null}
+                {referencesError ? <span className="text-[11px] text-rose-600">{referencesError}</span> : null}
+                {referencesRequestId ? (
+                  <span className="text-[10px] text-[var(--text-secondary)]">Ref: {referencesRequestId}</span>
+                ) : null}
+                <Button size="sm" variant="outline" onClick={saveReferences} disabled={!isAdmin || referencesSaving}>
+                  {referencesSaving ? 'Sauvegarde…' : 'Enregistrer'}
+                </Button>
+              </div>
+            </div>
+            <ReferencePicker
+              businessId={businessId}
+              categoryId={categoryReferenceId || null}
+              tagIds={tagReferenceIds}
+              onCategoryChange={(id: string | null) => setCategoryReferenceId(id ?? '')}
+              onTagsChange={(ids: string[]) => setTagReferenceIds(ids)}
+              disabled={!isAdmin || referencesSaving}
+            />
+            {!isAdmin ? (
+              <p className="text-xs text-[var(--text-secondary)]">
+                Lecture seule : ADMIN/OWNER requis pour modifier les références.
+              </p>
+            ) : null}
+          </Card>
+
+          {readOnlyInfo ? <p className="text-xs text-[var(--text-secondary)] px-1">{readOnlyInfo}</p> : null}
+
+          <Card className="space-y-3 p-5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <p className="text-sm font-semibold text-[var(--text-primary)]">Validation commerciale</p>
+                <p className="text-xs text-[var(--text-secondary)]">
+                  Met à jour le statut du devis et de l’acompte pour débloquer le démarrage.
+                </p>
+              </div>
+              <Button size="sm" variant="outline" onClick={saveCommercial} disabled={!isAdmin || savingCommercial}>
+                {savingCommercial ? 'Enregistrement…' : 'Enregistrer'}
+              </Button>
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <Select
+                label="Statut du devis"
+                value={quoteStatusValue}
+                onChange={(e) => setQuoteStatusValue(e.target.value as ProjectQuoteStatus)}
+                disabled={!isAdmin || savingCommercial}
+              >
+                {Object.entries(QUOTE_LABELS).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </Select>
+              <Select
+                label="Statut de l’acompte"
+                value={depositStatusValue}
+                onChange={(e) => setDepositStatusValue(e.target.value as ProjectDepositStatus)}
+                disabled={!isAdmin || savingCommercial}
+              >
+                {Object.entries(DEPOSIT_LABELS).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            {!project.startedAt && !canStart ? (
+              <p className="text-xs text-amber-600">
+                Démarrage bloqué tant que le devis n’est pas SIGNED/ACCEPTED et l’acompte non PAID ou NOT_REQUIRED.
+              </p>
+            ) : null}
+            {commercialMessage ? <p className="text-xs text-[var(--text-secondary)]">{commercialMessage}</p> : null}
+          </Card>
+
+          <Card className="space-y-3 p-5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <p className="text-sm font-semibold text-[var(--text-primary)]">Démarrage du projet</p>
+                <p className="text-xs text-[var(--text-secondary)]">
+                  Devis signé + acompte payé pour lancer le projet et générer les tâches.
+                </p>
+              </div>
+              {project.startedAt ? (
+                <Badge variant="neutral">Démarré le {formatDate(project.startedAt)}</Badge>
+              ) : project.archivedAt ? (
+                <Badge variant="performance">Archivé</Badge>
+              ) : (
+                <Button onClick={startProject} disabled={!canStart || startLoading || !isAdmin} variant="primary">
+                  {startLoading ? 'Démarrage…' : 'Démarrer le projet'}
+                </Button>
+              )}
+            </div>
+            {project.archivedAt ? (
+              <p className="text-sm text-amber-600">Projet archivé : restaurer pour démarrer.</p>
+            ) : !canStart && !project.startedAt ? (
+              <p className="text-sm text-amber-600">
+                Pré-requis : devis SIGNED/ACCEPTED et acompte PAID ou NOT_REQUIRED.
+              </p>
+            ) : null}
+            {!isAdmin ? (
+              <p className="text-xs text-[var(--text-secondary)]">Seuls les admins/owners peuvent démarrer un projet.</p>
+            ) : null}
+            {actionMessage ? <p className="text-xs text-[var(--text-secondary)]">{actionMessage}</p> : null}
+          </Card>
+        </>
+      ) : null}
+
+      {activeTab === 'services' ? (
         <Card className="space-y-3 p-5">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex flex-wrap items-center gap-2">
-              {project.categoryReferenceName ? (
-                <Badge variant="neutral">Catégorie : {project.categoryReferenceName}</Badge>
-              ) : (
-                <Badge variant="neutral">Sans catégorie</Badge>
-              )}
-              {project.tagReferences?.length ? (
-                project.tagReferences.map((tag) => (
-                  <Badge key={tag.id} variant="neutral" className="bg-[var(--surface-hover)]">
-                    #{tag.name}
-                  </Badge>
-                ))
-              ) : (
-                <Badge variant="neutral">Aucun tag</Badge>
-              )}
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              {project.archivedAt ? (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    setArchiveAction('unarchive');
-                    setArchiveError(null);
-                  }}
-                  disabled={!isAdmin}
-                >
-                  Restaurer
-                </Button>
-              ) : (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    setArchiveAction('archive');
-                    setArchiveError(null);
-                  }}
-                  disabled={!isAdmin}
-                >
-                  Archiver
-                </Button>
-              )}
-              {!isAdmin ? (
-                <p className="text-[11px] text-[var(--text-secondary)]">
-                  Lecture seule : archiver/restaurer nécessite ADMIN/OWNER.
-                </p>
-              ) : null}
-            </div>
-          </div>
-
-          <div className="grid gap-3 md:grid-cols-3">
-            <Card className="border-dashed border-[var(--border)] bg-transparent p-3">
-              <p className="text-xs font-semibold text-[var(--text-secondary)]">Début</p>
-              <p className="text-sm text-[var(--text-primary)]">{formatDate(project.startDate)}</p>
-            </Card>
-            <Card className="border-dashed border-[var(--border)] bg-transparent p-3">
-              <p className="text-xs font-semibold text-[var(--text-secondary)]">Échéance</p>
-              <p className="text-sm text-[var(--text-primary)]">{formatDate(project.endDate)}</p>
-            </Card>
-            <Card className="border-dashed border-[var(--border)] bg-transparent p-3 space-y-1">
-              <div className="flex items-center justify-between text-xs text-[var(--text-secondary)]">
-                <span>Avancement</span>
-                <span className="font-semibold text-[var(--text-primary)]">{progress.progressPct}%</span>
-              </div>
-              <div className="h-2 rounded-full bg-[var(--surface)]">
-                <div
-                  className="h-2 rounded-full bg-blue-500 transition-all"
-                  style={{ width: `${progress.progressPct}%` }}
-                />
-              </div>
-              <p className="text-[11px] text-[var(--text-secondary)]">
-                {progress.done} terminée(s) · {progress.open} ouverte(s)
+            <div>
+              <p className="text-sm font-semibold text-[var(--text-primary)]">Services vendus</p>
+              <p className="text-xs text-[var(--text-secondary)]">
+                Quantités, prix et notes sont synchronisés avec le devis.
               </p>
-            </Card>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" variant="ghost" asChild disabled={!isAdmin}>
+                <Link href={`/app/pro/${businessId}/services`}>Gérer le catalogue</Link>
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => openServiceModal()}
+                variant="outline"
+                disabled={Boolean(project.archivedAt) || !isAdmin}
+              >
+                Ajouter un service
+              </Button>
+            </div>
           </div>
-        </Card>
-      </section>
+          {project.archivedAt ? (
+            <p className="text-xs text-amber-600">Projet archivé : ajout/édition de services désactivés.</p>
+          ) : null}
 
-      <Card className="space-y-3 p-5">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <p className="text-sm font-semibold text-[var(--text-primary)]">Références</p>
-            <p className="text-xs text-[var(--text-secondary)]">Catégorie + tags utilisés pour filtrer et organiser.</p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            {referencesMessage ? <span className="text-[11px] text-emerald-600">{referencesMessage}</span> : null}
-            {referencesError ? <span className="text-[11px] text-rose-600">{referencesError}</span> : null}
-            {referencesRequestId ? (
-              <span className="text-[10px] text-[var(--text-secondary)]">Ref: {referencesRequestId}</span>
-            ) : null}
-            <Button size="sm" variant="outline" onClick={saveReferences} disabled={!isAdmin || referencesSaving}>
-              {referencesSaving ? 'Sauvegarde…' : 'Enregistrer'}
-            </Button>
-          </div>
-        </div>
-        <ReferencePicker
-          businessId={businessId}
-          categoryId={categoryReferenceId || null}
-          tagIds={tagReferenceIds}
-          onCategoryChange={(id: string | null) => setCategoryReferenceId(id ?? '')}
-          onTagsChange={(ids: string[]) => setTagReferenceIds(ids)}
-          disabled={!isAdmin || referencesSaving}
-        />
-        {!isAdmin ? (
-          <p className="text-xs text-[var(--text-secondary)]">
-            Lecture seule : ADMIN/OWNER requis pour modifier les références.
-          </p>
-        ) : null}
-      </Card>
-
-      {readOnlyInfo ? <p className="text-xs text-[var(--text-secondary)] px-1">{readOnlyInfo}</p> : null}
-
-      <Card className="space-y-3 p-5">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <p className="text-sm font-semibold text-[var(--text-primary)]">Validation commerciale</p>
-            <p className="text-xs text-[var(--text-secondary)]">
-              Met à jour le statut du devis et de l’acompte pour débloquer le démarrage.
-            </p>
-          </div>
-          <Button size="sm" variant="outline" onClick={saveCommercial} disabled={!isAdmin || savingCommercial}>
-            {savingCommercial ? 'Enregistrement…' : 'Enregistrer'}
-          </Button>
-        </div>
-        <div className="grid gap-3 md:grid-cols-2">
-          <Select
-            label="Statut du devis"
-            value={quoteStatusValue}
-            onChange={(e) => setQuoteStatusValue(e.target.value as ProjectQuoteStatus)}
-            disabled={!isAdmin || savingCommercial}
-          >
-            {Object.entries(QUOTE_LABELS).map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </Select>
-          <Select
-            label="Statut de l’acompte"
-            value={depositStatusValue}
-            onChange={(e) => setDepositStatusValue(e.target.value as ProjectDepositStatus)}
-            disabled={!isAdmin || savingCommercial}
-          >
-            {Object.entries(DEPOSIT_LABELS).map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </Select>
-        </div>
-        {!project.startedAt && !canStart ? (
-          <p className="text-xs text-amber-600">
-            Démarrage bloqué tant que le devis n’est pas SIGNED/ACCEPTED et l’acompte non PAID ou NOT_REQUIRED.
-          </p>
-        ) : null}
-        {commercialMessage ? <p className="text-xs text-[var(--text-secondary)]">{commercialMessage}</p> : null}
-      </Card>
-
-      <Card className="space-y-3 p-5">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <p className="text-sm font-semibold text-[var(--text-primary)]">Démarrage du projet</p>
-            <p className="text-xs text-[var(--text-secondary)]">
-              Devis signé + acompte payé pour lancer le projet et générer les tâches.
-            </p>
-          </div>
-          {project.startedAt ? (
-            <Badge variant="neutral">Démarré le {formatDate(project.startedAt)}</Badge>
-          ) : project.archivedAt ? (
-            <Badge variant="performance">Archivé</Badge>
+          {services.length === 0 ? (
+            <p className="text-sm text-[var(--text-secondary)]">Aucun service ajouté.</p>
           ) : (
-            <Button onClick={startProject} disabled={!canStart || startLoading || !isAdmin} variant="primary">
-              {startLoading ? 'Démarrage…' : 'Démarrer le projet'}
-            </Button>
+            <div className="space-y-2">
+              {services.map((item) => {
+                const unit = item.priceCents ?? item.service.defaultPriceCents ?? null;
+                const subtotal = unit ? (Number(unit) * item.quantity) / 100 : 0;
+                return (
+                  <div
+                    key={item.id}
+                    className="card-interactive flex flex-col gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface)]/70 p-3 md:flex-row md:items-center md:justify-between"
+                  >
+                    <div>
+                      <p className="font-semibold text-[var(--text-primary)]">
+                        {item.service.code} · {item.service.name}
+                      </p>
+                      <p className="text-xs text-[var(--text-secondary)]">
+                        {item.quantity} × {unit ? formatCurrency(Number(unit) / 100) : '—'} · Sous-total {formatCurrency(subtotal)}
+                      </p>
+                      {item.notes ? <p className="text-xs text-[var(--text-secondary)]">{item.notes}</p> : null}
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => openServiceModal(item)}
+                        disabled={Boolean(project.archivedAt) || !isAdmin}
+                      >
+                        Éditer
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => deleteService(item)}
+                        disabled={Boolean(project.archivedAt) || !isAdmin}
+                      >
+                        Supprimer
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+              <p className="text-sm font-semibold text-[var(--text-primary)]">
+                Total services : {formatCurrency(servicesTotal / 100)}
+              </p>
+            </div>
           )}
-        </div>
-        {project.archivedAt ? (
-          <p className="text-sm text-amber-600">Projet archivé : restaurer pour démarrer.</p>
-        ) : !canStart && !project.startedAt ? (
-          <p className="text-sm text-amber-600">
-            Pré-requis : devis SIGNED/ACCEPTED et acompte PAID ou NOT_REQUIRED.
-          </p>
-        ) : null}
-        {!isAdmin ? (
-          <p className="text-xs text-[var(--text-secondary)]">Seuls les admins/owners peuvent démarrer un projet.</p>
-        ) : null}
-        {actionMessage ? <p className="text-xs text-[var(--text-secondary)]">{actionMessage}</p> : null}
-      </Card>
+        </Card>
+      ) : null}
 
-      <Card className="space-y-3 p-5">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <p className="text-sm font-semibold text-[var(--text-primary)]">Services vendus</p>
-            <p className="text-xs text-[var(--text-secondary)]">
-              Quantités, prix et notes sont synchronisés avec le devis.
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button size="sm" variant="ghost" asChild disabled={!isAdmin}>
-              <Link href={`/app/pro/${businessId}/services`}>Gérer le catalogue</Link>
-            </Button>
-            <Button
-              size="sm"
-              onClick={() => openServiceModal()}
-              variant="outline"
-              disabled={Boolean(project.archivedAt) || !isAdmin}
-            >
-              Ajouter un service
-            </Button>
-          </div>
-        </div>
-        {project.archivedAt ? (
-          <p className="text-xs text-amber-600">Projet archivé : ajout/édition de services désactivés.</p>
-        ) : null}
-
-        {services.length === 0 ? (
-          <p className="text-sm text-[var(--text-secondary)]">Aucun service ajouté.</p>
-        ) : (
-          <div className="space-y-2">
-            {services.map((item) => {
-              const unit = item.priceCents ?? item.service.defaultPriceCents ?? null;
-              const subtotal = unit ? (Number(unit) * item.quantity) / 100 : 0;
-              return (
-                <div
-                  key={item.id}
-                  className="flex flex-col gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface)]/70 p-3 md:flex-row md:items-center md:justify-between"
-                >
-                  <div>
-                    <p className="font-semibold text-[var(--text-primary)]">
-                      {item.service.code} · {item.service.name}
-                    </p>
-                    <p className="text-xs text-[var(--text-secondary)]">
-                      {item.quantity} × {unit ? formatCurrency(Number(unit) / 100) : '—'} · Sous-total {formatCurrency(subtotal)}
-                    </p>
-                    {item.notes ? <p className="text-xs text-[var(--text-secondary)]">{item.notes}</p> : null}
-                  </div>
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => openServiceModal(item)}
-                      disabled={Boolean(project.archivedAt) || !isAdmin}
-                    >
-                      Éditer
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => deleteService(item)}
-                      disabled={Boolean(project.archivedAt) || !isAdmin}
-                    >
-                      Supprimer
-                    </Button>
-                  </div>
-                </div>
-              );
-            })}
-            <p className="text-sm font-semibold text-[var(--text-primary)]">
-              Total services : {formatCurrency(servicesTotal / 100)}
-            </p>
-          </div>
-        )}
-      </Card>
-
-      <Card className="space-y-3 p-5">
+      {activeTab === 'billing' ? (
+      <Card className="space-y-3 p-5" id="billing">
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div>
             <p className="text-sm font-semibold text-[var(--text-primary)]">Facturation (devis & factures)</p>
@@ -1495,14 +1531,6 @@ export default function ProjectDetailPage() {
               <Button size="sm" onClick={createQuote} disabled={!isAdmin || billingLoading}>
                 Créer un devis
               </Button>
-              <Button
-                size="sm"
-                onClick={() => loadBilling()}
-                variant="outline"
-                disabled={billingLoading}
-              >
-                Rafraîchir
-              </Button>
               {eligibleQuoteForInvoice ? (
                 <Button
                   size="sm"
@@ -1510,13 +1538,12 @@ export default function ProjectDetailPage() {
                   onClick={() => createInvoiceFromQuote(eligibleQuoteForInvoice.id)}
                   disabled={!isAdmin || billingLoading}
                 >
-                  Créer facture (devis {eligibleQuoteForInvoice.id})
+                  Facturer le devis
                 </Button>
-              ) : (
-                <Button size="sm" variant="outline" disabled>
-                  Facture: aucun devis signé
-                </Button>
-              )}
+              ) : null}
+              <Button size="sm" variant="outline" onClick={() => loadBilling()} disabled={billingLoading}>
+                Rafraîchir
+              </Button>
             </div>
 
             <div className="space-y-2 overflow-x-auto">
@@ -1532,7 +1559,7 @@ export default function ProjectDetailPage() {
                   {quotes.map((quote) => (
                     <div
                       key={quote.id}
-                      className="flex flex-col gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface)]/60 p-3 md:flex-row md:items-center md:justify-between"
+                      className="card-interactive flex flex-col gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface)]/60 p-3 md:flex-row md:items-center md:justify-between"
                     >
                       <div>
                         <p className="text-sm font-semibold text-[var(--text-primary)]">
@@ -1611,7 +1638,7 @@ export default function ProjectDetailPage() {
                   {invoices.map((invoice) => (
                     <div
                       key={invoice.id}
-                      className="flex flex-col gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface)]/60 p-3 md:flex-row md:items-center md:justify-between"
+                      className="card-interactive flex flex-col gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface)]/60 p-3 md:flex-row md:items-center md:justify-between"
                     >
                       <div>
                         <p className="text-sm font-semibold text-[var(--text-primary)]">
@@ -1685,7 +1712,7 @@ export default function ProjectDetailPage() {
               ) : (
                 <div className="space-y-1">
                   {finances.map((f) => (
-                    <div key={f.id} className="flex items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--surface)]/60 px-3 py-2">
+                    <div key={f.id} className="card-interactive flex items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--surface)]/60 px-3 py-2">
                       <div>
                         <p className="text-sm font-semibold text-[var(--text-primary)]">{f.category}</p>
                         <p className="text-[10px] text-[var(--text-secondary)]">{formatDate(f.date)} · {f.note ?? ''}</p>
@@ -1701,8 +1728,10 @@ export default function ProjectDetailPage() {
           </div>
         )}
       </Card>
+      ) : null}
 
-      <Card className="space-y-3 p-5">
+      {activeTab === 'activity' ? (
+      <Card className="space-y-3 p-5" id="activity">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <p className="text-sm font-semibold text-[var(--text-primary)]">Interactions projet</p>
@@ -1737,7 +1766,8 @@ export default function ProjectDetailPage() {
             {interactions.map((interaction) => (
               <div
                 key={interaction.id}
-                className="rounded-lg border border-[var(--border)] bg-[var(--surface)]/60 p-3"
+                className="card-interactive rounded-lg border border-[var(--border)] bg-[var(--surface)]/60 p-3"
+                onClick={() => (isAdmin ? startEditInteraction(interaction) : undefined)}
               >
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex flex-wrap items-center gap-2">
@@ -1842,110 +1872,134 @@ export default function ProjectDetailPage() {
           <p className="text-[10px] text-[var(--text-faint)]">Req: {interactionRequestId}</p>
         ) : null}
       </Card>
+      ) : null}
 
-      <Card className="space-y-3 p-5">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-semibold text-[var(--text-primary)]">Tâches du projet</p>
-            <p className="text-xs text-[var(--text-secondary)]">Groupées par phase. Mises à jour en direct.</p>
-          </div>
-          <Button size="sm" variant="outline" asChild>
-            <Link href={`/app/pro/${businessId}/tasks?projectId=${projectId}`}>Voir dans Tâches</Link>
-          </Button>
-        </div>
-        {taskError ? <p className="text-xs text-rose-500">{taskError}</p> : null}
-        {tasksLoading ? (
-          <p className="text-sm text-[var(--text-secondary)]">Chargement des tâches…</p>
-        ) : tasks.length === 0 ? (
-          <div className="space-y-2">
-            <p className="text-sm text-[var(--text-secondary)]">
-              {project.startedAt
-                ? 'Aucune tâche générée : aucun service vendu n’a de template.'
-                : 'Aucune tâche pour ce projet.'}
-            </p>
-            {project.startedAt ? (
-              <Button size="sm" variant="ghost" asChild>
-                <Link href={`/app/pro/${businessId}/services`}>Configurer templates dans le catalogue</Link>
+      {activeTab === 'tasks' ? (
+        <Card className="space-y-3 p-5" id="tasks">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="space-y-1">
+              <p className="text-sm font-semibold text-[var(--text-primary)]">Tâches du projet</p>
+              <p className="text-xs text-[var(--text-secondary)]">Groupées par phase. Mises à jour en direct.</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" variant="outline" asChild>
+                <Link href={`/app/pro/${businessId}/tasks?projectId=${projectId}`}>Voir dans Tâches</Link>
               </Button>
-            ) : !project.startedAt ? (
+              <Button size="sm" variant="primary" asChild>
+                <Link href={`/app/pro/${businessId}/tasks?projectId=${projectId}&new=1`}>Créer une tâche</Link>
+              </Button>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {[
+              { key: 'all', label: 'Toutes' },
+              { key: 'overdue', label: 'En retard' },
+              { key: 'week', label: 'Cette semaine' },
+            ].map((filter) => (
               <Button
+                key={filter.key}
                 size="sm"
-                variant="outline"
-                onClick={startProject}
-                disabled={startLoading || !canStart || !isAdmin}
+                variant={taskFilter === filter.key ? 'primary' : 'outline'}
+                onClick={() => setTaskFilter(filter.key as typeof taskFilter)}
               >
-                {startLoading ? 'Démarrage…' : 'Démarrer pour générer les tâches'}
+                {filter.label}
               </Button>
-            ) : null}
+            ))}
           </div>
-        ) : (
-          <div className="space-y-3">
-            {['CADRAGE', 'UX', 'DESIGN', 'DEV', 'SEO', 'LAUNCH', 'FOLLOW_UP', null].map((phase) => {
-              const group = tasks.filter((t) => (t.phase ?? null) === phase);
-              if (group.length === 0) return null;
-              return (
-                <div key={phase ?? 'none'} className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--text-secondary)]">
-                      {phaseLabel(phase as TaskPhase)}
-                    </p>
-                  </div>
-                  <div className="space-y-2">
-                    {group.map((task) => (
-                      <div
-                        key={task.id}
-                        className="rounded-lg border border-[var(--border)] bg-[var(--surface)]/60 p-3"
-                      >
-                        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                          <div>
-                            <p className="text-sm font-semibold text-[var(--text-primary)]">{task.title}</p>
-                            <p className="text-[11px] text-[var(--text-secondary)]">
-                              Échéance {formatDate(task.dueDate)} · {task.assigneeName ?? task.assigneeEmail ?? 'Non assigné'}
-                            </p>
-                          </div>
-                          <div className="flex flex-wrap gap-2">
-                            <Select
-                              value={task.status}
-                              onChange={(e) => updateTask(task, { status: e.target.value as TaskStatus })}
-                              disabled={!isAdmin || taskActionId === task.id}
-                            >
-                              {TASK_STATUS_OPTIONS.map((opt) => (
-                                <option key={opt.value} value={opt.value}>
-                                  {opt.label}
-                                </option>
-                              ))}
-                            </Select>
-                            <Input
-                              type="number"
-                              min={0}
-                              max={100}
-                              value={task.progress}
-                              onChange={(e: ChangeEvent<HTMLInputElement>) =>
-                                updateTask(task, { progress: Number(e.target.value) })
-                              }
-                              disabled={!isAdmin || taskActionId === task.id}
-                              className="w-24"
-                              aria-label="Progression"
-                            />
-                            <Input
-                              type="date"
-                              value={task.dueDate ? task.dueDate.slice(0, 10) : ''}
-                              onChange={(e: ChangeEvent<HTMLInputElement>) =>
-                                updateTask(task, { dueDate: e.target.value || null })
-                              }
-                              disabled={!isAdmin || taskActionId === task.id}
-                            />
+          {taskError ? <p className="text-xs text-rose-500">{taskError}</p> : null}
+          {tasksLoading ? (
+            <p className="text-sm text-[var(--text-secondary)]">Chargement des tâches…</p>
+          ) : filteredTasks.length === 0 ? (
+            <div className="space-y-2">
+              <p className="text-sm text-[var(--text-secondary)]">
+                {project.startedAt
+                  ? 'Aucune tâche générée : aucun service vendu n’a de template.'
+                  : 'Aucune tâche pour ce projet.'}
+              </p>
+              {project.startedAt ? (
+                <Button size="sm" variant="ghost" asChild>
+                  <Link href={`/app/pro/${businessId}/services`}>Configurer templates dans le catalogue</Link>
+                </Button>
+              ) : !project.startedAt ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={startProject}
+                  disabled={startLoading || !canStart || !isAdmin}
+                >
+                  {startLoading ? 'Démarrage…' : 'Démarrer pour générer les tâches'}
+                </Button>
+              ) : null}
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {['CADRAGE', 'UX', 'DESIGN', 'DEV', 'SEO', 'LAUNCH', 'FOLLOW_UP', null].map((phase) => {
+                const group = filteredTasks.filter((t) => (t.phase ?? null) === phase);
+                if (group.length === 0) return null;
+                return (
+                  <div key={phase ?? 'none'} className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--text-secondary)]">
+                        {phaseLabel(phase as TaskPhase)}
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      {group.map((task) => (
+                        <div
+                          key={task.id}
+                          className="card-interactive rounded-lg border border-[var(--border)] bg-[var(--surface)]/60 p-3"
+                        >
+                          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                            <div>
+                              <p className="text-sm font-semibold text-[var(--text-primary)]">{task.title}</p>
+                              <p className="text-[11px] text-[var(--text-secondary)]">
+                                Échéance {formatDate(task.dueDate)} · {task.assigneeName ?? task.assigneeEmail ?? 'Non assigné'}
+                              </p>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              <Select
+                                value={task.status}
+                                onChange={(e) => updateTask(task, { status: e.target.value as TaskStatus })}
+                                disabled={!isAdmin || taskActionId === task.id}
+                              >
+                                {TASK_STATUS_OPTIONS.map((opt) => (
+                                  <option key={opt.value} value={opt.value}>
+                                    {opt.label}
+                                  </option>
+                                ))}
+                              </Select>
+                              <Input
+                                type="number"
+                                min={0}
+                                max={100}
+                                value={task.progress}
+                                onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                                  updateTask(task, { progress: Number(e.target.value) })
+                                }
+                                disabled={!isAdmin || taskActionId === task.id}
+                                className="w-24"
+                                aria-label="Progression"
+                              />
+                              <Input
+                                type="date"
+                                value={task.dueDate ? task.dueDate.slice(0, 10) : ''}
+                                onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                                  updateTask(task, { dueDate: e.target.value || null })
+                                }
+                                disabled={!isAdmin || taskActionId === task.id}
+                              />
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </Card>
+                );
+              })}
+            </div>
+          )}
+        </Card>
+      ) : null}
 
       <Modal
         open={Boolean(archiveAction)}
