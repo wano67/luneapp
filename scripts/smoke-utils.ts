@@ -3,6 +3,7 @@ type FetchOpts = {
   headers?: Record<string, string>;
   body?: unknown;
   allowError?: boolean;
+  redirect?: RequestRedirect;
 };
 
 export type SmokeCreds = {
@@ -84,6 +85,7 @@ export function createRequester(baseUrl: string) {
   async function request(path: string, opts: FetchOpts = {}) {
     const res = await fetch(`${baseUrl}${path}`, {
       method: opts.method ?? 'GET',
+      redirect: opts.redirect,
       headers: {
         accept: 'application/json',
         Origin: origin,
