@@ -20,7 +20,6 @@ import {
   Cog,
   Wallet2,
   Building2,
-  Focus,
   Package,
   ClipboardList,
   FileSpreadsheet,
@@ -84,7 +83,6 @@ function getGlobalSections(): NavSection[] {
         { href: '/app', label: 'Accueil', icon: <LayoutDashboard size={18} /> },
         { href: '/app/personal', label: 'Wallet', icon: <Wallet2 size={18} />, accent: 'wallet' },
         { href: '/app/pro', label: 'Studio', icon: <Building2 size={18} />, accent: 'studio' },
-        { label: 'Focus', icon: <Focus size={18} />, accent: 'focus', disabled: true, hint: 'Bientôt' },
       ],
     },
     {
@@ -177,26 +175,13 @@ function getWalletSections(): NavSection[] {
         { href: `${base}`, label: 'Vue d’accueil', icon: <Wallet2 size={18} />, accent: 'wallet' },
         { href: `${base}/comptes`, label: 'Comptes', icon: <Banknote size={18} /> },
         { href: `${base}/transactions`, label: 'Transactions', icon: <ClipboardList size={18} /> },
-        { href: `${base}/transactions?type=INCOME`, label: 'Revenus', icon: <Banknote size={18} /> },
-        { href: `${base}/budgets`, label: 'Budgets', icon: <LineChart size={18} />, disabled: true, hint: 'Bientôt' },
-        { href: `${base}/epargne`, label: 'Épargne', icon: <PiggyBank size={18} />, disabled: true, hint: 'Bientôt' },
-        { href: `${base}/admin`, label: 'Administratif', icon: <FileSpreadsheet size={18} />, disabled: true, hint: 'Bientôt' },
       ],
     },
   ];
 }
 
 function getFocusSections(): NavSection[] {
-  return [
-    {
-      title: 'Focus',
-      items: [
-        { label: 'Pro', icon: <Focus size={18} />, accent: 'focus', disabled: true, hint: 'Bientôt' },
-        { label: 'Perso', icon: <Users size={18} />, disabled: true, hint: 'Bientôt' },
-        { label: 'Alignement', icon: <Workflow size={18} />, disabled: true, hint: 'Bientôt' },
-      ],
-    },
-  ];
+  return [];
 }
 
 function buildSections(space: Space, businessId: string | null): NavSection[] {
