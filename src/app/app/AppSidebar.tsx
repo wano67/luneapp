@@ -12,21 +12,15 @@ import {
   Workflow,
   Bookmark,
   Banknote,
-  CreditCard,
-  PiggyBank,
-  Percent,
-  LineChart,
-  BookOpen,
   Cog,
   Wallet2,
   Building2,
   Package,
   ClipboardList,
-  FileSpreadsheet,
 } from 'lucide-react';
 import { useActiveBusiness } from './pro/ActiveBusinessProvider';
 
-export type Space = 'pro' | 'perso' | 'performance' | null;
+export type Space = 'home' | 'pro' | 'perso' | 'focus' | null;
 
 type AppSidebarProps = {
   space: Space;
@@ -143,17 +137,6 @@ function getStudioBusinessSections(businessId: string): NavSection[] {
       title: 'Finances',
       items: [
         { href: `${base}/finances`, label: 'Finances', icon: <Banknote size={18} /> },
-        { href: `${base}/finances/payments`, label: 'Paiements', icon: <CreditCard size={18} /> },
-        { href: `${base}/finances/treasury`, label: 'Trésorerie', icon: <PiggyBank size={18} /> },
-        { href: `${base}/finances/vat`, label: 'TVA', icon: <Percent size={18} /> },
-        { href: `${base}/finances/forecasting`, label: 'Prévisions', icon: <LineChart size={18} /> },
-        { href: `${base}/finances/ledger`, label: 'Grand livre', icon: <BookOpen size={18} /> },
-        {
-          href: `${base}/projects`,
-          label: 'Facturation (projets)',
-          icon: <FileSpreadsheet size={18} />,
-          hint: 'Devis/factures via projets',
-        },
       ],
     },
     {
@@ -187,7 +170,7 @@ function getFocusSections(): NavSection[] {
 function buildSections(space: Space, businessId: string | null): NavSection[] {
   if (space === 'pro') return businessId ? getStudioBusinessSections(businessId) : getStudioRootSections();
   if (space === 'perso') return getWalletSections();
-  if (space === 'performance') return getFocusSections();
+  if (space === 'focus') return getFocusSections();
   return getGlobalSections();
 }
 
