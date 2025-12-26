@@ -2,9 +2,8 @@ import { isIP } from 'node:net';
 import { NextRequest, NextResponse } from 'next/server';
 import { getRequestId } from '@/server/http/apiUtils';
 import { normalizeWebsiteUrl } from '@/lib/website';
-
-const UA =
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+import { getLogoCandidates } from '@/lib/logo/getLogoCandidates';
+import { validateLogoUrl } from '@/lib/logo/validateLogoUrl';
 
 function buildJson(body: unknown, status: number, requestId: string) {
   const res = NextResponse.json(body, { status });
@@ -14,8 +13,6 @@ function buildJson(body: unknown, status: number, requestId: string) {
   res.headers.set('Expires', '0');
   return res;
 }
-
-const MAX_ICON_BYTES = 200_000; // ~200 KB
 
 function isBlockedHost(hostname: string) {
   const host = hostname.toLowerCase();
@@ -41,106 +38,6 @@ function isBlockedHost(hostname: string) {
     }
   }
   return false;
-}
-
-async function fetchBuffer(url: string, accept: string) {
-  const res = await fetch(url, {
-    redirect: 'follow',
-    headers: {
-      'User-Agent': UA,
-      Accept: accept,
-    },
-  });
-  if (!res.ok) return null;
-  const contentLength = res.headers.get('content-length');
-  if (contentLength && Number(contentLength) > MAX_ICON_BYTES) return null;
-
-  if (!res.body) {
-    const buf = await res.arrayBuffer();
-    if (buf.byteLength > MAX_ICON_BYTES) return null;
-    return { res, buf };
-  }
-
-  const reader = res.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let total = 0;
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    if (value) {
-      total += value.byteLength;
-      if (total > MAX_ICON_BYTES) return null;
-      chunks.push(value);
-    }
-  }
-  const combined = new Uint8Array(total);
-  let offset = 0;
-  for (const chunk of chunks) {
-    combined.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return { res, buf: combined.buffer };
-}
-
-async function fetchFavicon(url: string) {
-  const hit = await fetchBuffer(url, 'image/*,*/*;q=0.8');
-  if (!hit) return null;
-  const contentType = hit.res.headers.get('content-type') ?? 'image/x-icon';
-  if (!contentType.startsWith('image/') && !contentType.includes('svg')) return null;
-  return { buf: hit.buf, contentType };
-}
-
-function resolveUrl(href: string, base: URL) {
-  try {
-    return new URL(href, base).toString();
-  } catch {
-    return null;
-  }
-}
-
-function extractIconLinks(html: string, base: URL) {
-  const links: string[] = [];
-  const linkRe = /<link\s+[^>]*rel=["']([^"']*)["'][^>]*href=["']([^"']+)["'][^>]*>/gi;
-  let match: RegExpExecArray | null;
-  while ((match = linkRe.exec(html)) !== null) {
-    const rel = match[1]?.toLowerCase() || '';
-    const href = match[2];
-    if (!href) continue;
-    if (rel.includes('icon')) {
-      const resolved = resolveUrl(href, base);
-      if (resolved) links.push(resolved);
-    }
-  }
-  return links;
-}
-
-async function extractManifestIcons(html: string, base: URL) {
-  const manifestRe = /<link\s+[^>]*rel=["']manifest["'][^>]*href=["']([^"']+)["'][^>]*>/i;
-  const match = manifestRe.exec(html);
-  if (!match) return [];
-  const href = match[1];
-  const manifestUrl = resolveUrl(href, base);
-  if (!manifestUrl) return [];
-  try {
-    const manifestHit = await fetchBuffer(manifestUrl, 'application/manifest+json,application/json;q=0.9,*/*;q=0.8');
-    if (!manifestHit) return [];
-    const text = Buffer.from(manifestHit.buf).toString('utf-8');
-    const json = JSON.parse(text) as { icons?: Array<{ src?: string; sizes?: string; type?: string }> };
-    const icons = json.icons ?? [];
-    const sorted = icons
-      .map((i) => ({ ...i, src: i.src ? resolveUrl(i.src, new URL(manifestUrl)) : null }))
-      .filter((i) => i.src)
-      .sort((a, b) => {
-        const sizeA = a.sizes?.split(/\s+/)[0]?.split('x')[0];
-        const sizeB = b.sizes?.split(/\s+/)[0]?.split('x')[0];
-        const nA = sizeA ? parseInt(sizeA, 10) || 0 : 0;
-        const nB = sizeB ? parseInt(sizeB, 10) || 0 : 0;
-        return nB - nA;
-      });
-    return sorted.map((i) => i.src!) as string[];
-  } catch {
-    return [];
-  }
 }
 
 export async function GET(request: NextRequest) {
@@ -173,74 +70,64 @@ export async function GET(request: NextRequest) {
     return buildJson({ error: 'Host non autorisé' }, 403, requestId);
   }
 
-  const candidates = new Set<string>([
-    `https://www.google.com/s2/favicons?sz=64&domain=${encodeURIComponent(host)}`,
-    `https://www.google.com/s2/favicons?sz=64&domain_url=${encodeURIComponent(target)}`,
-    `https://t0.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${encodeURIComponent(target)}&size=64`,
-    `https://${host}/favicon.ico`,
-    `http://${host}/favicon.ico`,
-  ]);
+  const scoreMime = (url: string, contentType: string) => {
+    const ct = contentType.toLowerCase();
+    const u = url.toLowerCase();
+    const isSvg = ct.includes('svg') || u.endsWith('.svg');
+    const isPng = ct.includes('png') || u.endsWith('.png');
+    const isWebp = ct.includes('webp') || u.endsWith('.webp');
+    const isJpg = ct.includes('jpeg') || ct.includes('jpg') || u.endsWith('.jpg') || u.endsWith('.jpeg');
+    const isGif = ct.includes('gif') || u.endsWith('.gif');
+    const isIco = ct.includes('ico') || u.endsWith('.ico');
+    if (isSvg) return 6;
+    if (isPng) return 5;
+    if (isWebp) return 4;
+    if (isJpg) return 3;
+    if (isGif) return 2;
+    if (isIco) return 1;
+    return 0;
+  };
 
-  for (const candidate of candidates) {
-    try {
-      const hit = await fetchFavicon(candidate);
-      if (hit) {
-        const res = new NextResponse(Buffer.from(hit.buf), {
-          status: 200,
-          headers: {
-            'Content-Type': hit.contentType,
-            'Cache-Control': 'public, max-age=86400',
-            'x-request-id': requestId,
-          },
-        });
-        return res;
+  const candidates = await getLogoCandidates(target);
+  const fallbacks = [
+    `https://www.google.com/s2/favicons?domain=${encodeURIComponent(host)}&sz=256`,
+    `https://logo.clearbit.com/${encodeURIComponent(host)}`,
+  ];
+
+  const sources = [...candidates, ...fallbacks];
+  if (process.env.NODE_ENV !== 'production') {
+    console.debug('[favicon] candidates', sources);
+  }
+
+  let best: { buffer: Uint8Array; contentType: string; score: number; url: string } | null = null;
+
+  for (const candidate of sources) {
+    const hit = await validateLogoUrl(candidate);
+    if (process.env.NODE_ENV !== 'production') {
+      console.debug('[favicon] candidate', candidate, hit.ok ? 'ok' : 'fail', hit.ok ? hit.contentType : '');
+    }
+    if (hit.ok) {
+      const score = scoreMime(candidate, hit.contentType || '');
+      if (!best || score > best.score) {
+        best = { buffer: new Uint8Array(hit.buffer), contentType: hit.contentType || 'image/*', score, url: candidate };
+        // Early exit if top score
+        if (score === 6) break;
       }
-    } catch {
-      // continue to next candidate
     }
   }
 
-  // Try to inspect HTML for <link rel="icon"> or manifest icons
-  try {
-    const pageHit =
-      (await fetchBuffer(baseUrl.toString(), 'text/html,*/*;q=0.8')) ??
-      (await fetchBuffer(`http://${host}`, 'text/html,*/*;q=0.8'));
-    if (pageHit) {
-      const html = Buffer.from(pageHit.buf).toString('utf-8');
-      const baseForPage = new URL(pageHit.res.url ?? baseUrl.toString());
-      for (const linkHref of extractIconLinks(html, baseForPage)) {
-        const hit = await fetchFavicon(linkHref);
-        if (hit) {
-          const res = new NextResponse(Buffer.from(hit.buf), {
-            status: 200,
-            headers: {
-              'Content-Type': hit.contentType,
-              'Cache-Control': 'public, max-age=86400',
-              'x-request-id': requestId,
-            },
-          });
-          return res;
-        }
-      }
-
-      const manifestIcons = await extractManifestIcons(html, baseForPage);
-      for (const iconUrl of manifestIcons) {
-        const hit = await fetchFavicon(iconUrl);
-        if (hit) {
-          const res = new NextResponse(Buffer.from(hit.buf), {
-            status: 200,
-            headers: {
-              'Content-Type': hit.contentType,
-              'Cache-Control': 'public, max-age=86400',
-              'x-request-id': requestId,
-            },
-          });
-          return res;
-        }
-      }
+  if (best) {
+    if (process.env.NODE_ENV !== 'production') {
+      console.debug('[favicon] picked', best.url, 'ct=', best.contentType, 'score=', best.score);
     }
-  } catch {
-    // ignore parsing errors
+    return new NextResponse(best.buffer as unknown as BodyInit, {
+      status: 200,
+      headers: {
+        'Content-Type': best.contentType,
+        'Cache-Control': 'public, max-age=3600, stale-while-revalidate=604800',
+        'x-request-id': requestId,
+      },
+    });
   }
 
   const empty = new NextResponse(null, { status: 204 });
