@@ -29,6 +29,9 @@ jobs:
           version: 10.21.0
           run_install: true
 
+      - name: Show pnpm version
+        run: pnpm --version
+
       - name: Build
         run: NEXT_DIST_DIR=.next-build pnpm build
 
