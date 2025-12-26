@@ -1,23 +1,19 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { ArrowRight, MoreVertical } from 'lucide-react';
 import CashflowChart from './charts/CashflowChart';
 import TasksDonut from './charts/TasksDonut';
-import PipelineBar from './charts/PipelineBar';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import { formatCurrency } from '@/app/app/pro/pro-data';
 import { useActiveBusiness } from '@/app/app/pro/ActiveBusinessProvider';
-import RoleBanner from '@/components/RoleBanner';
-import { PageHeader } from '@/app/app/components/PageHeader';
-import { ActionTile } from '@/app/app/components/ActionTile';
-import { Building2, UserPlus, Briefcase, Wallet2 } from 'lucide-react';
+import { normalizeWebsiteUrl } from '@/lib/website';
 
 type TaskStatus = 'TODO' | 'IN_PROGRESS' | 'DONE';
-type ProspectPipelineStatus = 'NEW' | 'IN_DISCUSSION' | 'OFFER_SENT' | 'FOLLOW_UP' | 'CLOSED';
 
 type DashboardPayload = {
   kpis?: {
@@ -76,19 +72,6 @@ type TaskItem = {
   projectName?: string | null;
 };
 
-type ProspectItem = {
-  id: string;
-  name: string;
-  pipelineStatus: ProspectPipelineStatus;
-};
-
-type ClientItem = {
-  id: string;
-  name: string;
-  email?: string | null;
-  createdAt: string;
-};
-
 const STATUS_LABELS: Record<TaskStatus, string> = {
   TODO: 'À faire',
   IN_PROGRESS: 'En cours',
@@ -133,22 +116,11 @@ function countLateTasks(tasks: TaskItem[]) {
   return tasks.filter((t) => t.dueDate && new Date(t.dueDate) < now && t.status !== 'DONE').length;
 }
 
-function groupPipeline(prospects: ProspectItem[]) {
-  const map = new Map<string, number>();
-  prospects.forEach((p) => {
-    const key = p.pipelineStatus ?? 'UNKNOWN';
-    map.set(key, (map.get(key) ?? 0) + 1);
-  });
-  return Array.from(map.entries()).map(([name, value]) => ({ name, value }));
-}
-
 export default function ProDashboard({ businessId }: { businessId: string }) {
   const [periodDays, setPeriodDays] = useState(30);
   const [dashboard, setDashboard] = useState<DashboardPayload | null>(null);
   const [financeAgg, setFinanceAgg] = useState<FinanceAggregate | null>(null);
   const [tasks, setTasks] = useState<TaskItem[]>([]);
-  const [prospects, setProspects] = useState<ProspectItem[]>([]);
-  const [clients, setClients] = useState<ClientItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [requestId, setRequestId] = useState<string | null>(null);
@@ -167,15 +139,13 @@ export default function ProDashboard({ businessId }: { businessId: string }) {
       const periodEndIso = periodEnd.toISOString();
 
       try {
-        const [dashRes, financeRes, tasksRes, prospectsRes, clientsRes] = await Promise.all([
+        const [dashRes, financeRes, tasksRes] = await Promise.all([
           fetchJson<DashboardPayload>(`/api/pro/businesses/${businessId}/dashboard`, { cache: 'no-store' }),
           fetchJson<FinanceAggregate>(
             `/api/pro/businesses/${businessId}/finances?aggregate=1&periodStart=${encodeURIComponent(periodStart)}&periodEnd=${encodeURIComponent(periodEndIso)}`,
             { cache: 'no-store' }
           ),
           fetchJson<{ items: TaskItem[] }>(`/api/pro/businesses/${businessId}/tasks`, { cache: 'no-store' }),
-          fetchJson<{ items: ProspectItem[] }>(`/api/pro/businesses/${businessId}/prospects`, { cache: 'no-store' }),
-          fetchJson<{ items: ClientItem[] }>(`/api/pro/businesses/${businessId}/clients`, { cache: 'no-store' }),
         ]);
 
         if (cancelled) return;
@@ -184,22 +154,16 @@ export default function ProDashboard({ businessId }: { businessId: string }) {
           dashRes.requestId ||
             financeRes.requestId ||
             tasksRes.requestId ||
-            prospectsRes.requestId ||
-            clientsRes.requestId ||
             null
         );
 
         if (!dashRes.ok) throw new Error(dashRes.error || 'Dashboard indisponible');
         if (!financeRes.ok) throw new Error(financeRes.error || 'Finances indisponibles');
         if (!tasksRes.ok) throw new Error(tasksRes.error || 'Tâches indisponibles');
-        if (!prospectsRes.ok) throw new Error(prospectsRes.error || 'Prospects indisponibles');
-        if (!clientsRes.ok) throw new Error(clientsRes.error || 'Clients indisponibles');
 
         setDashboard(dashRes.data ?? null);
         setFinanceAgg(financeRes.data ?? null);
         setTasks(tasksRes.data?.items ?? []);
-        setProspects(prospectsRes.data?.items ?? []);
-        setClients(clientsRes.data?.items ?? []);
       } catch (err) {
         if (cancelled) return;
         setError(getErrorMessage(err));
@@ -230,60 +194,25 @@ export default function ProDashboard({ businessId }: { businessId: string }) {
   const openTasks = dashboard?.kpis?.openTasksCount ?? 0;
   const tasksByStatus = useMemo(() => countByStatus(tasks), [tasks]);
   const lateTasksCount = useMemo(() => countLateTasks(tasks), [tasks]);
-  const pipelineData = useMemo(() => groupPipeline(prospects), [prospects]);
-  const clientsRecent = useMemo(
-    () =>
-      [...clients].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 5),
-    [clients]
-  );
   const upcomingTasks = dashboard?.latestTasks ?? dashboard?.nextActions?.tasks ?? [];
   const monthlySeries = dashboard?.monthlySeries ?? [];
 
-  const statTiles = [
-    {
-      label: 'Solde net',
-      value: formatCurrency(net),
-      hint: 'Finances · trésorerie',
-      href: `/app/pro/${businessId}/finances/treasury`,
-    },
-    {
-      label: 'Revenus (période)',
-      value: formatCurrency(income),
-      hint: 'Détail finances',
-      href: `/app/pro/${businessId}/finances`,
-    },
-    {
-      label: 'Projets actifs',
-      value: String(activeProjects),
-      hint: 'Voir les projets',
-      href: `/app/pro/${businessId}/projects`,
-    },
-    {
-      label: 'Tâches ouvertes',
-      value: String(openTasks),
-      hint: 'Voir les tâches',
-      href: `/app/pro/${businessId}/tasks`,
-    },
-  ];
-
   return (
     <div className="mx-auto max-w-6xl space-y-5 px-4 py-4">
-      <RoleBanner role={role} />
-      <PageHeader
-        backHref="/app/pro"
-        backLabel="Studio"
-        title={activeCtx?.activeBusiness?.name ?? 'Dashboard pro'}
-        subtitle="KPIs, tendances et actions rapides"
-        primaryAction={{ label: 'Ajouter un client', href: `/app/pro/${businessId}/clients` }}
-        secondaryAction={{ label: 'Nouvelle opération', href: `/app/pro/${businessId}/finances`, variant: 'outline' }}
+      <BusinessHeader
+        businessName={activeCtx?.activeBusiness?.name ?? 'Entreprise'}
+        websiteUrl={activeCtx?.activeBusiness?.websiteUrl ?? null}
+        role={role}
+        businessId={businessId}
       />
+
       <div className="flex flex-wrap items-center gap-3">
         <div className="flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2">
           <span className="text-xs text-[var(--text-secondary)]">Période</span>
           <select
             value={periodDays}
             onChange={(e) => setPeriodDays(Number(e.target.value))}
-            className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-2 py-1 text-sm"
+            className="cursor-pointer rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-2 py-1 text-sm"
           >
             <option value={7}>7 jours</option>
             <option value={30}>30 jours</option>
@@ -297,36 +226,14 @@ export default function ProDashboard({ businessId }: { businessId: string }) {
         ) : null}
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <ActionTile
-          icon={<UserPlus size={18} />}
-          title="Nouveau client"
-          description="Ajoute un contact et démarre un projet"
-          href={`/app/pro/${businessId}/clients`}
-          activeHref={`/app/pro/${businessId}/clients`}
-        />
-        <ActionTile
-          icon={<Briefcase size={18} />}
-          title="Nouveau projet"
-          description="Crée un devis ou une mission"
-          href={`/app/pro/${businessId}/projects`}
-          activeHref={`/app/pro/${businessId}/projects`}
-        />
-        <ActionTile
-          icon={<Wallet2 size={18} />}
-          title="Enregistrer un paiement"
-          description="Paiements et finances"
-          href={`/app/pro/${businessId}/finances`}
-          activeHref={`/app/pro/${businessId}/finances`}
-        />
-        <ActionTile
-          icon={<Building2 size={18} />}
-          title="Pipeline prospects"
-          description="Suivre les leads en cours"
-          href={`/app/pro/${businessId}/prospects`}
-          activeHref={`/app/pro/${businessId}/prospects`}
-        />
-      </div>
+      <BusinessKpis
+        items={[
+          { label: 'Solde', value: formatCurrency(net) },
+          { label: 'Revenus', value: formatCurrency(income) },
+          { label: 'Projets', value: String(activeProjects) },
+          { label: 'Tâches', value: String(openTasks) },
+        ]}
+      />
 
       {loading ? (
         <Card className="p-5">
@@ -339,39 +246,29 @@ export default function ProDashboard({ businessId }: { businessId: string }) {
         </Card>
       ) : (
         <>
-          <div className="grid gap-3 sm:grid-cols-2">
-            {statTiles.map((tile) => (
-              <Link
-                key={tile.label}
-                href={tile.href}
-                className="card-interactive block rounded-2xl"
-              >
-                <div className="space-y-1 rounded-2xl border border-[var(--border)] bg-[var(--surface)]/70 p-4">
-                  <p className="text-xs uppercase tracking-[0.16em] text-[var(--text-secondary)]">
-                    {tile.label}
-                  </p>
-                  <p className="text-2xl font-semibold text-[var(--text-primary)]">{tile.value}</p>
-                  <p className="text-[11px] text-[var(--text-secondary)]">{tile.hint}</p>
-                </div>
-              </Link>
-            ))}
-          </div>
-
           <div className="grid gap-4 lg:grid-cols-3">
-            <Card className="lg:col-span-2 space-y-3 p-5">
+            <Card className="lg:col-span-2 space-y-3 border border-[var(--border)]/80 bg-[var(--surface)] p-5">
               <div className="flex items-center justify-between">
                 <p className="text-sm font-semibold text-[var(--text-primary)]">Cash flow (12 mois)</p>
-                <Button asChild size="sm" variant="outline">
+                <Button
+                  asChild
+                  size="sm"
+                  className="cursor-pointer rounded-md bg-neutral-900 px-3 text-xs font-semibold text-white transition hover:bg-neutral-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
+                >
                   <Link href={`/app/pro/${businessId}/finances`}>Finances</Link>
                 </Button>
               </div>
               <CashflowChart series={monthlySeries} />
             </Card>
 
-            <Card className="space-y-3 p-5">
+            <Card className="space-y-3 border border-[var(--border)]/80 bg-[var(--surface)] p-5">
               <div className="flex items-center justify-between">
                 <p className="text-sm font-semibold text-[var(--text-primary)]">Tâches par statut</p>
-                <Button asChild size="sm" variant="outline">
+                <Button
+                  asChild
+                  size="sm"
+                  className="cursor-pointer rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 text-xs font-semibold text-[var(--text-primary)] transition hover:bg-[var(--surface-hover)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
+                >
                   <Link href={`/app/pro/${businessId}/tasks`}>Voir tâches</Link>
                 </Button>
               </div>
@@ -386,117 +283,209 @@ export default function ProDashboard({ businessId }: { businessId: string }) {
           </div>
 
           <div className="grid gap-4 lg:grid-cols-3">
-            <Card className="space-y-3 p-5">
+            <Card className="space-y-3 border border-[var(--border)]/80 bg-[var(--surface)] p-5">
               <div className="flex items-center justify-between">
-                <p className="text-sm font-semibold text-[var(--text-primary)]">Pipeline prospects</p>
-                <Button asChild size="sm" variant="outline">
-                  <Link href={`/app/pro/${businessId}/prospects`}>Pipeline</Link>
-                </Button>
-              </div>
-              <PipelineBar data={pipelineData} />
-            </Card>
-
-            <Card className="lg:col-span-2 space-y-3 p-5">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-semibold text-[var(--text-primary)]">Tâches à venir (7j)</p>
-                <Button asChild size="sm" variant="outline">
-                  <Link href={`/app/pro/${businessId}/tasks`}>Toutes les tâches</Link>
-                </Button>
-              </div>
-              <div className="space-y-2">
-                {upcomingTasks.length === 0 ? (
-                  <p className="text-sm text-[var(--text-secondary)]">Aucune tâche à venir.</p>
-                ) : (
-                  upcomingTasks.map((t) => (
-                    <Link
-                      key={t.id}
-                      href={`/app/pro/${businessId}/tasks/${t.id}`}
-                      className="card-interactive block rounded-xl"
-                    >
-                      <div className="flex flex-col gap-1 rounded-xl border border-[var(--border)] bg-[var(--surface)]/60 p-3 md:flex-row md:items-center md:justify-between">
-                        <div>
-                          <p className="text-sm font-semibold text-[var(--text-primary)]">{t.title}</p>
-                          <p className="text-[11px] text-[var(--text-secondary)]">
-                            {t.projectName ?? 'Projet ?'} · {formatDate(t.dueDate)}
-                          </p>
-                        </div>
-                        <Badge variant="neutral">{STATUS_LABELS[t.status]}</Badge>
-                      </div>
-                    </Link>
-                  ))
-                )}
-              </div>
-            </Card>
-          </div>
-
-          <div className="grid gap-4 lg:grid-cols-2">
-            <Card className="space-y-3 p-5">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-semibold text-[var(--text-primary)]">Clients récents</p>
-                <Button asChild size="sm" variant="outline">
-                  <Link href={`/app/pro/${businessId}/clients`}>Voir clients</Link>
-                </Button>
-              </div>
-              <div className="space-y-2">
-                {clientsRecent.length === 0 ? (
-                  <p className="text-sm text-[var(--text-secondary)]">Aucun client récent.</p>
-                ) : (
-                  clientsRecent.map((c) => (
-                    <Link
-                      key={c.id}
-                      href={`/app/pro/${businessId}/clients/${c.id}`}
-                      className="card-interactive block rounded-xl"
-                    >
-                      <div className="flex flex-col gap-1 rounded-xl border border-[var(--border)] bg-[var(--surface)]/60 p-3">
-                        <p className="text-sm font-semibold text-[var(--text-primary)]">{c.name}</p>
-                        <p className="text-[11px] text-[var(--text-secondary)]">
-                          {c.email ?? 'Email manquant'} · {formatDate(c.createdAt)}
-                        </p>
-                      </div>
-                    </Link>
-                  ))
-                )}
-              </div>
-            </Card>
-
-            <Card className="space-y-3 p-5">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-semibold text-[var(--text-primary)]">À faire ensuite</p>
-                <Badge variant="neutral">{lateTasksCount > 0 ? `${lateTasksCount} urgences` : 'Prêt'}</Badge>
+                <p className="text-sm font-semibold text-[var(--text-primary)]">Actions rapides</p>
               </div>
               <div className="grid gap-2 sm:grid-cols-2">
-                <Link href={`/app/pro/${businessId}/clients`} className="card-interactive block rounded-xl">
-                  <div className="space-y-1 rounded-xl border border-[var(--border)] bg-[var(--surface)]/60 p-3">
-                    <p className="text-sm font-semibold text-[var(--text-primary)]">Créer un client</p>
-                    <p className="text-xs text-[var(--text-secondary)]">Démarrer un dossier rapidement.</p>
+                <QuickLink href={`/app/pro/${businessId}/clients`} label="Nouveau client" />
+                <QuickLink href={`/app/pro/${businessId}/projects`} label="Nouveau projet" />
+                <QuickLink href={`/app/pro/${businessId}/finances`} label="Ajouter une opération" />
+                <QuickLink href={`/app/pro/${businessId}/tasks`} label="Voir les tâches" />
+              </div>
+            </Card>
+
+            <Card className="space-y-3 border border-[var(--border)]/80 bg-[var(--surface)] p-5 lg:col-span-2">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-semibold text-[var(--text-primary)]">Focus</p>
+                <Badge variant="neutral">{lateTasksCount > 0 ? `${lateTasksCount} urgences` : 'Prêt'}</Badge>
+              </div>
+              <div className="space-y-2 text-sm text-[var(--text-secondary)]">
+                {upcomingTasks.slice(0, 3).map((t) => (
+                  <div key={t.id} className="flex items-center justify-between rounded-xl border border-[var(--border)]/60 bg-[var(--surface)]/70 px-3 py-2">
+                    <div className="min-w-0">
+                      <p className="truncate text-[var(--text-primary)]">{t.title}</p>
+                      <p className="text-[11px]">{t.projectName ?? 'Projet'} · {formatDate(t.dueDate)}</p>
+                    </div>
+                    <Badge variant="neutral" className="shrink-0">
+                      {STATUS_LABELS[t.status]}
+                    </Badge>
                   </div>
-                </Link>
-                <Link href={`/app/pro/${businessId}/projects`} className="card-interactive block rounded-xl">
-                  <div className="space-y-1 rounded-xl border border-[var(--border)] bg-[var(--surface)]/60 p-3">
-                    <p className="text-sm font-semibold text-[var(--text-primary)]">Créer un projet/devis</p>
-                    <p className="text-xs text-[var(--text-secondary)]">Planifier la prochaine mission.</p>
-                  </div>
-                </Link>
-                <Link href={`/app/pro/${businessId}/finances`} className="card-interactive block rounded-xl">
-                  <div className="space-y-1 rounded-xl border border-[var(--border)] bg-[var(--surface)]/60 p-3">
-                    <p className="text-sm font-semibold text-[var(--text-primary)]">Ajouter une opération</p>
-                    <p className="text-xs text-[var(--text-secondary)]">Encaisser ou enregistrer une dépense.</p>
-                  </div>
-                </Link>
-                <Link href={`/app/pro/${businessId}/tasks`} className="card-interactive block rounded-xl">
-                  <div className="space-y-1 rounded-xl border border-[var(--border)] bg-[var(--surface)]/60 p-3">
-                    <p className="text-sm font-semibold text-[var(--text-primary)]">Tâches en retard</p>
-                    <p className="text-xs text-[var(--text-secondary)]">
-                      {lateTasksCount > 0 ? `${lateTasksCount} à traiter` : 'Aucune, continue !'}
-                    </p>
-                  </div>
-                </Link>
+                ))}
+                {upcomingTasks.length === 0 ? <p>Aucune action imminente.</p> : null}
               </div>
             </Card>
           </div>
-
         </>
       )}
     </div>
+  );
+}
+
+function BusinessHeader({
+  businessName,
+  websiteUrl,
+  role,
+  businessId,
+}: {
+  businessName: string;
+  websiteUrl: string | null | undefined;
+  role: string | null;
+  businessId: string;
+}) {
+  const normalized = normalizeWebsiteUrl(websiteUrl).value;
+  const src = normalized ? `/api/logo?url=${encodeURIComponent(normalized)}` : null;
+  return (
+    <div className="flex flex-col gap-3 rounded-3xl border border-[var(--border)]/80 bg-[var(--surface)]/80 p-4">
+      <Link href="/app/pro" className="text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
+        ← Studio
+      </Link>
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-start gap-3">
+          <LogoBlock src={src} fallback={businessName} />
+          <div className="min-w-0">
+            <p className="text-xl font-semibold text-[var(--text-primary)]">{businessName}</p>
+            {role ? (
+              <Badge variant="neutral" className="mt-1 text-[11px]">
+                {role}
+              </Badge>
+            ) : null}
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            asChild
+            size="sm"
+            className="cursor-pointer rounded-md bg-neutral-900 px-3 text-xs font-semibold text-white transition hover:bg-neutral-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
+          >
+            <Link href={`/app/pro/${businessId}/projects`}>Nouveau projet</Link>
+          </Button>
+          <HeaderMenu businessId={businessId} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BusinessKpis({ items }: { items: Array<{ label: string; value: string }> }) {
+  return (
+    <div className="rounded-3xl bg-[var(--surface)]/70 p-4">
+      <div className="grid grid-cols-1 justify-items-center gap-4 sm:grid-cols-4">
+        {items.slice(0, 4).map((item) => (
+          <div
+            key={item.label}
+            className="flex h-[120px] w-[120px] flex-col items-center justify-center rounded-full bg-[var(--surface)] text-center shadow-[0_0_0_1px_var(--border)]"
+          >
+            <span className="text-2xl font-bold text-[var(--text-primary)]">{item.value}</span>
+            <span className="mt-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-secondary)]">
+              {item.label}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function HeaderMenu({ businessId }: { businessId: string }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (!ref.current) return;
+      if (!ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setOpen(false);
+    }
+    document.addEventListener('mousedown', handleClick);
+    document.addEventListener('keydown', handleKey);
+    return () => {
+      document.removeEventListener('mousedown', handleClick);
+      document.removeEventListener('keydown', handleKey);
+    };
+  }, []);
+
+  const items = [
+    { label: 'Projets', href: `/app/pro/${businessId}/projects` },
+    { label: 'Clients', href: `/app/pro/${businessId}/clients` },
+    { label: 'Finances', href: `/app/pro/${businessId}/finances` },
+    { label: 'Membres', href: `/app/pro/${businessId}/settings/team` },
+    { label: 'Paramètres', href: `/app/pro/${businessId}/settings` },
+  ];
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label="Actions"
+        className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full text-[var(--text-secondary)] transition hover:bg-black/5 hover:text-[var(--text-primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
+        onClick={() => setOpen((v) => !v)}
+      >
+        <MoreVertical size={18} />
+      </button>
+      {open ? (
+        <div className="absolute right-0 z-20 mt-2 w-44 overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--surface)] shadow-md">
+          {items.map((item) => (
+            <Link
+              key={item.label}
+              href={item.href}
+              role="menuitem"
+              className="block cursor-pointer px-3 py-2 text-sm text-[var(--text-primary)] transition hover:bg-[var(--surface-hover)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
+              onClick={() => setOpen(false)}
+            >
+              {item.label}
+            </Link>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function LogoBlock({ src, fallback }: { src: string | null; fallback: string }) {
+  const initials =
+    fallback
+      ?.trim()
+      .split(/\s+/)
+      .map((p) => p[0] || '')
+      .join('')
+      .slice(0, 2)
+      .toUpperCase() || '??';
+  const [errored, setErrored] = useState(false);
+  return (
+    <span
+      className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-[var(--surface-2)] text-[var(--text-secondary)]"
+      aria-hidden
+    >
+      {src && !errored ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={src}
+          alt=""
+          className="h-full w-full rounded-xl object-cover"
+          onError={() => setErrored(true)}
+        />
+      ) : (
+        <span className="text-sm font-semibold text-[var(--text-primary)]">{initials}</span>
+      )}
+    </span>
+  );
+}
+
+function QuickLink({ href, label }: { href: string; label: string }) {
+  return (
+    <Link
+      href={href}
+      className="card-interactive block cursor-pointer rounded-xl border border-[var(--border)]/70 bg-[var(--surface)]/80 px-3 py-2 text-sm text-[var(--text-primary)] transition hover:-translate-y-[1px] hover:shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
+    >
+      <div className="flex items-center justify-between">
+        <span>{label}</span>
+        <ArrowRight size={14} />
+      </div>
+    </Link>
   );
 }

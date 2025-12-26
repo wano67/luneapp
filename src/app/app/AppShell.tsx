@@ -2,7 +2,7 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import AppSidebar, { type Space, getActiveSidebarMeta } from './AppSidebar';
@@ -36,33 +36,8 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const space = getCurrentSpace(pathname);
   const businessId = getBusinessIdFromPathname(pathname);
 
-  /* ---------------- DESKTOP DOCK ---------------- */
-  const [dockOpen, setDockOpen] = useState(false);
-  const closeTimer = useRef<number | null>(null);
-
-  function openDock() {
-    if (closeTimer.current) window.clearTimeout(closeTimer.current);
-    setDockOpen(true);
-  }
-  function scheduleCloseDock() {
-    if (closeTimer.current) window.clearTimeout(closeTimer.current);
-    closeTimer.current = window.setTimeout(() => setDockOpen(false), 140);
-  }
-  useEffect(() => {
-    return () => {
-      if (closeTimer.current) window.clearTimeout(closeTimer.current);
-    };
-  }, []);
-
-  const DOCK_LEFT_PX = 12;
-  const DOCK_GAP_PX = 16;
-  const DOCK_W_CLOSED_PX = 56;
-  const DOCK_W_OPEN_PX = 256;
-  const dockPaddingPx =
-    DOCK_LEFT_PX + (dockOpen ? DOCK_W_OPEN_PX : DOCK_W_CLOSED_PX) + DOCK_GAP_PX;
-  const dockStyle = useMemo(() => {
-    return { ['--dock-pl' as const]: `${dockPaddingPx}px` } as React.CSSProperties;
-  }, [dockPaddingPx]);
+  /* ---------------- LAYOUT CONST ---------------- */
+  const HEADER_H = 56; // h-14
 
   /* ---------------- NAV ---------------- */
   const centerNav = useMemo(
@@ -102,6 +77,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
 
   const LAYERS = {
     header: 60,
+    sidebar: 50,
     overlay: 55,
     menu: 57,
     modal: 70,
@@ -525,49 +501,34 @@ export default function AppShell({ children }: { children: ReactNode }) {
         </div>
       </header>
 
-      {/* ✅ DOCK DESKTOP */}
+      {/* ✅ SIDEBAR DESKTOP FIXE */}
       <aside
-        onMouseEnter={openDock}
-        onMouseLeave={scheduleCloseDock}
-        className="fixed left-3 top-1/2 z-40 hidden -translate-y-1/2 md:block"
-        aria-label="Dock latéral"
+        className="fixed left-0 hidden w-[264px] border-r border-[var(--border)] bg-[var(--background-alt)]/80 backdrop-blur-md md:flex md:flex-col"
+        style={{
+          zIndex: LAYERS.sidebar,
+          top: `${HEADER_H}px`,
+          height: `calc(100vh - ${HEADER_H}px)`,
+          paddingTop: 'env(safe-area-inset-top, 0px)',
+        }}
+        aria-label="Navigation latérale"
       >
-        <div
-          className={[
-            'rounded-3xl border border-[var(--border)] max-h-[90vh] overflow-y-auto',
-            'bg-[var(--background-alt)]/70 backdrop-blur-md shadow-xl',
-            'transition-all duration-200 ease-out',
-            dockOpen ? 'w-64' : 'w-14',
-          ].join(' ')}
-        >
-          {/* ✅ SUPPRIMÉ : la petite barre en haut */}
-          {/* <div className="px-2 pt-2">
-            <div className="h-2 w-full rounded-full bg-[var(--surface)]/40" />
-          </div> */}
-
-          <div className="px-1 pb-2 pt-2">
-            <AppSidebar
-              space={space}
-              pathname={pathname}
-              businessId={businessId}
-              collapsed={!dockOpen}
-              onNavigate={() => setDockOpen(false)}
-            />
-          </div>
+        <div className="h-full overflow-y-auto px-3 pb-4 pt-3">
+          <AppSidebar
+            space={space}
+            pathname={pathname}
+            businessId={businessId}
+            collapsed={false}
+            onNavigate={undefined}
+          />
         </div>
       </aside>
 
       {/* CONTENU */}
       <main
-        style={dockStyle}
-        className={[
-          'min-h-screen pt-14',
-          'transition-[padding-left] duration-200 ease-out',
-          'pl-0',
-          'md:pl-[var(--dock-pl)]',
-        ].join(' ')}
+        className="min-h-screen md:pl-[264px]"
+        style={{ paddingTop: `${HEADER_H}px` }}
       >
-        <div className="p-4 md:p-6">{children}</div>
+        <div className="px-4 py-4 md:px-6 md:py-6">{children}</div>
       </main>
     </div>
     </FileDropProvider>

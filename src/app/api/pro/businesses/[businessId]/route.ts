@@ -13,7 +13,7 @@ import {
   withRequestId,
 } from '@/server/http/apiUtils';
 import { rateLimit } from '@/server/security/rateLimit';
-import { normalizeWebsiteUrl } from '@/lib/website';
+import { normalizeWebsiteUrl } from '@/lib/normalizeWebsiteUrl';
 
 function parseId(param: string | undefined) {
   if (!param || !/^\d+$/.test(param)) return null;
@@ -164,7 +164,7 @@ export async function PATCH(
   }
 
   if (Object.prototype.hasOwnProperty.call(body, 'websiteUrl')) {
-    const normalizedWebsite = normalizeWebsiteUrl((body as Record<string, unknown>).websiteUrl);
+    const normalizedWebsite = await normalizeWebsiteUrl((body as Record<string, unknown>).websiteUrl);
     if (normalizedWebsite.error) {
       return withRequestId(badRequest(normalizedWebsite.error), requestId);
     }

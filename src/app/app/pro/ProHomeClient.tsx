@@ -1,18 +1,18 @@
 // src/app/app/pro/ProHomeClient.tsx
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { Card } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
 import { Modal } from '@/components/ui/modal';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import SwitchBusinessModal from './SwitchBusinessModal';
 import { PageHeader } from '../components/PageHeader';
-import { FaviconAvatar } from '../components/FaviconAvatar';
+import { ArrowRight } from 'lucide-react';
+import { LogoAvatar } from '@/components/pro/LogoAvatar';
 
 /* ===================== TYPES ===================== */
 
@@ -44,6 +44,18 @@ type BusinessesResponse = {
   }[];
 };
 
+type ProjectsResponse = {
+  items?: Array<{ id: string; status: string }>;
+};
+
+type MembersResponse = {
+  items?: Array<{ userId: string }>;
+};
+
+type ClientsResponse = {
+  items?: Array<{ id: string }>;
+};
+
 type BusinessInviteAcceptResponse = {
   business: BusinessSummary;
   role: string;
@@ -69,22 +81,22 @@ type OverviewResponse = {
 type CreateBusinessDraft = {
   name: string;
   websiteUrl: string;
+  activityType: 'service' | 'product' | 'mixte';
+  country: string;
 };
 
 /* ===================== COMPONENT ===================== */
 
 export default function ProHomeClient() {
   const router = useRouter();
-  const pathname = usePathname() || '';
   const searchParams = useSearchParams();
+  const pathname = usePathname() || '';
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [me, setMe] = useState<AuthMeResponse | null>(null);
   const [businesses, setBusinesses] = useState<BusinessesResponse | null>(null);
   const [overview, setOverview] = useState<OverviewResponse | null>(null);
   const loadController = useRef<AbortController | null>(null);
-  const [activeId, setActiveId] = useState<string | null>(null);
 
   /* ---------- CREATE MODAL ---------- */
   const [createOpen, setCreateOpen] = useState(false);
@@ -94,10 +106,9 @@ export default function ProHomeClient() {
   const [draft, setDraft] = useState<CreateBusinessDraft>({
     name: '',
     websiteUrl: '',
+    activityType: 'service',
+    country: '',
   });
-  const [seedMessage, setSeedMessage] = useState<string | null>(null);
-  const [seedError, setSeedError] = useState<string | null>(null);
-  const [seeding, setSeeding] = useState(false);
 
   /* ---------- JOIN MODAL ---------- */
   const [joinOpen, setJoinOpen] = useState(false);
@@ -105,31 +116,19 @@ export default function ProHomeClient() {
   const [joining, setJoining] = useState(false);
   const [joinError, setJoinError] = useState<string | null>(null);
   const [joinSuccess, setJoinSuccess] = useState<string | null>(null);
+  const [businessStats, setBusinessStats] = useState<
+    Record<string, { projectsTotal?: number; projectsInProgress?: number; members?: number; clients?: number }>
+  >({});
 
   /* ---------- DATA ---------- */
   const items = useMemo(() => businesses?.items ?? [], [businesses]);
-  const defaultBusinessId = useMemo(() => activeId ?? items[0]?.business.id ?? null, [activeId, items]);
-  const isActivePath = useCallback(
-    (target: string) => pathname === target || pathname.startsWith(`${target}/`),
-    [pathname]
-  );
 
   const createValidation = useMemo(() => {
     const issues: string[] = [];
     if (!draft.name.trim()) issues.push("Le nom de l'entreprise est obligatoire.");
-    return { ok: issues.length === 0, issues };
+    if (!draft.country.trim()) issues.push('Pays requis.');
+  return { ok: issues.length === 0, issues };
   }, [draft]);
-
-  useEffect(() => {
-    // hydrate once on mount
-    if (typeof window === 'undefined') return;
-    try {
-      const storedActive = localStorage.getItem('activeProBusinessId');
-      if (storedActive) setActiveId(storedActive);
-    } catch {
-      // ignore
-    }
-  }, []);
 
   // auto-open disabled to avoid loops; handled explicitly elsewhere
 
@@ -191,7 +190,6 @@ export default function ProHomeClient() {
           return;
         }
 
-        setMe(meRes.data);
         setBusinesses(bizRes.data);
         setOverview(overviewRes.data);
       } catch (err) {
@@ -206,6 +204,71 @@ export default function ProHomeClient() {
     void load();
     return () => controller.abort();
   }, []);
+
+  useEffect(() => {
+    if (!businesses?.items?.length) return;
+    const controller = new AbortController();
+    const targets = businesses.items.filter((item) => !businessStats[item.business.id]);
+    if (!targets.length) return undefined;
+
+    async function loadStats() {
+      await Promise.all(
+        targets.map(async (item) => {
+          const businessId = item.business.id;
+          const next: {
+            projectsTotal?: number;
+            projectsInProgress?: number;
+            members?: number;
+            clients?: number;
+          } = {};
+          try {
+            const res = await fetchJson<ProjectsResponse>(
+              `/api/pro/businesses/${businessId}/projects?archived=false`,
+              {},
+              controller.signal
+            );
+            if (res.ok && res.data?.items) {
+              next.projectsTotal = res.data.items.length;
+              next.projectsInProgress = res.data.items.filter((p) => p.status === 'IN_PROGRESS').length;
+            }
+          } catch {
+            // ignore
+          }
+
+          try {
+            const res = await fetchJson<MembersResponse>(
+              `/api/pro/businesses/${businessId}/members`,
+              {},
+              controller.signal
+            );
+            if (res.ok && res.data?.items) {
+              next.members = res.data.items.length;
+            }
+          } catch {
+            // ignore (non admin or network)
+          }
+
+          try {
+            const res = await fetchJson<ClientsResponse>(
+              `/api/pro/businesses/${businessId}/clients`,
+              {},
+              controller.signal
+            );
+            if (res.ok && res.data?.items) {
+              next.clients = res.data.items.length;
+            }
+          } catch {
+            // ignore
+          }
+
+          setBusinessStats((prev) => ({ ...prev, [businessId]: { ...prev[businessId], ...next } }));
+        })
+      );
+    }
+
+    void loadStats();
+    return () => controller.abort();
+  }, [businessStats, businesses]);
 
   async function refreshBusinesses(signal?: AbortSignal) {
     try {
@@ -225,7 +288,6 @@ export default function ProHomeClient() {
     if (typeof window !== 'undefined') {
       try {
         localStorage.setItem('activeProBusinessId', businessId);
-        setActiveId(businessId);
       } catch {
         // ignore storage errors
       }
@@ -272,6 +334,8 @@ export default function ProHomeClient() {
       setDraft({
         name: '',
         websiteUrl: '',
+        activityType: 'service',
+        country: '',
       });
       rememberAndGo(res.data.business.id, `/app/pro/${res.data.business.id}`);
     } catch (err) {
@@ -326,49 +390,163 @@ export default function ProHomeClient() {
     }
   }
 
-  async function triggerDevSeed() {
-    setSeedMessage(null);
-    setSeedError(null);
-    setSeeding(true);
-    const res = await fetchJson<{ ok: boolean; result: { businessId: string } }>('/api/dev/seed', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-    });
-    setSeeding(false);
-    if (!res.ok) {
-      const msg = res.error ?? 'Seed dev indisponible.';
-      setSeedError(res.requestId ? `${msg} (Ref: ${res.requestId})` : msg);
-      return;
-    }
-    setSeedMessage('Compte admin dev prêt. Identifiants: admin@local.test / admintest');
-    if (res.data?.result?.businessId) {
-      await refreshBusinesses();
-    }
-  }
-
-  const upcomingTasks = useMemo(() => overview?.upcomingTasks ?? [], [overview]);
-  const groupedTasks = useMemo(() => {
-    const buckets: Record<string, typeof upcomingTasks> = {};
-    for (const task of upcomingTasks) {
-      const due = task.dueDate ? new Date(task.dueDate) : null;
-      const key = due ? due.toISOString().slice(0, 10) : 'Aucune date';
-      if (!buckets[key]) buckets[key] = [];
-      buckets[key].push(task);
-    }
-    return Object.entries(buckets)
-      .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([date, tasks]) => ({ date, tasks }));
-  }, [upcomingTasks]);
-
   const formatCurrency = (cents: string | number) =>
     new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(
       Number(cents) / 100
     );
 
+  const filteredItems = useMemo(() => {
+    return [...items].sort(
+      (a, b) => new Date(b.business.createdAt).getTime() - new Date(a.business.createdAt).getTime()
+    );
+  }, [items]);
+
+  const kpis = useMemo(() => {
+    const entries: Array<{ label: string; value: string }> = [];
+    if (typeof overview?.totals?.businessesCount === 'number') {
+      entries.push({ label: 'Entreprises', value: String(overview.totals.businessesCount) });
+    }
+    const projectsFromStats = Object.values(businessStats).reduce(
+      (acc, curr) => acc + (typeof curr.projectsInProgress === 'number' ? curr.projectsInProgress : 0),
+      0
+    );
+    const projectsFallback =
+      typeof overview?.totals?.projectsActiveCount === 'number' ? overview.totals.projectsActiveCount : 0;
+    entries.push({ label: 'Projets', value: String(projectsFromStats || projectsFallback) });
+
+    // TODO: connecter au solde réel si/ quand dispo via API finances
+    const totalNet =
+      typeof overview?.totals?.totalNetCents === 'number'
+        ? overview.totals.totalNetCents
+        : overview?.totals?.totalNetCents || 0;
+    entries.push({ label: 'Solde', value: totalNet ? formatCurrency(totalNet) : '0 €' });
+    return entries;
+  }, [overview, businessStats]);
+
+  const businessBuckets = useMemo(() => {
+    const keywords = ['shop', 'store', 'boutique', 'commerce', 'market', 'vente'];
+    function inferBucket(business: BusinessSummary): 'product' | 'service' {
+      const haystack = `${business.name} ${business.websiteUrl ?? ''}`.toLowerCase();
+      return keywords.some((k) => haystack.includes(k)) ? 'product' : 'service';
+    }
+    return filteredItems.map(({ business, role }) => {
+      const bucket: 'product' | 'service' = inferBucket(business);
+      const domain = business.websiteUrl?.replace(/^https?:\/\//, '') ?? '';
+      return {
+        business,
+        role,
+        bucket,
+        domain,
+      };
+    });
+  }, [filteredItems]);
+
+  const serviceBusinesses = businessBuckets.filter((b) => b.bucket === 'service');
+  const productBusinesses = businessBuckets.filter((b) => b.bucket === 'product');
+
+  const tabKind = useMemo(() => {
+    const urlKind = searchParams?.get('kind');
+    if (urlKind === 'product') return 'product';
+    return 'service';
+  }, [searchParams]);
+
+  function setTab(kind: 'service' | 'product') {
+    const params = new URLSearchParams(searchParams?.toString());
+    params.set('kind', kind);
+    router.replace(`${pathname}?${params.toString()}`);
+  }
+
+  function renderBusinessGrid(
+    list: Array<{ business: BusinessSummary; role: string; bucket: 'service' | 'product' }>
+  ) {
+    if (!list.length) {
+      return (
+        <Card className="flex flex-col gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5 shadow-sm">
+          <p className="text-sm font-semibold text-[var(--text-primary)]">
+            Aucune entreprise pour l’instant.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" onClick={() => setCreateOpen(true)} className="cursor-pointer">
+              Créer une entreprise
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => setJoinOpen(true)} className="cursor-pointer">
+              Rejoindre
+            </Button>
+          </div>
+        </Card>
+      );
+    }
+
+    return (
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        {list.map(({ business, role }) => {
+          const stats = businessStats[business.id] ?? {};
+          const projectsTotal = typeof stats.projectsTotal === 'number' ? stats.projectsTotal : 0;
+          const projectsInProgress = typeof stats.projectsInProgress === 'number' ? stats.projectsInProgress : 0;
+          const members = typeof stats.members === 'number' ? stats.members : 0;
+          const clients = typeof stats.clients === 'number' ? stats.clients : 0;
+
+          return (
+          <Link
+            key={business.id}
+            href={`/app/pro/${business.id}`}
+            className="group relative card-interactive flex min-h-[160px] flex-col gap-3 rounded-3xl border border-[var(--border)]/50 bg-[var(--surface)] p-4 text-left shadow-sm transition hover:-translate-y-[1px] hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
+            aria-label={`Entrer dans ${business.name}`}
+          >
+            <div className="flex items-start gap-3">
+              <LogoAvatar name={business.name} websiteUrl={business.websiteUrl} size={44} />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-base font-semibold text-[var(--text-primary)]">
+                  {business.name}
+                </p>
+                {role ? (
+                  <span className="mt-1 inline-flex items-center rounded-full bg-[var(--surface-hover)] px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--text-secondary)]">
+                    {role}
+                  </span>
+                ) : null}
+              </div>
+              <ActionMenu businessId={business.id} />
+            </div>
+
+            <div className="space-y-1 text-[12px] text-[var(--text-secondary)]">
+              <div className="grid grid-cols-2 gap-x-6 rounded-xl px-2 py-1">
+                <div className="flex items-center justify-between">
+                  <span>Projets</span>
+                  <span className="font-semibold text-[var(--text-primary)]">{projectsTotal}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>En cours</span>
+                  <span className="font-semibold text-[var(--text-primary)]">{projectsInProgress}</span>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-x-6 rounded-xl px-2 py-1">
+                <div className="flex items-center justify-between">
+                  <span>Membres</span>
+                  <span className="font-semibold text-[var(--text-primary)]">{members}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>Clients</span>
+                  <span className="font-semibold text-[var(--text-primary)]">{clients}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-auto flex justify-end">
+              <span className="flex h-9 w-9 cursor-pointer items-center justify-center text-sm font-semibold text-[var(--text-primary)] transition group-hover:translate-x-1 group-hover:text-[var(--text-primary)]">
+                <ArrowRight size={18} strokeWidth={2.5} />
+              </span>
+            </div>
+          </Link>
+        );
+        })}
+      </div>
+    );
+  }
+
   /* ===================== UI ===================== */
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 px-4 py-4">
+    <div className="mx-auto max-w-7xl space-y-6 px-4 py-6 md:px-8">
       {loading ? (
         <Card className="p-5">
           <p className="text-sm text-[var(--text-secondary)]">Chargement…</p>
@@ -381,224 +559,59 @@ export default function ProHomeClient() {
       ) : (
         <>
           <PageHeader
-            title="Espace PRO"
-            subtitle="Gère tes entreprises, prospects, projets et clients."
-            primaryAction={{ label: 'Créer une entreprise', onClick: () => setCreateOpen(true) }}
-            secondaryAction={{ label: 'Rejoindre via invitation', onClick: () => setJoinOpen(true), variant: 'outline' }}
+            title="Studio"
+            subtitle="Vos entreprises et leur activité."
+            primaryAction={{ label: 'Créer un business', onClick: () => setCreateOpen(true) }}
+            secondaryAction={{ label: 'Rejoindre', onClick: () => setJoinOpen(true), variant: 'ghost' }}
           />
-          {me?.user ? (
-            <p className="text-xs text-[var(--text-secondary)]">
-              Connecté en tant que <span className="font-semibold text-[var(--text-primary)]">{me.user.name ?? me.user.email}</span>
-            </p>
+
+          {kpis.length ? (
+            <div className="rounded-3xl bg-[var(--surface)]/70 p-5">
+              <div className="grid grid-cols-1 justify-items-center gap-4 sm:grid-cols-3">
+                {kpis.map((item) => (
+                  <div
+                    key={item.label}
+                    className="flex h-[126px] w-[126px] flex-col items-center justify-center rounded-full bg-[var(--surface)]/90 text-center shadow-[0_0_0_1px_var(--border)] sm:h-[136px] sm:w-[136px]"
+                  >
+                    <span className="text-2xl font-bold text-[var(--text-primary)]">{item.value}</span>
+                    <span className="mt-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-secondary)]">
+                      {item.label}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
           ) : null}
 
-          <section className="space-y-3">
-            <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
-              Aperçu global
-            </h3>
-
-            <div className="grid gap-3 md:grid-cols-3">
-              <Card className="space-y-1 rounded-2xl border border-[var(--border)] bg-[var(--surface)]/70 p-4">
-                <p className="text-xs uppercase tracking-[0.2em] text-[var(--text-secondary)]">Solde net (finances)</p>
-                <p className="text-2xl font-semibold text-[var(--text-primary)]">
-                  {overview ? formatCurrency(overview.totals.totalNetCents) : '—'}
-                </p>
-              </Card>
-              <Card className="space-y-1 rounded-2xl border border-[var(--border)] bg-[var(--surface)]/70 p-4">
-                <p className="text-xs uppercase tracking-[0.2em] text-[var(--text-secondary)]">Projets actifs</p>
-                <p className="text-2xl font-semibold text-[var(--text-primary)]">
-                  {overview?.totals.projectsActiveCount ?? '—'}
-                </p>
-              </Card>
-              <Card className="space-y-1 rounded-2xl border border-[var(--border)] bg-[var(--surface)]/70 p-4">
-                <p className="text-xs uppercase tracking-[0.2em] text-[var(--text-secondary)]">Entreprises</p>
-                <p className="text-2xl font-semibold text-[var(--text-primary)]">
-                  {overview?.totals.businessesCount ?? items.length}
-                </p>
-              </Card>
+          <section className="space-y-4">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className={`cursor-pointer rounded-full px-3 py-1 text-xs font-semibold transition ${tabKind === 'service' ? 'bg-[var(--surface)] text-[var(--text-primary)] border border-[var(--border)] shadow-sm' : 'text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]'}`}
+                onClick={() => setTab('service')}
+                aria-pressed={tabKind === 'service'}
+              >
+                Services
+              </button>
+              <button
+                type="button"
+                className={`cursor-pointer rounded-full px-3 py-1 text-xs font-semibold transition ${tabKind === 'product' ? 'bg-[var(--surface)] text-[var(--text-primary)] border border-[var(--border)] shadow-sm' : 'text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]'}`}
+                onClick={() => setTab('product')}
+                aria-pressed={tabKind === 'product'}
+              >
+                Produits
+              </button>
             </div>
 
-            <Card className="space-y-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)]/70 p-4">
-              <div className="flex items-center justify-between">
-                <h4 className="text-sm font-semibold text-[var(--text-primary)]">Tâches à venir (7 jours)</h4>
-                <Badge variant="neutral" className="text-[11px]">
-                  {upcomingTasks.length} tâche{upcomingTasks.length > 1 ? 's' : ''}
-                </Badge>
-              </div>
-              {groupedTasks.length === 0 ? (
-                <div className="space-y-2">
-                  <p className="text-xs text-[var(--text-secondary)]">Aucune tâche planifiée sur les 7 prochains jours.</p>
-                  {defaultBusinessId ? (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => rememberAndGo(defaultBusinessId, `/app/pro/${defaultBusinessId}/tasks`)}
-                    >
-                      Créer une tâche
-                    </Button>
-                  ) : null}
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {groupedTasks.map(({ date, tasks }) => {
-                    const label =
-                      date === 'Aucune date'
-                        ? 'Sans date'
-                        : new Date(date).toLocaleDateString('fr-FR', {
-                            weekday: 'long',
-                            day: 'numeric',
-                            month: 'short',
-                          });
-                    return (
-                      <div key={date} className="space-y-2">
-                        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--text-secondary)]">
-                          {label}
-                        </p>
-                        <div className="space-y-2">
-                          {tasks.map((task) => {
-                            const taskHref =
-                              task.businessId && task.id
-                                ? `/app/pro/${task.businessId}/tasks/${task.id}`
-                                : task.businessId
-                                  ? `/app/pro/${task.businessId}`
-                                  : null;
-                            const content = (
-                              <div className="flex items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm transition hover:border-[var(--accent)] hover:bg-[var(--surface-2)]">
-                                <div className="flex min-w-0 items-center gap-3">
-                                  <FaviconAvatar
-                                    name={task.businessName ?? 'Entreprise'}
-                                    websiteUrl={task.websiteUrl ?? null}
-                                    size={28}
-                                  />
-                                  <div className="min-w-0 space-y-0.5">
-                                    <p className="truncate font-medium text-[var(--text-primary)]">{task.title}</p>
-                                    <div className="flex items-center gap-2 text-xs text-[var(--text-secondary)]">
-                                      <span className="truncate">{task.businessName ?? 'Entreprise'}</span>
-                                      <Badge variant="neutral" className="shrink-0">
-                                        {task.status}
-                                      </Badge>
-                                    </div>
-                                  </div>
-                                </div>
-                                {task.dueDate ? (
-                                  <Badge variant="neutral" className="shrink-0">
-                                    {new Date(task.dueDate).toLocaleDateString('fr-FR', {
-                                      day: '2-digit',
-                                      month: '2-digit',
-                                    })}
-                                  </Badge>
-                                ) : null}
-                              </div>
-                            );
-                            return taskHref ? (
-                              <Link key={task.id} href={taskHref} className="block focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]">
-                                {content}
-                              </Link>
-                            ) : (
-                              <div key={task.id}>{content}</div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </Card>
+            {tabKind === 'service' ? renderBusinessGrid(serviceBusinesses) : renderBusinessGrid(productBusinesses)}
           </section>
-      <section className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
-            Mes entreprises
-          </h3>
-          <Badge variant="neutral" className="text-[11px]">
-            {items.length} entreprise{items.length > 1 ? 's' : ''}
-          </Badge>
-        </div>
-        {items.length > 0 ? (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {items.map(({ business, role }) => {
-              return (
-                <Card
-                  key={business.id}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => rememberAndGo(business.id, `/app/pro/${business.id}`)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      rememberAndGo(business.id, `/app/pro/${business.id}`);
-                    }
-                  }}
-                  className="card-interactive flex h-full flex-col gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)]/70 p-4"
-                  data-active={
-                    isActivePath(`/app/pro/${business.id}`) || business.id === activeId ? true : undefined
-                  }
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex min-w-0 items-start gap-3">
-                      <FaviconAvatar name={business.name} websiteUrl={business.websiteUrl} size={38} />
-                      <div className="min-w-0 space-y-1">
-                        <p className="truncate font-semibold text-[var(--text-primary)]">{business.name}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Badge variant="neutral" className="shrink-0">
-                        {role}
-                      </Badge>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          rememberAndGo(business.id, `/app/pro/${business.id}/settings`);
-                        }}
-                      >
-                        Gérer
-                      </Button>
-                    </div>
-                  </div>
-                </Card>
-              );
-            })}
-          </div>
-        ) : (
-          <Card className="p-5">
-            <p className="text-sm text-[var(--text-secondary)]">
-              Aucune entreprise pour le moment. Crée-en une ou rejoins-en une.
-            </p>
-            <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-              <Button onClick={() => setCreateOpen(true)}>Créer une entreprise</Button>
-              <Button variant="outline" onClick={() => setJoinOpen(true)}>
-                Rejoindre via invitation
-              </Button>
-            </div>
-          </Card>
-        )}
-      </section>
-
-      {process.env.NODE_ENV !== 'production' ? (
-        <Card className="mt-6 flex flex-col gap-2 border-dashed border-[var(--border)] bg-transparent p-4">
-          <p className="text-sm font-semibold text-[var(--text-primary)]">Mode dev</p>
-          <p className="text-xs text-[var(--text-secondary)]">
-            Crée un compte admin local + business demo (admin@local.test / admintest).
-          </p>
-          <div className="flex flex-wrap gap-2">
-            <Button variant="outline" size="sm" onClick={triggerDevSeed} disabled={seeding}>
-              {seeding ? 'Seed en cours…' : 'Créer un compte admin de test'}
-            </Button>
-          </div>
-          {seedMessage ? <p className="text-xs text-emerald-500">{seedMessage}</p> : null}
-          {seedError ? <p className="text-xs text-rose-500">{seedError}</p> : null}
-        </Card>
-      ) : null}
 
       {/* CREATE MODAL */}
       <Modal
         open={createOpen}
         onCloseAction={() => (creating ? null : setCreateOpen(false))}
         title="Créer une entreprise"
-        description="Formulaire complet (pour l’instant, l’API n’exige que le nom)."
+        description="Formulaire minimal pour démarrer immédiatement."
       >
         <form onSubmit={handleCreateBusiness} className="space-y-4">
           <Input
@@ -607,6 +620,28 @@ export default function ProHomeClient() {
             onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
             error={creationError ?? undefined}
             placeholder="Ex: StudioFief"
+          />
+          <label className="space-y-1 text-sm text-[var(--text-primary)]">
+            <span className="text-xs text-[var(--text-secondary)]">Type d’activité *</span>
+            <select
+              value={draft.activityType}
+              onChange={(e) =>
+                setDraft((d) => ({ ...d, activityType: e.target.value as CreateBusinessDraft['activityType'] }))
+              }
+              className="w-full rounded-md border border-[var(--border)] bg-[var(--surface)] p-2 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
+              required
+            >
+              <option value="service">Service</option>
+              <option value="product">Produit</option>
+              <option value="mixte">Mixte</option>
+            </select>
+          </label>
+          <Input
+            label="Pays *"
+            value={draft.country}
+            onChange={(e) => setDraft((d) => ({ ...d, country: e.target.value }))}
+            placeholder="France"
+            required
           />
           <Input
             label="Site web"
@@ -669,7 +704,7 @@ export default function ProHomeClient() {
     </div>
   );
 }
- 
+
 // include switch modal globally on /app/pro hub
 export function ProHomeWithSwitch() {
   return (
@@ -677,5 +712,78 @@ export function ProHomeWithSwitch() {
       <ProHomeClient />
       <SwitchBusinessModal />
     </>
+  );
+}
+
+type ActionMenuProps = { businessId: string };
+
+function ActionMenu({ businessId }: ActionMenuProps) {
+  const [open, setOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    function onClickOutside(e: MouseEvent) {
+      if (!menuRef.current) return;
+      if (!menuRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setOpen(false);
+    }
+    document.addEventListener('mousedown', onClickOutside);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onClickOutside);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, []);
+
+  const items = [
+    { label: 'Projets', href: `/app/pro/${businessId}/projects` },
+    { label: 'Clients', href: `/app/pro/${businessId}/clients` },
+    { label: 'Finances', href: `/app/pro/${businessId}/finances` },
+    { label: 'Membres', href: `/app/pro/${businessId}/settings/team` },
+    { label: 'Paramètres', href: `/app/pro/${businessId}/settings` },
+  ];
+
+  return (
+    <div className="relative" ref={menuRef}>
+      <button
+        type="button"
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setOpen((v) => !v);
+        }}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label="Actions"
+        className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full bg-transparent text-[var(--text-secondary)] opacity-70 transition hover:bg-black/5 hover:opacity-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
+      >
+        ⋮
+      </button>
+      {open ? (
+        <div
+          role="menu"
+          className="absolute right-0 z-20 mt-2 w-36 overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--surface)] shadow-md"
+        >
+          {items.map((item) => (
+            <a
+              key={item.label}
+              href={item.href}
+              role="menuitem"
+              className="block cursor-pointer px-3 py-2 text-xs text-[var(--text-primary)] transition hover:bg-[var(--surface-hover)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
+              onClick={(e) => {
+                e.stopPropagation();
+                setOpen(false);
+              }}
+            >
+              {item.label}
+            </a>
+          ))}
+        </div>
+      ) : null}
+    </div>
   );
 }

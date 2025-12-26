@@ -1,448 +1,293 @@
-// src/app/app/pro/[businessId]/prospects/[prospectId]/page.tsx
+// Prospect detail page - premium, minimal
 'use client';
 
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { Card } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
-import { Modal } from '@/components/ui/modal';
-import { Select } from '@/components/ui/select';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
-import RoleBanner from '@/components/RoleBanner';
-import { useActiveBusiness } from '../../../ActiveBusinessProvider';
-
-type ProspectStatus = 'NEW' | 'FOLLOW_UP' | 'WON' | 'LOST';
-type ProspectPipelineStatus = 'NEW' | 'IN_DISCUSSION' | 'OFFER_SENT' | 'FOLLOW_UP' | 'CLOSED';
+import { LogoAvatar } from '@/components/pro/LogoAvatar';
+import { MoreVertical } from 'lucide-react';
 
 type Prospect = {
   id: string;
-  businessId: string;
   name: string;
-  title: string | null;
-  contactName: string | null;
-  contactEmail: string | null;
-  contactPhone: string | null;
-  probability: number;
-  nextActionDate: string | null;
-  pipelineStatus: ProspectPipelineStatus;
-  status: ProspectStatus;
-  createdAt: string;
-  updatedAt: string;
+  contactName?: string | null;
+  contactEmail?: string | null;
+  websiteUrl?: string | null;
+  pipelineStatus?: string | null;
+  probability?: number | null;
+  nextActionDate?: string | null;
+  notes?: string | null;
 };
 
-type ConvertResponse = { clientId: string; projectId: string };
+type ProspectResponse = Prospect;
 
-const pipelineOptions: { value: ProspectPipelineStatus; label: string }[] = [
-  { value: 'NEW', label: 'Nouveau' },
-  { value: 'IN_DISCUSSION', label: 'En discussion' },
-  { value: 'OFFER_SENT', label: 'Devis envoyé' },
-  { value: 'FOLLOW_UP', label: 'Relance' },
-  { value: 'CLOSED', label: 'Fermé' },
+type Interaction = { id: string; content?: string | null; happenedAt?: string | null; type?: string | null };
+type InteractionsResponse = { items?: Interaction[] };
+
+const tabs = [
+  { key: 'infos', label: 'Infos' },
+  { key: 'interactions', label: 'Interactions' },
+  { key: 'offers', label: 'Offres / Devis' },
 ];
-
-const statusOptions: { value: ProspectStatus; label: string }[] = [
-  { value: 'NEW', label: 'Nouveau' },
-  { value: 'FOLLOW_UP', label: 'Suivi' },
-  { value: 'WON', label: 'Gagné' },
-  { value: 'LOST', label: 'Perdu' },
-];
-
-function formatDate(value: string | null) {
-  if (!value) return '—';
-  try {
-    return new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(value));
-  } catch {
-    return value;
-  }
-}
-
-function withRef(message: string, ref?: string | null) {
-  return ref ? `${message} (Ref: ${ref})` : message;
-}
-
-function probabilityLabel(value: number | null | undefined) {
-  if (value == null) return '—';
-  return `${value}%`;
-}
 
 export default function ProspectDetailPage() {
   const params = useParams();
   const router = useRouter();
-
   const businessId = (params?.businessId ?? '') as string;
   const prospectId = (params?.prospectId ?? '') as string;
-  const activeCtx = useActiveBusiness({ optional: true });
-  const role = activeCtx?.activeBusiness?.role ?? null;
-  const isAdmin = role === 'OWNER' || role === 'ADMIN';
-  const readOnlyMessage = 'Action réservée aux admins/owners.';
 
   const [prospect, setProspect] = useState<Prospect | null>(null);
+  const [interactions, setInteractions] = useState<Interaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [requestId, setRequestId] = useState<string | null>(null);
-
-  const [form, setForm] = useState({
-    name: '',
-    title: '',
-    contactName: '',
-    contactEmail: '',
-    contactPhone: '',
-    probability: '',
-    pipelineStatus: 'NEW' as ProspectPipelineStatus,
-    status: 'NEW' as ProspectStatus,
-    nextActionDate: '',
-  });
-  const [saving, setSaving] = useState(false);
-  const [formError, setFormError] = useState<string | null>(null);
-
-  const [convertOpen, setConvertOpen] = useState(false);
-  const [convertLoading, setConvertLoading] = useState(false);
-  const [convertError, setConvertError] = useState<string | null>(null);
-  const [projectName, setProjectName] = useState('');
-  const [readOnlyInfo, setReadOnlyInfo] = useState<string | null>(null);
-
-  const fetchController = useRef<AbortController | null>(null);
+  const [activeTab, setActiveTab] = useState<'infos' | 'interactions' | 'offers'>('infos');
 
   useEffect(() => {
-    if (!prospect) return;
-    setForm({
-      name: prospect.name,
-      title: prospect.title ?? '',
-      contactName: prospect.contactName ?? '',
-      contactEmail: prospect.contactEmail ?? '',
-      contactPhone: prospect.contactPhone ?? '',
-      probability: String(prospect.probability ?? ''),
-      pipelineStatus: prospect.pipelineStatus,
-      status: prospect.status,
-      nextActionDate: prospect.nextActionDate
-        ? new Date(prospect.nextActionDate).toISOString().slice(0, 16)
-        : '',
-    });
-  }, [prospect]);
-
-  async function loadProspect(signal?: AbortSignal) {
-    const controller = signal ? null : new AbortController();
-    const effectiveSignal = signal ?? controller?.signal;
-    if (controller) {
-      fetchController.current?.abort();
-      fetchController.current = controller;
-    }
-
-    try {
-      setLoading(true);
-      setError(null);
-      setRequestId(null);
-
-      const res = await fetchJson<Prospect>(
-        `/api/pro/businesses/${businessId}/prospects/${prospectId}`,
-        {},
-        effectiveSignal
-      );
-      if (effectiveSignal?.aborted) return;
-
-      setRequestId(res.requestId);
-      if (res.status === 401) {
-        const from = window.location.pathname + window.location.search;
-        window.location.href = `/login?from=${encodeURIComponent(from)}`;
-        return;
+    const controller = new AbortController();
+    async function load() {
+      try {
+        setLoading(true);
+        setError(null);
+        const [prospectRes, interactionsRes] = await Promise.all([
+          fetchJson<ProspectResponse>(
+            `/api/pro/businesses/${businessId}/prospects/${prospectId}`,
+            {},
+            controller.signal,
+          ),
+          fetchJson<InteractionsResponse>(
+            `/api/pro/businesses/${businessId}/interactions?prospectId=${prospectId}`,
+            {},
+            controller.signal,
+          ),
+        ]);
+        if (controller.signal.aborted) return;
+        if (!prospectRes.ok || !prospectRes.data) {
+          setError(prospectRes.error ?? 'Prospect introuvable');
+          return;
+        }
+        if (!interactionsRes.ok) setError((prev) => prev ?? interactionsRes.error ?? null);
+        setProspect(prospectRes.data);
+        setInteractions(interactionsRes.data?.items ?? []);
+      } catch (err) {
+        if (controller.signal.aborted) return;
+        setError(getErrorMessage(err));
+      } finally {
+        if (!controller.signal.aborted) setLoading(false);
       }
-
-      if (!res.ok || !res.data) {
-        setError(withRef(res.error ?? 'Prospect introuvable.', res.requestId));
-        setProspect(null);
-        return;
-      }
-
-      setProspect(res.data);
-    } catch (err) {
-      if (effectiveSignal?.aborted) return;
-      console.error(err);
-      setError(getErrorMessage(err));
-    } finally {
-      if (!effectiveSignal?.aborted) setLoading(false);
     }
-  }
-
-  useEffect(() => {
-    void loadProspect();
-    return () => fetchController.current?.abort();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    void load();
+    return () => controller.abort();
   }, [businessId, prospectId]);
 
-  async function handleSave(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    if (!prospect) return;
-    if (!isAdmin) {
-      setFormError(readOnlyMessage);
-      setReadOnlyInfo(readOnlyMessage);
-      return;
-    }
-    setSaving(true);
-    setFormError(null);
-    setRequestId(null);
-
-    const payload: Record<string, unknown> = {
-      name: form.name.trim(),
-      title: form.title.trim() || null,
-      contactName: form.contactName.trim() || null,
-      contactEmail: form.contactEmail.trim() || null,
-      contactPhone: form.contactPhone.trim() || null,
-      pipelineStatus: form.pipelineStatus,
-      status: form.status,
-      probability: form.probability ? Number(form.probability) : null,
-      nextActionDate: form.nextActionDate ? new Date(form.nextActionDate).toISOString() : null,
-    };
-
-    const res = await fetchJson<Prospect>(
-      `/api/pro/businesses/${businessId}/prospects/${prospectId}`,
-      {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      }
+  const lastInteraction = useMemo(() => {
+    return (
+      interactions
+        .map((i) => i.happenedAt)
+        .filter(Boolean)
+        .sort()
+        .slice(-1)[0] ?? null
     );
-    setRequestId(res.requestId);
-
-    if (!res.ok || !res.data) {
-      const msg = res.error ?? 'Mise à jour impossible.';
-      setFormError(withRef(msg, res.requestId));
-      setSaving(false);
-      return;
-    }
-
-    setSaving(false);
-    await loadProspect();
-  }
-
-  async function handleConvert() {
-    if (!isAdmin) {
-      setConvertError(readOnlyMessage);
-      setReadOnlyInfo(readOnlyMessage);
-      return;
-    }
-    setConvertLoading(true);
-    setConvertError(null);
-    const payload: Record<string, unknown> = {};
-    if (projectName.trim()) payload.projectName = projectName.trim();
-
-    const res = await fetchJson<ConvertResponse>(
-      `/api/pro/businesses/${businessId}/prospects/${prospectId}/convert`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      }
-    );
-    setRequestId(res.requestId);
-
-    if (!res.ok || !res.data) {
-      const msg = res.error ?? 'Conversion impossible.';
-      setConvertError(withRef(msg, res.requestId));
-      setConvertLoading(false);
-      return;
-    }
-
-    setConvertLoading(false);
-    setConvertOpen(false);
-    const { projectId, clientId } = res.data;
-    if (projectId) {
-      router.push(`/app/pro/${businessId}/projects/${projectId}`);
-    } else if (clientId) {
-      router.push(`/app/pro/${businessId}/clients/${clientId}`);
-    } else {
-      router.push(`/app/pro/${businessId}/clients`);
-    }
-  }
+  }, [interactions]);
 
   if (loading) {
     return (
-      <Card className="p-5">
-        <p className="text-sm text-[var(--text-secondary)]">Chargement du prospect…</p>
-      </Card>
+      <div className="mx-auto max-w-5xl space-y-4 px-4 py-6">
+        <Card className="h-32 animate-pulse rounded-2xl bg-[var(--surface)]">
+          <div className="h-full w-full rounded-xl bg-[var(--surface-hover)]" />
+        </Card>
+        <Card className="h-24 animate-pulse rounded-2xl bg-[var(--surface)]">
+          <div className="h-full w-full rounded-xl bg-[var(--surface-hover)]" />
+        </Card>
+      </div>
     );
   }
 
-  if (!prospect) {
+  if (error || !prospect) {
     return (
-      <Card className="space-y-3 p-5">
-        <p className="text-sm font-semibold text-rose-500">{error ?? 'Prospect introuvable.'}</p>
-        <Button variant="outline" asChild>
-          <Link href={`/app/pro/${businessId}/prospects`}>Retour au pipeline</Link>
-        </Button>
-      </Card>
+      <div className="mx-auto max-w-5xl space-y-3 px-4 py-6">
+        <Link
+          href={`/app/pro/${businessId}/agenda`}
+          className="text-sm text-[var(--text-secondary)] underline-offset-4 hover:text-[var(--text-primary)]"
+        >
+          ← Retour à l’agenda
+        </Link>
+        <Card className="p-4 text-sm text-rose-500">{error ?? 'Prospect introuvable'}</Card>
+      </div>
     );
   }
 
   return (
-    <div className="space-y-5">
-      <RoleBanner role={role} />
-      <Card className="space-y-4 p-5">
-        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-          <div className="space-y-1">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-[var(--text-secondary)]">
-              Prospect · fiche
-            </p>
-            <h1 className="text-xl font-semibold text-[var(--text-primary)]">{prospect.name}</h1>
-            <p className="text-sm text-[var(--text-secondary)]">
-              Contact : {prospect.contactName ?? '—'} · {prospect.contactEmail ?? prospect.contactPhone ?? '—'}
-            </p>
-            <div className="flex flex-wrap gap-2 pt-2">
-              <Badge variant="neutral">{prospect.pipelineStatus}</Badge>
-              <Badge variant="neutral">{prospect.status}</Badge>
-              <Badge variant="neutral">{probabilityLabel(prospect.probability)}</Badge>
-            </div>
-          </div>
-          <div className="flex flex-col gap-2 md:items-end">
-            <Button
-              onClick={() => {
-                if (!isAdmin) {
-                  setReadOnlyInfo(readOnlyMessage);
-                  return;
-                }
-                setConvertOpen(true);
-              }}
-              disabled={!isAdmin}
-            >
-              Convertir en client
-            </Button>
-            <p className="text-[10px] text-[var(--text-secondary)]">
-              Prochaine action : {formatDate(prospect.nextActionDate)}
-            </p>
-          </div>
-        </div>
-
-        <div className="grid gap-3 md:grid-cols-3">
-          <Card className="border-dashed border-[var(--border)] bg-transparent p-3">
-            <p className="text-xs font-semibold text-[var(--text-secondary)]">Créé le</p>
-            <p className="text-sm text-[var(--text-primary)]">{formatDate(prospect.createdAt)}</p>
-          </Card>
-          <Card className="border-dashed border-[var(--border)] bg-transparent p-3">
-            <p className="text-xs font-semibold text-[var(--text-secondary)]">Titre</p>
-            <p className="text-sm text-[var(--text-primary)]">{prospect.title || '—'}</p>
-          </Card>
-          <Card className="border-dashed border-[var(--border)] bg-transparent p-3">
-            <p className="text-xs font-semibold text-[var(--text-secondary)]">Prochaine action</p>
-            <p className="text-sm text-[var(--text-primary)]">{formatDate(prospect.nextActionDate)}</p>
-          </Card>
-        </div>
-      </Card>
-
-      <Card className="space-y-4 p-5">
-        <div className="flex items-center justify-between">
-          <p className="text-sm font-semibold text-[var(--text-primary)]">Infos prospect</p>
-          {requestId ? (
-            <span className="text-[10px] text-[var(--text-faint)]">Req: {requestId}</span>
-          ) : null}
-        </div>
-
-        <form onSubmit={handleSave} className="space-y-4">
-          <div className="grid gap-3 md:grid-cols-2">
-            <Input
-              label="Entreprise"
-              required
-              value={form.name}
-              onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
-            />
-            <Input
-              label="Titre / rôle"
-              value={form.title}
-              onChange={(e) => setForm((prev) => ({ ...prev, title: e.target.value }))}
-            />
-            <Input
-              label="Contact"
-              value={form.contactName}
-              onChange={(e) => setForm((prev) => ({ ...prev, contactName: e.target.value }))}
-            />
-            <Input
-              label="Email"
-              type="email"
-              value={form.contactEmail}
-              onChange={(e) => setForm((prev) => ({ ...prev, contactEmail: e.target.value }))}
-            />
-            <Input
-              label="Téléphone"
-              value={form.contactPhone}
-              onChange={(e) => setForm((prev) => ({ ...prev, contactPhone: e.target.value }))}
-            />
-            <Input
-              label="Probabilité (%)"
-              type="number"
-              inputMode="numeric"
-              value={form.probability}
-              onChange={(e) => setForm((prev) => ({ ...prev, probability: e.target.value }))}
-            />
-            <Select
-              label="Pipeline"
-              value={form.pipelineStatus}
-              onChange={(e) => setForm((prev) => ({ ...prev, pipelineStatus: e.target.value as ProspectPipelineStatus }))}
-            >
-              {pipelineOptions.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </Select>
-            <Select
-              label="Statut"
-              value={form.status}
-              onChange={(e) => setForm((prev) => ({ ...prev, status: e.target.value as ProspectStatus }))}
-            >
-              {statusOptions.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </Select>
-            <Input
-              label="Prochaine action"
-              type="datetime-local"
-              value={form.nextActionDate}
-              onChange={(e) => setForm((prev) => ({ ...prev, nextActionDate: e.target.value }))}
-            />
-          </div>
-          {formError ? <p className="text-sm font-semibold text-rose-500">{formError}</p> : null}
-          {readOnlyInfo ? <p className="text-xs text-[var(--text-secondary)]">{readOnlyInfo}</p> : null}
-          <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
-            <Button type="submit" variant="outline" disabled={saving || !isAdmin}>
-              {saving ? 'Enregistrement…' : 'Mettre à jour'}
-            </Button>
-          </div>
-        </form>
-      </Card>
-
-      <Modal
-        open={convertOpen}
-        onCloseAction={() => {
-          if (convertLoading) return;
-          setConvertOpen(false);
-        }}
-        title="Convertir en client + projet"
-        description="Un client et un projet seront créés à partir de ce prospect."
+    <div className="mx-auto max-w-5xl space-y-5 px-4 py-6">
+      <Link
+        href={`/app/pro/${businessId}/agenda`}
+        className="text-sm text-[var(--text-secondary)] underline-offset-4 hover:text-[var(--text-primary)]"
       >
-        <div className="space-y-4">
-          <p className="text-sm text-[var(--text-secondary)]">
-            Confirme pour créer un client et un projet liés. Tu pourras ensuite démarrer et suivre les tâches.
-          </p>
-          <Input
-            label="Nom du projet (optionnel)"
-            value={projectName}
-            onChange={(e) => setProjectName(e.target.value)}
-            placeholder={prospect.name}
-          />
-          {convertError ? <p className="text-sm font-semibold text-rose-500">{convertError}</p> : null}
-          <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
-            <Button variant="outline" onClick={() => setConvertOpen(false)} disabled={convertLoading}>
-              Annuler
-            </Button>
-            <Button onClick={handleConvert} disabled={convertLoading || !isAdmin}>
-              {convertLoading ? 'Conversion…' : 'Convertir en client'}
-            </Button>
+        ← Retour à l’agenda
+      </Link>
+      <header className="flex items-start justify-between gap-3">
+        <div className="flex items-start gap-3">
+          <LogoAvatar name={prospect.name || 'Prospect'} websiteUrl={prospect.websiteUrl ?? undefined} size={48} />
+          <div className="space-y-1">
+            <p className="text-lg font-semibold text-[var(--text-primary)]">{prospect.name}</p>
+            {prospect.contactEmail ? (
+              <p className="text-sm text-[var(--text-secondary)]">{prospect.contactEmail}</p>
+            ) : null}
+            <StatusIndicatorProspect />
           </div>
         </div>
-      </Modal>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => router.push(`/app/pro/${businessId}/clients?from=prospect&prospectId=${prospectId}`)}
+            className="cursor-pointer rounded-md bg-neutral-900 px-3 py-2 text-sm font-semibold text-white transition hover:bg-neutral-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
+          >
+            Convertir en client
+          </button>
+          <MenuDots businessId={businessId} prospectId={prospectId} />
+        </div>
+      </header>
+
+      <Card className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <Metric label="Statut pipeline" value={prospect.pipelineStatus ?? 'Non défini'} />
+          <Metric label="Probabilité" value={prospect.probability ? `${prospect.probability}%` : '0%'} />
+          <Metric label="Prochaine action" value={formatDate(prospect.nextActionDate)} />
+          <Metric label="Dernière interaction" value={formatDate(lastInteraction)} />
+        </div>
+      </Card>
+
+      <div className="flex gap-2">
+        {tabs.map((tab) => (
+          <button
+            key={tab.key}
+            type="button"
+            onClick={() => setActiveTab(tab.key as typeof activeTab)}
+            className={`cursor-pointer rounded-full px-3 py-1 text-xs font-semibold transition ${
+              activeTab === tab.key
+                ? 'border border-[var(--border)] bg-[var(--surface)] text-[var(--text-primary)] shadow-sm'
+                : 'text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]'
+            }`}
+            aria-pressed={activeTab === tab.key}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === 'infos' ? (
+        <Card className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
+          <div className="space-y-2 text-sm text-[var(--text-secondary)]">
+            <InfoRow label="Contact" value={prospect.contactName ?? 'Non renseigné'} />
+            <InfoRow label="Email" value={prospect.contactEmail ?? 'Non renseigné'} />
+            <InfoRow label="Site" value={prospect.websiteUrl ?? 'Non renseigné'} />
+            <InfoRow label="Notes" value={prospect.notes ?? '—'} />
+          </div>
+        </Card>
+      ) : null}
+
+      {activeTab === 'interactions' ? (
+        <Card className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
+          {interactions.length === 0 ? (
+            <EmptyBlock message="Aucune interaction." />
+          ) : (
+            <div className="grid gap-2">
+              {interactions.map((i) => (
+                <div
+                  key={i.id}
+                  className="rounded-xl border border-[var(--border)]/60 bg-[var(--surface-hover)] px-3 py-2 text-sm"
+                >
+                  <div className="flex items-center justify-between">
+                    <p className="font-semibold text-[var(--text-primary)]">{i.type ?? 'Note'}</p>
+                    <span className="text-xs text-[var(--text-secondary)]">{formatDate(i.happenedAt)}</span>
+                  </div>
+                  {i.content ? <p className="text-sm text-[var(--text-primary)]">{i.content}</p> : null}
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+      ) : null}
+
+      {activeTab === 'offers' ? (
+        <Card className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
+          <EmptyBlock message="Aucune offre / devis pour l’instant." />
+        </Card>
+      ) : null}
+    </div>
+  );
+}
+
+function Metric({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="rounded-xl bg-[var(--surface-hover)]/60 px-3 py-3">
+      <p className="text-xs uppercase tracking-wide text-[var(--text-secondary)]">{label}</p>
+      <p className="text-lg font-semibold text-[var(--text-primary)]">{value}</p>
+    </div>
+  );
+}
+
+function EmptyBlock({ message }: { message: string }) {
+  return <p className="text-sm text-[var(--text-secondary)]">{message}</p>;
+}
+
+function formatDate(value: string | null | undefined) {
+  if (!value) return '—';
+  try {
+    return new Intl.DateTimeFormat('fr-FR').format(new Date(value));
+  } catch {
+    return '—';
+  }
+}
+
+function InfoRow({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="flex items-center justify-between rounded-lg bg-[var(--surface-hover)]/60 px-3 py-2">
+      <span>{label}</span>
+      <span className="text-[var(--text-primary)] font-medium">{value}</span>
+    </div>
+  );
+}
+
+function StatusIndicatorProspect() {
+  return (
+    <span className="flex items-center gap-1 text-[12px] font-medium text-[var(--text-secondary)]">
+      <span aria-hidden>○</span>
+      <span>Prospect</span>
+    </span>
+  );
+}
+
+function MenuDots({ businessId, prospectId }: { businessId: string; prospectId: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        aria-label="Actions"
+        className="cursor-pointer rounded-md p-2 text-[var(--text-secondary)] transition hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
+        onClick={() => setOpen((v) => !v)}
+      >
+        <MoreVertical size={18} />
+      </button>
+      {open ? (
+        <div className="absolute right-0 z-10 mt-2 w-40 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-1 shadow-lg">
+          {[
+            { label: 'Interactions', href: `/app/pro/${businessId}/prospects/${prospectId}#interactions` },
+            { label: 'Offres', href: `/app/pro/${businessId}/prospects/${prospectId}#offers` },
+          ].map((item) => (
+            <Link
+              key={item.label}
+              href={item.href}
+              className="flex cursor-pointer items-center justify-between rounded-md px-3 py-2 text-sm text-[var(--text-primary)] transition hover:bg-[var(--surface-hover)]"
+              onClick={() => setOpen(false)}
+            >
+              {item.label}
+            </Link>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }

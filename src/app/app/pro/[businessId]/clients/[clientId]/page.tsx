@@ -1,943 +1,469 @@
-// src/app/app/pro/[businessId]/clients/[clientId]/page.tsx
+// Client detail page - premium, minimal CRM view
 'use client';
 
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Select } from '@/components/ui/select';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
-import { useActiveBusiness } from '../../../ActiveBusinessProvider';
-import RoleBanner from '@/components/RoleBanner';
-import { ReferencePicker } from '../../references/ReferencePicker';
-import { FaviconAvatar } from '../../../../components/FaviconAvatar';
+import { LogoAvatar } from '@/components/pro/LogoAvatar';
+import { MoreVertical } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { normalizeWebsiteUrl } from '@/lib/website';
+import { KpiCirclesBlock } from '@/components/pro/KpiCirclesBlock';
+import { formatCurrencyEUR } from '@/lib/formatCurrency';
 
 type Client = {
   id: string;
-  businessId: string;
-  categoryReferenceId: string | null;
-  categoryReferenceName: string | null;
-  tagReferences: { id: string; name: string }[];
   name: string;
   email: string | null;
   websiteUrl: string | null;
-  phone: string | null;
   notes: string | null;
-  createdAt: string;
-  updatedAt: string;
+  company?: string | null;
 };
 
-type ClientDetailResponse = {
-  item: Client;
+type ClientResponse = { item: Client };
+
+type Project = {
+  id: string;
+  name: string;
+  status?: string | null;
+  amountCents?: string | number | null;
+  startDate?: string | null;
+  archivedAt?: string | null;
 };
 
-type InteractionType = 'CALL' | 'MEETING' | 'EMAIL' | 'NOTE' | 'MESSAGE';
+type ProjectsResponse = { items?: Project[] };
 
 type Interaction = {
   id: string;
-  businessId: string;
-  clientId: string | null;
-  projectId: string | null;
-  type: InteractionType;
-  content: string;
-  happenedAt: string;
-  nextActionDate: string | null;
-  createdAt: string;
-  createdByUserId: string | null;
+  type?: string | null;
+  content?: string | null;
+  happenedAt?: string | null;
 };
 
-type ProjectStatus = 'PLANNED' | 'ACTIVE' | 'ON_HOLD' | 'COMPLETED' | 'CANCELLED';
+type InteractionsResponse = { items?: Interaction[] };
 
-type ProjectSummary = {
-  id: string;
-  businessId: string;
-  clientId: string | null;
-  clientName: string | null;
-  name: string;
-  status: ProjectStatus;
-  quoteStatus: 'DRAFT' | 'SENT' | 'SIGNED' | 'CANCELLED' | 'EXPIRED';
-  depositStatus: 'NOT_REQUIRED' | 'PENDING' | 'PAID';
-  startDate: string | null;
-  endDate: string | null;
-  startedAt: string | null;
-  archivedAt: string | null;
-  progress: number;
-};
-
-type FinanceLine = {
-  id: string;
-  businessId: string;
-  projectId: string | null;
-  projectName: string | null;
-  type: 'INCOME' | 'EXPENSE';
-  amountCents: string;
-  amount: number;
-  category: string;
-  date: string;
-  note: string | null;
-};
+const tabs = [
+  { key: 'projects', label: 'Projets' },
+  { key: 'documents', label: 'Documents' },
+  { key: 'interactions', label: 'Interactions' },
+  { key: 'infos', label: 'Infos' },
+];
 
 export default function ClientDetailPage() {
   const params = useParams();
+  const router = useRouter();
   const businessId = (params?.businessId ?? '') as string;
   const clientId = (params?.clientId ?? '') as string;
-  const activeCtx = useActiveBusiness({ optional: true });
-  const role = activeCtx?.activeBusiness?.role;
-  const isAdminOrOwner = role === 'ADMIN' || role === 'OWNER';
-  const canEditInteractions = isAdminOrOwner;
-  const canEditReferences = isAdminOrOwner;
 
   const [client, setClient] = useState<Client | null>(null);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [interactions, setInteractions] = useState<Interaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const fetchController = useRef<AbortController | null>(null);
-  const interactionsController = useRef<AbortController | null>(null);
-  const projectsController = useRef<AbortController | null>(null);
-  const financesController = useRef<AbortController | null>(null);
-
-  const [interactions, setInteractions] = useState<Interaction[]>([]);
-  const [interactionsLoading, setInteractionsLoading] = useState(true);
-  const [interactionsError, setInteractionsError] = useState<string | null>(null);
-  const [interactionRequestId, setInteractionRequestId] = useState<string | null>(null);
-  const [interactionType, setInteractionType] = useState<InteractionType>('CALL');
-  const [interactionContent, setInteractionContent] = useState('');
-  const [interactionDate, setInteractionDate] = useState<string>(() => new Date().toISOString().slice(0, 16));
-  const [interactionNextAction, setInteractionNextAction] = useState('');
-  const [savingInteraction, setSavingInteraction] = useState(false);
-  const [interactionInfo, setInteractionInfo] = useState<string | null>(null);
-  const [editingInteraction, setEditingInteraction] = useState<Interaction | null>(null);
-  const [projects, setProjects] = useState<ProjectSummary[]>([]);
-  const [projectsLoading, setProjectsLoading] = useState(true);
-  const [projectsError, setProjectsError] = useState<string | null>(null);
-  const [projectsRequestId, setProjectsRequestId] = useState<string | null>(null);
-  const [financeLines, setFinanceLines] = useState<FinanceLine[]>([]);
-  const [financeLoading, setFinanceLoading] = useState(true);
-  const [financeError, setFinanceError] = useState<string | null>(null);
-  const [financeRequestId, setFinanceRequestId] = useState<string | null>(null);
-  const [categoryReferenceId, setCategoryReferenceId] = useState<string>('');
-  const [tagReferenceIds, setTagReferenceIds] = useState<string[]>([]);
-  const [referenceMessage, setReferenceMessage] = useState<string | null>(null);
-  const [referenceError, setReferenceError] = useState<string | null>(null);
-  const [referenceRequestId, setReferenceRequestId] = useState<string | null>(null);
-  const [referencesSaving, setReferencesSaving] = useState(false);
-  const [websiteInput, setWebsiteInput] = useState('');
-  const [contactSaving, setContactSaving] = useState(false);
-  const [contactError, setContactError] = useState<string | null>(null);
-  const [contactInfo, setContactInfo] = useState<string | null>(null);
-  const [contactRequestId, setContactRequestId] = useState<string | null>(null);
-
-  function formatDate(value: string) {
-    try {
-      return new Intl.DateTimeFormat('fr-FR').format(new Date(value));
-    } catch {
-      return value;
-    }
-  }
-
-  function formatDateTime(value: string) {
-    try {
-      return new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
-    } catch {
-      return value;
-    }
-  }
-
-  function formatCents(value: string | number | null | undefined, currency = 'EUR') {
-    const num = typeof value === 'number' ? value : Number(value ?? 0);
-    if (!Number.isFinite(num)) return '—';
-    return new Intl.NumberFormat('fr-FR', { style: 'currency', currency, maximumFractionDigits: 0 }).format(
-      num / 100
-    );
-  }
-
-  function interactionTypeLabel(value: InteractionType) {
-    switch (value) {
-      case 'CALL':
-        return 'Appel';
-      case 'MEETING':
-        return 'Réunion';
-      case 'EMAIL':
-        return 'Email';
-      case 'NOTE':
-        return 'Note';
-      case 'MESSAGE':
-        return 'Message';
-      default:
-        return value;
-    }
-  }
-
-  async function loadProjects(signal?: AbortSignal) {
-    const controller = signal ? null : new AbortController();
-    const effectiveSignal = signal ?? controller?.signal;
-    if (controller) {
-      projectsController.current?.abort();
-      projectsController.current = controller;
-    }
-
-    try {
-      setProjectsLoading(true);
-      setProjectsError(null);
-      setProjectsRequestId(null);
-      const res = await fetchJson<{ items: ProjectSummary[] }>(
-        `/api/pro/businesses/${businessId}/projects?clientId=${clientId}`,
-        {},
-        effectiveSignal
-      );
-      if (effectiveSignal?.aborted) return;
-      setProjectsRequestId(res.requestId);
-      if (!res.ok || !res.data) {
-        const msg = res.error ?? 'Impossible de charger les projets.';
-        setProjectsError(res.requestId ? `${msg} (Ref: ${res.requestId})` : msg);
-        setProjects([]);
-        return;
-      }
-      setProjects(res.data.items);
-    } catch (err) {
-      if (effectiveSignal?.aborted) return;
-      setProjectsError(getErrorMessage(err));
-      setProjects([]);
-    } finally {
-      if (!effectiveSignal?.aborted) setProjectsLoading(false);
-    }
-  }
-
-  async function loadFinanceLines(signal?: AbortSignal) {
-    if (projects.length === 0) {
-      setFinanceLines([]);
-      setFinanceLoading(false);
-      return;
-    }
-    const controller = signal ? null : new AbortController();
-    const effectiveSignal = signal ?? controller?.signal;
-    if (controller) {
-      financesController.current?.abort();
-      financesController.current = controller;
-    }
-    try {
-      setFinanceLoading(true);
-      setFinanceError(null);
-      setFinanceRequestId(null);
-      const res = await fetchJson<{ items: FinanceLine[] }>(
-        `/api/pro/businesses/${businessId}/finances`,
-        {},
-        effectiveSignal
-      );
-      if (effectiveSignal?.aborted) return;
-      setFinanceRequestId(res.requestId);
-      if (!res.ok || !res.data) {
-        const msg = res.error ?? 'Impossible de charger les finances.';
-        setFinanceError(res.requestId ? `${msg} (Ref: ${res.requestId})` : msg);
-        setFinanceLines([]);
-        return;
-      }
-      const projectIds = new Set(projects.map((p) => p.id));
-      const filtered = res.data.items.filter((line) => line.projectId && projectIds.has(line.projectId));
-      setFinanceLines(filtered);
-    } catch (err) {
-      if (effectiveSignal?.aborted) return;
-      setFinanceError(getErrorMessage(err));
-      setFinanceLines([]);
-    } finally {
-      if (!effectiveSignal?.aborted) setFinanceLoading(false);
-    }
-  }
-
-  async function loadInteractions(signal?: AbortSignal) {
-    const controller = signal ? null : new AbortController();
-    const effectiveSignal = signal ?? controller?.signal;
-    if (controller) {
-      interactionsController.current?.abort();
-      interactionsController.current = controller;
-    }
-
-    try {
-      setInteractionsLoading(true);
-      setInteractionsError(null);
-      setInteractionRequestId(null);
-
-      const res = await fetchJson<{ items: Interaction[] }>(
-        `/api/pro/businesses/${businessId}/interactions?clientId=${clientId}&limit=10`,
-        {},
-        effectiveSignal
-      );
-
-      if (effectiveSignal?.aborted) return;
-      setInteractionRequestId(res.requestId);
-
-      if (res.status === 401) {
-        const from = window.location.pathname + window.location.search;
-        window.location.href = `/login?from=${encodeURIComponent(from)}`;
-        return;
-      }
-
-      if (!res.ok || !res.data) {
-        const msg = res.error ?? 'Impossible de charger les interactions.';
-        setInteractionsError(res.requestId ? `${msg} (Ref: ${res.requestId})` : msg);
-        setInteractions([]);
-        return;
-      }
-
-      setInteractions(res.data.items);
-    } catch (err) {
-      if (effectiveSignal?.aborted) return;
-      console.error(err);
-      setInteractionsError(getErrorMessage(err));
-      setInteractions([]);
-    } finally {
-      if (!effectiveSignal?.aborted) setInteractionsLoading(false);
-    }
-  }
-
-  function startEditInteraction(interaction: Interaction) {
-    setEditingInteraction(interaction);
-    setInteractionType(interaction.type);
-    setInteractionContent(interaction.content);
-    setInteractionDate(interaction.happenedAt.slice(0, 16));
-    setInteractionNextAction(interaction.nextActionDate ? interaction.nextActionDate.slice(0, 16) : '');
-    setInteractionInfo(null);
-    setInteractionsError(null);
-  }
-
-  async function deleteInteraction(interaction: Interaction) {
-    if (!canEditInteractions) return;
-    if (!window.confirm('Supprimer cette interaction ?')) return;
-    setInteractionsError(null);
-    setInteractionInfo(null);
-    const res = await fetchJson<{ ok: boolean }>(
-      `/api/pro/businesses/${businessId}/interactions/${interaction.id}`,
-      { method: 'DELETE' }
-    );
-    setInteractionRequestId(res.requestId);
-    if (res.status === 401) {
-      const from = window.location.pathname + window.location.search;
-      window.location.href = `/login?from=${encodeURIComponent(from)}`;
-      return;
-    }
-    if (!res.ok) {
-      const msg = res.error ?? 'Suppression impossible.';
-      setInteractionsError(res.requestId ? `${msg} (Ref: ${res.requestId})` : msg);
-      return;
-    }
-    if (editingInteraction?.id === interaction.id) {
-      setEditingInteraction(null);
-      setInteractionContent('');
-      setInteractionNextAction('');
-      setInteractionType('CALL');
-      setInteractionDate(new Date().toISOString().slice(0, 16));
-    }
-    await loadInteractions();
-  }
-
-  async function submitInteraction(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    if (!canEditInteractions) return;
-    setSavingInteraction(true);
-    setInteractionsError(null);
-    setInteractionInfo(null);
-    const isEdit = Boolean(editingInteraction);
-
-    const content = interactionContent.trim();
-    if (!content) {
-      setInteractionsError('Contenu requis.');
-      setSavingInteraction(false);
-      return;
-    }
-
-    const happenedAtValue = interactionDate ? new Date(interactionDate) : new Date();
-    if (Number.isNaN(happenedAtValue.getTime())) {
-      setInteractionsError('Date invalide.');
-      setSavingInteraction(false);
-      return;
-    }
-    const nextActionValue = interactionNextAction ? new Date(interactionNextAction) : null;
-    if (nextActionValue && Number.isNaN(nextActionValue.getTime())) {
-      setInteractionsError('Prochaine action invalide.');
-      setSavingInteraction(false);
-      return;
-    }
-
-    const payload: Record<string, unknown> = {
-      clientId,
-      type: interactionType,
-      content,
-      happenedAt: happenedAtValue.toISOString(),
-    };
-    if (nextActionValue) payload.nextActionDate = nextActionValue.toISOString();
-    else if (isEdit && !interactionNextAction) payload.nextActionDate = null;
-
-    const endpoint = isEdit
-      ? `/api/pro/businesses/${businessId}/interactions/${editingInteraction?.id}`
-      : `/api/pro/businesses/${businessId}/interactions`;
-    const res = await fetchJson<Interaction>(endpoint, {
-      method: isEdit ? 'PATCH' : 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-
-    setInteractionRequestId(res.requestId);
-
-    if (res.status === 401) {
-      const from = window.location.pathname + window.location.search;
-      window.location.href = `/login?from=${encodeURIComponent(from)}`;
-      setSavingInteraction(false);
-      return;
-    }
-
-    if (!res.ok || !res.data) {
-      const msg = res.error ?? 'Création impossible.';
-      setInteractionsError(res.requestId ? `${msg} (Ref: ${res.requestId})` : msg);
-      setSavingInteraction(false);
-      return;
-    }
-
-    setInteractionInfo(isEdit ? 'Interaction mise à jour.' : 'Interaction ajoutée.');
-    setEditingInteraction(null);
-    setInteractionType('CALL');
-    setInteractionContent('');
-    setInteractionNextAction('');
-    setInteractionDate(new Date().toISOString().slice(0, 16));
-    await loadInteractions();
-    setSavingInteraction(false);
-  }
-
-  async function saveReferences() {
-    if (!canEditReferences) return;
-    setReferenceError(null);
-    setReferenceMessage(null);
-    setReferencesSaving(true);
-    const res = await fetchJson<ClientDetailResponse>(
-      `/api/pro/businesses/${businessId}/clients/${clientId}`,
-      {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          categoryReferenceId: categoryReferenceId || null,
-          tagReferenceIds,
-        }),
-      }
-    );
-
-    setReferenceRequestId(res.requestId ?? null);
-
-    if (res.status === 401) {
-      const from = window.location.pathname + window.location.search;
-      window.location.href = `/login?from=${encodeURIComponent(from)}`;
-      return;
-    }
-
-    if (!res.ok || !res.data) {
-      const msg = res.error ?? 'Impossible de mettre à jour les références.';
-      setReferenceError(res.requestId ? `${msg} (Ref: ${res.requestId})` : msg);
-      setReferencesSaving(false);
-      return;
-    }
-
-    const updated: Client = {
-      ...res.data.item,
-      categoryReferenceId: res.data.item.categoryReferenceId ?? null,
-      categoryReferenceName: res.data.item.categoryReferenceName ?? null,
-      tagReferences: res.data.item.tagReferences ?? [],
-      websiteUrl: res.data.item.websiteUrl ?? null,
-    };
-
-    setClient(updated);
-    setCategoryReferenceId(updated.categoryReferenceId ?? '');
-    setTagReferenceIds(updated.tagReferences.map((t) => t.id));
-    setReferenceMessage('Références mises à jour.');
-    setReferenceError(null);
-    setReferencesSaving(false);
-  }
-
-  async function saveWebsite(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    if (!isAdminOrOwner) {
-      setContactInfo('Action réservée aux admins/owners.');
-      return;
-    }
-    setContactSaving(true);
-    setContactError(null);
-    setContactInfo(null);
-    const res = await fetchJson<ClientDetailResponse>(
-      `/api/pro/businesses/${businessId}/clients/${clientId}`,
-      {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ websiteUrl: websiteInput.trim() || null }),
-      }
-    );
-
-    setContactRequestId(res.requestId ?? null);
-
-    if (res.status === 401) {
-      const from = window.location.pathname + window.location.search;
-      window.location.href = `/login?from=${encodeURIComponent(from)}`;
-      return;
-    }
-
-    if (!res.ok || !res.data) {
-      const msg = res.error ?? 'Impossible de mettre à jour le site web.';
-      setContactError(res.requestId ? `${msg} (Ref: ${res.requestId})` : msg);
-      setContactSaving(false);
-      return;
-    }
-
-    const normalized: Client = {
-      ...res.data.item,
-      categoryReferenceId: res.data.item.categoryReferenceId ?? null,
-      categoryReferenceName: res.data.item.categoryReferenceName ?? null,
-      tagReferences: res.data.item.tagReferences ?? [],
-      websiteUrl: res.data.item.websiteUrl ?? null,
-    };
-
-    setClient(normalized);
-    setCategoryReferenceId(normalized.categoryReferenceId ?? '');
-    setTagReferenceIds(normalized.tagReferences.map((t) => t.id));
-    setContactInfo('Site web mis à jour.');
-    setContactSaving(false);
-  }
+  const [activeTab, setActiveTab] = useState<'projects' | 'documents' | 'interactions' | 'infos'>('projects');
+  const [form, setForm] = useState<{ name: string; email: string; company: string; websiteUrl: string }>({
+    name: '',
+    email: '',
+    company: '',
+    websiteUrl: '',
+  });
+  const [saving, setSaving] = useState(false);
+  const [saveInfo, setSaveInfo] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
-    fetchController.current?.abort();
-    fetchController.current = controller;
-
     async function load() {
       try {
         setLoading(true);
         setError(null);
-
-        const res = await fetchJson<ClientDetailResponse>(
-          `/api/pro/businesses/${businessId}/clients/${clientId}`,
-          {},
-          controller.signal
-        );
-
+        const [clientRes, projectsRes, interactionsRes] = await Promise.all([
+          fetchJson<ClientResponse>(`/api/pro/businesses/${businessId}/clients/${clientId}`, {}, controller.signal),
+          fetchJson<ProjectsResponse>(
+            `/api/pro/businesses/${businessId}/projects?clientId=${clientId}&archived=false`,
+            {},
+            controller.signal,
+          ),
+          fetchJson<InteractionsResponse>(
+            `/api/pro/businesses/${businessId}/interactions?clientId=${clientId}`,
+            {},
+            controller.signal,
+          ),
+        ]);
         if (controller.signal.aborted) return;
-
-        if (res.status === 401) {
-          const from = window.location.pathname + window.location.search;
-          window.location.href = `/login?from=${encodeURIComponent(from)}`;
+        if (!clientRes.ok || !clientRes.data) {
+          setError(clientRes.error ?? 'Client introuvable');
           return;
         }
-
-        if (!res.ok || !res.data) {
-          const msg = res.error ?? 'Chargement impossible.';
-          setError(res.requestId ? `${msg} (Ref: ${res.requestId})` : msg);
-          setClient(null);
-          return;
-        }
-
-        const normalized: Client = {
-          ...res.data.item,
-          categoryReferenceId: res.data.item.categoryReferenceId ?? null,
-          categoryReferenceName: res.data.item.categoryReferenceName ?? null,
-          tagReferences: res.data.item.tagReferences ?? [],
-          websiteUrl: res.data.item.websiteUrl ?? null,
-        };
-        setClient(normalized);
-        setCategoryReferenceId(normalized.categoryReferenceId ?? '');
-        setTagReferenceIds(normalized.tagReferences.map((t) => t.id));
+        if (!projectsRes.ok) setError((prev) => prev ?? projectsRes.error ?? null);
+        if (!interactionsRes.ok) setError((prev) => prev ?? interactionsRes.error ?? null);
+        setClient(clientRes.data.item);
+        setProjects(projectsRes.data?.items ?? []);
+        setInteractions(interactionsRes.data?.items ?? []);
+        setForm({
+          name: clientRes.data.item.name ?? '',
+          email: clientRes.data.item.email ?? '',
+          company: clientRes.data.item.company ?? '',
+          websiteUrl: clientRes.data.item.websiteUrl ?? '',
+        });
       } catch (err) {
         if (controller.signal.aborted) return;
-        console.error(err);
-        setError('Impossible de charger ce client.');
+        setError(getErrorMessage(err));
       } finally {
         if (!controller.signal.aborted) setLoading(false);
       }
     }
-
     void load();
-    void loadInteractions();
-    return () => {
-      controller.abort();
-      interactionsController.current?.abort();
-      projectsController.current?.abort();
-      financesController.current?.abort();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => controller.abort();
   }, [businessId, clientId]);
 
-  useEffect(() => {
-    void loadProjects();
-    return () => projectsController.current?.abort();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [businessId, clientId]);
-
-  useEffect(() => {
-    setWebsiteInput(client?.websiteUrl ?? '');
-  }, [client?.websiteUrl]);
-
-  useEffect(() => {
-    void loadFinanceLines();
-    return () => financesController.current?.abort();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projects, businessId]);
-
-  const incomeTotalCents = financeLines
-    .filter((f) => f.type === 'INCOME')
-    .reduce((acc, f) => acc + Number(f.amountCents ?? 0), 0);
-  const expenseTotalCents = financeLines
-    .filter((f) => f.type === 'EXPENSE')
-    .reduce((acc, f) => acc + Number(f.amountCents ?? 0), 0);
+  const metrics = useMemo(() => {
+    let total = 0;
+    let active = 0;
+    let valueCents = 0;
+    for (const p of projects) {
+      total += 1;
+      if (p.status === 'IN_PROGRESS' || p.status === 'ACTIVE' || p.status === 'ONGOING') active += 1;
+      const amount =
+        typeof p.amountCents === 'string'
+          ? Number(p.amountCents)
+          : typeof p.amountCents === 'number'
+            ? p.amountCents
+            : 0;
+      if (Number.isFinite(amount)) valueCents += amount;
+    }
+    const lastInteraction = interactions
+      .map((i) => i.happenedAt)
+      .filter(Boolean)
+      .sort()
+      .slice(-1)[0];
+    return { total, active, valueCents, lastInteraction };
+  }, [projects, interactions]);
 
   if (loading) {
     return (
-      <Card className="p-5">
-        <p className="text-sm text-[var(--text-secondary)]">Chargement du client…</p>
-      </Card>
+      <div className="mx-auto max-w-5xl space-y-4 px-4 py-6">
+        <Card className="h-32 animate-pulse rounded-2xl bg-[var(--surface)]">
+          <div className="h-full w-full rounded-xl bg-[var(--surface-hover)]" />
+        </Card>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {[0, 1, 2, 3].map((k) => (
+            <Card key={k} className="h-20 animate-pulse rounded-xl bg-[var(--surface)]">
+              <div className="h-full w-full rounded-lg bg-[var(--surface-hover)]" />
+            </Card>
+          ))}
+        </div>
+        <Card className="h-64 animate-pulse rounded-2xl bg-[var(--surface)]">
+          <div className="h-full w-full rounded-xl bg-[var(--surface-hover)]" />
+        </Card>
+      </div>
     );
   }
 
-  if (!client) {
+  if (error || !client) {
     return (
-      <Card className="space-y-2 p-5">
-        <p className="text-sm font-semibold text-rose-400">{error ?? 'Client introuvable.'}</p>
-        <Button variant="outline" size="sm" asChild>
-          <Link href={`/app/pro/${businessId}/clients`}>Retour à la liste</Link>
-        </Button>
-      </Card>
+      <div className="mx-auto max-w-5xl space-y-3 px-4 py-6">
+        <Link
+          href={`/app/pro/${businessId}/agenda`}
+          className="text-sm text-[var(--text-secondary)] underline-offset-4 hover:text-[var(--text-primary)]"
+        >
+          ← Retour à l’agenda
+        </Link>
+        <Card className="p-4 text-sm text-rose-500">{error ?? 'Client introuvable'}</Card>
+      </div>
     );
+  }
+
+  const valueFormatted = formatCurrencyEUR(metrics.valueCents);
+
+  const hasChanges = client
+    ? form.name !== (client.name ?? '') ||
+      form.email !== (client.email ?? '') ||
+      form.company !== (client.company ?? '') ||
+      form.websiteUrl !== (client.websiteUrl ?? '')
+    : false;
+
+  async function handleSave() {
+    setSaveInfo(null);
+    setSaveError(null);
+    if (!client) {
+      setSaveError('Client introuvable');
+      return;
+    }
+    try {
+      setSaving(true);
+      const body = {
+        name: form.name.trim() || client.name,
+        email: form.email.trim() || null,
+        company: form.company.trim() || null,
+        websiteUrl: form.websiteUrl.trim() || null,
+      };
+      const res = await fetchJson<ClientResponse>(
+        `/api/pro/businesses/${businessId}/clients/${clientId}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        },
+      );
+      if (!res.ok || !res.data) {
+        setSaveError(res.error ?? 'Enregistrement impossible');
+        return;
+      }
+      setClient(res.data.item);
+      setSaveInfo('Enregistré');
+      setForm({
+        name: res.data.item.name ?? '',
+        email: res.data.item.email ?? '',
+        company: res.data.item.company ?? '',
+        websiteUrl: res.data.item.websiteUrl ?? '',
+      });
+    } catch (err) {
+      setSaveError(getErrorMessage(err));
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
-    <div className="space-y-5">
-      <RoleBanner role={role} />
-      <Card className="space-y-3 p-5">
-        <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-          <div className="flex items-start gap-3">
-            <FaviconAvatar name={client.name} websiteUrl={client.websiteUrl} size={42} />
-            <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-[var(--text-secondary)]">
-                Client · Centre de pilotage
-              </p>
-              <h1 className="text-xl font-semibold text-[var(--text-primary)]">{client.name}</h1>
-              <p className="text-xs text-[var(--text-secondary)]">Cockpit client — données consolidées.</p>
-              {client.websiteUrl ? (
-                <p className="text-[11px] text-[var(--text-secondary)] truncate max-w-sm">
-                  {client.websiteUrl}
-                </p>
-              ) : null}
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Badge variant="neutral">ID {client.id}</Badge>
+    <div className="mx-auto max-w-5xl space-y-5 px-4 py-6">
+      <Link
+        href={`/app/pro/${businessId}/agenda`}
+        className="text-sm text-[var(--text-secondary)] underline-offset-4 hover:text-[var(--text-primary)]"
+      >
+        ← Retour à l’agenda
+      </Link>
+      <header className="flex items-start justify-between gap-3">
+        <div className="flex items-start gap-3">
+          <LogoAvatar name={client.name} websiteUrl={client.websiteUrl ?? undefined} size={52} />
+          <div className="space-y-1">
+            <p className="text-lg font-semibold text-[var(--text-primary)]">{client.name}</p>
+            {client.email ? <p className="text-sm text-[var(--text-secondary)]">{client.email}</p> : null}
+            {client.websiteUrl ? (
+              <p className="truncate text-sm text-[var(--text-secondary)]">{normalizeWebsiteUrl(client.websiteUrl).value}</p>
+            ) : null}
+            <StatusIndicator active={metrics.active > 0} />
           </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          {client.categoryReferenceName ? (
-            <Badge variant="neutral" className="bg-indigo-50 text-indigo-700">
-              {client.categoryReferenceName}
-            </Badge>
-          ) : (
-            <Badge variant="neutral">Catégorie ?</Badge>
-          )}
-          {client.tagReferences.length ? (
-            client.tagReferences.map((tag) => (
-              <Badge key={tag.id} variant="neutral" className="bg-emerald-50 text-emerald-700">
-                {tag.name}
-              </Badge>
-            ))
-          ) : (
-            <Badge variant="neutral">Tags ?</Badge>
-          )}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => router.push(`/app/pro/${businessId}/projects?clientId=${clientId}`)}
+            className="cursor-pointer rounded-md bg-neutral-900 px-3 py-2 text-sm font-semibold text-white transition hover:bg-neutral-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
+          >
+            Nouveau projet
+          </button>
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={!hasChanges || saving}
+            className="cursor-pointer rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm font-semibold text-[var(--text-primary)] transition hover:bg-[var(--surface-hover)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {saving ? 'Enregistrement…' : 'Enregistrer'}
+          </button>
+          <MenuDots businessId={businessId} clientId={clientId} />
         </div>
+      </header>
 
-        <div className="grid gap-3 md:grid-cols-2">
-          <Card className="space-y-1 border-dashed border-[var(--border)] bg-[var(--surface)]/70 p-3">
-            <p className="text-xs font-semibold text-[var(--text-primary)]">Synthèse finances (projets liés)</p>
-            <p className="text-sm text-[var(--text-secondary)]">
-              Revenus: {formatCents(incomeTotalCents)} · Dépenses: {formatCents(expenseTotalCents)}
-            </p>
-          </Card>
-          <Card className="space-y-1 border-dashed border-[var(--border)] bg-[var(--surface)]/70 p-3">
-            <p className="text-xs font-semibold text-[var(--text-primary)]">Créé le</p>
-            <p className="text-sm text-[var(--text-secondary)]">{formatDate(client.createdAt)}</p>
-          </Card>
+      <KpiCirclesBlock
+        items={[
+          { label: 'Projets', value: metrics.total },
+          { label: 'En cours', value: metrics.active },
+          { label: 'Valeur', value: valueFormatted },
+          { label: 'Dernière', value: formatDate(metrics.lastInteraction) },
+        ]}
+      />
+
+      <Card className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <Metric label="Projets" value={metrics.total} />
+          <Metric label="En cours" value={metrics.active} />
+          <Metric label="Valeur" value={valueFormatted} />
+          <Metric label="Dernière interaction" value={formatDate(metrics.lastInteraction)} />
         </div>
       </Card>
 
-      <Card className="space-y-3 p-5">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <p className="text-sm font-semibold text-[var(--text-primary)]">Références</p>
-            <p className="text-xs text-[var(--text-secondary)]">Catégorie et tags liés à ce client.</p>
-          </div>
-          <Badge variant="neutral">{canEditReferences ? 'Admin/Owner' : 'Lecture seule'}</Badge>
-        </div>
-        <ReferencePicker
-          businessId={businessId}
-          categoryId={categoryReferenceId || null}
-          tagIds={tagReferenceIds}
-          onCategoryChange={(id) => setCategoryReferenceId(id ?? '')}
-          onTagsChange={(ids) => setTagReferenceIds(ids)}
-          disabled={!canEditReferences || referencesSaving}
-          title="Références client"
-        />
-        {referenceError ? <p className="text-xs font-semibold text-rose-500">{referenceError}</p> : null}
-        {referenceMessage ? <p className="text-xs text-emerald-500">{referenceMessage}</p> : null}
-        {referenceRequestId ? <p className="text-[10px] text-[var(--text-faint)]">Req: {referenceRequestId}</p> : null}
-        <div className="flex justify-end">
-          <Button onClick={() => void saveReferences()} disabled={!canEditReferences || referencesSaving}>
-            {referencesSaving ? 'Enregistrement…' : 'Enregistrer'}
-          </Button>
-        </div>
-      </Card>
+      {saveError ? <p className="text-sm text-rose-500">{saveError}</p> : null}
+      {saveInfo ? <p className="text-sm text-emerald-500">{saveInfo}</p> : null}
 
-      <Card className="space-y-3 p-5">
-        <div className="flex items-center justify-between">
-          <p className="text-sm font-semibold text-[var(--text-primary)]">Infos générales</p>
-          <Badge variant="neutral">Contact</Badge>
-        </div>
-        <div className="grid gap-3 md:grid-cols-2">
-          <Card className="border-dashed border-[var(--border)] bg-transparent p-3">
-            <p className="text-xs font-semibold text-[var(--text-secondary)]">Email</p>
-            <p className="text-sm text-[var(--text-primary)]">{client.email ?? 'Non renseigné'}</p>
-          </Card>
-          <Card className="border-dashed border-[var(--border)] bg-transparent p-3">
-            <p className="text-xs font-semibold text-[var(--text-secondary)]">Téléphone</p>
-            <p className="text-sm text-[var(--text-primary)]">{client.phone ?? 'Non renseigné'}</p>
-          </Card>
-        </div>
-        <form onSubmit={saveWebsite} className="space-y-2">
-          <Input
-            label="Site web"
-            value={websiteInput}
-            onChange={(e) => setWebsiteInput(e.target.value)}
-            placeholder="https://exemple.com"
-            disabled={!isAdminOrOwner || contactSaving}
-          />
-          <div className="flex flex-wrap items-center gap-2">
-            <Button type="submit" disabled={!isAdminOrOwner || contactSaving}>
-              {contactSaving ? 'Enregistrement…' : 'Mettre à jour'}
-            </Button>
-            {contactInfo ? <span className="text-xs text-emerald-600">{contactInfo}</span> : null}
-            {contactError ? <span className="text-xs text-rose-600">{contactError}</span> : null}
-            {contactRequestId ? (
-              <span className="text-[10px] text-[var(--text-faint)]">Req: {contactRequestId}</span>
-            ) : null}
-          </div>
-        </form>
-        <Card className="border-dashed border-[var(--border)] bg-transparent p-3">
-          <p className="text-xs font-semibold text-[var(--text-secondary)]">Notes</p>
-          <p className="text-sm text-[var(--text-primary)]">{client.notes ?? '—'}</p>
-        </Card>
-      </Card>
+      <div className="flex gap-2">
+        {tabs.map((tab) => (
+          <button
+            key={tab.key}
+            type="button"
+            onClick={() => setActiveTab(tab.key as typeof activeTab)}
+            className={`cursor-pointer rounded-full px-3 py-1 text-xs font-semibold transition ${
+              activeTab === tab.key
+                ? 'border border-[var(--border)] bg-[var(--surface)] text-[var(--text-primary)] shadow-sm'
+                : 'text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]'
+            }`}
+            aria-pressed={activeTab === tab.key}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
 
-      <Card className="space-y-3 p-5">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <p className="text-sm font-semibold text-[var(--text-primary)]">Interactions</p>
-            <p className="text-xs text-[var(--text-secondary)]">Les 10 dernières actions + prochaine action à suivre.</p>
-          </div>
-          <Badge variant="neutral">{canEditInteractions ? 'Écriture autorisée' : 'Lecture seule'}</Badge>
-        </div>
-
-        {interactionsError ? <p className="text-xs font-semibold text-rose-500">{interactionsError}</p> : null}
-
-        {interactionsLoading ? (
-          <p className="text-sm text-[var(--text-secondary)]">Chargement des interactions…</p>
-        ) : interactions.length === 0 ? (
-          <Card className="space-y-2 border-dashed border-[var(--border)] bg-transparent p-3">
-            <p className="text-sm text-[var(--text-secondary)]">
-              Aucune interaction encore. Ajoute un point de contact pour garder l’historique client.
-            </p>
-            {canEditInteractions ? (
-              <Button size="sm" onClick={() => document.getElementById('interaction-content')?.scrollIntoView()}>
-                Ajouter une interaction
-              </Button>
-            ) : null}
-          </Card>
-        ) : (
-          <div className="space-y-2">
-            {interactions.map((interaction) => (
-              <div
-                key={interaction.id}
-                className="rounded-lg border border-[var(--border)] bg-[var(--surface)]/60 p-3"
-              >
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge variant="pro">{interactionTypeLabel(interaction.type)}</Badge>
-                    {interaction.nextActionDate ? (
-                      <Badge variant="personal">Next {formatDate(interaction.nextActionDate)}</Badge>
-                    ) : null}
-                  </div>
-                  <p className="text-[11px] text-[var(--text-secondary)]">{formatDateTime(interaction.happenedAt)}</p>
-                </div>
-                <p className="text-sm text-[var(--text-primary)]">{interaction.content}</p>
-                {canEditInteractions ? (
-                  <div className="flex flex-wrap gap-2">
-                    <Button size="sm" variant="outline" onClick={() => startEditInteraction(interaction)}>
-                      Modifier
-                    </Button>
-                    <Button size="sm" variant="ghost" onClick={() => deleteInteraction(interaction)}>
-                      Supprimer
-                    </Button>
-                  </div>
-                ) : null}
-              </div>
-            ))}
-          </div>
-        )}
-
-        <div className="space-y-2 rounded-xl border border-[var(--border)] bg-[var(--surface)]/60 p-4">
-          <p className="text-sm font-semibold text-[var(--text-primary)]">Ajouter une interaction</p>
-          <form onSubmit={submitInteraction} className="grid gap-3 md:grid-cols-2">
-            <Select
-              label="Type"
-              value={interactionType}
-              onChange={(e) => setInteractionType(e.target.value as InteractionType)}
-              disabled={!canEditInteractions || savingInteraction}
-            >
-              <option value="CALL">Appel</option>
-              <option value="MEETING">Réunion</option>
-              <option value="EMAIL">Email</option>
-              <option value="NOTE">Note</option>
-              <option value="MESSAGE">Message</option>
-            </Select>
-            <Input
-              label="Date de l’interaction"
-              type="datetime-local"
-              value={interactionDate}
-              onChange={(e) => setInteractionDate(e.target.value)}
-              disabled={!canEditInteractions || savingInteraction}
-            />
-            <Input
-              label="Prochaine action (optionnel)"
-              type="datetime-local"
-              value={interactionNextAction}
-              onChange={(e) => setInteractionNextAction(e.target.value)}
-              disabled={!canEditInteractions || savingInteraction}
-            />
-            <label className="flex w-full flex-col gap-1 md:col-span-2" id="interaction-content">
-              <span className="text-sm font-medium text-[var(--text-secondary)]">Contenu</span>
-              <textarea
-                className="w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-base text-[var(--text-primary)] placeholder:text-[var(--text-faint)] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
-                value={interactionContent}
-                onChange={(e) => setInteractionContent(e.target.value)}
-                rows={3}
-                disabled={!canEditInteractions || savingInteraction}
-                placeholder="Compte-rendu, décision, suivi…"
-                required
-              />
-            </label>
-            {!canEditInteractions ? (
-              <p className="text-xs text-[var(--text-secondary)]">Lecture seule pour les rôles Viewer/Membre.</p>
-            ) : null}
-            <div className="flex items-center justify-end gap-2 md:col-span-2">
-              {interactionInfo ? <span className="text-xs text-emerald-500">{interactionInfo}</span> : null}
-              {editingInteraction ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    setEditingInteraction(null);
-                    setInteractionType('CALL');
-                    setInteractionContent('');
-                    setInteractionNextAction('');
-                    setInteractionDate(new Date().toISOString().slice(0, 16));
-                  }}
-                  disabled={savingInteraction}
+      {activeTab === 'projects' ? (
+        <Card className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
+          <div className="grid gap-2">
+            {projects.length === 0 ? (
+              <EmptyBlock message="Aucun projet" />
+            ) : (
+              projects.map((p) => (
+                <Link
+                  key={p.id}
+                  href={`/app/pro/${businessId}/projects/${p.id}`}
+                  className="flex cursor-pointer items-center justify-between rounded-xl px-3 py-2 text-sm transition hover:bg-[var(--surface-hover)]"
                 >
-                  Annuler l’édition
-                </Button>
-              ) : null}
-              <Button type="submit" disabled={!canEditInteractions || savingInteraction}>
-                {savingInteraction ? 'Enregistrement…' : editingInteraction ? 'Mettre à jour' : 'Ajouter une interaction'}
-              </Button>
-            </div>
-          </form>
-        </div>
+                  <div className="min-w-0 space-y-1">
+                    <p className="truncate font-semibold text-[var(--text-primary)]">{p.name}</p>
+                    <p className="text-xs text-[var(--text-secondary)]">{formatDate(p.startDate)}</p>
+                  </div>
+                  <span className="text-[11px] text-[var(--text-secondary)]">{p.status ?? 'INCONNU'}</span>
+                </Link>
+              ))
+            )}
+          </div>
+        </Card>
+      ) : null}
 
-        {interactionRequestId ? (
-          <p className="text-[10px] text-[var(--text-faint)]">Req: {interactionRequestId}</p>
-        ) : null}
-      </Card>
+      {activeTab === 'documents' ? (
+        <Card className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
+          <EmptyBlock message="Aucun document listé pour ce client." />
+        </Card>
+      ) : null}
 
-      <Card className="space-y-3 p-5">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-sm font-semibold text-[var(--text-primary)]">Projets du client</p>
-          <Badge variant="neutral">{projectsLoading ? 'Chargement…' : `${projects.length} projet(s)`}</Badge>
-        </div>
-        {projectsError ? <p className="text-xs font-semibold text-rose-500">{projectsError}</p> : null}
-        {projectsRequestId ? (
-          <p className="text-[10px] text-[var(--text-faint)]">Req: {projectsRequestId}</p>
-        ) : null}
-        {projectsLoading ? (
-          <p className="text-sm text-[var(--text-secondary)]">Chargement des projets…</p>
-        ) : projects.length === 0 ? (
-          <p className="text-sm text-[var(--text-secondary)]">Aucun projet lié pour le moment.</p>
-        ) : (
-          <div className="grid gap-3 md:grid-cols-2">
-            {projects.map((project) => (
-              <Card key={project.id} className="space-y-1 border border-[var(--border)] bg-[var(--surface)]/70 p-3">
-                <div className="flex items-center justify-between">
-                  <p className="text-sm font-semibold text-[var(--text-primary)]">{project.name}</p>
-                  <Badge variant="neutral">{project.status}</Badge>
+      {activeTab === 'interactions' ? (
+        <Card className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
+          {interactions.length === 0 ? (
+            <EmptyBlock message="Aucune interaction enregistrée." />
+          ) : (
+            <div className="grid gap-2">
+              {interactions.map((i) => (
+                <div
+                  key={i.id}
+                  className="rounded-xl border border-[var(--border)]/60 bg-[var(--surface-hover)] px-3 py-2 text-sm"
+                >
+                  <div className="flex items-center justify-between">
+                    <p className="font-semibold text-[var(--text-primary)]">{i.type ?? 'Note'}</p>
+                    <span className="text-xs text-[var(--text-secondary)]">{formatDate(i.happenedAt)}</span>
+                  </div>
+                  {i.content ? <p className="text-sm text-[var(--text-primary)]">{i.content}</p> : null}
                 </div>
-                <p className="text-xs text-[var(--text-secondary)]">
-                  Quote: {project.quoteStatus} · Dépôt: {project.depositStatus} · Progress: {project.progress}%
-                </p>
-                <Button asChild size="sm" variant="outline">
-                  <Link href={`/app/pro/${businessId}/projects/${project.id}`}>Ouvrir</Link>
-                </Button>
-              </Card>
-            ))}
-          </div>
-        )}
-      </Card>
+              ))}
+            </div>
+          )}
+        </Card>
+      ) : null}
 
-      <Card className="space-y-3 p-5">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-sm font-semibold text-[var(--text-primary)]">Finances du client</p>
-          <Badge variant="neutral">{financeLoading ? 'Chargement…' : `${financeLines.length} ligne(s)`}</Badge>
-        </div>
-        {financeError ? <p className="text-xs font-semibold text-rose-500">{financeError}</p> : null}
-        {financeRequestId ? (
-          <p className="text-[10px] text-[var(--text-faint)]">Req: {financeRequestId}</p>
-        ) : null}
-        {financeLoading ? (
-          <p className="text-sm text-[var(--text-secondary)]">Chargement des mouvements…</p>
-        ) : financeLines.length === 0 ? (
-          <p className="text-sm text-[var(--text-secondary)]">
-            Aucun mouvement lié aux projets de ce client pour l’instant.
-          </p>
-        ) : (
-          <div className="space-y-2">
-            <div className="flex flex-wrap gap-3 text-sm text-[var(--text-secondary)]">
-              <span>Total revenus: {formatCents(incomeTotalCents)}</span>
-              <span>Total dépenses: {formatCents(expenseTotalCents)}</span>
-            </div>
-            <div className="overflow-hidden rounded-xl border border-[var(--border)]">
-              <table className="min-w-full divide-y divide-[var(--border)]">
-                <thead className="bg-[var(--surface)]">
-                  <tr className="text-left text-xs uppercase tracking-wide text-[var(--text-secondary)]">
-                    <th className="px-4 py-3">Projet</th>
-                    <th className="px-4 py-3">Type</th>
-                    <th className="px-4 py-3">Montant</th>
-                    <th className="px-4 py-3">Catégorie</th>
-                    <th className="px-4 py-3">Date</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[var(--border)] bg-[var(--surface)]">
-                  {financeLines.slice(0, 10).map((line) => (
-                    <tr key={line.id} className="text-sm text-[var(--text-primary)]">
-                      <td className="px-4 py-3">{line.projectName ?? line.projectId ?? '—'}</td>
-                      <td className="px-4 py-3">{line.type === 'INCOME' ? 'Revenu' : 'Dépense'}</td>
-                      <td className="px-4 py-3">{formatCents(line.amountCents)}</td>
-                      <td className="px-4 py-3">{line.category}</td>
-                      <td className="px-4 py-3">{formatDate(line.date)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+      {activeTab === 'infos' ? (
+        <Card className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
+          <div className="space-y-3 text-sm text-[var(--text-secondary)]">
+            <Input
+              label="Nom"
+              value={form.name}
+              onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
+            />
+            <Input
+              label="Email"
+              value={form.email}
+              onChange={(e) => setForm((prev) => ({ ...prev, email: e.target.value }))}
+            />
+            <Input
+              label="Entreprise"
+              value={form.company}
+              onChange={(e) => setForm((prev) => ({ ...prev, company: e.target.value }))}
+            />
+            <Input
+              label="Site web"
+              value={form.websiteUrl}
+              onChange={(e) => setForm((prev) => ({ ...prev, websiteUrl: e.target.value }))}
+              placeholder="https://exemple.com"
+            />
+            <InfoRow label="Notes" value={client.notes ?? '—'} />
           </div>
-        )}
-      </Card>
+        </Card>
+      ) : null}
+    </div>
+  );
+}
+
+function Metric({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="rounded-xl bg-[var(--surface-hover)]/60 px-3 py-3">
+      <p className="text-xs uppercase tracking-wide text-[var(--text-secondary)]">{label}</p>
+      <p className="text-lg font-semibold text-[var(--text-primary)]">{value}</p>
+    </div>
+  );
+}
+
+function EmptyBlock({ message }: { message: string }) {
+  return <p className="text-sm text-[var(--text-secondary)]">{message}</p>;
+}
+
+function formatDate(value: string | null | undefined) {
+  if (!value) return '—';
+  try {
+    return new Intl.DateTimeFormat('fr-FR').format(new Date(value));
+  } catch {
+    return '—';
+  }
+}
+
+function InfoRow({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="flex items-center justify-between rounded-lg bg-[var(--surface-hover)]/60 px-3 py-2">
+      <span>{label}</span>
+      <span className="text-[var(--text-primary)] font-medium">{value}</span>
+    </div>
+  );
+}
+
+function StatusIndicator({ active }: { active: boolean }) {
+  const indicator = active
+    ? { icon: '●', label: 'Actif', className: 'text-emerald-500' }
+    : { icon: '✕', label: 'Inactif', className: 'text-[var(--text-secondary)]' };
+  return (
+    <span className={`flex items-center gap-1 text-[12px] font-medium ${indicator.className}`}>
+      <span aria-hidden>{indicator.icon}</span>
+      <span>{indicator.label}</span>
+    </span>
+  );
+}
+
+function MenuDots({ businessId, clientId }: { businessId: string; clientId: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        aria-label="Actions"
+        className="cursor-pointer rounded-md p-2 text-[var(--text-secondary)] transition hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
+        onClick={() => setOpen((v) => !v)}
+      >
+        <MoreVertical size={18} />
+      </button>
+      {open ? (
+        <div className="absolute right-0 z-10 mt-2 w-40 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-1 shadow-lg">
+          {[
+            { label: 'Projets', href: `/app/pro/${businessId}/projects?clientId=${clientId}` },
+            { label: 'Documents', href: `/app/pro/${businessId}/clients/${clientId}#documents` },
+            { label: 'Interactions', href: `/app/pro/${businessId}/clients/${clientId}#interactions` },
+          ].map((item) => (
+            <Link
+              key={item.label}
+              href={item.href}
+              className="flex cursor-pointer items-center justify-between rounded-md px-3 py-2 text-sm text-[var(--text-primary)] transition hover:bg-[var(--surface-hover)]"
+              onClick={() => setOpen(false)}
+            >
+              {item.label}
+            </Link>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }

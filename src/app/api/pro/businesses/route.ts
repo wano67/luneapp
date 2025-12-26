@@ -5,7 +5,7 @@ import { assertSameOrigin, jsonNoStore } from '@/server/security/csrf';
 import { rateLimit } from '@/server/security/rateLimit';
 import { requireAuthPro } from '@/server/auth/requireAuthPro';
 import { badRequest, getErrorMessage, getRequestId, unauthorized, withRequestId } from '@/server/http/apiUtils';
-import { normalizeWebsiteUrl } from '@/lib/website';
+import { normalizeWebsiteUrl } from '@/lib/normalizeWebsiteUrl';
 
 function serializeBusiness(b: Business) {
   return {
@@ -84,7 +84,7 @@ export async function POST(request: NextRequest) {
   }
 
   const websiteRaw = (body as Record<string, unknown>).websiteUrl;
-  const normalizedWebsite = normalizeWebsiteUrl(websiteRaw);
+  const normalizedWebsite = await normalizeWebsiteUrl(websiteRaw);
   if (normalizedWebsite.error) {
     return withRequestId(badRequest(normalizedWebsite.error), requestId);
   }
