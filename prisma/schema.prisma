@@ -162,6 +162,7 @@ model Business {
   tasks       Task[]
   finances    Finance[]
   services    Service[]
+  serviceProcessTemplates ServiceProcessTemplate[]
   interactions Interaction[]
   quotes      Quote[]
   invoices    Invoice[]
@@ -424,6 +425,8 @@ model Task {
   id             BigInt      @id @default(autoincrement())
   businessId     BigInt
   projectId      BigInt?
+  projectServiceId BigInt?
+  projectServiceStepId BigInt?
   assigneeUserId BigInt?
   categoryReferenceId BigInt?
   title          String
@@ -436,6 +439,8 @@ model Task {
 
   business Business @relation(fields: [businessId], references: [id])
   project  Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  projectService ProjectService? @relation(fields: [projectServiceId], references: [id], onDelete: SetNull)
+  projectServiceStep ProjectServiceStep? @relation(fields: [projectServiceStepId], references: [id], onDelete: SetNull)
   assignee User?    @relation(fields: [assigneeUserId], references: [id], onDelete: SetNull)
   categoryReference BusinessReference? @relation("TaskCategoryReference", fields: [categoryReferenceId], references: [id], onDelete: SetNull)
   tags     TaskTag[]
@@ -445,6 +450,9 @@ model Task {
 
   @@index([businessId, status])
   @@index([businessId, projectId])
+  @@index([projectServiceId])
+  @@index([projectServiceStepId])
+  @@index([projectId, projectServiceId])
   @@index([businessId, categoryReferenceId])
 }
 
@@ -529,6 +537,7 @@ model Service {
   categoryReference BusinessReference? @relation("ServiceCategoryReference", fields: [categoryReferenceId], references: [id], onDelete: SetNull)
   tags              ServiceTag[]
   taskTemplates   ServiceTaskTemplate[]
+  serviceProcessTemplate ServiceProcessTemplate?
   projectServices ProjectService[]
   quoteItems      QuoteItem[]
   invoiceItems    InvoiceItem[]
@@ -657,6 +666,63 @@ model ServiceTaskTemplate {
   createdAt DateTime @default(now())
 }
 
+model ServiceProcessTemplate {
+  id         BigInt   @id @default(autoincrement())
+  businessId BigInt
+  serviceId  BigInt   @unique
+  name       String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  service  Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  phases   ServiceProcessPhaseTemplate[]
+
+  @@index([businessId])
+}
+
+model ServiceProcessPhaseTemplate {
+  id         BigInt   @id @default(autoincrement())
+  templateId BigInt
+  name       String
+  order      Int      @default(0)
+
+  template ServiceProcessTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  steps    ServiceProcessStepTemplate[]
+
+  @@index([templateId])
+  @@index([templateId, order])
+}
+
+model ServiceProcessStepTemplate {
+  id         BigInt   @id @default(autoincrement())
+  phaseId    BigInt
+  name       String
+  order      Int      @default(0)
+  isBillableMilestone Boolean @default(false)
+
+  phase ServiceProcessPhaseTemplate @relation(fields: [phaseId], references: [id], onDelete: Cascade)
+  tasks ServiceProcessTaskTemplate[]
+
+  @@index([phaseId])
+  @@index([phaseId, order])
+}
+
+model ServiceProcessTaskTemplate {
+  id         BigInt   @id @default(autoincrement())
+  stepId     BigInt
+  title      String
+  order      Int      @default(0)
+  description String?
+  dueOffsetDays Int?
+  defaultAssigneeRole String?
+
+  step ServiceProcessStepTemplate @relation(fields: [stepId], references: [id], onDelete: Cascade)
+
+  @@index([stepId])
+  @@index([stepId, order])
+}
+
 model ProjectService {
   id         BigInt   @id @default(autoincrement())
   projectId  BigInt
@@ -668,8 +734,26 @@ model ProjectService {
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   service Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  steps   ProjectServiceStep[]
+  tasks   Task[]
 
   @@index([projectId, serviceId])
+}
+
+model ProjectServiceStep {
+  id               BigInt  @id @default(autoincrement())
+  projectServiceId BigInt
+  name             String
+  order            Int     @default(0)
+  phaseName        String?
+  isBillableMilestone Boolean @default(false)
+  createdAt        DateTime @default(now())
+
+  projectService ProjectService @relation(fields: [projectServiceId], references: [id], onDelete: Cascade)
+  tasks          Task[]
+
+  @@index([projectServiceId])
+  @@index([projectServiceId, order])
 }
 
 model Interaction {

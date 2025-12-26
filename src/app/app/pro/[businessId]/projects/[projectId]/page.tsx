@@ -70,6 +70,8 @@ type TaskItem = {
   assigneeUserId: string | null;
   assigneeEmail: string | null;
   assigneeName: string | null;
+  projectServiceId?: string | null;
+  projectServiceName?: string | null;
 };
 
 type ServiceOption = {
@@ -379,6 +381,7 @@ export default function ProjectDetailPage() {
   const [savingService, setSavingService] = useState(false);
   const [serviceError, setServiceError] = useState<string | null>(null);
 
+  const [billingScopeFilter, setBillingScopeFilter] = useState<'all' | 'billable' | 'nonBillable'>('all');
   const [startLoading, setStartLoading] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
 
@@ -741,6 +744,29 @@ export default function ProjectDetailPage() {
     }
   }
 
+  async function linkTaskToService(task: TaskItem, projectServiceIdValue: string | null) {
+    if (!isAdmin) {
+      setTaskError(readOnlyMessage);
+      return;
+    }
+    setTaskActionId(task.id);
+    setTaskError(null);
+    const res = await fetchJson<{ item: TaskItem }>(
+      `/api/pro/businesses/${businessId}/tasks/${task.id}`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectServiceId: projectServiceIdValue }),
+      }
+    );
+    setTaskActionId(null);
+    if (!res.ok || !res.data?.item) {
+      setTaskError(res.requestId ? `${res.error ?? 'Lien impossible.'} (Ref: ${res.requestId})` : res.error ?? 'Lien impossible.');
+      return;
+    }
+    setTasks((prev) => prev.map((t) => (t.id === task.id ? res.data!.item : t)));
+  }
+
   useEffect(() => {
     void loadProject();
     void loadTasks();
@@ -795,18 +821,58 @@ export default function ProjectDetailPage() {
   }, [quotes]);
 
   const filteredTasks = useMemo(() => {
-    if (taskFilter === 'all') return tasks;
+    let scoped = tasks;
+    if (billingScopeFilter === 'billable') {
+      scoped = scoped.filter((t) => Boolean(t.projectServiceId));
+    } else if (billingScopeFilter === 'nonBillable') {
+      scoped = scoped.filter((t) => !t.projectServiceId);
+    }
+    if (taskFilter === 'all') return scoped;
     const now = new Date();
     const weekAhead = new Date();
     weekAhead.setDate(now.getDate() + 7);
-    return tasks.filter((t) => {
+    return scoped.filter((t) => {
       if (!t.dueDate) return false;
       const due = new Date(t.dueDate);
       if (Number.isNaN(due.getTime())) return false;
       if (taskFilter === 'overdue') return due < now;
       return due >= now && due <= weekAhead;
     });
-  }, [taskFilter, tasks]);
+  }, [billingScopeFilter, taskFilter, tasks]);
+
+  const billableTasksCount = useMemo(
+    () => tasks.filter((t) => Boolean(t.projectServiceId)).length,
+    [tasks]
+  );
+
+  const readyServices = useMemo(() => {
+    const doneByService = tasks.reduce<Record<string, number>>((acc, t) => {
+      if (t.projectServiceId && t.status === 'DONE') {
+        acc[t.projectServiceId] = (acc[t.projectServiceId] ?? 0) + 1;
+      }
+      return acc;
+    }, {});
+    return services
+      .filter((s) => doneByService[s.id] && doneByService[s.id] > 0)
+      .map((s) => ({
+        id: s.id,
+        name: s.service.name,
+        doneTasks: doneByService[s.id],
+      }));
+  }, [services, tasks]);
+
+  const projectServiceOptions = useMemo(
+    () => [
+      { value: '', label: 'Hors facturation' },
+      ...services.map((s) => ({
+        value: s.id,
+        label: `${s.service.name} — ${s.quantity} × ${
+          s.priceCents ? formatCurrency(Number(s.priceCents) / 100) : 'prix catalogue'
+        }`,
+      })),
+    ],
+    [services]
+  );
 
   async function openServiceModal(existing?: ProjectServiceItem) {
     if (!isAdmin) {
@@ -1267,7 +1333,7 @@ export default function ProjectDetailPage() {
               </div>
             </Card>
 
-            <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
               <KpiTile
                 title="Facturé"
                 value={formatCurrency(billedTotal)}
@@ -1292,7 +1358,53 @@ export default function ProjectDetailPage() {
                 helper={nextAction ? `Next ${formatDate(nextAction.nextActionDate)}` : 'Planifie une action'}
                 onClick={() => setActiveTab('activity')}
               />
+              <KpiTile
+                title="Tâches facturables"
+                value={`${billableTasksCount}/${tasks.length || 0}`}
+                helper="Liées à des services"
+                onClick={() => {
+                  setBillingScopeFilter('billable');
+                  setActiveTab('tasks');
+                }}
+              />
+              <KpiTile
+                title="Lignes prêtes"
+                value={`${readyServices.length}`}
+                helper="Services avec tâches terminées"
+                onClick={() => setActiveTab('billing')}
+              />
             </div>
+
+            {readyServices.length ? (
+              <Card className="space-y-2 p-4">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-semibold text-[var(--text-primary)]">Prêtes à facturer</p>
+                  <Button size="sm" variant="outline" onClick={() => setActiveTab('billing')}>
+                    Voir facturation
+                  </Button>
+                </div>
+                <div className="space-y-2">
+                  {readyServices.slice(0, 3).map((svc) => (
+                    <div
+                      key={svc.id}
+                      className="card-interactive flex items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--surface)]/70 px-3 py-2"
+                      onClick={() => setActiveTab('billing')}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          setActiveTab('billing');
+                        }
+                      }}
+                    >
+                      <span className="text-sm text-[var(--text-primary)]">{svc.name}</span>
+                      <Badge variant="neutral">{svc.doneTasks} tâche(s) terminée(s)</Badge>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            ) : null}
 
             <Card className="space-y-3 p-5">
               <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1656,6 +1768,30 @@ export default function ProjectDetailPage() {
           <p className="text-sm text-[var(--text-secondary)]">Chargement facturation…</p>
         ) : (
           <div className="space-y-3">
+            <Card className="space-y-2 border-dashed border-[var(--border)] bg-transparent p-3">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--text-secondary)]">
+                  Livrables prêts
+                </p>
+                <Badge variant="neutral">{readyServices.length}</Badge>
+              </div>
+              {readyServices.length === 0 ? (
+                <p className="text-sm text-[var(--text-secondary)]">Aucun service prêt (tâches liées non terminées).</p>
+              ) : (
+                <div className="space-y-1">
+                  {readyServices.map((svc) => (
+                    <div
+                      key={svc.id}
+                      className="card-interactive flex items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--surface)]/70 px-3 py-2"
+                    >
+                      <span className="text-sm text-[var(--text-primary)]">{svc.name}</span>
+                      <Badge variant="neutral">{svc.doneTasks} tâche(s) terminée(s)</Badge>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Card>
+
             <div className="grid gap-2 md:grid-cols-3">
               <Card className="border-dashed border-[var(--border)] bg-transparent p-3">
                 <p className="text-xs text-[var(--text-secondary)]">Total</p>
@@ -2099,6 +2235,22 @@ export default function ProjectDetailPage() {
               </Button>
             ))}
           </div>
+          <div className="flex flex-wrap gap-2">
+            {[
+              { key: 'all', label: 'Scope: toutes' },
+              { key: 'billable', label: 'Facturables' },
+              { key: 'nonBillable', label: 'Hors facturation' },
+            ].map((filter) => (
+              <Button
+                key={filter.key}
+                size="sm"
+                variant={billingScopeFilter === filter.key ? 'primary' : 'outline'}
+                onClick={() => setBillingScopeFilter(filter.key as typeof billingScopeFilter)}
+              >
+                {filter.label}
+              </Button>
+            ))}
+          </div>
           {taskError ? <p className="text-xs text-rose-500">{taskError}</p> : null}
           {tasksLoading ? (
             <p className="text-sm text-[var(--text-secondary)]">Chargement des tâches…</p>
@@ -2142,17 +2294,22 @@ export default function ProjectDetailPage() {
                           key={task.id}
                           className="card-interactive rounded-lg border border-[var(--border)] bg-[var(--surface)]/60 p-3"
                         >
-                          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                            <div>
-                              <p className="text-sm font-semibold text-[var(--text-primary)]">{task.title}</p>
-                              <p className="text-[11px] text-[var(--text-secondary)]">
-                                Échéance {formatDate(task.dueDate)} · {task.assigneeName ?? task.assigneeEmail ?? 'Non assigné'}
-                              </p>
-                            </div>
-                            <div className="flex flex-wrap gap-2">
-                              <Select
-                                value={task.status}
-                                onChange={(e) => updateTask(task, { status: e.target.value as TaskStatus })}
+                      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                        <div>
+                          <p className="text-sm font-semibold text-[var(--text-primary)]">{task.title}</p>
+                          <p className="text-[11px] text-[var(--text-secondary)]">
+                            Échéance {formatDate(task.dueDate)} · {task.assigneeName ?? task.assigneeEmail ?? 'Non assigné'}
+                          </p>
+                          <div className="mt-1 flex flex-wrap items-center gap-2">
+                            <Badge variant="neutral">
+                              Facturation : {task.projectServiceName ?? 'Hors facturation'}
+                            </Badge>
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <Select
+                            value={task.status}
+                            onChange={(e) => updateTask(task, { status: e.target.value as TaskStatus })}
                                 disabled={!isAdmin || taskActionId === task.id}
                               >
                                 {TASK_STATUS_OPTIONS.map((opt) => (
@@ -2173,17 +2330,29 @@ export default function ProjectDetailPage() {
                                 className="w-24"
                                 aria-label="Progression"
                               />
-                              <Input
-                                type="date"
-                                value={task.dueDate ? task.dueDate.slice(0, 10) : ''}
-                                onChange={(e: ChangeEvent<HTMLInputElement>) =>
-                                  updateTask(task, { dueDate: e.target.value || null })
-                                }
-                                disabled={!isAdmin || taskActionId === task.id}
-                              />
-                            </div>
+                            <Input
+                              type="date"
+                              value={task.dueDate ? task.dueDate.slice(0, 10) : ''}
+                              onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                                updateTask(task, { dueDate: e.target.value || null })
+                              }
+                              disabled={!isAdmin || taskActionId === task.id}
+                            />
+                            <Select
+                              value={task.projectServiceId ?? ''}
+                              onChange={(e) => linkTaskToService(task, e.target.value || null)}
+                              disabled={!isAdmin || taskActionId === task.id}
+                              aria-label="Lier à un service"
+                            >
+                              {projectServiceOptions.map((opt) => (
+                                <option key={opt.value || 'none'} value={opt.value}>
+                                  {opt.label}
+                                </option>
+                              ))}
+                            </Select>
                           </div>
                         </div>
+                      </div>
                       ))}
                     </div>
                   </div>

@@ -1,12 +1,5 @@
-import { ComingSoon } from '../../ComingSoon';
+import { redirect } from 'next/navigation';
 
-export default function PerformanceProPage() {
-  return (
-    <ComingSoon
-      title="Vue Performance Pro"
-      description="Pilotage performance pro (temps, revenus, objectifs) sera bientôt disponible."
-      backHref="/app"
-      backLabel="Retour à l’accueil"
-    />
-  );
+export default function PerformanceProRedirect() {
+  redirect('/app/focus');
 }

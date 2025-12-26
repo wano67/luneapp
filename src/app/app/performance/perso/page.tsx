@@ -1,12 +1,5 @@
-import { ComingSoon } from '../../ComingSoon';
+import { redirect } from 'next/navigation';
 
-export default function PerformancePersoPage() {
-  return (
-    <ComingSoon
-      title="Vue Performance Perso"
-      description="Synthèse des objectifs personnels à venir."
-      backHref="/app"
-      backLabel="Retour à l’accueil"
-    />
-  );
+export default function PerformancePersoRedirect() {
+  redirect('/app/focus');
 }

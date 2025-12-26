@@ -1,12 +1,9 @@
 import { redirect } from 'next/navigation';
 
-type BusinessSubPageProps = {
-  params: Promise<{ businessId: string }>;
-};
-
-export default async function BusinessDashProjetsPage({
+export default function DashProjetsRedirect({
   params,
-}: BusinessSubPageProps) {
-  const { businessId } = await params;
-  redirect(`/app/pro/${businessId}/projects`);
+}: {
+  params: Promise<{ businessId: string }>;
+}) {
+  return params.then(({ businessId }) => redirect(`/app/pro/${businessId}/projects`));
 }

@@ -1,12 +1,5 @@
-import { ComingSoon } from '../../ComingSoon';
+import { redirect } from 'next/navigation';
 
-export default function PerformanceAlignementPage() {
-  return (
-    <ComingSoon
-      title="Alignement Pro ↔ Perso"
-      description="Suivi de l’alignement pro/perso en préparation."
-      backHref="/app"
-      backLabel="Retour à l’accueil"
-    />
-  );
+export default function PerformanceAlignRedirect() {
+  redirect('/app/focus');
 }

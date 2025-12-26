@@ -6,21 +6,16 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import AppSidebar, { type Space, getActiveSidebarMeta } from './AppSidebar';
-import {
-  IconHome,
-  IconStudio,
-  IconWallet,
-  IconFocus,
-  IconUser,
-} from '@/components/icons';
+import { IconFocus, IconHome, IconStudio, IconWallet, IconUser } from '@/components/icons';
 import { useBodyScrollLock } from '@/lib/scrollLock';
 import { LogoMark } from '@/components/marketing/LogoMark';
 import { FileDropProvider } from '@/components/file-drop/FileDropProvider';
 
 function getCurrentSpace(pathname: string): Space {
+  if (pathname === '/app' || pathname.startsWith('/app?')) return 'home';
   if (pathname.startsWith('/app/pro')) return 'pro';
   if (pathname.startsWith('/app/personal')) return 'perso';
-  if (pathname.startsWith('/app/performance')) return 'performance';
+  if (pathname.startsWith('/app/focus') || pathname.startsWith('/app/performance')) return 'focus';
   return null;
 }
 
@@ -74,7 +69,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
     () => [
       { key: 'wallet', label: 'Wallet', href: '/app/personal', icon: <IconWallet size={18} /> },
       { key: 'studio', label: 'Studio', href: '/app/pro', icon: <IconStudio size={18} /> },
-      { key: 'focus', label: 'Focus', href: '/app/performance', icon: <IconFocus size={18} /> },
+      { key: 'focus', label: 'Focus', href: '/app/focus', icon: <IconFocus size={18} /> },
     ],
     []
   );
@@ -220,13 +215,13 @@ export default function AppShell({ children }: { children: ReactNode }) {
   }
 
   // menuSpace: sous-nav de l'univers courant (null => global)
-  const menuSpace: Space =
-    space === 'perso' || space === 'pro' || space === 'performance' ? space : null;
+  const menuSpace: Space = space === 'perso' || space === 'pro' ? space : null;
 
   function spaceLabel(s: Space) {
+    if (s === 'home') return 'Accueil';
     if (s === 'perso') return 'Wallet';
     if (s === 'pro') return 'Studio';
-    if (s === 'performance') return 'Focus';
+    if (s === 'focus') return 'Focus';
     return 'Navigation';
   }
 
@@ -246,12 +241,8 @@ export default function AppShell({ children }: { children: ReactNode }) {
       ];
     }
 
-    if (s === 'performance') {
-      return [
-        { label: 'Pro', href: '/app/performance/pro' },
-        { label: 'Alignement', href: '/app/performance/alignement' },
-        { label: 'Perso', href: '/app/performance/perso' },
-      ];
+    if (s === 'focus') {
+      return [];
     }
 
     if (s === 'pro') {
@@ -273,7 +264,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
     return [
       { label: 'Wallet', href: '/app/personal' },
       { label: 'Studio', href: '/app/pro' },
-      { label: 'Focus', href: '/app/performance' },
+      { label: 'Focus', href: '/app/focus' },
     ];
   }
 

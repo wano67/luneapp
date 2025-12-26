@@ -27,15 +27,21 @@
     "smoke:settings": "pnpm tsx scripts/smoke-settings.ts",
     "smoke:website": "pnpm tsx scripts/smoke-website.ts",
     "smoke:services-import": "pnpm tsx scripts/smoke-services-import.ts",
+    "smoke:planning": "pnpm tsx scripts/smoke-planning.ts",
+    "smoke:projects-delete-safe": "pnpm tsx scripts/smoke-projects-delete-safe.ts",
     "smoke:finance-advanced": "pnpm tsx scripts/smoke-finance-advanced.ts",
     "smoke:processes": "pnpm tsx scripts/smoke-processes.ts",
+    "smoke:process-implicit": "pnpm tsx scripts/smoke-process-implicit.ts",
+    "smoke:projects-no-delete": "pnpm tsx scripts/smoke-projects-no-delete.ts",
     "smoke:team": "pnpm tsx scripts/smoke-team-employees.ts",
     "smoke:stock": "pnpm tsx scripts/smoke-stock.ts",
     "smoke:invoice-reservation": "pnpm tsx scripts/smoke-invoice-reservation.ts",
     "smoke:ledger": "pnpm tsx scripts/smoke-ledger.ts",
+    "smoke:nav-surface": "pnpm tsx scripts/smoke-nav-surface.ts",
     "postinstall": "prisma generate",
     "smoke:clients-delete": "pnpm tsx scripts/smoke-clients-delete.ts",
-    "smoke:clients-gdpr": "pnpm tsx scripts/smoke-clients-gdpr.ts"
+    "smoke:clients-gdpr": "pnpm tsx scripts/smoke-clients-gdpr.ts",
+    "smoke:tasks-billing-link": "pnpm tsx scripts/smoke-tasks-billing-link.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.1.0",
