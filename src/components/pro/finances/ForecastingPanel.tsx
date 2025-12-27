@@ -90,54 +90,50 @@ export function ForecastingPanel({ businessId }: { businessId: string }) {
 
           <Card className="p-4">
             <h2 className="text-lg font-semibold mb-2">Historique (6 mois)</h2>
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Mois</TableHead>
-                    <TableHead>Revenus</TableHead>
-                    <TableHead>Dépenses</TableHead>
-                    <TableHead>Net</TableHead>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Mois</TableHead>
+                  <TableHead>Revenus</TableHead>
+                  <TableHead>Dépenses</TableHead>
+                  <TableHead>Net</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {data.history.map((m) => (
+                  <TableRow key={m.month}>
+                    <TableCell>{m.month}</TableCell>
+                    <TableCell>{formatMoney(m.incomeCents)}</TableCell>
+                    <TableCell>{formatMoney(m.expenseCents)}</TableCell>
+                    <TableCell>{formatMoney(m.netCents)}</TableCell>
                   </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {data.history.map((m) => (
-                    <TableRow key={m.month}>
-                      <TableCell>{m.month}</TableCell>
-                      <TableCell>{formatMoney(m.incomeCents)}</TableCell>
-                      <TableCell>{formatMoney(m.expenseCents)}</TableCell>
-                      <TableCell>{formatMoney(m.netCents)}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+                ))}
+              </TableBody>
+            </Table>
           </Card>
 
           <Card className="p-4">
             <h2 className="text-lg font-semibold mb-2">Projection (3 mois)</h2>
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Mois</TableHead>
-                    <TableHead>Revenus projetés</TableHead>
-                    <TableHead>Dépenses projetées</TableHead>
-                    <TableHead>Net projeté</TableHead>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Mois</TableHead>
+                  <TableHead>Revenus projetés</TableHead>
+                  <TableHead>Dépenses projetées</TableHead>
+                  <TableHead>Net projeté</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {data.projections.map((p) => (
+                  <TableRow key={p.month}>
+                    <TableCell>{p.month}</TableCell>
+                    <TableCell>{formatMoney(p.projectedIncomeCents)}</TableCell>
+                    <TableCell>{formatMoney(p.projectedExpenseCents)}</TableCell>
+                    <TableCell>{formatMoney(p.projectedNetCents)}</TableCell>
                   </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {data.projections.map((p) => (
-                    <TableRow key={p.month}>
-                      <TableCell>{p.month}</TableCell>
-                      <TableCell>{formatMoney(p.projectedIncomeCents)}</TableCell>
-                      <TableCell>{formatMoney(p.projectedExpenseCents)}</TableCell>
-                      <TableCell>{formatMoney(p.projectedNetCents)}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+                ))}
+              </TableBody>
+            </Table>
           </Card>
         </>
       )}

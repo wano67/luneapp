@@ -409,82 +409,80 @@ export function FinanceEntriesPanel({ businessId }: Props) {
           />
         ) : null}
 
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>
-                  <input
-                    type="checkbox"
-                    aria-label="Tout sélectionner"
-                    checked={selectedCount > 0 && selectedCount === filtered.length}
-                    onChange={() => toggleAll(filtered.map((f) => f.id))}
-                  />
-                </TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Catégorie</TableHead>
-                <TableHead>Projet</TableHead>
-                <TableHead>Montant</TableHead>
-                <TableHead>Date</TableHead>
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filtered.map((item) => {
-                const selectedRow = isSelected(item.id);
-                return (
-                  <TableRow key={item.id} data-selected={selectedRow} className={selectedRow ? 'bg-[var(--surface-hover)]' : ''}>
-                    <TableCell>
-                      <input
-                        type="checkbox"
-                        checked={selectedRow}
-                        onChange={() => toggle(item.id)}
-                        aria-label={`Sélectionner ${item.category}`}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={item.type === 'INCOME' ? 'pro' : 'neutral'}>
-                        {item.type === 'INCOME' ? 'Revenu' : 'Dépense'}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="min-w-[140px]">
-                      <div className="flex flex-col">
-                        <span className="text-sm font-semibold text-[var(--text-primary)]">{item.category}</span>
-                        {item.categoryReferenceName ? (
-                          <span className="text-[11px] text-[var(--text-secondary)]">{item.categoryReferenceName}</span>
-                        ) : null}
-                      </div>
-                    </TableCell>
-                    <TableCell>{item.projectName ?? '—'}</TableCell>
-                    <TableCell className="font-semibold">{formatCurrency(Number(item.amountCents) / 100)}</TableCell>
-                    <TableCell>{formatDate(item.date)}</TableCell>
-                    <TableCell>
-                      <div className="flex gap-2">
-                        <Button size="sm" variant="outline" onClick={() => setSelectedId(item.id)}>
-                          Détails
-                        </Button>
-                        <Button size="sm" variant="outline" onClick={() => openEdit(item)}>
-                          Modifier
-                        </Button>
-                        <Button size="sm" variant="ghost" onClick={() => setDeleteModal(item)}>
-                          Supprimer
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-              {filtered.length === 0 ? (
-                <TableEmpty>
-                  <div className="space-y-1">
-                    <p className="font-semibold">Aucune écriture</p>
-                    <p className="text-sm text-[var(--text-secondary)]">Ajoutez une première écriture pour commencer.</p>
-                  </div>
-                </TableEmpty>
-              ) : null}
-            </TableBody>
-          </Table>
-        </div>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>
+                <input
+                  type="checkbox"
+                  aria-label="Tout sélectionner"
+                  checked={selectedCount > 0 && selectedCount === filtered.length}
+                  onChange={() => toggleAll(filtered.map((f) => f.id))}
+                />
+              </TableHead>
+              <TableHead>Type</TableHead>
+              <TableHead>Catégorie</TableHead>
+              <TableHead>Projet</TableHead>
+              <TableHead>Montant</TableHead>
+              <TableHead>Date</TableHead>
+              <TableHead>Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {filtered.map((item) => {
+              const selectedRow = isSelected(item.id);
+              return (
+                <TableRow key={item.id} data-selected={selectedRow} className={selectedRow ? 'bg-[var(--surface-hover)]' : ''}>
+                  <TableCell>
+                    <input
+                      type="checkbox"
+                      checked={selectedRow}
+                      onChange={() => toggle(item.id)}
+                      aria-label={`Sélectionner ${item.category}`}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant={item.type === 'INCOME' ? 'pro' : 'neutral'}>
+                      {item.type === 'INCOME' ? 'Revenu' : 'Dépense'}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="min-w-0">
+                    <div className="flex flex-col">
+                      <span className="text-sm font-semibold text-[var(--text-primary)]">{item.category}</span>
+                      {item.categoryReferenceName ? (
+                        <span className="text-[11px] text-[var(--text-secondary)]">{item.categoryReferenceName}</span>
+                      ) : null}
+                    </div>
+                  </TableCell>
+                  <TableCell>{item.projectName ?? '—'}</TableCell>
+                  <TableCell className="font-semibold">{formatCurrency(Number(item.amountCents) / 100)}</TableCell>
+                  <TableCell>{formatDate(item.date)}</TableCell>
+                  <TableCell>
+                    <div className="flex flex-wrap gap-2">
+                      <Button size="sm" variant="outline" onClick={() => setSelectedId(item.id)}>
+                        Détails
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => openEdit(item)}>
+                        Modifier
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => setDeleteModal(item)}>
+                        Supprimer
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+            {filtered.length === 0 ? (
+              <TableEmpty>
+                <div className="space-y-1">
+                  <p className="font-semibold">Aucune écriture</p>
+                  <p className="text-sm text-[var(--text-secondary)]">Ajoutez une première écriture pour commencer.</p>
+                </div>
+              </TableEmpty>
+            ) : null}
+          </TableBody>
+        </Table>
       </Card>
 
       {selected ? (

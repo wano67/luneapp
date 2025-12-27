@@ -9,12 +9,12 @@ export function Table({ children, className, wrapperClassName, ...props }: Table
   return (
     <div
       className={cn(
-        'overflow-hidden overflow-x-auto rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-sm',
+        'w-full overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-sm',
         wrapperClassName
       )}
     >
       <table
-        className={cn('min-w-full border-collapse text-sm text-[var(--text)]', className)}
+        className={cn('min-w-0 w-full border-collapse text-sm text-[var(--text)]', className)}
         {...props}
       >
         {children}
@@ -33,7 +33,7 @@ export function TableHead({ children, className, ...props }: ThHTMLAttributes<HT
   return (
     <th
       className={cn(
-        'px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]',
+        'px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)] break-words',
         className
       )}
       {...props}
@@ -65,7 +65,7 @@ export function TableRow({ children, className, ...props }: HTMLAttributes<HTMLT
 export function TableCell({ children, className, ...props }: HTMLAttributes<HTMLTableCellElement>) {
   return (
     <td
-      className={cn('px-4 py-3 align-middle text-sm text-[var(--text)]', className)}
+      className={cn('px-4 py-3 align-middle text-sm text-[var(--text)] break-words', className)}
       {...props}
     >
       {children}

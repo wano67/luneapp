@@ -8,6 +8,8 @@ import { Card } from '@/components/ui/card';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import { LogoAvatar } from '@/components/pro/LogoAvatar';
 import { MoreVertical } from 'lucide-react';
+import { PageHeaderPro } from '@/components/pro/PageHeaderPro';
+import { TabsPills } from '@/components/pro/TabsPills';
 
 type Prospect = {
   id: string;
@@ -120,34 +122,31 @@ export default function ProspectDetailPage() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-5 px-4 py-6">
-      <Link
-        href={`/app/pro/${businessId}/agenda`}
-        className="text-sm text-[var(--text-secondary)] underline-offset-4 hover:text-[var(--text-primary)]"
-      >
-        ← Retour à l’agenda
-      </Link>
-      <header className="flex items-start justify-between gap-3">
-        <div className="flex items-start gap-3">
-          <LogoAvatar name={prospect.name || 'Prospect'} websiteUrl={prospect.websiteUrl ?? undefined} size={48} />
-          <div className="space-y-1">
-            <p className="text-lg font-semibold text-[var(--text-primary)]">{prospect.name}</p>
-            {prospect.contactEmail ? (
-              <p className="text-sm text-[var(--text-secondary)]">{prospect.contactEmail}</p>
-            ) : null}
+      <PageHeaderPro
+        backHref={`/app/pro/${businessId}/agenda`}
+        backLabel="Agenda"
+        title={prospect.name || 'Prospect'}
+        subtitle={
+          <div className="flex flex-col gap-1 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2">
+            {prospect.contactEmail ? <span className="truncate">{prospect.contactEmail}</span> : null}
+            {prospect.websiteUrl ? <span className="truncate">{prospect.websiteUrl}</span> : null}
             <StatusIndicatorProspect />
           </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => router.push(`/app/pro/${businessId}/clients?from=prospect&prospectId=${prospectId}`)}
-            className="cursor-pointer rounded-md bg-neutral-900 px-3 py-2 text-sm font-semibold text-white transition hover:bg-neutral-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
-          >
-            Convertir en client
-          </button>
-          <MenuDots businessId={businessId} prospectId={prospectId} />
-        </div>
-      </header>
+        }
+        leading={<LogoAvatar name={prospect.name || 'Prospect'} websiteUrl={prospect.websiteUrl ?? undefined} size={48} />}
+        actions={
+          <>
+            <button
+              type="button"
+              onClick={() => router.push(`/app/pro/${businessId}/clients?from=prospect&prospectId=${prospectId}`)}
+              className="w-full cursor-pointer rounded-md bg-neutral-900 px-3 py-2 text-sm font-semibold text-white transition hover:bg-neutral-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)] sm:w-auto"
+            >
+              Convertir en client
+            </button>
+            <MenuDots businessId={businessId} prospectId={prospectId} />
+          </>
+        }
+      />
 
       <Card className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -158,23 +157,13 @@ export default function ProspectDetailPage() {
         </div>
       </Card>
 
-      <div className="flex gap-2">
-        {tabs.map((tab) => (
-          <button
-            key={tab.key}
-            type="button"
-            onClick={() => setActiveTab(tab.key as typeof activeTab)}
-            className={`cursor-pointer rounded-full px-3 py-1 text-xs font-semibold transition ${
-              activeTab === tab.key
-                ? 'border border-[var(--border)] bg-[var(--surface)] text-[var(--text-primary)] shadow-sm'
-                : 'text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]'
-            }`}
-            aria-pressed={activeTab === tab.key}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
+      <TabsPills
+        items={tabs}
+        value={activeTab}
+        onChange={(key) => setActiveTab(key as typeof activeTab)}
+        ariaLabel="Sections prospect"
+        className="-mx-1 px-1"
+      />
 
       {activeTab === 'infos' ? (
         <Card className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">

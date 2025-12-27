@@ -14,7 +14,7 @@ const tabs = [
 export default function ProjectHub({ businessId, projectId }: Props) {
   return (
     <div className="mx-auto max-w-6xl space-y-4 px-4 py-6">
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <p className="text-xs text-[var(--text-secondary)]">
             <Link href={`/app/pro/${businessId}/projects`} className="hover:text-[var(--text-primary)]">
@@ -26,12 +26,12 @@ export default function ProjectHub({ businessId, projectId }: Props) {
         </div>
         <Link
           href={`/app/pro/${businessId}/projects/${projectId}/edit`}
-          className="rounded-md bg-neutral-900 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-neutral-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
+          className="w-full rounded-md bg-neutral-900 px-3 py-1.5 text-center text-sm font-semibold text-white transition hover:bg-neutral-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)] sm:w-auto"
         >
           Actions
         </Link>
       </div>
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         {tabs.map((tab) => (
           <button
             key={tab.key}

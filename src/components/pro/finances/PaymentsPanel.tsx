@@ -261,59 +261,57 @@ export function PaymentsPanel({ businessId }: { businessId: string }) {
         {error ? <p className="text-xs text-rose-500">{error}</p> : null}
         {requestId ? <p className="text-[10px] text-[var(--text-secondary)]">Req: {requestId}</p> : null}
 
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Client</TableHead>
-                <TableHead>Projet</TableHead>
-                <TableHead>Montant</TableHead>
-                <TableHead>Méthode</TableHead>
-                <TableHead>Échéance/Réception</TableHead>
-                <TableHead>Statut</TableHead>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Client</TableHead>
+              <TableHead>Projet</TableHead>
+              <TableHead>Montant</TableHead>
+              <TableHead>Méthode</TableHead>
+              <TableHead>Échéance/Réception</TableHead>
+              <TableHead>Statut</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {pageItems.map((p) => (
+              <TableRow
+                key={p.id}
+                onClick={() => setSelectedId(p.id)}
+                className="cursor-pointer hover:bg-[var(--surface-hover)]"
+                data-selected={selectedId === p.id}
+              >
+                <TableCell className="font-semibold">{p.clientName}</TableCell>
+                <TableCell>{p.project ?? '—'}</TableCell>
+                <TableCell>{formatCurrency(p.amount)}</TableCell>
+                <TableCell>{METHOD_LABELS[p.method]}</TableCell>
+                <TableCell>
+                  {p.receivedAt ? (
+                    <span className="text-xs text-emerald-700">Reçu le {formatDate(p.receivedAt)}</span>
+                  ) : (
+                    <span className="text-xs text-[var(--text-secondary)]">Échéance {formatDate(p.expectedAt)}</span>
+                  )}
+                </TableCell>
+                <TableCell>
+                  <Badge variant={p.status === 'PAID' ? 'pro' : p.status === 'LATE' ? 'performance' : 'neutral'}>
+                    {STATUS_LABELS[p.status]}
+                  </Badge>
+                </TableCell>
               </TableRow>
-            </TableHeader>
-            <TableBody>
-              {pageItems.map((p) => (
-                <TableRow
-                  key={p.id}
-                  onClick={() => setSelectedId(p.id)}
-                  className="cursor-pointer hover:bg-[var(--surface-hover)]"
-                  data-selected={selectedId === p.id}
-                >
-                  <TableCell className="font-semibold">{p.clientName}</TableCell>
-                  <TableCell>{p.project ?? '—'}</TableCell>
-                  <TableCell>{formatCurrency(p.amount)}</TableCell>
-                  <TableCell>{METHOD_LABELS[p.method]}</TableCell>
-                  <TableCell>
-                    {p.receivedAt ? (
-                      <span className="text-xs text-emerald-700">Reçu le {formatDate(p.receivedAt)}</span>
-                    ) : (
-                      <span className="text-xs text-[var(--text-secondary)]">Échéance {formatDate(p.expectedAt)}</span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={p.status === 'PAID' ? 'pro' : p.status === 'LATE' ? 'performance' : 'neutral'}>
-                      {STATUS_LABELS[p.status]}
-                    </Badge>
-                  </TableCell>
-                </TableRow>
-              ))}
-              {pageItems.length === 0 ? (
-                <TableEmpty>
-                  <div className="space-y-1">
-                    <p className="font-semibold">Aucun paiement</p>
-                    <p className="text-sm text-[var(--text-secondary)]">
-                      Aucune écriture de paiement trouvée pour l’instant.
-                    </p>
-                  </div>
-                </TableEmpty>
-              ) : null}
-            </TableBody>
-          </Table>
-        </div>
+            ))}
+            {pageItems.length === 0 ? (
+              <TableEmpty>
+                <div className="space-y-1">
+                  <p className="font-semibold">Aucun paiement</p>
+                  <p className="text-sm text-[var(--text-secondary)]">
+                    Aucune écriture de paiement trouvée pour l’instant.
+                  </p>
+                </div>
+              </TableEmpty>
+            ) : null}
+          </TableBody>
+        </Table>
 
-        <div className="flex items-center justify-between text-xs text-[var(--text-secondary)]">
+        <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-[var(--text-secondary)]">
           <div>
             Page {page} / {totalPages || 1}
           </div>

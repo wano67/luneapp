@@ -1,0 +1,24 @@
+# RESPONSIVE_CONTRACT — PRO (mobile-first 430px, premium)
+
+- **Layout shell**: containers `mx-auto max-w-5xl/6xl px-4 py-6`, spacing `space-y-4/5`, no horizontal scroll on 430px.
+- **Header (PageHeaderPro)**:
+  - Back link muted (`text-xs text-[var(--text-secondary)] underline-offset-4 hover:text-[var(--text-primary)]`).
+  - Identity block may include avatar (`leading`); text column `min-w-0` to allow truncation.
+  - Actions area wraps: `flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:justify-end`; primary CTA can be `w-full` on mobile.
+- **Tabs (TabsPills)**:
+  - Container plein largeur, tabs en `flex flex-wrap gap-2`.
+  - Button classes: `rounded-full px-3 py-1 text-xs font-semibold`; active `border border-[var(--border)] bg-[var(--surface)] shadow-sm`, inactive `text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]`.
+- **KPI circles (KpiCirclesBlock)**:
+  - Wrapper: `rounded-3xl bg-[var(--surface)]/70 p-4 sm:p-6`.
+  - Mobile: grille 2 colonnes (`grid grid-cols-2 gap-3`), cercles `aspect-square w-full max-w-[112px]` centrés (`justify-items-center`).
+  - Desktop: `sm:grid-cols-3 sm:gap-6`, cercles `sm:max-w-[136px] sm:text-2xl`.
+- **Cards (ContactCard / Studio shells)**:
+  - `rounded-3xl border bg-[var(--surface)] p-4/5 pb-14 shadow-sm transition hover:-translate-y-[1px] hover:shadow-md`.
+  - Metrics grids stack on mobile (`grid-cols-1`), wrap to 2 columns at `sm`.
+  - Borders carry status only (emerald/rose), no floating pills.
+- **Actions never overflow**:
+  - Avoid `whitespace-nowrap` on CTA text; prefer `w-full` on xs then `sm:w-auto`.
+  - Replace `justify-between` header bars with wrapped stacks; no absolute positioning for action bars.
+- **Tabs/KPI overflow safeguards**:
+  - Pas de scroll horizontal : tabs en `flex flex-wrap gap-2`, KPI en grille 2→3 colonnes.
+  - Global guard: `html, body { overflow-x: hidden; }` + root `overflow-x-hidden`.

@@ -13,6 +13,7 @@
 3. LogoAvatar improvements: detect banners via ratio, fallback initials; memoize /api/logo requests.
 4. Add Playwright e2e smoke (Agenda render, single arrow, border color) + visual snapshot KPI.
 5. Ajouter formatters partagés (currency/date) + small helpers for totals.
+6. Comptabilité client: data via `invoices` + nouvelle route summary (pas de modèle Payment dédié) ; consolider quand un vrai paiement/ledger par client existe.
 
 ## P2
 1. Refondre Business dashboard (3–4 KPIs, tabs, one chart) aligné Studio.

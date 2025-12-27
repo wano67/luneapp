@@ -901,7 +901,7 @@ export default function ServicesPage() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
-            <Button type="submit" variant="outline" className="whitespace-nowrap">
+            <Button type="submit" variant="outline" className="w-full sm:w-auto">
               Filtrer
             </Button>
           </form>
@@ -1118,12 +1118,12 @@ export default function ServicesPage() {
           {importRows.length ? (
             <div className="space-y-2">
               <p className="text-xs text-[var(--text-secondary)]">Aperçu (10 premières lignes)</p>
-              <div className="overflow-x-auto rounded-xl border border-dashed border-[var(--border)]">
-                <table className="min-w-full divide-y divide-[var(--border)] text-xs">
+              <div className="rounded-xl border border-dashed border-[var(--border)]">
+                <table className="w-full divide-y divide-[var(--border)] text-xs">
                   <thead className="bg-[var(--surface)]">
                     <tr>
                       {importColumns.slice(0, 6).map((col) => (
-                        <th key={col} className="px-3 py-2 text-left font-semibold text-[var(--text-secondary)]">
+                        <th key={col} className="px-3 py-2 text-left font-semibold text-[var(--text-secondary)] break-words">
                           {col}
                         </th>
                       ))}
@@ -1133,7 +1133,7 @@ export default function ServicesPage() {
                     {importRows.slice(0, 10).map((row, idx) => (
                       <tr key={`${idx}-${row[importColumns[0]] ?? idx}`}>
                         {importColumns.slice(0, 6).map((col) => (
-                          <td key={col} className="px-3 py-2 text-[var(--text-primary)]">
+                          <td key={col} className="px-3 py-2 text-[var(--text-primary)] break-words">
                             {row[col] ?? ''}
                           </td>
                         ))}

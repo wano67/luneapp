@@ -101,28 +101,26 @@ export function VatPanel({ businessId }: { businessId: string }) {
 
           <Card className="p-4">
             <h2 className="text-lg font-semibold mb-2">Par mois</h2>
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Mois</TableHead>
-                    <TableHead>Collectée</TableHead>
-                    <TableHead>Déductible</TableHead>
-                    <TableHead>Balance</TableHead>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Mois</TableHead>
+                  <TableHead>Collectée</TableHead>
+                  <TableHead>Déductible</TableHead>
+                  <TableHead>Balance</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {data.monthly.map((m) => (
+                  <TableRow key={m.month}>
+                    <TableCell>{m.month}</TableCell>
+                    <TableCell>{formatMoney(m.collectedCents)}</TableCell>
+                    <TableCell>{formatMoney(m.deductibleCents)}</TableCell>
+                    <TableCell>{formatMoney(m.balanceCents)}</TableCell>
                   </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {data.monthly.map((m) => (
-                    <TableRow key={m.month}>
-                      <TableCell>{m.month}</TableCell>
-                      <TableCell>{formatMoney(m.collectedCents)}</TableCell>
-                      <TableCell>{formatMoney(m.deductibleCents)}</TableCell>
-                      <TableCell>{formatMoney(m.balanceCents)}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+                ))}
+              </TableBody>
+            </Table>
           </Card>
         </>
       )}
