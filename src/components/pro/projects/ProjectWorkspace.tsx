@@ -117,6 +117,24 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
     setDocumentFile(null);
   };
 
+  const updateTaskDueDate = async (taskId: string, value: string) => {
+    try {
+      setModalError(null);
+      const res = await fetchJson(`/api/pro/businesses/${businessId}/tasks/${taskId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dueDate: value || null }),
+      });
+      if (!res.ok) {
+        setModalError(res.error ?? 'Impossible de mettre à jour la date.');
+        return;
+      }
+      await loadTasks();
+    } catch (err) {
+      setModalError(getErrorMessage(err));
+    }
+  };
+
   const loadProject = useCallback(async (): Promise<string | null> => {
     const res = await fetchJson<{ item: ProjectDetail }>(`/api/pro/businesses/${businessId}/projects/${projectId}`);
     if (!res.ok || !res.data) {
@@ -885,13 +903,7 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
                   <Input
                     type="date"
                     value={task.dueDate ?? ''}
-                    onChange={(e) =>
-                      void fetchJson(`/api/pro/businesses/${businessId}/tasks/${task.id}`, {
-                        method: 'PATCH',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ dueDate: e.target.value }),
-                      })
-                    }
+                    onChange={(e) => void updateTaskDueDate(task.id, e.target.value)}
                   />
                 </div>
               </div>

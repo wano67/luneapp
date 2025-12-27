@@ -4,7 +4,7 @@
 import type { ReactNode } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { LayoutDashboard, Briefcase, Contact2, Banknote, Cog, Wallet2, Building2 } from 'lucide-react';
+import { LayoutDashboard, Briefcase, Contact2, Banknote, Cog, Wallet2, Building2, Folder } from 'lucide-react';
 import { useActiveBusiness } from './pro/ActiveBusinessProvider';
 import { normalizeWebsiteUrl } from '@/lib/website';
 
@@ -115,6 +115,7 @@ function getProSections(businessId: string | null): NavSection[] {
         },
         { href: `${base}/projects`, label: 'Projets', icon: <Briefcase size={18} />, disabled },
         { href: `${base}/accounting`, label: 'Comptabilité', icon: <Banknote size={18} />, disabled },
+        { href: `${base}/catalog`, label: 'Catalogue', icon: <Folder size={18} />, disabled },
         { href: `${base}/marketing`, label: 'Marketing', icon: <Building2 size={18} />, disabled },
         { href: `${base}/finances`, label: 'Finances', icon: <Banknote size={18} />, disabled },
         { href: `${base}/settings`, label: 'Réglages', icon: <Cog size={18} />, disabled },
