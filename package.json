@@ -45,6 +45,7 @@
     "smoke:clients-delete": "pnpm tsx scripts/smoke-clients-delete.ts",
     "smoke:clients-gdpr": "pnpm tsx scripts/smoke-clients-gdpr.ts",
     "smoke:tasks-billing-link": "pnpm tsx scripts/smoke-tasks-billing-link.ts"
+    ,"test:e2e": "playwright test"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.1.0",
@@ -63,6 +64,7 @@
     "yaml": "^2.6.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.57.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/papaparse": "^5.5.2",
