@@ -1,7 +1,7 @@
 // Client detail page - premium, minimal CRM view
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { Card } from '@/components/ui/card';
@@ -12,6 +12,10 @@ import { Input } from '@/components/ui/input';
 import { normalizeWebsiteUrl } from '@/lib/website';
 import { KpiCirclesBlock } from '@/components/pro/KpiCirclesBlock';
 import { formatCurrencyEUR } from '@/lib/formatCurrency';
+import { ClientAccountingTab } from '@/components/pro/clients/ClientAccountingTab';
+import { PageHeaderPro } from '@/components/pro/PageHeaderPro';
+import { TabsPills } from '@/components/pro/TabsPills';
+import { ClientInteractionsTab } from '@/components/pro/clients/ClientInteractionsTab';
 
 type Client = {
   id: string;
@@ -34,22 +38,48 @@ type Project = {
 };
 
 type ProjectsResponse = { items?: Project[] };
-
+type SummaryResponse = {
+  totals: { invoicedCents: number; paidCents: number; outstandingCents: number };
+  invoices: Array<{
+    id: string;
+    number: string | null;
+    status: string;
+    totalCents: number;
+    currency: string;
+    issuedAt: string | null;
+    dueAt: string | null;
+    projectName: string | null;
+  }>;
+  payments: Array<{
+    id: string;
+    amountCents: number;
+    currency: string;
+    paidAt: string;
+    reference: string | null;
+  }>;
+};
 type Interaction = {
   id: string;
-  type?: string | null;
-  content?: string | null;
-  happenedAt?: string | null;
+  type: string;
+  content: string | null;
+  happenedAt: string;
+  createdByUserId: string | null;
 };
 
-type InteractionsResponse = { items?: Interaction[] };
+type TabKey = 'projects' | 'accounting' | 'interactions' | 'subscriptions' | 'documents' | 'infos';
 
-const tabs = [
+const tabs: { key: TabKey; label: string }[] = [
   { key: 'projects', label: 'Projets' },
-  { key: 'documents', label: 'Documents' },
+  { key: 'accounting', label: 'Comptabilité' },
   { key: 'interactions', label: 'Interactions' },
+  { key: 'subscriptions', label: 'Abonnements' },
+  { key: 'documents', label: 'Documents' },
   { key: 'infos', label: 'Infos' },
 ];
+
+function isActiveProjectStatus(status?: string | null) {
+  return status === 'IN_PROGRESS' || status === 'ACTIVE' || status === 'ONGOING';
+}
 
 export default function ClientDetailPage() {
   const params = useParams();
@@ -59,10 +89,18 @@ export default function ClientDetailPage() {
 
   const [client, setClient] = useState<Client | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
-  const [interactions, setInteractions] = useState<Interaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'projects' | 'documents' | 'interactions' | 'infos'>('projects');
+  const [accountingData, setAccountingData] = useState<SummaryResponse | null>(null);
+  const [accountingLoaded, setAccountingLoaded] = useState(false);
+  const [interactions, setInteractions] = useState<Interaction[]>([]);
+  const [interactionsLoaded, setInteractionsLoaded] = useState(false);
+  const [kpis, setKpis] = useState<Array<{ label: string; value: string | number }>>([
+    { label: 'Projets', value: '—' },
+    { label: 'En cours', value: '—' },
+    { label: 'Valeur', value: '—' },
+  ]);
+  const [activeTab, setActiveTab] = useState<TabKey>('projects');
   const [form, setForm] = useState<{ name: string; email: string; company: string; websiteUrl: string }>({
     name: '',
     email: '',
@@ -79,15 +117,10 @@ export default function ClientDetailPage() {
       try {
         setLoading(true);
         setError(null);
-        const [clientRes, projectsRes, interactionsRes] = await Promise.all([
+        const [clientRes, projectsRes] = await Promise.all([
           fetchJson<ClientResponse>(`/api/pro/businesses/${businessId}/clients/${clientId}`, {}, controller.signal),
           fetchJson<ProjectsResponse>(
             `/api/pro/businesses/${businessId}/projects?clientId=${clientId}&archived=false`,
-            {},
-            controller.signal,
-          ),
-          fetchJson<InteractionsResponse>(
-            `/api/pro/businesses/${businessId}/interactions?clientId=${clientId}`,
             {},
             controller.signal,
           ),
@@ -98,15 +131,15 @@ export default function ClientDetailPage() {
           return;
         }
         if (!projectsRes.ok) setError((prev) => prev ?? projectsRes.error ?? null);
-        if (!interactionsRes.ok) setError((prev) => prev ?? interactionsRes.error ?? null);
-        setClient(clientRes.data.item);
+        const rawClient = clientRes.data as ClientResponse | Client;
+        const clientData: Client = (rawClient as ClientResponse).item ?? (rawClient as Client);
+        setClient(clientData);
         setProjects(projectsRes.data?.items ?? []);
-        setInteractions(interactionsRes.data?.items ?? []);
         setForm({
-          name: clientRes.data.item.name ?? '',
-          email: clientRes.data.item.email ?? '',
-          company: clientRes.data.item.company ?? '',
-          websiteUrl: clientRes.data.item.websiteUrl ?? '',
+          name: clientData.name ?? '',
+          email: clientData.email ?? '',
+          company: clientData.company ?? '',
+          websiteUrl: clientData.websiteUrl ?? '',
         });
       } catch (err) {
         if (controller.signal.aborted) return;
@@ -119,13 +152,13 @@ export default function ClientDetailPage() {
     return () => controller.abort();
   }, [businessId, clientId]);
 
-  const metrics = useMemo(() => {
+  const buildProjectKpis = useCallback(() => {
     let total = 0;
     let active = 0;
     let valueCents = 0;
     for (const p of projects) {
       total += 1;
-      if (p.status === 'IN_PROGRESS' || p.status === 'ACTIVE' || p.status === 'ONGOING') active += 1;
+      if (isActiveProjectStatus(p.status)) active += 1;
       const amount =
         typeof p.amountCents === 'string'
           ? Number(p.amountCents)
@@ -134,13 +167,126 @@ export default function ClientDetailPage() {
             : 0;
       if (Number.isFinite(amount)) valueCents += amount;
     }
-    const lastInteraction = interactions
-      .map((i) => i.happenedAt)
-      .filter(Boolean)
-      .sort()
-      .slice(-1)[0];
-    return { total, active, valueCents, lastInteraction };
-  }, [projects, interactions]);
+    return [
+      { label: 'Projets', value: total },
+      { label: 'En cours', value: active },
+      { label: 'Valeur', value: formatCurrencyEUR(valueCents) },
+    ];
+  }, [projects]);
+
+  const buildAccountingKpis = useCallback(
+    (data?: SummaryResponse | null) => {
+      const totals = data?.totals ?? accountingData?.totals;
+      if (!totals) {
+        return [
+          { label: 'Facturé', value: '—' },
+          { label: 'Encaissé', value: '—' },
+          { label: 'En attente', value: '—' },
+        ];
+      }
+      return [
+        { label: 'Facturé', value: formatCurrencyEUR(totals.invoicedCents) },
+        { label: 'Encaissé', value: formatCurrencyEUR(totals.paidCents) },
+        { label: 'En attente', value: formatCurrencyEUR(totals.outstandingCents) },
+      ];
+    },
+    [accountingData],
+  );
+
+  function computeResponseDelay(items: Interaction[]) {
+    if (!items.length) return null;
+    const toTime = (value?: string | null) => {
+      if (!value) return Number.NaN;
+      const d = new Date(value);
+      return Number.isNaN(d.getTime()) ? Number.NaN : d.getTime();
+    };
+    const sorted = [...items].sort((a, b) => {
+      const aDate = toTime(a.happenedAt);
+      const bDate = toTime(b.happenedAt);
+      return aDate - bDate;
+    });
+    const deltas: number[] = [];
+    for (let i = 1; i < sorted.length; i += 1) {
+      const prev = toTime(sorted[i - 1].happenedAt);
+      const curr = toTime(sorted[i].happenedAt);
+      if (Number.isFinite(prev) && Number.isFinite(curr) && curr > prev) deltas.push(curr - prev);
+    }
+    if (!deltas.length) return null;
+    const avg = deltas.reduce((a, b) => a + b, 0) / deltas.length;
+    return avg;
+  }
+
+  function formatResponseDelay(ms: number | null) {
+    if (ms == null || !Number.isFinite(ms)) return '—';
+    const hours = ms / (1000 * 60 * 60);
+    if (hours < 24) return `${Math.round(hours)}h`;
+    const days = hours / 24;
+    return `${Math.round(days)}j`;
+  }
+
+  const buildInteractionKpis = useCallback(
+    (list?: Interaction[]) => {
+      const source = list ?? interactions;
+      const sent = source.length;
+      const received = 0;
+      const delayMs = computeResponseDelay(source);
+      return [
+        { label: 'Envoyés', value: sent },
+        { label: 'Reçus', value: received },
+        { label: 'Délai', value: formatResponseDelay(delayMs) },
+      ];
+    },
+    [interactions],
+  );
+
+  useEffect(() => {
+    if (activeTab === 'accounting') {
+      setKpis(buildAccountingKpis());
+    } else if (activeTab === 'interactions') {
+      setKpis(buildInteractionKpis());
+    } else {
+      setKpis(buildProjectKpis());
+    }
+  }, [activeTab, buildAccountingKpis, buildInteractionKpis, buildProjectKpis]);
+
+  const projectMetrics = useMemo(() => {
+    let total = 0;
+    let active = 0;
+    for (const p of projects) {
+      total += 1;
+      if (isActiveProjectStatus(p.status)) active += 1;
+    }
+    return { total, active };
+  }, [projects]);
+
+  const hasChanges = client
+    ? form.name !== (client.name ?? '') ||
+      form.email !== (client.email ?? '') ||
+      form.company !== (client.company ?? '') ||
+      form.websiteUrl !== (client.websiteUrl ?? '')
+    : false;
+
+  const handleSummaryChange = useCallback(
+    (data: SummaryResponse | null) => {
+      setAccountingData(data);
+      setAccountingLoaded(true);
+      if (activeTab === 'accounting') {
+        setKpis(buildAccountingKpis(data));
+      }
+    },
+    [activeTab, buildAccountingKpis],
+  );
+
+  const handleInteractionsChange = useCallback(
+    (items: Interaction[]) => {
+      setInteractions(items);
+      setInteractionsLoaded(true);
+      if (activeTab === 'interactions') {
+        setKpis(buildInteractionKpis(items));
+      }
+    },
+    [activeTab, buildInteractionKpis],
+  );
 
   if (loading) {
     return (
@@ -175,15 +321,6 @@ export default function ClientDetailPage() {
       </div>
     );
   }
-
-  const valueFormatted = formatCurrencyEUR(metrics.valueCents);
-
-  const hasChanges = client
-    ? form.name !== (client.name ?? '') ||
-      form.email !== (client.email ?? '') ||
-      form.company !== (client.company ?? '') ||
-      form.websiteUrl !== (client.websiteUrl ?? '')
-    : false;
 
   async function handleSave() {
     setSaveInfo(null);
@@ -229,82 +366,56 @@ export default function ClientDetailPage() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-5 px-4 py-6">
-      <Link
-        href={`/app/pro/${businessId}/agenda`}
-        className="text-sm text-[var(--text-secondary)] underline-offset-4 hover:text-[var(--text-primary)]"
-      >
-        ← Retour à l’agenda
-      </Link>
-      <header className="flex items-start justify-between gap-3">
-        <div className="flex items-start gap-3">
-          <LogoAvatar name={client.name} websiteUrl={client.websiteUrl ?? undefined} size={52} />
-          <div className="space-y-1">
-            <p className="text-lg font-semibold text-[var(--text-primary)]">{client.name}</p>
-            {client.email ? <p className="text-sm text-[var(--text-secondary)]">{client.email}</p> : null}
+      <PageHeaderPro
+        backHref={`/app/pro/${businessId}/agenda`}
+        backLabel="Agenda"
+        title={client.name}
+        subtitle={
+          <div className="flex flex-col gap-1 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2">
+            {client.email ? <span className="truncate">{client.email}</span> : null}
             {client.websiteUrl ? (
-              <p className="truncate text-sm text-[var(--text-secondary)]">{normalizeWebsiteUrl(client.websiteUrl).value}</p>
+              <span className="truncate text-[var(--text-secondary)]">
+                {normalizeWebsiteUrl(client.websiteUrl).value}
+              </span>
             ) : null}
-            <StatusIndicator active={metrics.active > 0} />
+            <StatusIndicator active={projectMetrics.active > 0} />
           </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => router.push(`/app/pro/${businessId}/projects?clientId=${clientId}`)}
-            className="cursor-pointer rounded-md bg-neutral-900 px-3 py-2 text-sm font-semibold text-white transition hover:bg-neutral-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
-          >
-            Nouveau projet
-          </button>
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={!hasChanges || saving}
-            className="cursor-pointer rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm font-semibold text-[var(--text-primary)] transition hover:bg-[var(--surface-hover)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)] disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {saving ? 'Enregistrement…' : 'Enregistrer'}
-          </button>
-          <MenuDots businessId={businessId} clientId={clientId} />
-        </div>
-      </header>
-
-      <KpiCirclesBlock
-        items={[
-          { label: 'Projets', value: metrics.total },
-          { label: 'En cours', value: metrics.active },
-          { label: 'Valeur', value: valueFormatted },
-          { label: 'Dernière', value: formatDate(metrics.lastInteraction) },
-        ]}
+        }
+        leading={<LogoAvatar name={client.name} websiteUrl={client.websiteUrl ?? undefined} size={52} />}
+        actions={
+          <>
+            <button
+              type="button"
+              onClick={() => router.push(`/app/pro/${businessId}/projects?clientId=${clientId}`)}
+              className="w-full cursor-pointer rounded-md bg-neutral-900 px-3 py-2 text-sm font-semibold text-white transition hover:bg-neutral-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)] sm:w-auto"
+            >
+              Nouveau projet
+            </button>
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={!hasChanges || saving}
+              className="w-full cursor-pointer rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm font-semibold text-[var(--text-primary)] transition hover:bg-[var(--surface-hover)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)] disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+            >
+              {saving ? 'Enregistrement…' : 'Enregistrer'}
+            </button>
+            <MenuDots businessId={businessId} clientId={clientId} />
+          </>
+        }
       />
 
-      <Card className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Metric label="Projets" value={metrics.total} />
-          <Metric label="En cours" value={metrics.active} />
-          <Metric label="Valeur" value={valueFormatted} />
-          <Metric label="Dernière interaction" value={formatDate(metrics.lastInteraction)} />
-        </div>
-      </Card>
+      <KpiCirclesBlock items={kpis} />
 
       {saveError ? <p className="text-sm text-rose-500">{saveError}</p> : null}
       {saveInfo ? <p className="text-sm text-emerald-500">{saveInfo}</p> : null}
 
-      <div className="flex gap-2">
-        {tabs.map((tab) => (
-          <button
-            key={tab.key}
-            type="button"
-            onClick={() => setActiveTab(tab.key as typeof activeTab)}
-            className={`cursor-pointer rounded-full px-3 py-1 text-xs font-semibold transition ${
-              activeTab === tab.key
-                ? 'border border-[var(--border)] bg-[var(--surface)] text-[var(--text-primary)] shadow-sm'
-                : 'text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]'
-            }`}
-            aria-pressed={activeTab === tab.key}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
+      <TabsPills
+        items={tabs}
+        value={activeTab}
+        onChange={(key) => setActiveTab(key as typeof activeTab)}
+        ariaLabel="Sections client"
+        className="-mx-1 px-1"
+      />
 
       {activeTab === 'projects' ? (
         <Card className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
@@ -322,11 +433,36 @@ export default function ClientDetailPage() {
                     <p className="truncate font-semibold text-[var(--text-primary)]">{p.name}</p>
                     <p className="text-xs text-[var(--text-secondary)]">{formatDate(p.startDate)}</p>
                   </div>
-                  <span className="text-[11px] text-[var(--text-secondary)]">{p.status ?? 'INCONNU'}</span>
+                  <div className="flex flex-col items-end gap-1 text-right">
+                    <span className="text-[11px] text-[var(--text-secondary)]">{p.status ?? 'INCONNU'}</span>
+                    {p.amountCents != null ? (
+                      <span className="text-[var(--text-primary)] text-xs font-semibold">
+                        {formatCurrencyEUR(
+                          typeof p.amountCents === 'string' ? Number(p.amountCents) : (p.amountCents ?? 0),
+                        )}
+                      </span>
+                    ) : null}
+                  </div>
                 </Link>
               ))
             )}
           </div>
+        </Card>
+      ) : null}
+
+      {activeTab === 'accounting' ? (
+        <ClientAccountingTab
+          businessId={businessId}
+          clientId={clientId}
+          initialData={accountingData}
+          alreadyLoaded={accountingLoaded}
+          onSummaryChange={handleSummaryChange}
+        />
+      ) : null}
+
+      {activeTab === 'subscriptions' ? (
+        <Card className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5">
+          <EmptyBlock message="Abonnements / récurrences bientôt disponibles." />
         </Card>
       ) : null}
 
@@ -337,26 +473,13 @@ export default function ClientDetailPage() {
       ) : null}
 
       {activeTab === 'interactions' ? (
-        <Card className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
-          {interactions.length === 0 ? (
-            <EmptyBlock message="Aucune interaction enregistrée." />
-          ) : (
-            <div className="grid gap-2">
-              {interactions.map((i) => (
-                <div
-                  key={i.id}
-                  className="rounded-xl border border-[var(--border)]/60 bg-[var(--surface-hover)] px-3 py-2 text-sm"
-                >
-                  <div className="flex items-center justify-between">
-                    <p className="font-semibold text-[var(--text-primary)]">{i.type ?? 'Note'}</p>
-                    <span className="text-xs text-[var(--text-secondary)]">{formatDate(i.happenedAt)}</span>
-                  </div>
-                  {i.content ? <p className="text-sm text-[var(--text-primary)]">{i.content}</p> : null}
-                </div>
-              ))}
-            </div>
-          )}
-        </Card>
+        <ClientInteractionsTab
+          businessId={businessId}
+          clientId={clientId}
+          initialItems={interactions}
+          alreadyLoaded={interactionsLoaded}
+          onChange={handleInteractionsChange}
+        />
       ) : null}
 
       {activeTab === 'infos' ? (
@@ -387,15 +510,6 @@ export default function ClientDetailPage() {
           </div>
         </Card>
       ) : null}
-    </div>
-  );
-}
-
-function Metric({ label, value }: { label: string; value: string | number }) {
-  return (
-    <div className="rounded-xl bg-[var(--surface-hover)]/60 px-3 py-3">
-      <p className="text-xs uppercase tracking-wide text-[var(--text-secondary)]">{label}</p>
-      <p className="text-lg font-semibold text-[var(--text-primary)]">{value}</p>
     </div>
   );
 }

@@ -40,6 +40,7 @@
     "smoke:invoice-reservation": "pnpm tsx scripts/smoke-invoice-reservation.ts",
     "smoke:ledger": "pnpm tsx scripts/smoke-ledger.ts",
     "smoke:nav-surface": "pnpm tsx scripts/smoke-nav-surface.ts",
+    "test:accounting": "pnpm tsx scripts/test-accounting-outstanding.ts",
     "postinstall": "prisma generate",
     "smoke:clients-delete": "pnpm tsx scripts/smoke-clients-delete.ts",
     "smoke:clients-gdpr": "pnpm tsx scripts/smoke-clients-gdpr.ts",

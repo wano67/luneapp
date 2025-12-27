@@ -95,28 +95,26 @@ export function TreasuryPanel({ businessId }: { businessId: string }) {
 
           <Card className="p-4">
             <h2 className="text-lg font-semibold mb-2">Par mois</h2>
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Mois</TableHead>
-                    <TableHead>Revenus</TableHead>
-                    <TableHead>Dépenses</TableHead>
-                    <TableHead>Net</TableHead>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Mois</TableHead>
+                  <TableHead>Revenus</TableHead>
+                  <TableHead>Dépenses</TableHead>
+                  <TableHead>Net</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {data.monthly.map((m) => (
+                  <TableRow key={m.month}>
+                    <TableCell>{m.month}</TableCell>
+                    <TableCell>{formatMoney(m.incomeCents)}</TableCell>
+                    <TableCell>{formatMoney(m.expenseCents)}</TableCell>
+                    <TableCell>{formatMoney(m.netCents)}</TableCell>
                   </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {data.monthly.map((m) => (
-                    <TableRow key={m.month}>
-                      <TableCell>{m.month}</TableCell>
-                      <TableCell>{formatMoney(m.incomeCents)}</TableCell>
-                      <TableCell>{formatMoney(m.expenseCents)}</TableCell>
-                      <TableCell>{formatMoney(m.netCents)}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+                ))}
+              </TableBody>
+            </Table>
           </Card>
 
           <Card className="p-4">
@@ -124,24 +122,22 @@ export function TreasuryPanel({ businessId }: { businessId: string }) {
             {data.byCategory.length === 0 ? (
               <p className="text-sm text-muted-foreground">Aucune catégorie disponible.</p>
             ) : (
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Catégorie</TableHead>
-                      <TableHead>Net</TableHead>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Catégorie</TableHead>
+                    <TableHead>Net</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {data.byCategory.map((c) => (
+                    <TableRow key={c.category}>
+                      <TableCell>{c.category}</TableCell>
+                      <TableCell>{formatMoney(c.netCents)}</TableCell>
                     </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {data.byCategory.map((c) => (
-                      <TableRow key={c.category}>
-                        <TableCell>{c.category}</TableCell>
-                        <TableCell>{formatMoney(c.netCents)}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+                  ))}
+                </TableBody>
+              </Table>
             )}
           </Card>
         </>

@@ -8,6 +8,8 @@ import { Input } from '@/components/ui/input';
 import { Modal } from '@/components/ui/modal';
 import { KpiCirclesBlock } from '@/components/pro/KpiCirclesBlock';
 import { ContactCard } from '@/components/pro/crm/ContactCard';
+import { PageHeaderPro } from '@/components/pro/PageHeaderPro';
+import { TabsPills } from '@/components/pro/TabsPills';
 
 type ViewMode = 'agenda' | 'clients' | 'prospects';
 type Props = { businessId: string; view?: ViewMode };
@@ -189,48 +191,32 @@ export default function AgendaPage({ businessId, view = 'agenda' }: Props) {
 
   return (
     <div className="mx-auto max-w-6xl space-y-4 px-4 py-6">
-      <header className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-xs text-[var(--text-secondary)]">
-            <Link href={`/app/pro/${businessId}`} className="hover:text-[var(--text-primary)]">
-              ← Dashboard
-            </Link>
-          </p>
-          <h1 className="text-xl font-semibold text-[var(--text-primary)]">Agenda</h1>
-          <p className="text-sm text-[var(--text-secondary)]">Clients et prospects de l’entreprise</p>
-        </div>
-        <Link
-          href={`/app/pro/${businessId}/clients`}
-          className="cursor-pointer rounded-md bg-neutral-900 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-neutral-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
-          onClick={(e) => {
-            e.preventDefault();
-            setCreateOpen(true);
-          }}
-        >
-          Ajouter un contact
-        </Link>
-      </header>
+      <PageHeaderPro
+        backHref={`/app/pro/${businessId}`}
+        backLabel="Dashboard"
+        title="Agenda"
+        subtitle="Clients et prospects de l’entreprise"
+        actions={
+          <button
+            type="button"
+            onClick={() => setCreateOpen(true)}
+            className="w-full cursor-pointer rounded-md bg-neutral-900 px-3 py-2 text-sm font-semibold text-white transition hover:bg-neutral-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)] sm:w-auto"
+          >
+            Ajouter un contact
+          </button>
+        }
+      />
 
       <KpiCirclesBlock items={kpis} />
 
       {view === 'agenda' ? (
-        <div className="flex gap-2">
-          {tabs.map((tab) => (
-            <button
-              key={tab.key}
-              type="button"
-              onClick={() => setActiveTab(tab.key as 'clients' | 'prospects')}
-              className={`cursor-pointer rounded-full px-3 py-1 text-xs font-semibold transition ${
-                activeTab === tab.key
-                  ? 'border border-[var(--border)] bg-[var(--surface)] text-[var(--text-primary)] shadow-sm'
-                  : 'text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]'
-              }`}
-              aria-pressed={activeTab === tab.key}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
+        <TabsPills
+          items={tabs}
+          value={activeTab}
+          onChange={(key) => setActiveTab(key as 'clients' | 'prospects')}
+          ariaLabel="Agenda onglets"
+          className="-mx-1 px-1"
+        />
       ) : null}
 
       {loading ? (

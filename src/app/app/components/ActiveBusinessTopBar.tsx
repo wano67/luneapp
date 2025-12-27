@@ -34,11 +34,11 @@ export function ActiveBusinessTopBar({
       </div>
       <div className="ml-auto flex flex-wrap items-center gap-2">
         {onChange ? (
-          <Button size="sm" variant="outline" onClick={onChange} className="whitespace-nowrap">
+          <Button size="sm" variant="outline" onClick={onChange} className="w-full sm:w-auto">
             Changer
           </Button>
         ) : null}
-        <Button size="sm" variant="ghost" asChild className="whitespace-nowrap">
+        <Button size="sm" variant="ghost" asChild className="w-full sm:w-auto">
           <Link href={hubHref}>Hub PRO</Link>
         </Button>
       </div>

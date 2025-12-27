@@ -35,9 +35,9 @@ export default async function RootLayout({
   const initialDataTheme = pref === 'dark' || pref === 'light' ? pref : undefined;
 
   return (
-    <html lang="fr" suppressHydrationWarning data-theme={initialDataTheme}>
+    <html lang="fr" suppressHydrationWarning data-theme={initialDataTheme} className="overflow-x-hidden">
       <body
-        className={`${inter.variable} ${jetBrainsMono.variable} antialiased`}
+        className={`${inter.variable} ${jetBrainsMono.variable} antialiased overflow-x-hidden`}
       >
         <ThemeProvider initialPref={pref}>{children}</ThemeProvider>
       </body>

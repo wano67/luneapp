@@ -340,7 +340,7 @@ function BusinessHeader({
       <Link href="/app/pro" className="text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
         ← Studio
       </Link>
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex items-start gap-3">
           <LogoBlock src={src} fallback={businessName} />
           <div className="min-w-0">
@@ -352,11 +352,11 @@ function BusinessHeader({
             ) : null}
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:justify-end">
           <Button
             asChild
             size="sm"
-            className="cursor-pointer rounded-md bg-neutral-900 px-3 text-xs font-semibold text-white transition hover:bg-neutral-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
+            className="w-full cursor-pointer rounded-md bg-neutral-900 px-3 text-xs font-semibold text-white transition hover:bg-neutral-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)] sm:w-auto"
           >
             <Link href={`/app/pro/${businessId}/projects`}>Nouveau projet</Link>
           </Button>
