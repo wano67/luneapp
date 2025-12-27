@@ -231,14 +231,6 @@ export function CatalogPage({
       defaultPriceCents: serviceForm.price ? Number(serviceForm.price) : null,
       vatRate: serviceForm.vatRate ? Number(serviceForm.vatRate) : null,
       type: serviceForm.type.trim() || null,
-      // billingType/recurrence are UI-only until backend supports them
-      ...(serviceForm.billingType ? { billingType: serviceForm.billingType } : {}),
-      ...(serviceForm.billingType === 'RECURRING' && serviceForm.recurrenceInterval
-        ? {
-            recurrenceInterval: serviceForm.recurrenceInterval,
-            recurrenceDayOfMonth: serviceForm.recurrenceDayOfMonth ? Number(serviceForm.recurrenceDayOfMonth) : null,
-          }
-        : {}),
     };
     const url = serviceForm.id
       ? `/api/pro/businesses/${businessId}/services/${serviceForm.id}`
@@ -518,6 +510,9 @@ export function CatalogPage({
                   onChange={(e) => setServiceForm((prev) => ({ ...prev, recurrenceDayOfMonth: e.target.value }))}
                 />
               ) : null}
+              <p className="text-xs text-[var(--text-secondary)]">
+                Les paramètres d’abonnement sont affichés à titre informatif et envoyés uniquement si l’API les accepte.
+              </p>
             </>
           ) : (
             <>
