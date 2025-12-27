@@ -1,0 +1,12 @@
+# UI Components Map
+- **Theme tokens**: `src/app/globals.css` defines CSS variables for light/dark palettes (`--bg`, `--surface`, `--border`, `--text-*`, `--accent`, `--focus-ring`, shadows) and utility class `.card-interactive`.
+- **Core primitives (`src/components/ui`)**:
+  - `button.tsx` (variants + sizes), `badge.tsx`, `card.tsx`, `input.tsx`, `select.tsx`, `table.tsx`, `modal.tsx`, `dropzone.tsx`, `empty-state.tsx`, `kpi-card.tsx`, `section-header.tsx`.
+  - These are used across marketing and Pro dashboards (e.g., `src/app/(marketing)/page.tsx`, `src/app/app/pro/[businessId]/clients/[clientId]/page.tsx`).
+- **Layout shells**:
+  - App shell/navigation in `src/app/app/AppShell.tsx` and `AppSidebar.tsx` (Pro workspace); Marketing hero/sections built directly in pages using primitives.
+  - Pro client tabs (`src/components/pro/clients/*`) compose Cards, Buttons, Modal, Table.
+- **Specialized features**:
+  - Charts under `src/components/pro/charts/*` (Cashflow, Pipeline, Tasks donut).
+  - Finance panels `src/components/pro/finances/*`, CRM cards `src/components/pro/crm/*`.
+- **Design tokens usage**: Pages and components set colors via CSS variables (`var(--surface)`, `var(--text-primary)`) rather than Tailwind defaults, keeping theme consistent.

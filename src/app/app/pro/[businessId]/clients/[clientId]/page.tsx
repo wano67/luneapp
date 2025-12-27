@@ -8,7 +8,6 @@ import { Card } from '@/components/ui/card';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import { LogoAvatar } from '@/components/pro/LogoAvatar';
 import { MoreVertical } from 'lucide-react';
-import { Input } from '@/components/ui/input';
 import { normalizeWebsiteUrl } from '@/lib/website';
 import { KpiCirclesBlock } from '@/components/pro/KpiCirclesBlock';
 import { formatCurrencyEUR } from '@/lib/formatCurrency';
@@ -16,6 +15,8 @@ import { ClientAccountingTab } from '@/components/pro/clients/ClientAccountingTa
 import { PageHeaderPro } from '@/components/pro/PageHeaderPro';
 import { TabsPills } from '@/components/pro/TabsPills';
 import { ClientInteractionsTab } from '@/components/pro/clients/ClientInteractionsTab';
+import { ClientDocumentsTab } from '@/components/pro/clients/ClientDocumentsTab';
+import { ClientInfoTab } from '@/components/pro/clients/ClientInfoTab';
 
 type Client = {
   id: string;
@@ -23,6 +24,10 @@ type Client = {
   email: string | null;
   websiteUrl: string | null;
   notes: string | null;
+  phone?: string | null;
+  sector?: string | null;
+  status?: string | null;
+  leadSource?: string | null;
   company?: string | null;
 };
 
@@ -266,6 +271,19 @@ export default function ClientDetailPage() {
       form.websiteUrl !== (client.websiteUrl ?? '')
     : false;
 
+  const handleClientUpdated = useCallback(
+    (updated: Client) => {
+      setClient(updated);
+      setForm({
+        name: updated.name ?? '',
+        email: updated.email ?? '',
+        company: updated.company ?? '',
+        websiteUrl: updated.websiteUrl ?? '',
+      });
+    },
+    [],
+  );
+
   const handleSummaryChange = useCallback(
     (data: SummaryResponse | null) => {
       setAccountingData(data);
@@ -467,9 +485,7 @@ export default function ClientDetailPage() {
       ) : null}
 
       {activeTab === 'documents' ? (
-        <Card className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
-          <EmptyBlock message="Aucun document listé pour ce client." />
-        </Card>
+        <ClientDocumentsTab businessId={businessId} clientId={clientId} />
       ) : null}
 
       {activeTab === 'interactions' ? (
@@ -483,32 +499,12 @@ export default function ClientDetailPage() {
       ) : null}
 
       {activeTab === 'infos' ? (
-        <Card className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
-          <div className="space-y-3 text-sm text-[var(--text-secondary)]">
-            <Input
-              label="Nom"
-              value={form.name}
-              onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
-            />
-            <Input
-              label="Email"
-              value={form.email}
-              onChange={(e) => setForm((prev) => ({ ...prev, email: e.target.value }))}
-            />
-            <Input
-              label="Entreprise"
-              value={form.company}
-              onChange={(e) => setForm((prev) => ({ ...prev, company: e.target.value }))}
-            />
-            <Input
-              label="Site web"
-              value={form.websiteUrl}
-              onChange={(e) => setForm((prev) => ({ ...prev, websiteUrl: e.target.value }))}
-              placeholder="https://exemple.com"
-            />
-            <InfoRow label="Notes" value={client.notes ?? '—'} />
-          </div>
-        </Card>
+        <ClientInfoTab
+          businessId={businessId}
+          clientId={clientId}
+          client={client}
+          onUpdated={handleClientUpdated}
+        />
       ) : null}
     </div>
   );
@@ -525,15 +521,6 @@ function formatDate(value: string | null | undefined) {
   } catch {
     return '—';
   }
-}
-
-function InfoRow({ label, value }: { label: string; value: string | number }) {
-  return (
-    <div className="flex items-center justify-between rounded-lg bg-[var(--surface-hover)]/60 px-3 py-2">
-      <span>{label}</span>
-      <span className="text-[var(--text-primary)] font-medium">{value}</span>
-    </div>
-  );
 }
 
 function StatusIndicator({ active }: { active: boolean }) {

@@ -4,13 +4,8 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useParams } from 'next/navigation';
 import { fetchJson } from '@/lib/apiClient';
-import {
-  ActiveBusinessProvider,
-  type ActiveBusiness,
-  useActiveBusiness,
-} from '../ActiveBusinessProvider';
+import { ActiveBusinessProvider, type ActiveBusiness } from '../ActiveBusinessProvider';
 import SwitchBusinessModal from '../SwitchBusinessModal';
-import { ActiveBusinessTopBar } from '../../components/ActiveBusinessTopBar';
 
 type Business = {
   id: string;
@@ -78,7 +73,7 @@ export default function BusinessLayout({ children }: BusinessLayoutProps) {
 
   return (
     <ActiveBusinessProvider initialBusiness={initialActive}>
-      <LayoutContent error={error} initialActive={initialActive}>
+      <LayoutContent error={error}>
         {children}
       </LayoutContent>
     </ActiveBusinessProvider>
@@ -88,30 +83,12 @@ export default function BusinessLayout({ children }: BusinessLayoutProps) {
 function LayoutContent({
   children,
   error,
-  initialActive,
 }: {
   children: ReactNode;
   error: string | null;
-  initialActive: ActiveBusiness | null;
 }) {
-  const ctx = useActiveBusiness({ optional: true });
-  const activeForDisplay = ctx?.activeBusiness ?? initialActive;
-
   return (
     <div className="space-y-3">
-      {activeForDisplay ? (
-        <div className="sticky top-14 z-40 border-b border-[var(--border)] bg-[var(--background)]/85 backdrop-blur-md">
-          <div className="mx-auto max-w-6xl px-4 py-2 md:px-6">
-            <ActiveBusinessTopBar
-              businessName={activeForDisplay.name}
-              websiteUrl={activeForDisplay.websiteUrl}
-              roleLabel={activeForDisplay.role}
-              onChange={() => ctx?.openSwitchModal?.()}
-              hubHref="/app/pro"
-            />
-          </div>
-        </div>
-      ) : null}
       {error ? <p className="text-xs text-rose-400">{error}</p> : null}
       <div>{children}</div>
       <SwitchBusinessModal />

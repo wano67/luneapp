@@ -410,6 +410,7 @@ function HeaderMenu({ businessId }: { businessId: string }) {
   const items = [
     { label: 'Projets', href: `/app/pro/${businessId}/projects` },
     { label: 'Clients', href: `/app/pro/${businessId}/clients` },
+    { label: 'Catalogue', href: `/app/pro/${businessId}/catalog` },
     { label: 'Finances', href: `/app/pro/${businessId}/finances` },
     { label: 'Membres', href: `/app/pro/${businessId}/settings/team` },
     { label: 'Paramètres', href: `/app/pro/${businessId}/settings` },

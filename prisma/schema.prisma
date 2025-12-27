@@ -67,6 +67,12 @@ enum InventoryMovementSource {
   SALE
 }
 
+enum DocumentKind {
+  FILE
+  INVOICE
+  QUOTE
+}
+
 /**
  * Statut d'une invitation d'entreprise
  */
@@ -141,6 +147,7 @@ model User {
   inventoryMovements   InventoryMovement[]
   ledgerEntriesCreated LedgerEntry[]
   clientsAnonymized    Client[] @relation("ClientAnonymizedBy")
+  documentsCreated     BusinessDocument[] @relation("DocumentCreatedBy")
 }
 
 /**
@@ -166,6 +173,7 @@ model Business {
   interactions Interaction[]
   quotes      Quote[]
   invoices    Invoice[]
+  documents   BusinessDocument[]
   references  BusinessReference[]
   processes   Process[]
   settings    BusinessSettings?
@@ -379,6 +387,7 @@ model Client {
   interactions Interaction[]
   quotes    Quote[]
   invoices  Invoice[]
+  documents BusinessDocument[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1004,6 +1013,28 @@ model InvoiceItem {
   product Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
 
   @@index([productId])
+}
+
+model BusinessDocument {
+  id             BigInt       @id @default(autoincrement())
+  businessId     BigInt
+  clientId       BigInt?
+  title          String
+  filename       String
+  mimeType       String
+  sizeBytes      Int
+  storageKey     String       @unique
+  sha256         String?
+  kind           DocumentKind @default(FILE)
+  createdByUserId BigInt
+  createdAt      DateTime     @default(now())
+
+  business  Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  client    Client?  @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  createdBy User     @relation("DocumentCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+
+  @@index([businessId, clientId, createdAt])
+  @@index([businessId, createdAt])
 }
 
 /**
