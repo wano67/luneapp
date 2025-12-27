@@ -1,65 +1,53 @@
-# Audit PRO — Architecture, UX, Bugs, Plan (luneapp)
+# AUDIT — luneapp (Next.js App Router + Prisma)
 
-## 1) Cartographie projet (architecture)
-- **Stack**: Next.js App Router (app/), TypeScript, Tailwind + CSS vars (`--surface`, `--border`, `--text-*`), lucide-react icons.
-- **Racine pages**: `src/app/app/…` (app shell authenticated), `src/app/api/**` (routes API), `src/components/**` (UI).
-- **PRO pages principales**:
-  - Studio hub: `src/app/app/pro/page.tsx` (+ `ProHomeClient` components).
-  - Business dashboard: `src/app/app/pro/[businessId]/page.tsx`.
-  - Agenda: `src/app/app/pro/[businessId]/agenda/page.tsx` (uses `AgendaPage`).
-  - Clients list wrapper: `src/app/app/pro/[businessId]/clients/page.tsx` → `AgendaPage view="clients"`.
-  - Prospects list wrapper: `src/app/app/pro/[businessId]/prospects/page.tsx` → `AgendaPage view="prospects"`.
-  - Client detail: `src/app/app/pro/[businessId]/clients/[clientId]/page.tsx`.
-  - Prospect detail: `src/app/app/pro/[businessId]/prospects/[prospectId]/page.tsx`.
-  - Sidebar: `src/app/app/AppSidebar.tsx` (fixed nav).
-- **UI partagée**: `Card`, `Input`, `Modal`, `LogoAvatar`, `cn`, `fetchJson`, `normalizeWebsiteUrl`.
-- **Flux données Agenda/CRM**:
-  - `AgendaPage`: fetches `/api/pro/businesses/{id}/clients`, `/prospects`, `/projects?archived=false`; agrège par `clientId` pour projets actifs/valeur.
-  - Status actif = projets actifs > 0 ; border couleur sur card.
-  - Logo via `LogoAvatar` → `/api/logo?url=...` + `normalizeWebsiteUrl`.
+## Architecture
+- App Router : pages sous `src/app` (marketing, app/personal, app/pro). Layouts et UI premium (tokens CSS `--surface`, `--border`, etc.).
+- API routes : `src/app/api/**` couvrent auth, personal finance, PRO (clients, prospects, projects, invoices, documents, interactions, settings...).
+- Composants partagés : `src/components/pro` (LogoAvatar, KpiCirclesBlock, agenda ContactCard, etc.), UI de base sous `src/components/ui` (Card, Input, Modal...).
+- Serveur : `src/server` (db/client Prisma, auth guards `requireAuthPro`, RBAC `requireBusinessRole`, sécurité CSRF/rateLimit). Prisma schema sous `prisma/schema.prisma` (Business, Client, Project, BusinessDocument, etc.).
 
-## 2) Audit APIs & sécurité (côté PRO utilisés ici)
-- `/api/pro/businesses` (GET list) – auth required via app shell, business selection.
-- `/api/pro/businesses/{id}` (GET dashboard).
-- `/api/pro/businesses/{id}/clients` (GET/POST), `/clients/{clientId}` (GET/PATCH).
-- `/api/pro/businesses/{id}/prospects` (GET/POST), `/prospects/{prospectId}` (GET/PATCH/convert).
-- `/api/pro/businesses/{id}/projects?archived=false` (GET, supports `clientId`).
-- `/api/pro/businesses/{id}/interactions` (GET with clientId/prospectId).
-- `/api/logo?url=...` (GET image; SSRF guard exists in previous work).
-- Auth/permissions: enforced via app shell middleware (not detailed here) and requireAuth/requireBusinessRole in API handlers (review recommended for IDOR). Risk: detail pages rely on clientId/prospectId from params; ensure API guards business ownership.
-- SSRF: logo endpoint should validate http/https + block private/localhost; verify implementation in `/api/logo/route.ts`.
+## Pages (principales)
+- Marketing : /(marketing)/about, /contact, /features, /pricing, /security, /legal/*, landing /(marketing)/page.tsx.
+- Espace app : /app/page.tsx (hub), /app/docs, /app/focus, /app/performance/*, /app/personal/* (comptes/budgets/transactions).
+- PRO (hub studio) : /app/pro/page.tsx et /app/pro/businesses (sélection), /app/pro/[businessId] (dashboard). Modules : agenda, projects, finances (treasury/vat/ledger/payments/etc.), services, process, marketing, references, settings (team/billing/integrations/taxes), tasks, stock.
+- CRM : /app/pro/[businessId]/agenda, /clients, /prospects, détail client/prospect.
+- Legacy/transition : pages `dash-*` sous pro, admin documents/deadlines.
 
-## 3) Audit DB/ORM
-- ORM: Prisma (schema not re-opened here). Models used: Business, Client, Prospect, Project, Interaction (observed via API shapes). Project status enums include `IN_PROGRESS|ACTIVE|ONGOING` (front checks multiple). Prospect status `WON/LOST` used for conversion.
-- Potential mismatch: status strings hardcoded in front; align with Prisma enums to avoid missed actives.
+## API routes (synthèse)
+- Auth : /api/auth/login/logout/register/me ; account profile/preferences/password.
+- Personal : /api/personal/accounts, categories, summary, transactions (CRUD, import, bulk delete).
+- PRO core : /api/pro/businesses (CRUD, dashboard, overview), members, invites, settings, services, processes, products/stock, tasks, projects (CRUD + start/archive/unarchive, quotes, invoices, services), finances (treasury/vat/ledger/payments), accounting client summary.
+- CRM : /api/pro/businesses/:bid/clients (list/CRUD), prospects (list/CRUD/convert), interactions (list/CRUD), documents (uploads, view/download), payments (paid invoices), references.
+- Utilities : /api/logo, /api/favicon, /api/health, /api/dev/seed.
 
-## 4) Audit UX/UI (premium unifié)
-- Source of truth design: Studio KPIs (3 circles in soft container), surfaces via vars, radius 2xl, hover subtle.
-- Incohérences repérées:
-  - Agenda KPI block previously had border/spacing off; fixed to soft container but verify parity with Studio (same padding/spacing).
-  - Cards: risk of border color hidden by default `border` class overriding; ensure status class last and no secondary border class after it.
-  - Double ArrowRight previously; now only one bottom-right.
-  - Sidebar active state fixed via `activePatterns` for agenda/clients/prospects; “Clients” item removed.
-  - LogoAvatar uses `/api/logo` with object-contain/padding; banner guard important to avoid cropped wide images.
+## Orphelins / faible usage (suspect)
+- Pages `app/app/pro/[businessId]/dash-*` (dash-admin-process, dash-entreprise, dash-finances, dash-projets) : aucune nav principale actuelle → Orphelin probable.
+- Pages performance (alignement/perso/pro) et personal/dash-* : legacy analytics, peu référencées dans nav → Probablement non utilisées.
+- Admin pages `admin/deadlines`, `admin/documents` : pas vues en nav → à vérifier.
+- API `personal/*`, `performance/*` : usage non visible dans PRO ; garder si mobile/personal active, sinon documenter.
 
-## 5) Bugs critiques (symptôme → cause probable → fix)
-1. **Bordure état Agenda peu visible** → `border` class later overriding color or too light; ensure status class is last and color strong enough (emerald-300/60 / rose-300/60).
-2. **Deux flèches sur card** → duplicate ArrowRight; keep only bottom-right CTA, remove any others in subcomponents (done).
-3. **Prospect “introuvable”** → detail page fetched `/prospects/{id}` but old UI; ensure API exists and params correct, add graceful empty state.
-4. **/api/logo parfois 204 / bannières** → favicon fallbacks or missing user-agent; use unified LogoAvatar with padding & object-contain; strengthen logo fetcher (future PR).
-5. **Sidebar non active sur clients/prospects** → needed `activePatterns` for agenda; fixed.
+## Sécurité (constats rapides)
+- Auth/RBAC : la majorité des routes PRO utilisent `requireAuthPro` + `requireBusinessRole`. Ex : payments, documents, interactions. OK.
+- CSRF : mutations PRO utilisent `assertSameOrigin` (ex: payments POST, documents upload). Vérifier uniformité sur tous POST/PATCH/DELETE legacy.
+- Rate limiting : présent sur uploads documents (30/h), payments (120/h), invites ; absent sur certaines mutations legacy (à vérifier services/process).
+- SSRF : /api/logo et /api/favicon intègrent garde protocol/host privé. Garder timeouts courts (déjà 2s et max 4 candidats dans /api/logo).
+- Uploads : documents route limite 20MB + whitelist MIME. OK. Prévoir contrôle extension cohérent avec MIME.
+- P0 actuel : migration Prisma BusinessDocument non appliquée → prisma.businessDocument undefined en prod/test. Corriger en appliquant migrations/prisma generate.
 
-## 6) Plan PR “safe” (découpage)
-- PR1: Design primitives — extract `KpiCirclesBlock`, `ContactCard` shared; ensure status border utility; align LogoAvatar banner guard; update Storybook/MD if exists.
-- PR2: Agenda final — ensure KPI matches Studio, status borders visible, single arrow, skeleton/empty premium; regression test.
-- PR3: Client detail — premium layout, tabs, editable Info (PATCH), metrics from projects/interactions; back-to-agenda link.
-- PR4: Prospect detail — fetch prospect, metrics placeholders, convert CTA neutral, back link; handle not-found state.
-- PR5: Logo pipeline robustness — harden `/api/logo` (timeouts, UA, HTML parsing, og/manifest), add smoke tests for known domains.
+## Qualité / dette
+- Duplication de formatteurs (date/currency) partiellement résolue via `formatCurrencyEUR`; centraliser statuses (`isActiveProjectStatus`) et date formatter.
+- Headers/tabs/KPI répétées : besoin de primitives réutilisables (PageHeaderPro, TabsPills, CardShell).
+- Fichiers volumineux mélangeant data+UI (ex: agenda/client detail) : extraire composants par tab.
+- Tests manquants (smoke API/UI) pour CRM : documents upload/view, interactions, payments.
 
-## 7) Outils / Tests / Qualité
-- CI checklist: `pnpm lint`, `pnpm typecheck`, `NEXT_DISABLE_TURBOPACK=1 npx next build --webpack`.
-- Add targeted tests:
-  - Unit: status border helper, normalizeWebsiteUrl, logo fetch validator (mock).
-  - E2E (Playwright): Agenda page renders KPIs, cards have single arrow, border color changes with mocked data; client detail loads & saves form.
-  - Visual regression: snapshots of Studio KPI block vs Agenda KPI block.
-- Conventions: status enums centralized, helpers `formatCurrency/formatDate`, use `LogoAvatar` everywhere, `activePatterns` for nav, no inline blue hovers.
+## Plan d’action
+- P0 :
+  - Appliquer migrations Prisma (BusinessDocument) + `pnpm prisma generate`; retirer garde temporaire une fois généré.
+  - Vérifier CSRF/rateLimit sur mutations legacy (services/process/products) et corriger le cas échéant.
+- P1 :
+  - Créer primitives UI responsive (PageHeaderPro, TabsPills, CardShellStudio) et les appliquer à Agenda/Client/Prospect/Studio.
+  - Normaliser formatters (currency/date/status) + helpers fetchers (clients/prospects/projects/interactions/documents).
+  - Ajouter smokes pour /api/logo, documents upload/view/download, payments GET/POST.
+- P2 :
+  - Nettoyage routes/pages orphelines (dash-*, performance legacy) après validation produit.
+  - Documentation responsive (RESPONSIVE_CONTRACT) + checklist CI (lint/typecheck/build + smokes).

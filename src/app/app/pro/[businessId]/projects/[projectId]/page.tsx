@@ -1,8 +1,8 @@
-import ProjectHub from '@/components/pro/projects/ProjectHub';
+import { ProjectWorkspace } from '@/components/pro/projects/ProjectWorkspace';
 
 type Props = { params: Promise<{ businessId: string; projectId: string }> };
 
-export default async function Page({ params }: Props) {
+export default async function ProjectDetailPage({ params }: Props) {
   const { businessId, projectId } = await params;
-  return <ProjectHub businessId={businessId} projectId={projectId} />;
+  return <ProjectWorkspace businessId={businessId} projectId={projectId} />;
 }
