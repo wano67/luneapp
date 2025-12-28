@@ -4,19 +4,18 @@ import { useMemo } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { ProPageShell } from '@/components/pro/ProPageShell';
 import { Card } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 
 type Props = { businessId: string };
 
 const TABS = [
-  { key: 'campaigns', label: 'Campagnes' },
-  { key: 'social', label: 'Réseaux sociaux' },
-  { key: 'interactions', label: 'Interactions' },
+  { key: 'team', label: 'Équipe' },
+  { key: 'tasks', label: 'Tâches' },
+  { key: 'calendar', label: 'Calendrier' },
 ] as const;
 
 type TabKey = (typeof TABS)[number]['key'];
 
-export default function MarketingPage({ businessId }: Props) {
+export default function OrganizationPage({ businessId }: Props) {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -34,25 +33,22 @@ export default function MarketingPage({ businessId }: Props) {
 
   const content = useMemo(() => {
     switch (currentTab) {
-      case 'campaigns':
+      case 'team':
+        return (
+          <PlaceholderCard title="Organisation de l’équipe" description="Ajoutez des membres et répartissez les responsabilités du projet." />
+        );
+      case 'tasks':
         return (
           <PlaceholderCard
-            title="Campagnes"
-            description="Créez et suivez les campagnes email ou SMS dès que la connexion aux outils sera active."
+            title="Tâches par équipe"
+            description="Suivez les tâches clés par squad et préparez vos workflows d’assignation."
           />
         );
-      case 'social':
+      case 'calendar':
         return (
           <PlaceholderCard
-            title="Réseaux sociaux"
-            description="Planifiez vos posts et pilotez les canaux clés depuis cette vue centralisée."
-          />
-        );
-      case 'interactions':
-        return (
-          <PlaceholderCard
-            title="Interactions"
-            description="Analysez les réponses et mettez en place vos séquences de nurturing."
+            title="Calendrier partagé"
+            description="Synchronisez les événements d’équipe et les jalons projet depuis vos outils existants."
           />
         );
       default:
@@ -64,13 +60,8 @@ export default function MarketingPage({ businessId }: Props) {
     <ProPageShell
       backHref={`/app/pro/${businessId}`}
       backLabel="Dashboard"
-      title="Marketing"
-      subtitle="Campagnes, réseaux sociaux et interactions clients."
-      actions={
-        <Button disabled className="cursor-not-allowed opacity-70">
-          Créer une campagne (bientôt)
-        </Button>
-      }
+      title="Organisation"
+      subtitle="Équipe, tâches et calendrier internes."
       tabs={TABS}
       activeTab={currentTab}
       onTabChange={handleTabChange}

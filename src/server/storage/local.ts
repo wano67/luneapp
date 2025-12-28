@@ -1,7 +1,6 @@
-import { createHash } from 'crypto';
-import { mkdir, readFile, writeFile } from 'fs/promises';
+import { createHash, randomUUID } from 'crypto';
+import { mkdir, readFile, writeFile, rm } from 'fs/promises';
 import path from 'path';
-import { randomUUID } from 'crypto';
 
 const ROOT = path.join(process.cwd(), 'uploads');
 
@@ -15,16 +14,19 @@ export async function saveLocalFile(params: {
   filename: string;
   businessId: bigint;
   clientId?: bigint | null;
+  productId?: bigint | null;
 }) {
   const filename = sanitizeFilename(params.filename);
-  const dir = path.join(ROOT, params.businessId.toString(), params.clientId ? params.clientId.toString() : 'general');
+  const targetDir =
+    params.clientId != null
+      ? params.clientId.toString()
+      : params.productId != null
+        ? `product-${params.productId.toString()}`
+        : 'general';
+  const dir = path.join(ROOT, params.businessId.toString(), targetDir);
   await mkdir(dir, { recursive: true });
   const unique = randomUUID();
-  const storageKey = path.join(
-    params.businessId.toString(),
-    params.clientId ? params.clientId.toString() : 'general',
-    `${unique}-${filename}`,
-  );
+  const storageKey = path.join(params.businessId.toString(), targetDir, `${unique}-${filename}`);
   const fullPath = path.join(ROOT, storageKey);
   await writeFile(fullPath, params.buffer);
   const sha = createHash('sha256').update(params.buffer).digest('hex');
@@ -35,4 +37,9 @@ export async function readLocalFile(storageKey: string) {
   const fullPath = path.join(ROOT, storageKey);
   const buffer = await readFile(fullPath);
   return buffer;
+}
+
+export async function deleteLocalFile(storageKey: string) {
+  const fullPath = path.join(ROOT, storageKey);
+  await rm(fullPath, { force: true });
 }

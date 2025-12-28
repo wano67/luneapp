@@ -1,4 +1,6 @@
 import { Prisma } from '@/generated/prisma/client';
+import { getErrorMessage, getErrorStack } from '@/lib/error';
+type PrismaClientKnownRequestError = Prisma.PrismaClientKnownRequestError;
 import {
   AUTH_COOKIE_NAME,
   authCookieOptions,
@@ -86,8 +88,8 @@ export async function POST(request: NextRequest) {
 
     response.headers.set('Cache-Control', 'no-store');
     return withRequestId(response, requestId);
-  } catch (error) {
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+  } catch (error: unknown) {
+    if (isPrismaKnownError(error) && error.code === 'P2002') {
       // Email déjà utilisé : comportement non-énumérable, on tente un login silencieux si le mot de passe correspond.
       const existing = await authenticateUser({ email, password });
       if (existing) {
@@ -112,10 +114,14 @@ export async function POST(request: NextRequest) {
       return withRequestId(res, requestId);
     }
 
-    console.error('Error during registration', error);
+    console.error('Error during registration', getErrorMessage(error), getErrorStack(error));
 
     const res = NextResponse.json({ error: 'Impossible de créer le compte pour le moment.' }, { status: 500 });
     res.headers.set('Cache-Control', 'no-store');
     return withRequestId(res, requestId);
   }
+}
+
+function isPrismaKnownError(error: unknown): error is PrismaClientKnownRequestError {
+  return error instanceof Prisma.PrismaClientKnownRequestError;
 }

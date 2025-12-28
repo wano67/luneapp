@@ -1,15 +1,14 @@
--- This is an empty migration.
--- Add legal/contact fields to Business
+-- Business legal/onboarding fields
 ALTER TABLE "Business"
-  ADD COLUMN "legalName" TEXT,
-  ADD COLUMN "countryCode" TEXT NOT NULL DEFAULT 'FR',
-  ADD COLUMN "siret" TEXT,
-  ADD COLUMN "vatNumber" TEXT,
-  ADD COLUMN "addressLine1" TEXT,
-  ADD COLUMN "addressLine2" TEXT,
-  ADD COLUMN "postalCode" TEXT,
-  ADD COLUMN "city" TEXT;
+  ADD COLUMN IF NOT EXISTS "legalName" TEXT,
+  ADD COLUMN IF NOT EXISTS "countryCode" TEXT NOT NULL DEFAULT 'FR',
+  ADD COLUMN IF NOT EXISTS "siret" TEXT,
+  ADD COLUMN IF NOT EXISTS "vatNumber" TEXT,
+  ADD COLUMN IF NOT EXISTS "addressLine1" TEXT,
+  ADD COLUMN IF NOT EXISTS "addressLine2" TEXT,
+  ADD COLUMN IF NOT EXISTS "postalCode" TEXT,
+  ADD COLUMN IF NOT EXISTS "city" TEXT;
 
--- Add currency to BusinessSettings
+-- Settings currency + TVA defaults
 ALTER TABLE "BusinessSettings"
-  ADD COLUMN "currency" TEXT NOT NULL DEFAULT 'EUR';
+  ADD COLUMN IF NOT EXISTS "currency" TEXT NOT NULL DEFAULT 'EUR';

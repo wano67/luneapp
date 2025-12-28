@@ -494,7 +494,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
                 pathname={pathname}
                 businessId={businessId}
                 collapsed={false}
-                onNavigate={closeMobileMenu}
+                onNavigateAction={closeMobileMenu}
               />
             </div>
           </div>
@@ -518,7 +518,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
             pathname={pathname}
             businessId={businessId}
             collapsed={false}
-            onNavigate={undefined}
+            onNavigateAction={undefined}
           />
         </div>
       </aside>

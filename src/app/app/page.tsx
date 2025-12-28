@@ -1,14 +1,12 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { formatCents } from '@/lib/money';
-import { PageHeader } from './components/PageHeader';
-import { ActionTile } from './components/ActionTile';
-import { Wallet2, Building2, User, FileCode, Rocket } from 'lucide-react';
+import { Wallet2, Building2, UserPlus, Upload, FolderPlus, Users } from 'lucide-react';
 
 type ApiErrorShape = { error: string };
 
@@ -219,23 +217,25 @@ export default function AppHomePage() {
     return summary.accounts[0];
   }, [summary]);
 
-  const primaryCta = useMemo(() => {
-    if (lastBusiness) {
-      return { label: 'Aller au Studio', href: `/app/pro/${lastBusiness.id}` };
-    }
-    if (summary?.accountsCount) {
-      return { label: 'Aller au Wallet', href: '/app/personal' };
-    }
-    return { label: 'Créer ou rejoindre une entreprise', href: '/app/pro' };
-  }, [lastBusiness, summary]);
+  const disablePro = !lastBusiness;
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 px-4 py-4">
-      <PageHeader
-        title="Accueil"
-        subtitle={greeting}
-        primaryAction={{ label: primaryCta.label, href: primaryCta.href }}
-      />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="text-xs uppercase tracking-[0.18em] text-[var(--text-secondary)]">Accueil</p>
+          <h1 className="text-2xl font-semibold text-[var(--text-primary)]">{greeting}</h1>
+        </div>
+        {!lastBusiness ? (
+          <Button asChild variant="outline">
+            <Link href="/app/pro">Créer ou rejoindre une entreprise</Link>
+          </Button>
+        ) : (
+          <Button asChild>
+            <Link href={`/app/pro/${lastBusiness.id}`}>Aller au Studio</Link>
+          </Button>
+        )}
+      </div>
 
       <section className="space-y-3">
         <div className="flex items-center justify-between">
@@ -248,25 +248,84 @@ export default function AppHomePage() {
           </div>
         </div>
         <div className="grid gap-3 md:grid-cols-2">
-          <ActionTile
-            icon={<Wallet2 size={18} />}
-            title="Espace personnel"
-            description="Wallet, transactions, budgets."
-            href="/app/personal"
-            badge={summary ? formatCents(summary.totalBalanceCents, 'EUR') : undefined}
-            helper={summary ? `Net 30j : ${formatCents(summary.monthNetCents, 'EUR')}` : undefined}
+          <Card className="group flex flex-col justify-between gap-2 rounded-2xl border border-[var(--border)] bg-[var(--surface)]/80 p-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2 text-[var(--text-secondary)]">
+                <Wallet2 size={18} />
+                <span className="text-xs font-semibold uppercase tracking-[0.18em]">Espace personnel</span>
+              </div>
+              <p className="text-sm font-semibold text-[var(--text-primary)]">Finances personnelles</p>
+              <p className="text-xs text-[var(--text-secondary)]">Wallet, transactions, budgets.</p>
+              {summary ? (
+                <p className="text-xs text-[var(--text-secondary)]">
+                  Solde total : {formatCents(summary.totalBalanceCents, 'EUR')}
+                </p>
+              ) : null}
+            </div>
+            <Button asChild>
+              <Link href="/app/personal">Ouvrir l’espace personnel</Link>
+            </Button>
+          </Card>
+
+          <Card className="group flex flex-col justify-between gap-2 rounded-2xl border border-[var(--border)] bg-[var(--surface)]/80 p-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2 text-[var(--text-secondary)]">
+                <Building2 size={18} />
+                <span className="text-xs font-semibold uppercase tracking-[0.18em]">Studio (Pro)</span>
+              </div>
+              <p className="text-sm font-semibold text-[var(--text-primary)]">Pilotage entreprise</p>
+              <p className="text-xs text-[var(--text-secondary)]">Clients, projets, tâches, finances.</p>
+              <p className="text-xs text-[var(--text-secondary)]">
+                {loadingBusinesses
+                  ? 'Chargement…'
+                  : `${businesses.length} entreprise${businesses.length > 1 ? 's' : ''}`}
+              </p>
+              {lastBusiness ? (
+                <p className="text-xs text-[var(--text-secondary)]">Dernier espace : {lastBusiness.name}</p>
+              ) : null}
+            </div>
+            <Button asChild variant={lastBusiness ? 'primary' : 'outline'}>
+              <Link href={lastBusiness ? `/app/pro/${lastBusiness.id}` : '/app/pro'}>
+                {lastBusiness ? 'Ouvrir le Studio' : 'Créer ou rejoindre'}
+              </Link>
+            </Button>
+          </Card>
+        </div>
+      </section>
+
+      <section className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
+            Actions rapides
+          </h2>
+          <span className="text-xs text-[var(--text-secondary)]">Accès immédiats</span>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <QuickAction
+            icon={<Upload size={16} />}
+            title="Importer un CSV"
+            href="/app/personal/transactions?import=1"
+            helper="Transactions"
           />
-          <ActionTile
-            icon={<Building2 size={18} />}
-            title="Studio (Pro)"
-            description="Clients, projets, tâches, finances."
+          <QuickAction
+            icon={<UserPlus size={16} />}
+            title="Créer ou rejoindre une entreprise"
             href="/app/pro"
-            badge={
-              loadingBusinesses
-                ? '—'
-                : `${businesses.length} entreprise${businesses.length > 1 ? 's' : ''}`
-            }
-            helper={lastBusiness ? `Dernier : ${lastBusiness.name}` : undefined}
+            helper="Workspace"
+          />
+          <QuickAction
+            icon={<FolderPlus size={16} />}
+            title="Ajouter un produit"
+            href={lastBusiness ? `/app/pro/${lastBusiness.id}/catalog?tab=products` : '#'}
+            helper={disablePro ? 'Crée une entreprise' : 'Catalogue'}
+            disabled={disablePro}
+          />
+          <QuickAction
+            icon={<Users size={16} />}
+            title="Ajouter un client"
+            href={lastBusiness ? `/app/pro/${lastBusiness.id}/clients` : '#'}
+            helper={disablePro ? 'Crée une entreprise' : 'Clients'}
+            disabled={disablePro}
           />
         </div>
       </section>
@@ -276,7 +335,7 @@ export default function AppHomePage() {
           <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
             Reprendre
           </h2>
-          <span className="text-xs text-[var(--text-secondary)]">Derniers contextes visités.</span>
+          <span className="text-xs text-[var(--text-secondary)]">Continue ce que tu as commencé</span>
         </div>
         <div className="grid gap-3 md:grid-cols-2">
           {lastBusiness ? (
@@ -288,18 +347,34 @@ export default function AppHomePage() {
                 <p className="text-sm font-semibold text-[var(--text-primary)]">{lastBusiness.name}</p>
                 <p className="text-xs text-[var(--text-secondary)]">Dashboard et opérations.</p>
               </div>
-              <Button asChild className="mt-3">
-                <Link href={`/app/pro/${lastBusiness.id}`}>Ouvrir le dashboard</Link>
-              </Button>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button asChild size="sm">
+                  <Link href={`/app/pro/${lastBusiness.id}`}>Dashboard</Link>
+                </Button>
+                <Button asChild size="sm" variant="outline">
+                  <Link href={`/app/pro/${lastBusiness.id}/projects`}>Projets</Link>
+                </Button>
+                <Button asChild size="sm" variant="outline">
+                  <Link href={`/app/pro/${lastBusiness.id}/catalog`}>Catalogue</Link>
+                </Button>
+              </div>
             </Card>
           ) : (
             <Card className="rounded-2xl border border-dashed border-[var(--border)] bg-transparent p-4">
-              <p className="text-sm font-semibold text-[var(--text-primary)]">Aucune entreprise récente</p>
-              <p className="text-xs text-[var(--text-secondary)]">Crée ou rejoins une entreprise pour commencer.</p>
+              <p className="text-sm font-semibold text-[var(--text-primary)]">Aucune entreprise encore</p>
+              <p className="text-xs text-[var(--text-secondary)]">Crée ou rejoins une entreprise pour débloquer le Studio.</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button asChild size="sm">
+                  <Link href="/app/pro">Créer une entreprise</Link>
+                </Button>
+                <Button asChild size="sm" variant="outline">
+                  <Link href="/app/pro?join=1">Rejoindre</Link>
+                </Button>
+              </div>
             </Card>
           )}
 
-            {recentAccount ? (
+          {recentAccount ? (
             <Card className="flex h-full flex-col justify-between rounded-2xl border border-[var(--border)] bg-[var(--surface)]/70 p-4">
               <div className="space-y-1">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[var(--text-secondary)]">
@@ -315,9 +390,7 @@ export default function AppHomePage() {
                   <Link href={`/app/personal/comptes/${recentAccount.id}`}>Vue compte</Link>
                 </Button>
                 <Button asChild size="sm">
-                  <Link href={`/app/personal/transactions?accountId=${recentAccount.id}`}>
-                    Transactions
-                  </Link>
+                  <Link href={`/app/personal/transactions?accountId=${recentAccount.id}`}>Transactions</Link>
                 </Button>
               </div>
             </Card>
@@ -325,104 +398,51 @@ export default function AppHomePage() {
             <Card className="rounded-2xl border border-dashed border-[var(--border)] bg-transparent p-4">
               <p className="text-sm font-semibold text-[var(--text-primary)]">Aucun compte encore</p>
               <p className="text-xs text-[var(--text-secondary)]">Ajoute un compte pour suivre tes finances.</p>
-            </Card>
-          )}
-        </div>
-      </section>
-
-      <section className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
-            Actions rapides
-          </h2>
-          <span className="text-xs text-[var(--text-secondary)]">Sélectionne une destination.</span>
-        </div>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <ActionTile
-            icon={<Wallet2 size={18} />}
-            title="Importer un CSV"
-            description="Alimente tes transactions"
-            href="/app/personal/transactions?import=1"
-          />
-          <ActionTile
-            icon={<Rocket size={18} />}
-            title="Créer une entreprise"
-            description="Démarre un nouveau workspace"
-            href="/app/pro?create=1"
-          />
-          <ActionTile
-            icon={<Building2 size={18} />}
-            title="Rejoindre une entreprise"
-            description="Via une invitation"
-            href="/app/pro?join=1"
-          />
-          <ActionTile
-            icon={<User size={18} />}
-            title="Profil & Préférences"
-            description="Compte et sécurité"
-            href="/app/account"
-          />
-        </div>
-      </section>
-
-      <section className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
-            Prochaines étapes
-          </h2>
-          <span className="text-xs text-[var(--text-secondary)]">Guides rapides</span>
-        </div>
-        <div className="grid gap-3 md:grid-cols-2">
-          {businesses.length === 0 ? (
-            <Card className="rounded-2xl border border-[var(--border)] bg-[var(--surface)]/70 p-4">
-              <p className="text-sm font-semibold text-[var(--text-primary)]">Pas encore de business</p>
-              <p className="text-xs text-[var(--text-secondary)]">Crée ou rejoins pour débloquer le Studio.</p>
               <div className="mt-3 flex flex-wrap gap-2">
                 <Button asChild size="sm">
-                  <Link href="/app/pro?create=1">Créer une entreprise</Link>
+                  <Link href="/app/personal/comptes?new=1">Ajouter un compte</Link>
                 </Button>
                 <Button asChild size="sm" variant="outline">
-                  <Link href="/app/pro?join=1">Rejoindre</Link>
-                </Button>
-              </div>
-            </Card>
-          ) : (
-            <Card className="rounded-2xl border border-[var(--border)] bg-[var(--surface)]/70 p-4">
-              <p className="text-sm font-semibold text-[var(--text-primary)]">Pour {lastBusiness?.name ?? 'le Studio'}</p>
-              <div className="mt-2 flex flex-wrap gap-2">
-                <Button asChild size="sm">
-                  <Link href={`/app/pro/${lastBusiness?.id ?? businesses[0].id}`}>Ouvrir le dashboard</Link>
-                </Button>
-                <Button asChild size="sm" variant="outline">
-                  <Link href={`/app/pro/${lastBusiness?.id ?? businesses[0].id}/clients`}>Créer un client</Link>
-                </Button>
-                <Button asChild size="sm" variant="outline">
-                  <Link href={`/app/pro/${lastBusiness?.id ?? businesses[0].id}/projects`}>Créer un devis/facture</Link>
+                  <Link href="/app/personal/transactions?import=1">Importer un CSV</Link>
                 </Button>
               </div>
             </Card>
           )}
-          <Card className="rounded-2xl border border-[var(--border)] bg-[var(--surface)]/70 p-4">
-            <p className="text-sm font-semibold text-[var(--text-primary)]">Documentation & API</p>
-            <p className="text-xs text-[var(--text-secondary)]">Consulte les endpoints publics et tests rapides.</p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <Button asChild size="sm" variant="outline">
-                <Link href="/openapi.yaml">OpenAPI</Link>
-              </Button>
-              <Button asChild size="sm" variant="outline">
-                <Link href="/api-docs.html">Swagger UI</Link>
-              </Button>
-              <Button asChild size="sm" variant="ghost">
-                <Link href="/app/docs">
-                  <div className="flex items-center gap-1">
-                    <FileCode size={14} /> Docs produit
-                  </div>
-                </Link>
-              </Button>
-            </div>
-          </Card>
         </div>
       </section>
     </div>
+  );
+}
+
+function QuickAction({
+  icon,
+  title,
+  href,
+  helper,
+  disabled,
+}: {
+  icon: ReactNode;
+  title: string;
+  href: string;
+  helper?: string;
+  disabled?: boolean;
+}) {
+  return (
+    <Card
+      className={`flex items-center justify-between gap-2 rounded-2xl border ${
+        disabled ? 'border-dashed opacity-70' : 'border-[var(--border)]'
+      } bg-[var(--surface)]/80 p-3`}
+    >
+      <div className="flex items-center gap-2">
+        <span className="text-[var(--text-secondary)]">{icon}</span>
+        <div>
+          <p className="text-sm font-semibold text-[var(--text-primary)]">{title}</p>
+          {helper ? <p className="text-xs text-[var(--text-secondary)]">{helper}</p> : null}
+        </div>
+      </div>
+      <Button asChild size="sm" variant={disabled ? 'outline' : 'primary'} disabled={disabled}>
+        <Link href={href}>{disabled ? 'Indisponible' : 'Ouvrir'}</Link>
+      </Button>
+    </Card>
   );
 }

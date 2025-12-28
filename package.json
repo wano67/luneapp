@@ -44,7 +44,14 @@
     "postinstall": "prisma generate",
     "smoke:clients-delete": "pnpm tsx scripts/smoke-clients-delete.ts",
     "smoke:clients-gdpr": "pnpm tsx scripts/smoke-clients-gdpr.ts",
-    "smoke:tasks-billing-link": "pnpm tsx scripts/smoke-tasks-billing-link.ts"
+    "smoke:tasks-billing-link": "pnpm tsx scripts/smoke-tasks-billing-link.ts",
+    "db:migrate": "prisma migrate deploy",
+    "db:reset": "prisma migrate reset",
+    "db:generate": "prisma generate",
+    "db:status": "prisma migrate status",
+    "db:exec": "prisma db execute --stdin",
+    "db:inspect": "tsx scripts/db-inspect.ts",
+    "db:smoke": "tsx scripts/db-smoke.ts"
     ,"test:e2e": "playwright test",
     "verify": "pnpm -s lint && pnpm -s typecheck"
   },

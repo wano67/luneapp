@@ -7,7 +7,7 @@ type TabItem = {
 };
 
 type TabsPillsProps = {
-  items: TabItem[];
+  items: ReadonlyArray<TabItem>;
   value: string;
   onChange: (key: string) => void;
   ariaLabel?: string;

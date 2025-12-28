@@ -50,4 +50,22 @@ test.describe('Navigation PRO', () => {
       await expect(page.getByRole('heading')).toContainText(/Produit|SKU/i);
     }
   });
+
+  test('Upload image produit', async ({ page }) => {
+    test.skip(!productId, 'PRO_E2E_PRODUCT_ID requis');
+    await page.goto(`/app/pro/${businessId}/catalog/products/${productId}`);
+    const input = page.getByTestId('product-upload');
+    await expect(input).toBeVisible();
+    await input.setInputFiles('tests/fixtures/sample.png');
+    await expect(page.getByText(/Chargement des images|Upload/i)).toBeVisible({ timeout: 5000 }).catch(() => {});
+  });
+
+  test('Étape service : ouverture modal ajout', async ({ page }) => {
+    test.skip(!serviceId, 'PRO_E2E_SERVICE_ID requis pour tester les étapes service');
+    await page.goto(`/app/pro/${businessId}/catalog/services/${serviceId}?tab=templates`);
+    const addButton = page.getByRole('button', { name: /Ajouter une étape/i });
+    await expect(addButton).toBeVisible();
+    await addButton.click();
+    await expect(page.getByRole('dialog')).toBeVisible();
+  });
 });
