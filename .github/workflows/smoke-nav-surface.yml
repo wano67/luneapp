@@ -1,14 +1,15 @@
+cat > .github/workflows/smoke-nav-surface.yml <<'YAML'
 name: Smoke Navigation and Surface
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   pull_request:
 
 jobs:
   quality:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -40,6 +41,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Generate Prisma client (dummy DATABASE_URL)
+        env:
+          DATABASE_URL: postgresql://user:pass@localhost:5432/db?schema=public
+        run: pnpm -s db:generate
+
       - name: Lint
         run: pnpm -s lint
 
@@ -48,3 +54,5 @@ jobs:
 
       - name: Build
         run: pnpm -s build
+YAML
+
