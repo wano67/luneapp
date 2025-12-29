@@ -4,9 +4,10 @@ import { cn } from '@/lib/cn';
 type InputProps = InputHTMLAttributes<HTMLInputElement> & {
   label?: string | ReactNode;
   error?: string | null;
+  helper?: string | ReactNode;
 };
 
-export function Input({ label, error, className, ...props }: InputProps) {
+export function Input({ label, error, helper, className, ...props }: InputProps) {
   return (
     <label className="flex w-full flex-col gap-1">
       {label ? (
@@ -21,6 +22,7 @@ export function Input({ label, error, className, ...props }: InputProps) {
         )}
         {...props}
       />
+      {helper && !error ? <span className="text-xs text-[var(--text-secondary)]">{helper}</span> : null}
       {error ? <span className="text-xs text-[var(--danger)]">{error}</span> : null}
     </label>
   );

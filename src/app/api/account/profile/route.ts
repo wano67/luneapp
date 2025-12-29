@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Prisma } from '@/generated/prisma/client';
+import { getErrorMessage, getErrorStack } from '@/lib/error';
 import { prisma } from '@/server/db/client';
 import { requireAuthAsync } from '@/server/auth/requireAuth';
 import { assertSameOrigin, jsonNoStore } from '@/server/security/csrf';
 import { rateLimit } from '@/server/security/rateLimit';
 import { badRequest, getRequestId, unauthorized, withRequestId } from '@/server/http/apiUtils';
+type PrismaClientKnownRequestError = Prisma.PrismaClientKnownRequestError;
 
 type Body = {
   firstName?: unknown;
@@ -68,11 +70,15 @@ export async function PATCH(req: NextRequest) {
       }),
       requestId
     );
-  } catch (error) {
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+  } catch (error: unknown) {
+    if (isPrismaKnownError(error) && error.code === 'P2002') {
       return withRequestId(NextResponse.json({ error: 'Cet email est déjà utilisé.' }, { status: 409 }), requestId);
     }
-    console.error('account/profile', error);
+    console.error('account/profile', getErrorMessage(error), getErrorStack(error));
     return withRequestId(NextResponse.json({ error: 'Impossible de mettre à jour le profil.' }, { status: 500 }), requestId);
   }
+}
+
+function isPrismaKnownError(error: unknown): error is PrismaClientKnownRequestError {
+  return error instanceof Prisma.PrismaClientKnownRequestError;
 }

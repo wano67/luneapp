@@ -1,34 +1,58 @@
-# .github/workflows/smoke-nav-surface.yml content modified for dotenv
+cat > .github/workflows/smoke-nav-surface.yml <<'YAML'
 name: Smoke Navigation and Surface
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
+  pull_request:
 
 jobs:
-  build:
+  quality:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v3
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
-          node-version: '18.x'
+          node-version: 20.19.0
+          check-latest: false
 
-      - name: Load environment variables
-        run: npm install -g dotenv-cli
+      - name: Enable pnpm via corepack
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.21.0 --activate
+          pnpm --version
+
+      - name: Get pnpm store path
+        id: pnpm-store
+        run: echo "STORE_PATH=$(pnpm store path)" >> $GITHUB_OUTPUT
+
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-store.outputs.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
 
       - name: Install dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
-      - name: Build application
-        run: |
-          dotenv -e .env -- npm run build
+      - name: Generate Prisma client (dummy DATABASE_URL)
+        env:
+          DATABASE_URL: postgresql://user:pass@localhost:5432/db?schema=public
+        run: pnpm -s db:generate
 
-      - name: Run tests
-        run: |
-          npm test
+      - name: Lint
+        run: pnpm -s lint
+
+      - name: Typecheck
+        run: pnpm -s typecheck
+
+      - name: Build
+        run: pnpm -s build
+YAML
+

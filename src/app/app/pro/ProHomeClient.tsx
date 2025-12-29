@@ -7,12 +7,13 @@ import Link from 'next/link';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Modal } from '@/components/ui/modal';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import SwitchBusinessModal from './SwitchBusinessModal';
 import { PageHeader } from '../components/PageHeader';
 import { ArrowRight } from 'lucide-react';
 import { LogoAvatar } from '@/components/pro/LogoAvatar';
+import { CreateBusinessWizard, defaultDraft, type CreateBusinessDraft } from './components/CreateBusinessWizard';
+import { Modal } from '@/components/ui/modal';
 
 /* ===================== TYPES ===================== */
 
@@ -78,13 +79,6 @@ type OverviewResponse = {
   }>;
 };
 
-type CreateBusinessDraft = {
-  name: string;
-  websiteUrl: string;
-  activityType: 'service' | 'product' | 'mixte';
-  country: string;
-};
-
 /* ===================== COMPONENT ===================== */
 
 export default function ProHomeClient() {
@@ -103,12 +97,7 @@ export default function ProHomeClient() {
   const [creating, setCreating] = useState(false);
   const [creationError, setCreationError] = useState<string | null>(null);
 
-  const [draft, setDraft] = useState<CreateBusinessDraft>({
-    name: '',
-    websiteUrl: '',
-    activityType: 'service',
-    country: '',
-  });
+  const [draft, setDraft] = useState<CreateBusinessDraft>(defaultDraft);
 
   /* ---------- JOIN MODAL ---------- */
   const [joinOpen, setJoinOpen] = useState(false);
@@ -126,7 +115,7 @@ export default function ProHomeClient() {
   const createValidation = useMemo(() => {
     const issues: string[] = [];
     if (!draft.name.trim()) issues.push("Le nom de l'entreprise est obligatoire.");
-    if (!draft.country.trim()) issues.push('Pays requis.');
+    if (!draft.countryCode.trim()) issues.push('Pays requis.');
   return { ok: issues.length === 0, issues };
   }, [draft]);
 
@@ -317,6 +306,23 @@ export default function ProHomeClient() {
           body: JSON.stringify({
             name: draft.name.trim(),
             websiteUrl: draft.websiteUrl.trim() || undefined,
+            activityType: draft.activityType,
+            countryCode: draft.countryCode || 'FR',
+            currency: draft.currency || 'EUR',
+            sector: draft.sector,
+            size: draft.size,
+            goal: draft.goal,
+            vatEnabled: draft.vatEnabled,
+            vatRatePercent: Number(draft.vatRate) || 20,
+            invoicePrefix: draft.invoicePrefix,
+            quotePrefix: draft.quotePrefix,
+            legalName: draft.legalName,
+            siret: draft.siret,
+            vatNumber: draft.vatNumber,
+            addressLine1: draft.addressLine1,
+            addressLine2: draft.addressLine2,
+            postalCode: draft.postalCode,
+            city: draft.city,
           }),
         }
       );
@@ -331,12 +337,7 @@ export default function ProHomeClient() {
       await refreshBusinesses();
 
       setCreateOpen(false);
-      setDraft({
-        name: '',
-        websiteUrl: '',
-        activityType: 'service',
-        country: '',
-      });
+      setDraft(defaultDraft);
       rememberAndGo(res.data.business.id, `/app/pro/${res.data.business.id}`);
     } catch (err) {
       console.error(err);
@@ -607,64 +608,18 @@ export default function ProHomeClient() {
           </section>
 
       {/* CREATE MODAL */}
-      <Modal
+      <CreateBusinessWizard
         open={createOpen}
-        onCloseAction={() => (creating ? null : setCreateOpen(false))}
-        title="Créer une entreprise"
-        description="Formulaire minimal pour démarrer immédiatement."
-      >
-        <form onSubmit={handleCreateBusiness} className="space-y-4">
-          <Input
-            label="Nom de l’entreprise *"
-            value={draft.name}
-            onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
-            error={creationError ?? undefined}
-            placeholder="Ex: StudioFief"
-          />
-          <label className="space-y-1 text-sm text-[var(--text-primary)]">
-            <span className="text-xs text-[var(--text-secondary)]">Type d’activité *</span>
-            <select
-              value={draft.activityType}
-              onChange={(e) =>
-                setDraft((d) => ({ ...d, activityType: e.target.value as CreateBusinessDraft['activityType'] }))
-              }
-              className="w-full rounded-md border border-[var(--border)] bg-[var(--surface)] p-2 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
-              required
-            >
-              <option value="service">Service</option>
-              <option value="product">Produit</option>
-              <option value="mixte">Mixte</option>
-            </select>
-          </label>
-          <Input
-            label="Pays *"
-            value={draft.country}
-            onChange={(e) => setDraft((d) => ({ ...d, country: e.target.value }))}
-            placeholder="France"
-            required
-          />
-          <Input
-            label="Site web"
-            value={draft.websiteUrl}
-            onChange={(e) => setDraft((d) => ({ ...d, websiteUrl: e.target.value }))}
-            placeholder="https://exemple.com"
-          />
-
-          <div className="flex justify-end gap-2">
-            <Button
-              variant="outline"
-              type="button"
-              onClick={() => setCreateOpen(false)}
-              disabled={creating}
-            >
-              Annuler
-            </Button>
-            <Button type="submit" disabled={creating}>
-              {creating ? 'Création…' : 'Créer'}
-            </Button>
-          </div>
-        </form>
-      </Modal>
+        loading={creating}
+        error={creationError}
+        draft={draft}
+        onChangeDraft={setDraft}
+        onClose={() => {
+          if (creating) return;
+          setCreateOpen(false);
+        }}
+        onSubmit={handleCreateBusiness}
+      />
 
       {/* JOIN MODAL */}
       <Modal

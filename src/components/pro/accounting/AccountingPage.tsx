@@ -1,49 +1,82 @@
 "use client";
 
-import Link from 'next/link';
+import { useMemo } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { ProPageShell } from '@/components/pro/ProPageShell';
+import { Card } from '@/components/ui/card';
+import { FinanceEntriesPanel } from '@/components/pro/finances/FinanceEntriesPanel';
+import { PaymentsPanel } from '@/components/pro/finances/PaymentsPanel';
+import { TreasuryPanel } from '@/components/pro/finances/TreasuryPanel';
+import { VatPanel } from '@/components/pro/finances/VatPanel';
+import { ForecastingPanel } from '@/components/pro/finances/ForecastingPanel';
+import { LedgerPanel } from '@/components/pro/finances/LedgerPanel';
 
 type Props = { businessId: string };
 
-const tabs = [
-  { key: 'invoices', label: 'Factures' },
-  { key: 'quotes', label: 'Devis' },
+const TABS = [
+  { key: 'entries', label: 'Écritures' },
   { key: 'payments', label: 'Paiements' },
-];
+  { key: 'treasury', label: 'Trésorerie' },
+  { key: 'vat', label: 'TVA' },
+  { key: 'forecasting', label: 'Prévisions' },
+  { key: 'ledger', label: 'Grand livre' },
+  { key: 'reports', label: 'Rapports' },
+] as const;
+
+type TabKey = (typeof TABS)[number]['key'];
 
 export default function AccountingPage({ businessId }: Props) {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  const requestedTab = (searchParams?.get('tab') ?? TABS[0].key) as TabKey;
+  const currentTab = useMemo(
+    () => (TABS.some((t) => t.key === requestedTab) ? requestedTab : TABS[0].key),
+    [requestedTab]
+  );
+
+  const handleTabChange = (key: string) => {
+    const params = new URLSearchParams(searchParams?.toString() ?? '');
+    params.set('tab', key);
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  };
+
+  const content = useMemo(() => {
+    switch (currentTab) {
+      case 'entries':
+        return <FinanceEntriesPanel businessId={businessId} />;
+      case 'payments':
+        return <PaymentsPanel businessId={businessId} />;
+      case 'treasury':
+        return <TreasuryPanel businessId={businessId} />;
+      case 'vat':
+        return <VatPanel businessId={businessId} />;
+      case 'forecasting':
+        return <ForecastingPanel businessId={businessId} />;
+      case 'ledger':
+        return <LedgerPanel businessId={businessId} />;
+      case 'reports':
+        return (
+          <Card className="p-4 text-sm text-[var(--text-secondary)]">
+            Rapports comptables à venir. Configurez vos écritures pour préparer les exports.
+          </Card>
+        );
+      default:
+        return <FinanceEntriesPanel businessId={businessId} />;
+    }
+  }, [businessId, currentTab]);
+
   return (
-    <div className="mx-auto max-w-6xl space-y-4 px-4 py-6">
-      <div className="flex items-start justify-between">
-        <div>
-          <p className="text-xs text-[var(--text-secondary)]">
-            <Link href={`/app/pro/${businessId}`} className="hover:text-[var(--text-primary)]">
-              ← Dashboard
-            </Link>
-          </p>
-          <h1 className="text-xl font-semibold text-[var(--text-primary)]">Comptabilité</h1>
-          <p className="text-sm text-[var(--text-secondary)]">Factures, devis, paiements</p>
-        </div>
-        <Link
-          href={`/app/pro/${businessId}/finances`}
-          className="cursor-pointer rounded-md bg-neutral-900 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-neutral-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
-        >
-          Nouvelle opération
-        </Link>
-      </div>
-      <div className="flex gap-2">
-        {tabs.map((tab) => (
-          <button
-            key={tab.key}
-            type="button"
-            className="cursor-pointer rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-xs font-semibold text-[var(--text-primary)] hover:bg-[var(--surface-hover)]"
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
-      <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)]/80 p-4 text-sm text-[var(--text-secondary)]">
-        Comptabilité (placeholder)
-      </div>
-    </div>
+    <ProPageShell
+      backHref={`/app/pro/${businessId}`}
+      backLabel="Dashboard"
+      title="Comptabilité"
+      subtitle="Écritures, paiements, TVA et prévisions."
+      tabs={TABS}
+      activeTab={currentTab}
+      onTabChange={handleTabChange}
+    >
+      <div className="space-y-4">{content}</div>
+    </ProPageShell>
   );
 }

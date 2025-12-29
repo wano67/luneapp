@@ -1,49 +1,90 @@
 "use client";
 
-import Link from 'next/link';
+import { useMemo } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { ProPageShell } from '@/components/pro/ProPageShell';
+import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 
 type Props = { businessId: string };
 
-const tabs = [
-  { key: 'emails', label: 'Emails' },
-  { key: 'posts', label: 'Posts' },
-  { key: 'templates', label: 'Templates' },
-];
+const TABS = [
+  { key: 'campaigns', label: 'Campagnes' },
+  { key: 'social', label: 'Réseaux sociaux' },
+  { key: 'interactions', label: 'Interactions' },
+] as const;
+
+type TabKey = (typeof TABS)[number]['key'];
 
 export default function MarketingPage({ businessId }: Props) {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  const requestedTab = (searchParams?.get('tab') ?? TABS[0].key) as TabKey;
+  const currentTab = useMemo(
+    () => (TABS.some((t) => t.key === requestedTab) ? requestedTab : TABS[0].key),
+    [requestedTab]
+  );
+
+  const handleTabChange = (key: string) => {
+    const params = new URLSearchParams(searchParams?.toString() ?? '');
+    params.set('tab', key);
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  };
+
+  const content = useMemo(() => {
+    switch (currentTab) {
+      case 'campaigns':
+        return (
+          <PlaceholderCard
+            title="Campagnes"
+            description="Créez et suivez les campagnes email ou SMS dès que la connexion aux outils sera active."
+          />
+        );
+      case 'social':
+        return (
+          <PlaceholderCard
+            title="Réseaux sociaux"
+            description="Planifiez vos posts et pilotez les canaux clés depuis cette vue centralisée."
+          />
+        );
+      case 'interactions':
+        return (
+          <PlaceholderCard
+            title="Interactions"
+            description="Analysez les réponses et mettez en place vos séquences de nurturing."
+          />
+        );
+      default:
+        return null;
+    }
+  }, [currentTab]);
+
   return (
-    <div className="mx-auto max-w-6xl space-y-4 px-4 py-6">
-      <div className="flex items-start justify-between">
-        <div>
-          <p className="text-xs text-[var(--text-secondary)]">
-            <Link href={`/app/pro/${businessId}`} className="hover:text-[var(--text-primary)]">
-              ← Dashboard
-            </Link>
-          </p>
-          <h1 className="text-xl font-semibold text-[var(--text-primary)]">Marketing</h1>
-          <p className="text-sm text-[var(--text-secondary)]">Emails, posts, templates</p>
-        </div>
-        <Link
-          href={`/app/pro/${businessId}/marketing/new`}
-          className="cursor-pointer rounded-md bg-neutral-900 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-neutral-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
-        >
-          Nouvelle campagne
-        </Link>
-      </div>
-      <div className="flex gap-2">
-        {tabs.map((tab) => (
-          <button
-            key={tab.key}
-            type="button"
-            className="cursor-pointer rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-xs font-semibold text-[var(--text-primary)] hover:bg-[var(--surface-hover)]"
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
-      <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)]/80 p-4 text-sm text-[var(--text-secondary)]">
-        Marketing (placeholder)
-      </div>
-    </div>
+    <ProPageShell
+      backHref={`/app/pro/${businessId}`}
+      backLabel="Dashboard"
+      title="Marketing"
+      subtitle="Campagnes, réseaux sociaux et interactions clients."
+      actions={
+        <Button disabled className="cursor-not-allowed opacity-70">
+          Créer une campagne (bientôt)
+        </Button>
+      }
+      tabs={TABS}
+      activeTab={currentTab}
+      onTabChange={handleTabChange}
+    >
+      <div className="space-y-4">{content}</div>
+    </ProPageShell>
+  );
+}
+
+function PlaceholderCard({ title, description }: { title: string; description: string }) {
+  return (
+    <Card className="p-4 text-sm text-[var(--text-secondary)]">
+      <p className="text-[var(--text-primary)]">{title}</p>
+      <p className="mt-1 text-[var(--text-secondary)]">{description}</p>
+    </Card>
   );
 }

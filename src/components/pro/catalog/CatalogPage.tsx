@@ -3,14 +3,14 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
-import { ArrowLeft, Plus } from 'lucide-react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Modal } from '@/components/ui/modal';
 import { KpiCirclesBlock } from '@/components/pro/KpiCirclesBlock';
-import { TabsPills } from '@/components/pro/TabsPills';
+import { ProPageShell } from '@/components/pro/ProPageShell';
 import { fetchJson } from '@/lib/apiClient';
 import { formatCurrencyEUR } from '@/lib/formatCurrency';
 
@@ -28,6 +28,7 @@ type Service = {
   createdAt?: string;
   updatedAt?: string;
   isArchived?: boolean;
+  templateCount?: number;
 };
 
 type Product = {
@@ -72,6 +73,8 @@ export function CatalogPage({
   initialTab?: ItemKind;
 }) {
   const searchParams = useSearchParams();
+  const pathname = usePathname();
+  const router = useRouter();
   const [tab, setTab] = useState<ItemKind>(initialTab ?? 'services');
   const [services, setServices] = useState<Service[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -284,64 +287,61 @@ export function CatalogPage({
 
   const renderServiceCard = (svc: Service) => {
     const price = svc.defaultPriceCents ? formatCurrencyEUR(Number(svc.defaultPriceCents), { minimumFractionDigits: 0 }) : '—';
-    const billing =
-      svc.billingType === 'RECURRING'
-        ? 'Abonnement mensuel'
-        : 'Ponctuel';
+    const billing = svc.billingType === 'RECURRING' ? 'Abonnement mensuel' : 'Ponctuel';
     return (
-      <Card
-        key={svc.id}
-        className="flex h-full flex-col justify-between rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm"
-      >
-        <div className="space-y-1">
-          <div className="flex items-center justify-between gap-2">
-            <p className="text-sm font-semibold text-[var(--text-primary)]">{svc.name}</p>
-            <span className="text-[11px] text-[var(--text-secondary)]">{billing}</span>
+      <Link key={svc.id} href={`/app/pro/${businessId}/catalog/services/${svc.id}`} className="block">
+        <Card className="flex h-full flex-col gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm transition hover:-translate-y-[1px] hover:shadow-sm">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0 space-y-1">
+              <p className="truncate text-sm font-semibold text-[var(--text-primary)]">{svc.name}</p>
+              <p className="text-xs text-[var(--text-secondary)] line-clamp-2">{svc.description || 'Pas de description.'}</p>
+            </div>
+            <span className="rounded-full border border-[var(--border)] px-2 py-0.5 text-[11px] text-[var(--text-secondary)]">
+              {billing}
+            </span>
           </div>
-          <p className="text-xs text-[var(--text-secondary)] line-clamp-2">{svc.description || 'Pas de description.'}</p>
-        </div>
-        <div className="mt-3 space-y-1 text-xs text-[var(--text-secondary)]">
-          <p>{price} {svc.type ? `· ${svc.type}` : ''}</p>
-          <p>TVA: {svc.vatRate ?? '—'}%</p>
-          <p>Code: {svc.code}</p>
-        </div>
-        <div className="mt-3 flex justify-between gap-2">
-          <Button size="sm" variant="outline" asChild>
-            <Link href={`/app/pro/${businessId}/catalog/services/${svc.id}`}>Voir</Link>
-          </Button>
-          <Button size="sm" variant="outline" onClick={() => openEditService(svc)}>
-            Modifier
-          </Button>
-        </div>
-      </Card>
+          <div className="space-y-1 text-xs text-[var(--text-secondary)]">
+            <p>
+              {price} {svc.type ? `· ${svc.type}` : ''}
+            </p>
+            <p>TVA: {svc.vatRate ?? '—'}%</p>
+            <p>Code: {svc.code}</p>
+            <p>Templates: {svc.templateCount ?? 0}</p>
+            <p>Statut: {svc.isArchived ? 'Archivé' : 'Actif'}</p>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button size="sm" variant="outline" onClick={(e) => { e.preventDefault(); openEditService(svc); }}>
+              Modifier
+            </Button>
+          </div>
+        </Card>
+      </Link>
     );
   };
 
   const renderProductCard = (p: Product) => {
     const price = p.salePriceCents ? formatCurrencyEUR(Number(p.salePriceCents), { minimumFractionDigits: 0 }) : '—';
     return (
-      <Card
-        key={p.id}
-        className="flex h-full flex-col justify-between rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm"
-      >
-        <div className="space-y-1">
-          <p className="text-sm font-semibold text-[var(--text-primary)]">{p.name}</p>
-          <p className="text-xs text-[var(--text-secondary)] line-clamp-2">{p.description || 'Pas de description.'}</p>
-        </div>
-        <div className="mt-3 space-y-1 text-xs text-[var(--text-secondary)]">
-          <p>{price} {p.unit ? `· ${p.unit}` : ''}</p>
-          <p>SKU: {p.sku}</p>
-          <p>Statut: {p.isArchived ? 'Archivé' : 'Actif'}</p>
-        </div>
-        <div className="mt-3 flex justify-between gap-2">
-          <Button size="sm" variant="outline" asChild>
-            <Link href={`/app/pro/${businessId}/catalog/products/${p.id}`}>Voir</Link>
-          </Button>
-          <Button size="sm" variant="outline" onClick={() => openEditProduct(p)}>
-            Modifier
-          </Button>
-        </div>
-      </Card>
+      <Link key={p.id} href={`/app/pro/${businessId}/catalog/products/${p.id}`} className="block">
+        <Card className="flex h-full flex-col gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm transition hover:-translate-y-[1px] hover:shadow-sm">
+          <div className="min-w-0 space-y-1">
+            <p className="truncate text-sm font-semibold text-[var(--text-primary)]">{p.name}</p>
+            <p className="text-xs text-[var(--text-secondary)] line-clamp-2">{p.description || 'Pas de description.'}</p>
+          </div>
+          <div className="space-y-1 text-xs text-[var(--text-secondary)]">
+            <p>
+              {price} {p.unit ? `· ${p.unit}` : ''}
+            </p>
+            <p>SKU: {p.sku}</p>
+            <p>Statut: {p.isArchived ? 'Archivé' : 'Actif'}</p>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button size="sm" variant="outline" onClick={(e) => { e.preventDefault(); openEditProduct(p); }}>
+              Modifier
+            </Button>
+          </div>
+        </Card>
+      </Link>
     );
   };
 
@@ -371,73 +371,78 @@ export function CatalogPage({
     }
   }, [openEditProduct, openEditService, products, searchParams, services]);
 
+  const handleTabChange = (key: string) => {
+    if (key !== 'services' && key !== 'products') return;
+    setTab(key);
+    const params = new URLSearchParams(searchParams?.toString() ?? '');
+    params.set('tab', key);
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  };
+
   return (
-    <div className="mx-auto max-w-6xl space-y-4 px-4 py-4">
-      <div className="flex flex-col gap-2">
-        <div className="flex items-center justify-between gap-3">
-          <Button asChild variant="outline" size="sm" className="gap-2">
-            <Link href={`/app/pro/${businessId}`}>
-              <ArrowLeft size={16} />
-              Dashboard
-            </Link>
-          </Button>
-          <Button size="sm" className="gap-2" onClick={openCreate} data-testid="catalog-new">
-            <Plus size={16} />
-            Nouveau
-          </Button>
+    <ProPageShell
+      backHref={`/app/pro/${businessId}`}
+      backLabel="Dashboard"
+      title="Catalogue"
+      subtitle="Services et produits utilisés pour vos projets et factures."
+      actions={
+        <Button size="sm" className="gap-2" onClick={openCreate} data-testid="catalog-new">
+          <Plus size={16} />
+          Nouveau
+        </Button>
+      }
+      tabs={[
+        { key: 'services', label: 'Services' },
+        { key: 'products', label: 'Produits' },
+      ]}
+      activeTab={tab}
+      onTabChange={handleTabChange}
+    >
+      <div className="space-y-4">
+        <KpiCirclesBlock items={kpis} />
+
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <Input
+            placeholder="Rechercher…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="max-w-sm"
+          />
+          {error ? <p className="text-sm text-rose-500">{error}</p> : null}
         </div>
-        <h1 className="text-xl font-semibold text-[var(--text-primary)]">Catalogue</h1>
-        <p className="text-sm text-[var(--text-secondary)]">
-          Services et produits utilisés pour vos projets et votre facturation.
-        </p>
+
+        {loading ? (
+          <Card className="p-5">
+            <p className="text-sm text-[var(--text-secondary)]">Chargement…</p>
+          </Card>
+        ) : list.length === 0 ? (
+          <Card className="flex flex-col gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5">
+            <p className="text-sm font-semibold text-[var(--text-primary)]">Aucun élément.</p>
+            <Button size="sm" onClick={openCreate}>
+              Créer {tab === 'services' ? 'un service' : 'un produit'}
+            </Button>
+          </Card>
+        ) : (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {tab === 'services'
+              ? filteredServices.map(renderServiceCard)
+              : filteredProducts.map(renderProductCard)}
+          </div>
+        )}
       </div>
-
-      <KpiCirclesBlock items={kpis} />
-
-      <TabsPills
-        items={[
-          { key: 'services', label: 'Services' },
-          { key: 'products', label: 'Produits' },
-        ]}
-        value={tab}
-        onChange={(key) => setTab(key as ItemKind)}
-        ariaLabel="Onglets catalogue"
-        className="-mx-1 px-1"
-      />
-
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <Input
-          placeholder="Rechercher…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="max-w-sm"
-        />
-        {error ? <p className="text-sm text-rose-500">{error}</p> : null}
-      </div>
-
-      {loading ? (
-        <Card className="p-5">
-          <p className="text-sm text-[var(--text-secondary)]">Chargement…</p>
-        </Card>
-      ) : list.length === 0 ? (
-        <Card className="flex flex-col gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5">
-          <p className="text-sm font-semibold text-[var(--text-primary)]">Aucun élément.</p>
-          <Button size="sm" onClick={openCreate}>
-            Créer {tab === 'services' ? 'un service' : 'un produit'}
-          </Button>
-        </Card>
-      ) : (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {tab === 'services'
-            ? filteredServices.map(renderServiceCard)
-            : filteredProducts.map(renderProductCard)}
-        </div>
-      )}
 
       <Modal
         open={modalOpen}
         onCloseAction={() => setModalOpen(false)}
-        title={tab === 'services' ? (serviceForm.id ? 'Modifier le service' : 'Nouveau service') : productForm.id ? 'Modifier le produit' : 'Nouveau produit'}
+        title={
+          tab === 'services'
+            ? serviceForm.id
+              ? 'Modifier le service'
+              : 'Nouveau service'
+            : productForm.id
+              ? 'Modifier le produit'
+              : 'Nouveau produit'
+        }
       >
         <div className="space-y-3">
           {tab === 'services' ? (
@@ -555,6 +560,6 @@ export function CatalogPage({
           </div>
         </div>
       </Modal>
-    </div>
+    </ProPageShell>
   );
 }

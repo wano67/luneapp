@@ -4,7 +4,19 @@
 import type { ReactNode } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { LayoutDashboard, Briefcase, Contact2, Banknote, Cog, Wallet2, Building2, Folder } from 'lucide-react';
+import {
+  LayoutDashboard,
+  Briefcase,
+  Contact2,
+  Banknote,
+  Wallet2,
+  Building2,
+  Folder,
+  Users,
+  Plus,
+  ClipboardList,
+  Settings2,
+} from 'lucide-react';
 import { useActiveBusiness } from './pro/ActiveBusinessProvider';
 import { normalizeWebsiteUrl } from '@/lib/website';
 
@@ -15,7 +27,7 @@ type AppSidebarProps = {
   pathname: string;
   businessId: string | null;
   collapsed?: boolean;
-  onNavigate?: () => void;
+  onNavigateAction?: () => void;
 };
 
 export type NavItem = {
@@ -97,31 +109,37 @@ function getGlobalSections(): NavSection[] {
 function getProSections(businessId: string | null): NavSection[] {
   const base = businessId ? `/app/pro/${businessId}` : '/app/pro';
   const disabled = !businessId;
-  return [
-    {
-      title: 'Navigation',
-      items: [
-        { href: `${base}`, label: 'Dashboard', icon: <LayoutDashboard size={18} />, disabled },
-        {
-          href: `${base}/agenda`,
-          label: 'Agenda',
-          icon: <Contact2 size={18} />,
-          disabled,
-          activePatterns: [
-            new RegExp(`^${base}/agenda`),
-            new RegExp(`^${base}/clients`),
-            new RegExp(`^${base}/prospects`),
-          ],
-        },
-        { href: `${base}/projects`, label: 'Projets', icon: <Briefcase size={18} />, disabled },
-        { href: `${base}/accounting`, label: 'Comptabilité', icon: <Banknote size={18} />, disabled },
-        { href: `${base}/catalog`, label: 'Catalogue', icon: <Folder size={18} />, disabled },
-        { href: `${base}/marketing`, label: 'Marketing', icon: <Building2 size={18} />, disabled },
-        { href: `${base}/finances`, label: 'Finances', icon: <Banknote size={18} />, disabled },
-        { href: `${base}/settings`, label: 'Réglages', icon: <Cog size={18} />, disabled },
-      ],
-    },
-  ];
+
+  const studio: NavSection = {
+    title: 'Studio',
+    items: [
+      { href: `${base}`, label: 'Dashboard', icon: <LayoutDashboard size={18} />, disabled },
+      { href: `${base}/projects`, label: 'Projets', icon: <Briefcase size={18} />, disabled },
+      { href: `${base}/clients`, label: 'Clients', icon: <Contact2 size={18} />, disabled },
+      { href: `${base}/catalog`, label: 'Catalogue', icon: <Folder size={18} />, disabled },
+      { href: `${base}/tasks`, label: 'Tâches', icon: <ClipboardList size={18} />, disabled },
+      { href: `${base}/finances`, label: 'Finances', icon: <Banknote size={18} />, disabled },
+    ],
+  };
+
+  const shortcuts: NavSection = {
+    title: 'Raccourcis',
+    items: [
+      { href: `${base}/projects`, label: 'Nouveau projet', icon: <Plus size={16} />, disabled },
+      { href: `${base}/clients`, label: 'Nouveau client', icon: <Plus size={16} />, disabled },
+      { href: `${base}/catalog?tab=products`, label: 'Nouveau produit', icon: <Plus size={16} />, disabled },
+    ],
+  };
+
+  const admin: NavSection = {
+    title: 'Administration',
+    items: [
+      { href: `${base}/organization`, label: 'Organisation', icon: <Users size={18} />, disabled },
+      { href: `${base}/settings`, label: 'Paramètres', icon: <Settings2 size={18} />, disabled },
+    ],
+  };
+
+  return [studio, shortcuts, admin];
 }
 
 function getWalletSections(): NavSection[] {
@@ -151,7 +169,7 @@ function buildSections(space: Space, businessId: string | null): NavSection[] {
 /* ---------------- COMPONENT ---------------- */
 
 export default function AppSidebar(props: AppSidebarProps) {
-  const { space, pathname, businessId, collapsed = false, onNavigate } = props;
+  const { space, pathname, businessId, collapsed = false, onNavigateAction } = props;
   const [businesses, setBusinesses] = useState<SidebarBusiness[] | null>(null);
   const [recentBusinessIds, setRecentBusinessIds] = useState<string[]>([]);
   const sections = buildSections(space, businessId);
@@ -319,7 +337,7 @@ export default function AppSidebar(props: AppSidebarProps) {
                     onClick={() => {
                       if (isDisabled) return;
                       item.onClick?.();
-                      onNavigate?.();
+                      onNavigateAction?.();
                     }}
                     title={collapsed ? item.label : item.hint ?? item.label}
                     data-active={active ? 'true' : 'false'}
@@ -347,7 +365,7 @@ export default function AppSidebar(props: AppSidebarProps) {
                         e.preventDefault();
                         return;
                       }
-                      onNavigate?.();
+                      onNavigateAction?.();
                     }}
                     title={collapsed ? item.label : item.hint ?? item.label}
                     data-active={active ? 'true' : 'false'}
