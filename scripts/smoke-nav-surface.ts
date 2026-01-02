@@ -73,12 +73,42 @@ async function assertRedirect(path: string, expectedSuffix: string) {
   console.log(`OK ${path} ${res.status} Location=${loc}`);
 }
 
+async function createAndFetchProject(bizId: string) {
+  const projectName = `Smoke project ${Date.now()}`;
+  const { res, json } = await request(`/api/pro/businesses/${bizId}/projects`, {
+    method: 'POST',
+    body: { name: projectName },
+  });
+  if (res.status !== 201) {
+    const body = typeof json === 'string' ? json : JSON.stringify(json);
+    throw new Error(`Project creation failed (${res.status}): ${body?.slice(0, 200) ?? '<empty>'}`);
+  }
+  const projectId = (json as { id?: string })?.id;
+  if (!projectId) throw new Error('Project creation response missing id');
+  console.log(`OK project created ${projectId}`);
+
+  const { res: listRes, json: listJson } = await request(`/api/pro/businesses/${bizId}/projects`);
+  if (!listRes.ok) {
+    const body = typeof listJson === 'string' ? listJson : JSON.stringify(listJson);
+    throw new Error(`/projects listing failed (${listRes.status}): ${body?.slice(0, 200) ?? '<empty>'}`);
+  }
+
+  const items = (listJson as { items?: Array<{ id?: string; name?: string }> })?.items ?? [];
+  const found = items.find((p) => p.id === projectId || p.name === projectName);
+  if (!found) {
+    throw new Error(`Created project ${projectId} not returned by list (items=${items.length})`);
+  }
+  console.log(`OK project listed ${projectId}`);
+}
+
 async function main() {
   console.log(`Base URL: ${baseUrl} (origin=${getOrigin(baseUrl)})`);
   const creds = await login();
   if (!creds) return;
 
   const bizId = await pickBusinessId();
+
+  await createAndFetchProject(bizId);
 
   // Docs hub should render (no redirect to login once authenticated).
   await assertOk('/app/docs');

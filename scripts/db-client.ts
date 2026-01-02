@@ -20,6 +20,8 @@ export function createDbClient() {
   };
 
   if (shouldRelaxTls) {
+    // Allow self-signed certificates for inspection tools when explicitly requested.
+    process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
     poolConfig.ssl = { rejectUnauthorized: false };
   } else {
     const url = new URL(connectionString);

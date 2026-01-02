@@ -35,18 +35,101 @@ async function main() {
   }
 
   try {
-    const tables = await prisma.$queryRawUnsafe<Array<Record<string, unknown>>>(`
-      SELECT
-        current_database() AS db,
-        current_schema() AS schema,
-        to_regclass('public."User"')::text AS user_table,
-        to_regclass('public."Business"')::text AS business_table,
-        to_regclass('public."_prisma_migrations"')::text AS migrations_table
+    const tables = await prisma.$queryRawUnsafe<Array<{ table_schema: string; table_name: string }>>(`
+      SELECT table_schema, table_name
+      FROM information_schema.tables
+      WHERE table_schema='public' AND table_type='BASE TABLE'
+      ORDER BY table_name;
     `);
-    console.log('--- tables ---');
+    console.log('--- all tables ---');
     console.table(tables);
   } catch (err) {
-    console.error('Failed to read tables', err);
+    console.error('Failed to list all tables', err);
+  }
+
+  try {
+    const keyTables = await prisma.$queryRawUnsafe<
+      Array<{
+        BusinessDocument: string | null;
+        ProductImage: string | null;
+        ServiceTemplateTask: string | null;
+        ServiceTaskTemplate: string | null;
+        Service: string | null;
+        Product: string | null;
+      }>
+    >(`
+      SELECT
+        to_regclass('public."BusinessDocument"')::text AS "BusinessDocument",
+        to_regclass('public."ProductImage"')::text AS "ProductImage",
+        to_regclass('public."ServiceTemplateTask"')::text AS "ServiceTemplateTask",
+        to_regclass('public."ServiceTaskTemplate"')::text AS "ServiceTaskTemplate",
+        to_regclass('public."Service"')::text AS "Service",
+        to_regclass('public."Product"')::text AS "Product";
+    `);
+    console.log('--- key tables existence ---');
+    console.table(keyTables);
+  } catch (err) {
+    console.error('Failed to check key tables', err);
+  }
+
+  try {
+    const serviceTaskTemplateColumns = await prisma.$queryRawUnsafe<
+      Array<{
+        column_name: string;
+        data_type: string;
+        is_nullable: string;
+        column_default: string | null;
+      }>
+    >(`
+      SELECT column_name, data_type, is_nullable, column_default
+      FROM information_schema.columns
+      WHERE table_schema='public'
+        AND table_name='ServiceTaskTemplate'
+        AND column_name IN ('estimatedMinutes', 'position')
+      ORDER BY column_name;
+    `);
+    console.log('--- columns check: ServiceTaskTemplate ---');
+    console.table(serviceTaskTemplateColumns);
+  } catch (err) {
+    console.error('Failed to check ServiceTaskTemplate columns', err);
+  }
+
+  try {
+    const businessDocumentColumns = await prisma.$queryRawUnsafe<
+      Array<{
+        column_name: string;
+        data_type: string;
+        datetime_precision: number | null;
+        is_nullable: string;
+        column_default: string | null;
+      }>
+    >(`
+      SELECT column_name, data_type, datetime_precision, is_nullable, column_default
+      FROM information_schema.columns
+      WHERE table_schema='public'
+        AND table_name='BusinessDocument'
+        AND column_name IN ('createdAt', 'storageKey')
+      ORDER BY column_name;
+    `);
+    console.log('--- columns check: BusinessDocument (createdAt, storageKey) ---');
+    console.table(businessDocumentColumns);
+  } catch (err) {
+    console.error('Failed to check BusinessDocument columns', err);
+  }
+
+  try {
+    const businessDocumentUniques = await prisma.$queryRawUnsafe<
+      Array<{ conname: string; contype: string; definition: string }>
+    >(`
+      SELECT conname::text AS conname, contype::text AS contype, pg_get_constraintdef(c.oid)::text AS definition
+      FROM pg_constraint c
+      WHERE c.conrelid = 'public."BusinessDocument"'::regclass
+        AND c.contype IN ('u', 'f');
+    `);
+    console.log('--- constraints: BusinessDocument (unique + FK) ---');
+    console.table(businessDocumentUniques);
+  } catch (err) {
+    console.error('Failed to list BusinessDocument constraints', err);
   }
 }
 

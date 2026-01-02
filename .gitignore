@@ -49,3 +49,6 @@ package-lock.json
 .env.*
 # keep example if present
 !.env.example
+
+# local uploads storage
+uploads/**
