@@ -5,6 +5,7 @@ import { requireBusinessRole } from '@/server/auth/businessRole';
 import {
   badRequest,
   forbidden,
+  getErrorMessage,
   getRequestId,
   notFound,
   unauthorized,
@@ -13,7 +14,7 @@ import {
 import { assertSameOrigin, jsonNoStore, withNoStore } from '@/server/security/csrf';
 import { rateLimit } from '@/server/security/rateLimit';
 import { saveLocalFile } from '@/server/storage/local';
-import { DocumentKind } from '@/generated/prisma/client';
+import { DocumentKind, Prisma } from '@/generated/prisma/client';
 
 function parseId(param: string | undefined) {
   if (!param || !/^\d+$/.test(param)) return null;
@@ -29,6 +30,7 @@ function withIdNoStore(res: NextResponse, requestId: string) {
 }
 
 const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
+const BUSINESS_DOCUMENT_WARNING = 'BusinessDocument table missing. Run migrations.';
 const ALLOWED_MIME = [
   'application/pdf',
   'image/png',
@@ -39,6 +41,10 @@ const ALLOWED_MIME = [
   'application/zip',
   'text/plain',
 ];
+
+function isPrismaKnownError(error: unknown): error is Prisma.PrismaClientKnownRequestError {
+  return error instanceof Prisma.PrismaClientKnownRequestError;
+}
 
 // GET /api/pro/businesses/:businessId/clients/:clientId/documents
 export async function GET(
@@ -67,12 +73,25 @@ export async function GET(
   });
   if (!client) return withIdNoStore(notFound('Client introuvable.'), requestId);
 
-  const [uploads, invoices, quotes] = await Promise.all([
-    prisma.businessDocument.findMany({
+  let uploadsWarning: string | undefined;
+  let uploads: Awaited<ReturnType<typeof prisma.businessDocument.findMany>> = [];
+
+  try {
+    uploads = await prisma.businessDocument.findMany({
       where: { businessId: businessIdBigInt, clientId: clientIdBigInt },
       orderBy: { createdAt: 'desc' },
       take: 50,
-    }),
+    });
+  } catch (error) {
+    if (isPrismaKnownError(error) && error.code === 'P2021') {
+      uploadsWarning = BUSINESS_DOCUMENT_WARNING;
+      console.warn('businessDocument table missing', { requestId, error: getErrorMessage(error) });
+    } else {
+      throw error;
+    }
+  }
+
+  const [invoices, quotes] = await Promise.all([
     prisma.invoice.findMany({
       where: { businessId: businessIdBigInt, clientId: clientIdBigInt },
       orderBy: [{ issuedAt: 'desc' }, { createdAt: 'desc' }],
@@ -116,6 +135,7 @@ export async function GET(
         currency: q.currency,
         pdfUrl: `/api/pro/businesses/${businessId}/quotes/${q.id.toString()}/pdf`,
       })),
+      ...(uploadsWarning ? { warning: uploadsWarning } : {}),
     }),
     requestId,
   );
@@ -192,7 +212,20 @@ export async function POST(
       kind: DocumentKind.FILE,
       createdByUserId: BigInt(userId),
     },
+  }).catch((error) => {
+    if (isPrismaKnownError(error) && error.code === 'P2021') {
+      console.error('businessDocument table missing on upload', { requestId, error: getErrorMessage(error) });
+      return null;
+    }
+    throw error;
   });
+
+  if (!created) {
+    return withIdNoStore(
+      NextResponse.json({ error: BUSINESS_DOCUMENT_WARNING }, { status: 503 }),
+      requestId,
+    );
+  }
 
   return withIdNoStore(
     NextResponse.json(
