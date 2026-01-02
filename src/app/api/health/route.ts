@@ -5,14 +5,25 @@ import { withNoStore } from '@/server/security/csrf';
 
 export async function GET(request: NextRequest) {
   const requestId = getRequestId(request);
+  const dbUrl = process.env.DATABASE_URL?.trim();
+
+  if (!dbUrl) {
+    return withNoStore(
+      withRequestId(NextResponse.json({ status: 'ok', db: 'disabled' }), requestId)
+    );
+  }
+
   try {
     await prisma.$queryRaw`SELECT 1`;
-    return withNoStore(withRequestId(NextResponse.json({ status: 'ok' }), requestId));
+    return withNoStore(withRequestId(NextResponse.json({ status: 'ok', db: 'ok' }), requestId));
   } catch (error) {
-    console.error(error);
+    console.error('healthcheck db failure', error);
     return withNoStore(
       withRequestId(
-        NextResponse.json({ status: 'error', message: 'Database not reachable' }, { status: 500 }),
+        NextResponse.json(
+          { status: 'error', db: 'error', message: 'Database not reachable' },
+          { status: 503 }
+        ),
         requestId
       )
     );

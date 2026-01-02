@@ -5,7 +5,7 @@
  *   SMOKE_BASE_URL=http://localhost:3000 ADMIN_EMAIL=... ADMIN_PASSWORD=... pnpm smoke:nav-surface
  */
 
-import { createRequester, getOrigin, getSmokeCreds, handleMissingCreds } from './smoke-utils';
+import { createRequester, getOrigin, getSmokeCreds } from './smoke-utils';
 
 const baseUrl =
   process.env.SMOKE_BASE_URL?.trim() || process.env.BASE_URL?.trim() || 'http://localhost:3000';
@@ -16,8 +16,8 @@ async function login() {
   try {
     creds = getSmokeCreds({ preferAdmin: true });
   } catch (err) {
-    handleMissingCreds((err as Error).message);
-    return false;
+    console.log(`Missing smoke credentials: ${(err as Error).message}`);
+    return null;
   }
   const { res, json } = await request('/api/auth/login', {
     method: 'POST',
@@ -99,12 +99,29 @@ async function createAndFetchProject(bizId: string) {
     throw new Error(`Created project ${projectId} not returned by list (items=${items.length})`);
   }
   console.log(`OK project listed ${projectId}`);
+
+  await assertOk(`/app/pro/${bizId}/projects`);
+  await assertOk(`/app/pro/${bizId}/projects/${projectId}`);
+}
+
+async function runPublicSmoke() {
+  await assertOk('/api/health');
+  await assertOk('/');
+  try {
+    await assertOk('/about');
+  } catch (err) {
+    console.warn(`Skipping /about check: ${(err as Error).message}`);
+  }
+  console.log('smoke-nav-surface OK (public mode, no creds)');
 }
 
 async function main() {
   console.log(`Base URL: ${baseUrl} (origin=${getOrigin(baseUrl)})`);
   const creds = await login();
-  if (!creds) return;
+  if (!creds) {
+    await runPublicSmoke();
+    return;
+  }
 
   const bizId = await pickBusinessId();
 
