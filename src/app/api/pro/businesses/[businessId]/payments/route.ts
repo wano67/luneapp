@@ -12,7 +12,7 @@ import {
 } from '@/server/http/apiUtils';
 import { assertSameOrigin, jsonNoStore, withNoStore } from '@/server/security/csrf';
 import { rateLimit } from '@/server/security/rateLimit';
-import { InvoiceStatus } from '@/generated/prisma/client';
+import { InvoiceStatus } from '@/generated/prisma';
 import { upsertCashSaleLedgerForInvoicePaid } from '@/server/services/ledger';
 
 function parseId(param: string | undefined) {

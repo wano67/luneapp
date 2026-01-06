@@ -14,7 +14,7 @@ import {
 import { assertSameOrigin, jsonNoStore, withNoStore } from '@/server/security/csrf';
 import { rateLimit } from '@/server/security/rateLimit';
 import { saveLocalFile } from '@/server/storage/local';
-import { DocumentKind, Prisma } from '@/generated/prisma/client';
+import { DocumentKind, Prisma } from '@/generated/prisma';
 
 function parseId(param: string | undefined) {
   if (!param || !/^\d+$/.test(param)) return null;

@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/server/db/client';
-import type { Prisma, Prospect } from '@/generated/prisma/client';
+import type { Prisma, Prospect } from '@/generated/prisma';
 import {
   LeadSource,
   ProspectPipelineStatus,
   QualificationLevel,
   ProspectStatus,
-} from '@/generated/prisma/client';
+} from '@/generated/prisma';
 import { requireBusinessRole } from '@/server/auth/businessRole';
 import { assertSameOrigin, jsonNoStore, withNoStore } from '@/server/security/csrf';
 import { rateLimit } from '@/server/security/rateLimit';

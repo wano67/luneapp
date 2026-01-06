@@ -11,7 +11,7 @@ import {
   withRequestId,
 } from '@/server/http/apiUtils';
 import { jsonNoStore, withNoStore } from '@/server/security/csrf';
-import { InvoiceStatus, Prisma } from '@/generated/prisma/client';
+import { InvoiceStatus, Prisma } from '@/generated/prisma';
 import { computeOutstanding } from '@/lib/accounting';
 
 function parseId(param: string | undefined) {

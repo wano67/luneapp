@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/server/db/client';
-import { BusinessRole, BusinessInviteStatus } from '@/generated/prisma/client';
+import { BusinessRole, BusinessInviteStatus } from '@/generated/prisma';
 import { requireBusinessRole } from '@/server/auth/businessRole';
 import { assertSameOrigin, getAllowedOrigins, jsonNoStore, withNoStore } from '@/server/security/csrf';
 import crypto from 'crypto';

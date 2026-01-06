@@ -2,7 +2,7 @@ import {
   InventoryMovementType,
   LedgerSourceType,
   Prisma,
-} from '@/generated/prisma/client';
+} from '@/generated/prisma';
 
 type TxClient = Prisma.TransactionClient;
 

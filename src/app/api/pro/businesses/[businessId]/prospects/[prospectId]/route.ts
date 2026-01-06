@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/server/db/client';
-import { ProspectStatus } from '@/generated/prisma/client';
+import { ProspectStatus } from '@/generated/prisma';
 import { requireAuthPro } from '@/server/auth/requireAuthPro';
 import { requireBusinessRole } from '@/server/auth/businessRole';
 import { assertSameOrigin, jsonNoStore, withNoStore } from '@/server/security/csrf';
@@ -12,7 +12,7 @@ import {
   unauthorized,
   withRequestId,
 } from '@/server/http/apiUtils';
-import type { ProspectPipelineStatus, QualificationLevel, LeadSource } from '@/generated/prisma/client';
+import type { ProspectPipelineStatus, QualificationLevel, LeadSource } from '@/generated/prisma';
 
 function parseId(param: string | undefined) {
   if (!param || !/^\d+$/.test(param)) return null;

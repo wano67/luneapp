@@ -1,4 +1,4 @@
-import { Prisma } from '@/generated/prisma/client';
+import { Prisma } from '@/generated/prisma';
 import { getErrorMessage, getErrorStack } from '@/lib/error';
 type PrismaClientKnownRequestError = Prisma.PrismaClientKnownRequestError;
 import {

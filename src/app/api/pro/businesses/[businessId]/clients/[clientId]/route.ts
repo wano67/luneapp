@@ -12,7 +12,7 @@ import {
 } from '@/server/http/apiUtils';
 import { assertSameOrigin, jsonNoStore, withNoStore } from '@/server/security/csrf';
 import { rateLimit } from '@/server/security/rateLimit';
-import { BusinessReferenceType, ClientStatus, LeadSource } from '@/generated/prisma/client';
+import { BusinessReferenceType, ClientStatus, LeadSource } from '@/generated/prisma';
 import { normalizeWebsiteUrl } from '@/lib/website';
 
 function parseId(param: string | undefined) {

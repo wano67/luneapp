@@ -5,7 +5,7 @@ import {
   ProjectDepositStatus,
   ProjectQuoteStatus,
   ProjectStatus,
-} from '@/generated/prisma/client';
+} from '@/generated/prisma';
 import { requireBusinessRole } from '@/server/auth/businessRole';
 import { requireAuthPro } from '@/server/auth/requireAuthPro';
 import { assertSameOrigin, jsonNoStore, withNoStore } from '@/server/security/csrf';

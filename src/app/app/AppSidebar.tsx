@@ -4,21 +4,10 @@
 import type { ReactNode } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import {
-  LayoutDashboard,
-  Briefcase,
-  Contact2,
-  Banknote,
-  Wallet2,
-  Building2,
-  Folder,
-  Users,
-  Plus,
-  ClipboardList,
-  Settings2,
-} from 'lucide-react';
+import { LayoutDashboard, Wallet2, Building2, Banknote } from 'lucide-react';
 import { useActiveBusiness } from './pro/ActiveBusinessProvider';
 import { normalizeWebsiteUrl } from '@/lib/website';
+import { proNavSections, type ProNavSectionConfig } from '@/config/proNav';
 
 export type Space = 'home' | 'pro' | 'perso' | 'focus' | null;
 
@@ -110,36 +99,24 @@ function getProSections(businessId: string | null): NavSection[] {
   const base = businessId ? `/app/pro/${businessId}` : '/app/pro';
   const disabled = !businessId;
 
-  const studio: NavSection = {
-    title: 'Studio',
-    items: [
-      { href: `${base}`, label: 'Dashboard', icon: <LayoutDashboard size={18} />, disabled },
-      { href: `${base}/projects`, label: 'Projets', icon: <Briefcase size={18} />, disabled },
-      { href: `${base}/clients`, label: 'Clients', icon: <Contact2 size={18} />, disabled },
-      { href: `${base}/catalog`, label: 'Catalogue', icon: <Folder size={18} />, disabled },
-      { href: `${base}/tasks`, label: 'Tâches', icon: <ClipboardList size={18} />, disabled },
-      { href: `${base}/finances`, label: 'Finances', icon: <Banknote size={18} />, disabled },
-    ],
-  };
+  function sectionToNav(section: ProNavSectionConfig): NavSection {
+    return {
+      title: section.title,
+      items: section.items.map((item) => {
+        const href = disabled ? base : item.href(businessId as string);
+        return {
+          href,
+          label: item.label,
+          icon: <item.icon size={18} />,
+          disabled,
+          hint: section.secondary || item.secondary ? 'Secondaire' : undefined,
+          activePatterns: disabled ? undefined : item.activePatterns?.(businessId as string),
+        };
+      }),
+    };
+  }
 
-  const shortcuts: NavSection = {
-    title: 'Raccourcis',
-    items: [
-      { href: `${base}/projects`, label: 'Nouveau projet', icon: <Plus size={16} />, disabled },
-      { href: `${base}/clients`, label: 'Nouveau client', icon: <Plus size={16} />, disabled },
-      { href: `${base}/catalog?tab=products`, label: 'Nouveau produit', icon: <Plus size={16} />, disabled },
-    ],
-  };
-
-  const admin: NavSection = {
-    title: 'Administration',
-    items: [
-      { href: `${base}/organization`, label: 'Organisation', icon: <Users size={18} />, disabled },
-      { href: `${base}/settings`, label: 'Paramètres', icon: <Settings2 size={18} />, disabled },
-    ],
-  };
-
-  return [studio, shortcuts, admin];
+  return proNavSections.map(sectionToNav);
 }
 
 function getWalletSections(): NavSection[] {

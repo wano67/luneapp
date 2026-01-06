@@ -5,7 +5,7 @@ import { assertSameOrigin, jsonNoStore } from '@/server/security/csrf';
 import { rateLimit } from '@/server/security/rateLimit';
 import { requireAuthPro } from '@/server/auth/requireAuthPro';
 import { badRequest, getRequestId, unauthorized, withIdNoStore, withRequestId } from '@/server/http/apiUtils';
-import { BusinessReferenceType, ClientStatus, LeadSource } from '@/generated/prisma/client';
+import { BusinessReferenceType, ClientStatus, LeadSource } from '@/generated/prisma';
 import { normalizeWebsiteUrl } from '@/lib/website';
 
 function forbidden(requestId: string) {

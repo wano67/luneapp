@@ -1,7 +1,7 @@
 // src/app/api/personal/transactions/route.ts
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import type { Prisma } from '@/generated/prisma/client';
+import type { Prisma } from '@/generated/prisma';
 import { prisma } from '@/server/db/client';
 import { requireAuthAsync } from '@/server/auth/requireAuth';
 import { assertSameOrigin, withNoStore } from '@/server/security/csrf';

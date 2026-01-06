@@ -12,7 +12,7 @@ import {
   unauthorized,
   withRequestId,
 } from '@/server/http/apiUtils';
-import { BusinessReferenceType } from '@/generated/prisma/client';
+import { BusinessReferenceType } from '@/generated/prisma';
 
 type ImportRow = Record<string, unknown>;
 

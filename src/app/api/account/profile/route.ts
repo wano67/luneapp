@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { Prisma } from '@/generated/prisma/client';
+import { Prisma } from '@/generated/prisma';
 import { getErrorMessage, getErrorStack } from '@/lib/error';
 import { prisma } from '@/server/db/client';
 import { requireAuthAsync } from '@/server/auth/requireAuth';

@@ -13,7 +13,7 @@ import {
   unauthorized,
   withRequestId,
 } from '@/server/http/apiUtils';
-import { BusinessPermission, Prisma } from '@/generated/prisma/client';
+import { BusinessPermission, Prisma } from '@/generated/prisma';
 
 type BusinessRole = 'OWNER' | 'ADMIN' | 'MEMBER' | 'VIEWER';
 

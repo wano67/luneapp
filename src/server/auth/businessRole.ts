@@ -1,5 +1,5 @@
 import { prisma } from '@/server/db/client';
-import type { BusinessRole, BusinessMembership } from '@/generated/prisma/client';
+import type { BusinessRole, BusinessMembership } from '@/generated/prisma';
 
 const ROLE_WEIGHT: Record<BusinessRole, number> = {
   VIEWER: 0,

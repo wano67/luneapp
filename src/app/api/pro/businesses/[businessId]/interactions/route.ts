@@ -5,7 +5,7 @@ import { requireBusinessRole } from '@/server/auth/businessRole';
 import { assertSameOrigin, jsonNoStore } from '@/server/security/csrf';
 import { rateLimit } from '@/server/security/rateLimit';
 import { badRequest, getRequestId, unauthorized, withRequestId } from '@/server/http/apiUtils';
-import { InteractionType } from '@/generated/prisma/client';
+import { InteractionType } from '@/generated/prisma';
 
 function withIdNoStore(res: NextResponse, requestId: string) {
   res.headers.set('Cache-Control', 'no-store');

@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { prisma } from '@/server/db/client';
-import { ProjectStatus, TaskStatus, FinanceType } from '@/generated/prisma/client';
+import { ProjectStatus, TaskStatus, FinanceType } from '@/generated/prisma';
 import { requireAuthPro } from '@/server/auth/requireAuthPro';
 import { getRequestId, unauthorized, withRequestId } from '@/server/http/apiUtils';
 import { jsonNoStore, withNoStore } from '@/server/security/csrf';

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { LedgerSourceType } from '@/generated/prisma/client';
+import { LedgerSourceType } from '@/generated/prisma';
 import { prisma } from '@/server/db/client';
 import { requireAuthPro } from '@/server/auth/requireAuthPro';
 import { requireBusinessRole } from '@/server/auth/businessRole';

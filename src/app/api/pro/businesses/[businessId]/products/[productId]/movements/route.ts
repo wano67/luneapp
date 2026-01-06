@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { FinanceType, InventoryMovementSource, InventoryMovementType } from '@/generated/prisma/client';
+import { FinanceType, InventoryMovementSource, InventoryMovementType } from '@/generated/prisma';
 import { prisma } from '@/server/db/client';
 import { requireAuthPro } from '@/server/auth/requireAuthPro';
 import { requireBusinessRole } from '@/server/auth/businessRole';

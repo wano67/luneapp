@@ -225,8 +225,8 @@ export default function AppShell({ children }: { children: ReactNode }) {
       if (bizId) {
         const base = `/app/pro/${bizId}`;
         return [
-          { label: 'Projets', href: `${base}/projets` },
-          { label: 'Clients', href: `${base}/clients` },
+          { label: 'Nouveau projet', href: `${base}/projects/new` },
+          { label: 'Projets', href: `${base}/projects` },
           { label: 'Finances', href: `${base}/finances` },
         ];
       }

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { BusinessReferenceType } from '@/generated/prisma/client';
+import { BusinessReferenceType } from '@/generated/prisma';
 import { prisma } from '@/server/db/client';
 import { requireAuthPro } from '@/server/auth/requireAuthPro';
 import { requireBusinessRole } from '@/server/auth/businessRole';

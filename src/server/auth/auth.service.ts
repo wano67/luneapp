@@ -1,4 +1,4 @@
-import { type User } from '@/generated/prisma/client';
+import { type User } from '@/generated/prisma';
 import { prisma } from '@/server/db/client';
 import bcrypt from 'bcryptjs';
 import {

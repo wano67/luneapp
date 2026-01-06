@@ -3,7 +3,7 @@ import {
   InventoryMovementType,
   InventoryReservationStatus,
   Prisma,
-} from '@/generated/prisma/client';
+} from '@/generated/prisma';
 
 type TxClient = Prisma.TransactionClient;
 

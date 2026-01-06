@@ -2,7 +2,7 @@ import type {
   BusinessMemberPermission,
   BusinessMembership,
   BusinessPermission,
-} from '@/generated/prisma/client';
+} from '@/generated/prisma';
 
 const ADMIN_ROLES: Array<BusinessMembership['role']> = ['OWNER', 'ADMIN'];
 

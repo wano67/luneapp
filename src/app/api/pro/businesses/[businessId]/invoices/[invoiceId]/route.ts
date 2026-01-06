@@ -5,7 +5,7 @@ import {
   InvoiceStatus,
   InventoryReservationStatus,
   LedgerSourceType,
-} from '@/generated/prisma/client';
+} from '@/generated/prisma';
 import { requireAuthPro } from '@/server/auth/requireAuthPro';
 import { requireBusinessRole } from '@/server/auth/businessRole';
 import { assertSameOrigin, jsonNoStore, withNoStore } from '@/server/security/csrf';

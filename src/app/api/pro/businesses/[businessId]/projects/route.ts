@@ -6,7 +6,7 @@ import {
   ProjectQuoteStatus,
   ProjectDepositStatus,
   TaskStatus,
-} from '@/generated/prisma/client';
+} from '@/generated/prisma';
 import { requireBusinessRole } from '@/server/auth/businessRole';
 import { assertSameOrigin, jsonNoStore, withNoStore } from '@/server/security/csrf';
 import { rateLimit } from '@/server/security/rateLimit';
