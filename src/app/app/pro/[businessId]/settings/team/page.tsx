@@ -1,19 +1,21 @@
 // src/app/app/pro/[businessId]/settings/team/page.tsx
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select } from '@/components/ui/select';
 import { Modal } from '@/components/ui/modal';
+import { Input } from '@/components/ui/input';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import { useActiveBusiness } from '../../../ActiveBusinessProvider';
 import { PageHeader } from '../../../../components/PageHeader';
 
 type BusinessRole = 'OWNER' | 'ADMIN' | 'MEMBER' | 'VIEWER';
 type BusinessPermission = 'TEAM_EDIT' | 'FINANCE_EDIT';
+type BusinessInviteStatus = 'PENDING' | 'ACCEPTED' | 'EXPIRED' | 'REVOKED';
 
 type EmployeeProfile = {
   id?: string;
@@ -47,6 +49,21 @@ type MeResponse = {
     id: string;
     email: string;
   };
+};
+
+type InviteItem = {
+  id: string;
+  email: string;
+  role: BusinessRole;
+  status: BusinessInviteStatus;
+  createdAt: string;
+  expiresAt: string | null;
+  inviteLink?: string;
+  tokenPreview?: string;
+};
+
+type InvitesResponse = {
+  items: InviteItem[];
 };
 
 const ROLE_LABELS: Record<BusinessRole, string> = {
@@ -115,6 +132,7 @@ export default function BusinessTeamSettingsPage() {
 
   const [members, setMembers] = useState<Member[]>([]);
   const [me, setMe] = useState<MeResponse['user'] | null>(null);
+  const [invites, setInvites] = useState<InviteItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -135,6 +153,14 @@ export default function BusinessTeamSettingsPage() {
   });
   const [actionLoading, setActionLoading] = useState(false);
   const controllerRef = useRef<AbortController | null>(null);
+  const [inviteDraft, setInviteDraft] = useState<{ email: string; role: BusinessRole }>({
+    email: '',
+    role: 'MEMBER',
+  });
+  const [inviteLoading, setInviteLoading] = useState(false);
+  const [inviteError, setInviteError] = useState<string | null>(null);
+  const [inviteSuccess, setInviteSuccess] = useState<string | null>(null);
+  const [lastInviteLink, setLastInviteLink] = useState<string | null>(null);
 
   const currentUserId = me?.id ?? null;
   const actorMember = useMemo(
@@ -161,34 +187,40 @@ export default function BusinessTeamSettingsPage() {
       setLoading(true);
       setError(null);
 
-      const [meRes, membersRes] = await Promise.all([
+      const [meRes, membersRes, invitesRes] = await Promise.all([
         fetchJson<MeResponse>('/api/auth/me', {}, controller.signal),
         fetchJson<MembersResponse>(`/api/pro/businesses/${businessId}/members`, {}, controller.signal),
+        fetchJson<InvitesResponse>(`/api/pro/businesses/${businessId}/invites`, {}, controller.signal),
       ]);
 
       if (controller.signal.aborted) return;
 
-      if (meRes.status === 401 || membersRes.status === 401) {
+      if (meRes.status === 401 || membersRes.status === 401 || invitesRes.status === 401) {
         redirectToLogin();
         return;
       }
 
-      if (!meRes.ok || !membersRes.ok || !meRes.data || !membersRes.data) {
-        const ref = meRes.requestId ?? membersRes.requestId;
-        const msg = meRes.error || membersRes.error || 'Impossible de charger les membres.';
+      if (!meRes.ok || !membersRes.ok || !invitesRes.ok || !meRes.data || !membersRes.data || !invitesRes.data) {
+        const ref = meRes.requestId ?? membersRes.requestId ?? invitesRes.requestId;
+        const msg =
+          meRes.error || membersRes.error || invitesRes.error || 'Impossible de charger les membres ou invitations.';
         setError(ref ? `${msg} (Ref: ${ref})` : msg);
         setMembers([]);
+        setInvites([]);
         return;
       }
 
       setMe(meRes.data.user);
       setMembers(membersRes.data.items);
+      setInvites(invitesRes.data.items ?? []);
       setRoleDrafts({});
+      setLastInviteLink(null);
     } catch (err) {
       if (controller.signal.aborted) return;
       console.error(err);
       setError(getErrorMessage(err));
       setMembers([]);
+      setInvites([]);
     } finally {
       if (!controller.signal.aborted) setLoading(false);
     }
@@ -198,6 +230,124 @@ export default function BusinessTeamSettingsPage() {
     void load();
     return () => controllerRef.current?.abort();
   }, [load]);
+
+  const canInvite = actorRole === 'OWNER' || actorRole === 'ADMIN';
+
+  async function copyInviteLink(link: string) {
+    try {
+      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(link);
+      } else {
+        const el = document.createElement('textarea');
+        el.value = link;
+        el.setAttribute('readonly', '');
+        el.style.position = 'absolute';
+        el.style.left = '-9999px';
+        document.body.appendChild(el);
+        el.select();
+        document.execCommand('copy');
+        document.body.removeChild(el);
+      }
+      setInviteSuccess('Lien copié.');
+    } catch (err) {
+      console.error(err);
+      setInviteError("Impossible de copier le lien.");
+    }
+  }
+
+  async function onInviteSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!canInvite) {
+      setInviteError("Tu n'as pas les droits pour inviter.");
+      return;
+    }
+    const email = inviteDraft.email.trim().toLowerCase();
+    if (!email) {
+      setInviteError('Email requis.');
+      return;
+    }
+    if (!isValidEmail(email)) {
+      setInviteError('Email invalide.');
+      return;
+    }
+    if (!inviteDraft.role) {
+      setInviteError('Rôle requis.');
+      return;
+    }
+
+    setInviteLoading(true);
+    setInviteError(null);
+    setInviteSuccess(null);
+    try {
+      const res = await fetchJson<InviteItem>(
+        `/api/pro/businesses/${businessId}/invites`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, role: inviteDraft.role }),
+        }
+      );
+
+      if (res.status === 401) {
+        redirectToLogin();
+        return;
+      }
+
+      if (!res.ok || !res.data) {
+        setInviteError(
+          res.requestId
+            ? `${res.error ?? "Impossible d'envoyer l'invitation."} (Ref: ${res.requestId})`
+            : res.error ?? "Impossible d'envoyer l'invitation."
+        );
+        return;
+      }
+
+      setInviteDraft({ email: '', role: 'MEMBER' });
+      setInviteSuccess('Invitation envoyée.');
+      setLastInviteLink(res.data.inviteLink ?? null);
+      await load();
+    } catch (err) {
+      console.error(err);
+      setInviteError(getErrorMessage(err));
+    } finally {
+      setInviteLoading(false);
+    }
+  }
+
+  async function onRevokeInvite(inviteId: string) {
+    if (!canInvite) return;
+    setInviteLoading(true);
+    setInviteError(null);
+    setInviteSuccess(null);
+    try {
+      const res = await fetchJson(
+        `/api/pro/businesses/${businessId}/invites/${inviteId}`,
+        { method: 'DELETE' }
+      );
+
+      if (res.status === 401) {
+        redirectToLogin();
+        return;
+      }
+
+      if (!res.ok) {
+        setInviteError(
+          res.requestId
+            ? `${res.error ?? "Impossible de révoquer l'invitation."} (Ref: ${res.requestId})`
+            : res.error ?? "Impossible de révoquer l'invitation."
+        );
+        return;
+      }
+
+      setInviteSuccess('Invitation révoquée.');
+      await load();
+    } catch (err) {
+      console.error(err);
+      setInviteError(getErrorMessage(err));
+    } finally {
+      setInviteLoading(false);
+    }
+  }
 
   function onRoleChange(member: Member, value: string) {
     if (!isValidRole(value)) return;
@@ -382,6 +532,158 @@ export default function BusinessTeamSettingsPage() {
         title="Équipe"
         subtitle="Gère les membres et rôles pour l’entreprise."
       />
+
+      <Card className="p-5 space-y-4">
+        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="text-sm font-semibold text-[var(--text-primary)]">Inviter un collaborateur</p>
+            <p className="text-xs text-[var(--text-secondary)]">
+              Les invitations expirent au bout de 7 jours. Rôles autorisés : Admin, Member, Viewer.
+            </p>
+          </div>
+          {inviteError ? <p className="text-xs text-rose-500">{inviteError}</p> : null}
+          {inviteSuccess ? <p className="text-xs text-emerald-500">{inviteSuccess}</p> : null}
+        </div>
+
+        {!canInvite ? (
+          <p className="text-sm text-[var(--text-secondary)]">
+            Seuls les Owner/Admin peuvent inviter de nouveaux collaborateurs.
+          </p>
+        ) : (
+          <form className="grid grid-cols-1 gap-3 md:grid-cols-[1.6fr,0.8fr,auto]" onSubmit={onInviteSubmit}>
+            <Input
+              type="email"
+              placeholder="email@exemple.com"
+              value={inviteDraft.email}
+              onChange={(e) => setInviteDraft((prev) => ({ ...prev, email: e.target.value }))}
+              disabled={inviteLoading}
+              required
+            />
+            <Select
+              value={inviteDraft.role}
+              onChange={(e) => setInviteDraft((prev) => ({ ...prev, role: e.target.value as BusinessRole }))}
+              disabled={inviteLoading}
+              required
+            >
+              <option value="ADMIN">Admin</option>
+              <option value="MEMBER">Member</option>
+              <option value="VIEWER">Viewer</option>
+            </Select>
+            <Button type="submit" disabled={inviteLoading}>
+              {inviteLoading ? 'Envoi…' : 'Envoyer l’invitation'}
+            </Button>
+          </form>
+        )}
+
+        {lastInviteLink ? (
+          <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--text-secondary)]">
+            <p>Lien généré :</p>
+            <code className="rounded-md bg-[var(--surface-2)] px-2 py-1 text-[11px]">
+              /app/invites/accept?token=…
+            </code>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={inviteLoading}
+              onClick={() => copyInviteLink(lastInviteLink)}
+            >
+              Copier le lien
+            </Button>
+          </div>
+        ) : null}
+      </Card>
+
+      <Card className="p-5 space-y-3">
+        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="text-sm font-semibold text-[var(--text-primary)]">Invitations en attente</p>
+            <p className="text-xs text-[var(--text-secondary)]">
+              Révoque une invitation pour la rendre invalide immédiatement.
+            </p>
+          </div>
+        </div>
+
+        {loading ? (
+          <p className="text-sm text-[var(--text-secondary)]">Chargement des invitations…</p>
+        ) : invites.length === 0 ? (
+          <p className="text-sm text-[var(--text-secondary)]">Aucune invitation active.</p>
+        ) : (
+          <div className="space-y-2">
+            {invites.map((inv) => (
+              <div
+                key={inv.id}
+                className="flex flex-col gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface)]/70 p-3 md:flex-row md:items-center md:justify-between"
+              >
+                <div className="space-y-1">
+                  <p className="text-sm font-semibold text-[var(--text-primary)]">{inv.email}</p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant="neutral">{ROLE_LABELS[inv.role]}</Badge>
+                    <Badge
+                      variant={
+                        inv.status === 'PENDING'
+                          ? 'neutral'
+                          : inv.status === 'ACCEPTED'
+                            ? 'personal'
+                            : 'performance'
+                      }
+                    >
+                      {inv.status === 'PENDING'
+                        ? 'En attente'
+                        : inv.status === 'ACCEPTED'
+                          ? 'Acceptée'
+                          : inv.status === 'EXPIRED'
+                            ? 'Expirée'
+                            : 'Révoquée'}
+                    </Badge>
+                    <p className="text-[10px] text-[var(--text-secondary)]">
+                      Envoyée le {formatDate(inv.createdAt)}
+                    </p>
+                    {inv.expiresAt ? (
+                      <p className="text-[10px] text-[var(--text-secondary)]">
+                        Expire le {formatDate(inv.expiresAt)}
+                      </p>
+                    ) : null}
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  {inv.inviteLink ? (
+                    <>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={inv.status !== 'PENDING'}
+                        onClick={() => copyInviteLink(inv.inviteLink!)}
+                      >
+                        Copier le lien
+                      </Button>
+                      <a
+                        className="text-xs text-[var(--accent-strong)] underline"
+                        href={inv.inviteLink}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Ouvrir
+                      </a>
+                    </>
+                  ) : (
+                    <Badge variant="neutral">Lien indisponible</Badge>
+                  )}
+                  {inv.status === 'PENDING' && canInvite ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={inviteLoading}
+                      onClick={() => onRevokeInvite(inv.id)}
+                    >
+                      Révoquer
+                    </Button>
+                  ) : null}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
 
       <Card className="p-5 space-y-4">
         <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
@@ -650,4 +952,8 @@ export default function BusinessTeamSettingsPage() {
 
 function isValidRole(role: string): role is BusinessRole {
   return role === 'OWNER' || role === 'ADMIN' || role === 'MEMBER' || role === 'VIEWER';
+}
+
+function isValidEmail(email: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }

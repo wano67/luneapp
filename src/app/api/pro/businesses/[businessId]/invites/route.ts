@@ -40,6 +40,14 @@ function hashToken(raw: string) {
 }
 
 function buildBaseUrl(request: NextRequest) {
+  const envBase = process.env.BASE_URL?.trim();
+  if (envBase) {
+    try {
+      return new URL(envBase).origin;
+    } catch {
+      // ignore and fallback
+    }
+  }
   const forwardedProto = request.headers.get('x-forwarded-proto')?.split(',')[0]?.trim();
   const forwardedHost =
     request.headers.get('x-forwarded-host')?.split(',')[0]?.trim() || request.headers.get('host');
@@ -106,8 +114,8 @@ export async function GET(
     }
 
     const inviteLink =
-      status === BusinessInviteStatus.PENDING
-        ? `${baseUrl}/app/pro?join=1&token=${encodeURIComponent(inv.token)}`
+      status === BusinessInviteStatus.PENDING || status === BusinessInviteStatus.ACCEPTED
+        ? `${baseUrl}/app/invites/accept?token=${encodeURIComponent(inv.token)}`
         : undefined;
 
     return {
@@ -190,7 +198,7 @@ export async function POST(
   if (!email) return withIdNoStore(badRequest("L'email ne peut pas être vide."), requestId);
 
   const role = body.role as BusinessRole;
-  if (!['OWNER', 'ADMIN', 'MEMBER', 'VIEWER'].includes(role)) {
+  if (!['ADMIN', 'MEMBER', 'VIEWER'].includes(role)) {
     return withIdNoStore(badRequest('Rôle invalide.'), requestId);
   }
 
@@ -270,7 +278,7 @@ export async function POST(
 
   // TODO: envoyer un email avec le lien d'invitation
 
-  const inviteLink = `${baseUrl}/app/pro?join=1&token=${encodeURIComponent(rawToken)}`;
+  const inviteLink = `${baseUrl}/app/invites/accept?token=${encodeURIComponent(tokenHash)}`;
 
   return withIdNoStore(
     jsonNoStore(
@@ -282,7 +290,8 @@ export async function POST(
         status: invite.status,
         createdAt: invite.createdAt.toISOString(),
         expiresAt: invite.expiresAt ? invite.expiresAt.toISOString() : null,
-        ...(inviteLink ? { inviteLink, tokenPreview: rawToken.slice(-6) } : { tokenPreview: rawToken.slice(-6) }),
+        inviteLink,
+        tokenPreview: rawToken.slice(-6),
       },
       { status: 201 }
     ),

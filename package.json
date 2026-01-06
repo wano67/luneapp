@@ -7,7 +7,7 @@
     "node": ">=20.19 <25"
   },
   "scripts": {
-    "clean": "node -e \"const dir=process.env.NEXT_DIST_DIR||'.next';require('fs').rmSync(dir,{recursive:true,force:true});\"",
+    "clean": "node -e \"const dir=process.env.NEXT_DIST_DIR||'.next';const fs=require('fs');fs.rmSync(dir,{recursive:true,force:true});fs.mkdirSync(dir,{recursive:true});\"",
     "predev": "mkdir -p .next-dev/dev/cache/webpack",
     "predev:stable": "mkdir -p .next-dev/dev/cache/webpack",
     "dev": "NEXT_DIST_DIR=.next-dev NEXT_DISABLE_TURBOPACK=1 next dev --webpack",
