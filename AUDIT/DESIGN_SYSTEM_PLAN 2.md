@@ -1,0 +1,20 @@
+# Design System Plan
+- **Primitives (reuse existing UI kit)**
+  - Page shell: extract a reusable `PageShell` from `src/app/app/AppShell.tsx` (header, breadcrumbs, actions) to wrap Pro and Personal pages.
+  - Section header: formalize `SectionHeader` (`src/components/ui/section-header.tsx`) as the default top-of-page component with title, meta, actions.
+  - Card patterns: standardize `Card` (`src/components/ui/card.tsx`) + `card-interactive` class for lists and dashboards.
+  - Data tables: consolidate on `src/components/ui/table.tsx` with consistent spacing/pagination hooks.
+  - Modals: ensure all modals use `src/components/ui/modal.tsx` (sticky footer, focus ring).
+  - Form controls: Inputs/Selects from `src/components/ui/input.tsx` and `select.tsx`; add form-row helper for label/description.
+- **Tokens & theming**
+  - Keep CSS variables in `src/app/globals.css` as the source of truth; document usage and avoid raw hex values in pages.
+  - Add spacing/typography scale constants to a new `src/styles/tokens.ts` for JS usage (e.g., padding for cards, heading sizes).
+- **Navigation consistency**
+  - Use a shared sidebar config file (extract from `src/app/app/AppSidebar.tsx`) to drive both AppSidebar and any “app switcher” components.
+  - Introduce a `PageHeaderPro` component for Pro pages to unify breadcrumbs, tabs, and primary actions.
+- **Screens to migrate first**
+  - Personal home and transactions (`src/app/app/personal/page.tsx`, `src/app/app/personal/transactions/page.tsx`): wrap in PageShell, swap custom headers for SectionHeader, replace inline fetch helpers with `fetchJson`.
+  - Pro home/dashboard (`src/app/app/pro/ProHomeClient.tsx`) and dash-* pages: rebuild using KPI cards + SectionHeader + standard grids.
+  - Client detail tabs (`src/components/pro/clients/*`): align headers/buttons with PageHeaderPro; ensure cards use consistent padding/rounded corners.
+- **Documentation**
+  - Add a short MDX guideline in `docs/design-system.md` covering tokens (`globals.css`), primitives (ui/*), layout recipes (PageShell, SectionHeader), and examples for tables, forms, and modals.

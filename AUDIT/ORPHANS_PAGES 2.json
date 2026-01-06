@@ -1,0 +1,218 @@
+[
+  {
+    "url_path": "/app/performance/alignement",
+    "file_path": "app/performance/alignement/page.tsx",
+    "references": 0,
+    "sample": null,
+    "notes": "",
+    "kind": "page"
+  },
+  {
+    "url_path": "/app/performance/perso",
+    "file_path": "app/performance/perso/page.tsx",
+    "references": 0,
+    "sample": null,
+    "notes": "",
+    "kind": "page"
+  },
+  {
+    "url_path": "/app/performance/pro",
+    "file_path": "app/performance/pro/page.tsx",
+    "references": 0,
+    "sample": null,
+    "notes": "",
+    "kind": "page"
+  },
+  {
+    "url_path": "/app/personal/admin",
+    "file_path": "app/personal/admin/page.tsx",
+    "references": 0,
+    "sample": null,
+    "notes": "",
+    "kind": "page"
+  },
+  {
+    "url_path": "/app/personal/dash-finances",
+    "file_path": "app/personal/dash-finances/page.tsx",
+    "references": 0,
+    "sample": null,
+    "notes": "",
+    "kind": "page"
+  },
+  {
+    "url_path": "/app/personal/dash-objectifs",
+    "file_path": "app/personal/dash-objectifs/page.tsx",
+    "references": 0,
+    "sample": null,
+    "notes": "",
+    "kind": "page"
+  },
+  {
+    "url_path": "/app/personal/revenus",
+    "file_path": "app/personal/revenus/page.tsx",
+    "references": 0,
+    "sample": null,
+    "notes": "",
+    "kind": "page"
+  },
+  {
+    "url_path": "/app/pro/[businessId]/accounting",
+    "file_path": "app/pro/[businessId]/accounting/page.tsx",
+    "references": 0,
+    "sample": null,
+    "notes": "",
+    "kind": "page"
+  },
+  {
+    "url_path": "/app/pro/[businessId]/admin",
+    "file_path": "app/pro/[businessId]/admin/page.tsx",
+    "references": 0,
+    "sample": null,
+    "notes": "",
+    "kind": "page"
+  },
+  {
+    "url_path": "/app/pro/[businessId]/admin/deadlines",
+    "file_path": "app/pro/[businessId]/admin/deadlines/page.tsx",
+    "references": 0,
+    "sample": null,
+    "notes": "",
+    "kind": "page"
+  },
+  {
+    "url_path": "/app/pro/[businessId]/admin/documents",
+    "file_path": "app/pro/[businessId]/admin/documents/page.tsx",
+    "references": 0,
+    "sample": null,
+    "notes": "",
+    "kind": "page"
+  },
+  {
+    "url_path": "/app/pro/[businessId]/dash-admin-process",
+    "file_path": "app/pro/[businessId]/dash-admin-process/page.tsx",
+    "references": 0,
+    "sample": null,
+    "notes": "",
+    "kind": "page"
+  },
+  {
+    "url_path": "/app/pro/[businessId]/dash-entreprise",
+    "file_path": "app/pro/[businessId]/dash-entreprise/page.tsx",
+    "references": 0,
+    "sample": null,
+    "notes": "",
+    "kind": "page"
+  },
+  {
+    "url_path": "/app/pro/[businessId]/dash-finances",
+    "file_path": "app/pro/[businessId]/dash-finances/page.tsx",
+    "references": 0,
+    "sample": null,
+    "notes": "",
+    "kind": "page"
+  },
+  {
+    "url_path": "/app/pro/[businessId]/dash-projets",
+    "file_path": "app/pro/[businessId]/dash-projets/page.tsx",
+    "references": 0,
+    "sample": null,
+    "notes": "",
+    "kind": "page"
+  },
+  {
+    "url_path": "/app/pro/[businessId]/finances/forecasting",
+    "file_path": "app/pro/[businessId]/finances/forecasting/page.tsx",
+    "references": 0,
+    "sample": null,
+    "notes": "",
+    "kind": "page"
+  },
+  {
+    "url_path": "/app/pro/[businessId]/finances/payments",
+    "file_path": "app/pro/[businessId]/finances/payments/page.tsx",
+    "references": 0,
+    "sample": null,
+    "notes": "",
+    "kind": "page"
+  },
+  {
+    "url_path": "/app/pro/[businessId]/finances/treasury",
+    "file_path": "app/pro/[businessId]/finances/treasury/page.tsx",
+    "references": 0,
+    "sample": null,
+    "notes": "",
+    "kind": "page"
+  },
+  {
+    "url_path": "/app/pro/[businessId]/finances/vat",
+    "file_path": "app/pro/[businessId]/finances/vat/page.tsx",
+    "references": 0,
+    "sample": null,
+    "notes": "",
+    "kind": "page"
+  },
+  {
+    "url_path": "/app/pro/[businessId]/references/automations",
+    "file_path": "app/pro/[businessId]/references/automations/page.tsx",
+    "references": 0,
+    "sample": null,
+    "notes": "",
+    "kind": "page"
+  },
+  {
+    "url_path": "/app/pro/[businessId]/references/categories",
+    "file_path": "app/pro/[businessId]/references/categories/page.tsx",
+    "references": 0,
+    "sample": null,
+    "notes": "",
+    "kind": "page"
+  },
+  {
+    "url_path": "/app/pro/[businessId]/references/numbering",
+    "file_path": "app/pro/[businessId]/references/numbering/page.tsx",
+    "references": 0,
+    "sample": null,
+    "notes": "",
+    "kind": "page"
+  },
+  {
+    "url_path": "/app/pro/[businessId]/references/tags",
+    "file_path": "app/pro/[businessId]/references/tags/page.tsx",
+    "references": 0,
+    "sample": null,
+    "notes": "",
+    "kind": "page"
+  },
+  {
+    "url_path": "/app/pro/[businessId]/settings/billing",
+    "file_path": "app/pro/[businessId]/settings/billing/page.tsx",
+    "references": 0,
+    "sample": null,
+    "notes": "",
+    "kind": "page"
+  },
+  {
+    "url_path": "/app/pro/[businessId]/settings/integrations",
+    "file_path": "app/pro/[businessId]/settings/integrations/page.tsx",
+    "references": 0,
+    "sample": null,
+    "notes": "",
+    "kind": "page"
+  },
+  {
+    "url_path": "/app/pro/[businessId]/settings/permissions",
+    "file_path": "app/pro/[businessId]/settings/permissions/page.tsx",
+    "references": 0,
+    "sample": null,
+    "notes": "",
+    "kind": "page"
+  },
+  {
+    "url_path": "/app/pro/[businessId]/settings/taxes",
+    "file_path": "app/pro/[businessId]/settings/taxes/page.tsx",
+    "references": 0,
+    "sample": null,
+    "notes": "",
+    "kind": "page"
+  }
+]

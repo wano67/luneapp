@@ -1,0 +1,69 @@
+name: Smoke Nav Surface
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - chore/**
+
+jobs:
+  smoke-nav-surface:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      SMOKE_BASE_URL: http://127.0.0.1:8080
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.19.0
+          cache: 'pnpm'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.21.0
+          run_install: true
+
+      - name: Show pnpm version
+        run: pnpm --version
+
+      - name: Build
+        run: NEXT_DIST_DIR=.next-build pnpm build
+
+      - name: Start server
+        run: |
+          NEXT_DIST_DIR=.next-build pnpm start --hostname 0.0.0.0 --port 8080 >/tmp/next.log 2>&1 &
+          echo $! > /tmp/next.pid
+          for i in {1..30}; do
+            if curl -sf http://127.0.0.1:8080/api/health >/dev/null; then
+              echo "Server ready"
+              break
+            fi
+            sleep 2
+          done
+          if ! kill -0 "$(cat /tmp/next.pid)" 2>/dev/null; then
+            echo "Server failed to start"
+            cat /tmp/next.log || true
+            exit 1
+          fi
+
+      - name: Run smoke nav surface
+        env:
+          ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
+          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+          SMOKE_BASE_URL: http://127.0.0.1:8080
+        run: pnpm smoke:nav-surface
+
+      - name: Stop server
+        if: always()
+        run: |
+          if [ -f /tmp/next.pid ]; then
+            kill "$(cat /tmp/next.pid)" 2>/dev/null || true
+          fi
+          sleep 1
+          cat /tmp/next.log || true

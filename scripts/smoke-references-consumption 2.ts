@@ -1,0 +1,308 @@
+/**
+ * Smoke test: references wiring consumption (services + clients with category + tags).
+ *
+ * Usage:
+ *   BASE_URL=http://localhost:3000 TEST_EMAIL=... TEST_PASSWORD=... pnpm smoke:references-consumption
+ * Fallback: ADMIN_EMAIL/ADMIN_PASSWORD if TEST_* absent.
+ */
+
+import { createRequester, getSmokeCreds, handleMissingCreds } from './smoke-utils';
+
+const baseUrl = process.env.BASE_URL?.trim() || 'http://localhost:3000';
+const { request, getLastRequestId } = createRequester(baseUrl);
+
+async function login(): Promise<void> {
+  let creds;
+  try {
+    creds = getSmokeCreds({ preferAdmin: true });
+  } catch (err) {
+    handleMissingCreds((err as Error).message);
+    return;
+  }
+  const { res, json } = await request('/api/auth/login', {
+    method: 'POST',
+    body: { email: creds.email, password: creds.password },
+  });
+  if (!res.ok) {
+    throw new Error(`Login failed (${res.status}) ${JSON.stringify(json)}`);
+  }
+}
+
+async function main() {
+  console.log(`Base URL: ${baseUrl}`);
+  await login();
+
+  console.log('Fetch businesses…');
+  const { res: bizRes, json: bizJson } = await request('/api/pro/businesses');
+  if (!bizRes.ok) throw new Error(`Businesses failed (${bizRes.status}) ref=${getLastRequestId()}`);
+  const businessId =
+    (bizJson as { items?: Array<{ business?: { id?: string } }> })?.items?.[0]?.business?.id;
+  if (!businessId) throw new Error('No business found.');
+  console.log(`Business ${businessId}`);
+
+  let serviceId: string | null = null;
+  let clientId: string | null = null;
+  let taskId: string | null = null;
+  let financeId: string | null = null;
+  let categoryId: string | null = null;
+  let tagId: string | null = null;
+  try {
+    const uniq = `Smoke-${Date.now()}`;
+    console.log('Create category…');
+    const { res: catRes, json: catJson } = await request(
+      `/api/pro/businesses/${businessId}/references`,
+      { method: 'POST', body: { type: 'CATEGORY', name: `${uniq}-cat` } }
+    );
+    if (!catRes.ok) throw new Error(`Create category failed (${catRes.status}) ref=${getLastRequestId()}`);
+    categoryId = (catJson as { item?: { id?: string } })?.item?.id ?? null;
+
+    console.log('Create tag…');
+    const { res: tagRes, json: tagJson } = await request(
+      `/api/pro/businesses/${businessId}/references`,
+      { method: 'POST', body: { type: 'TAG', name: `${uniq}-tag` } }
+    );
+    if (!tagRes.ok) throw new Error(`Create tag failed (${tagRes.status}) ref=${getLastRequestId()}`);
+    tagId = (tagJson as { item?: { id?: string } })?.item?.id ?? null;
+
+    console.log('Create service…');
+    const code = `SER-${uniq}`;
+    const { res: serviceRes, json: serviceJson } = await request(
+      `/api/pro/businesses/${businessId}/services`,
+      {
+        method: 'POST',
+        body: {
+          code,
+          name: `Service ${uniq}`,
+          categoryReferenceId: categoryId,
+          tagReferenceIds: tagId ? [tagId] : [],
+        },
+      }
+    );
+    if (!serviceRes.ok) throw new Error(`Create service failed (${serviceRes.status}) ref=${getLastRequestId()}`);
+    serviceId = (serviceJson as { id?: string; item?: { id?: string } })?.item?.id ?? null;
+    if (!serviceId) serviceId = (serviceJson as { id?: string })?.id ?? null;
+    if (!serviceId) throw new Error('Service created but no id.');
+
+    console.log('Patch service references…');
+    const { res: patchRes } = await request(
+      `/api/pro/businesses/${businessId}/services/${serviceId}`,
+      {
+        method: 'PATCH',
+        body: {
+          code,
+          name: `Service ${uniq}`,
+          categoryReferenceId: categoryId,
+          tagReferenceIds: tagId ? [tagId] : [],
+        },
+      }
+    );
+    if (!patchRes.ok) throw new Error(`Patch service failed (${patchRes.status}) ref=${getLastRequestId()}`);
+
+    console.log('Get service detail…');
+    const { res: detailRes, json: detailJson } = await request(
+      `/api/pro/businesses/${businessId}/services/${serviceId}`
+    );
+    if (!detailRes.ok) throw new Error(`Detail failed (${detailRes.status}) ref=${getLastRequestId()}`);
+    const detail = detailJson as {
+      categoryReferenceId?: string | null;
+      tagReferences?: Array<{ id?: string }>;
+    };
+    if ((categoryId && detail.categoryReferenceId !== categoryId) || !detail.tagReferences?.find((t) => t.id === tagId)) {
+      throw new Error('References not persisted on service detail.');
+    }
+
+    console.log('Filter services by tag…');
+    const { res: listRes, json: listJson } = await request(
+      `/api/pro/businesses/${businessId}/services?tagReferenceId=${tagId}`
+    );
+    if (!listRes.ok) throw new Error(`List filter failed (${listRes.status}) ref=${getLastRequestId()}`);
+    const found = (listJson as { items?: Array<{ id?: string }> })?.items?.find((s) => s.id === serviceId);
+    if (!found) throw new Error('Filtered services did not return the created service.');
+
+    console.log('Create client…');
+    const { res: clientRes, json: clientJson } = await request(
+      `/api/pro/businesses/${businessId}/clients`,
+      {
+        method: 'POST',
+        body: {
+          name: `Client ${uniq}`,
+          categoryReferenceId: categoryId,
+          tagReferenceIds: tagId ? [tagId] : [],
+        },
+      }
+    );
+    if (!clientRes.ok) throw new Error(`Create client failed (${clientRes.status}) ref=${getLastRequestId()}`);
+    clientId =
+      (clientJson as { id?: string; item?: { id?: string } })?.item?.id ??
+      (clientJson as { id?: string })?.id ??
+      null;
+    if (!clientId) throw new Error('Client created but no id.');
+
+    console.log('Patch client references…');
+    const { res: clientPatchRes } = await request(
+      `/api/pro/businesses/${businessId}/clients/${clientId}`,
+      {
+        method: 'PATCH',
+        body: {
+          categoryReferenceId: categoryId,
+          tagReferenceIds: tagId ? [tagId] : [],
+        },
+      }
+    );
+    if (!clientPatchRes.ok) throw new Error(`Patch client failed (${clientPatchRes.status}) ref=${getLastRequestId()}`);
+
+    console.log('Get client detail…');
+    const { res: clientDetailRes, json: clientDetailJson } = await request(
+      `/api/pro/businesses/${businessId}/clients/${clientId}`
+    );
+    if (!clientDetailRes.ok) throw new Error(`Client detail failed (${clientDetailRes.status}) ref=${getLastRequestId()}`);
+    const clientDetail =
+      (clientDetailJson as { item?: { categoryReferenceId?: string | null; tagReferences?: Array<{ id?: string }> } }).item ??
+      (clientDetailJson as { categoryReferenceId?: string | null; tagReferences?: Array<{ id?: string }> });
+    if (!clientDetail) throw new Error('Client detail missing payload.');
+    if ((categoryId && clientDetail.categoryReferenceId !== categoryId) || !clientDetail.tagReferences?.find((t) => t.id === tagId)) {
+      throw new Error('References not persisted on client detail.');
+    }
+
+    console.log('Filter clients by tag…');
+    const { res: clientListRes, json: clientListJson } = await request(
+      `/api/pro/businesses/${businessId}/clients?tagReferenceId=${tagId}`
+    );
+    if (!clientListRes.ok) throw new Error(`Client list filter failed (${clientListRes.status}) ref=${getLastRequestId()}`);
+    const clientFound = (clientListJson as { items?: Array<{ id?: string }> })?.items?.find((c) => c.id === clientId);
+    if (!clientFound) throw new Error('Filtered clients did not return the created client.');
+
+    console.log('Create task…');
+    const { res: taskRes, json: taskJson } = await request(
+      `/api/pro/businesses/${businessId}/tasks`,
+      {
+        method: 'POST',
+        body: {
+          title: `Task ${uniq}`,
+          categoryReferenceId: categoryId,
+          tagReferenceIds: tagId ? [tagId] : [],
+        },
+      }
+    );
+    if (!taskRes.ok) throw new Error(`Create task failed (${taskRes.status}) ref=${getLastRequestId()}`);
+    taskId =
+      (taskJson as { item?: { id?: string } })?.item?.id ??
+      (taskJson as { id?: string })?.id ??
+      null;
+    if (!taskId) throw new Error('Task created but no id.');
+
+    console.log('Patch task references…');
+    const { res: taskPatchRes } = await request(
+      `/api/pro/businesses/${businessId}/tasks/${taskId}`,
+      {
+        method: 'PATCH',
+        body: {
+          categoryReferenceId: categoryId,
+          tagReferenceIds: tagId ? [tagId] : [],
+        },
+      }
+    );
+    if (!taskPatchRes.ok) throw new Error(`Patch task failed (${taskPatchRes.status}) ref=${getLastRequestId()}`);
+
+    console.log('Get task detail…');
+    const { res: taskDetailRes, json: taskDetailJson } = await request(
+      `/api/pro/businesses/${businessId}/tasks/${taskId}`
+    );
+    if (!taskDetailRes.ok) throw new Error(`Task detail failed (${taskDetailRes.status}) ref=${getLastRequestId()}`);
+    const taskDetail =
+      (taskDetailJson as { item?: { categoryReferenceId?: string | null; tagReferences?: Array<{ id?: string }> } }).item ??
+      (taskDetailJson as { categoryReferenceId?: string | null; tagReferences?: Array<{ id?: string }> });
+    if (!taskDetail) throw new Error('Task detail missing payload.');
+    if ((categoryId && taskDetail.categoryReferenceId !== categoryId) || !taskDetail.tagReferences?.find((t) => t.id === tagId)) {
+      throw new Error('References not persisted on task detail.');
+    }
+
+    console.log('Filter tasks by tag…');
+    const { res: taskListRes, json: taskListJson } = await request(
+      `/api/pro/businesses/${businessId}/tasks?tagReferenceId=${tagId}`
+    );
+    if (!taskListRes.ok) throw new Error(`Task list filter failed (${taskListRes.status}) ref=${getLastRequestId()}`);
+    const taskFound = (taskListJson as { items?: Array<{ id?: string }> })?.items?.find((t) => t.id === taskId);
+    if (!taskFound) throw new Error('Filtered tasks did not return the created task.');
+
+    console.log('Create finance…');
+    const { res: financeRes, json: financeJson } = await request(
+      `/api/pro/businesses/${businessId}/finances`,
+      {
+        method: 'POST',
+        body: {
+          type: 'INCOME',
+          amount: 1234,
+          category: 'SMOKE_REF',
+          date: new Date().toISOString(),
+          categoryReferenceId: categoryId,
+          tagReferenceIds: tagId ? [tagId] : [],
+        },
+      }
+    );
+    if (!financeRes.ok) throw new Error(`Create finance failed (${financeRes.status}) ref=${getLastRequestId()}`);
+    financeId =
+      (financeJson as { item?: { id?: string } })?.item?.id ??
+      (financeJson as { id?: string })?.id ??
+      null;
+    if (!financeId) throw new Error('Finance created but no id.');
+
+    console.log('Get finance detail…');
+    const { res: financeDetailRes, json: financeDetailJson } = await request(
+      `/api/pro/businesses/${businessId}/finances/${financeId}`
+    );
+    if (!financeDetailRes.ok) throw new Error(`Finance detail failed (${financeDetailRes.status}) ref=${getLastRequestId()}`);
+    const financeDetail =
+      (financeDetailJson as { item?: { categoryReferenceId?: string | null; tagReferences?: Array<{ id?: string }> } }).item ??
+      (financeDetailJson as { categoryReferenceId?: string | null; tagReferences?: Array<{ id?: string }> });
+    if (!financeDetail) throw new Error('Finance detail missing payload.');
+    if ((categoryId && financeDetail.categoryReferenceId !== categoryId) || !financeDetail.tagReferences?.find((t) => t.id === tagId)) {
+      throw new Error('References not persisted on finance detail.');
+    }
+
+    console.log('Filter finances by tag…');
+    const { res: financeListRes, json: financeListJson } = await request(
+      `/api/pro/businesses/${businessId}/finances?tagReferenceId=${tagId}`
+    );
+    if (!financeListRes.ok) throw new Error(`Finance list filter failed (${financeListRes.status}) ref=${getLastRequestId()}`);
+    const financeFound = (financeListJson as { items?: Array<{ id?: string }> })?.items?.find((f) => f.id === financeId);
+    if (!financeFound) throw new Error('Filtered finances did not return the created finance.');
+
+    console.log('Smoke references consumption OK.');
+  } finally {
+    if (financeId) {
+      await request(`/api/pro/businesses/${businessId}/finances/${financeId}`, { method: 'DELETE', allowError: true });
+    }
+    if (taskId) {
+      await request(`/api/pro/businesses/${businessId}/tasks/${taskId}`, {
+        method: 'DELETE',
+        allowError: true,
+      });
+    }
+    if (serviceId) {
+      await request(`/api/pro/businesses/${businessId}/services/${serviceId}`, {
+        method: 'DELETE',
+        allowError: true,
+      });
+    }
+    if (categoryId) {
+      await request(`/api/pro/businesses/${businessId}/references/${categoryId}`, {
+        method: 'DELETE',
+        allowError: true,
+      });
+    }
+    if (tagId) {
+      await request(`/api/pro/businesses/${businessId}/references/${tagId}`, {
+        method: 'DELETE',
+        allowError: true,
+      });
+    }
+  }
+}
+
+main().catch((err) => {
+  console.error(err);
+  const rid = getLastRequestId();
+  if (rid) console.error(`Last request id: ${rid}`);
+  process.exit(1);
+});

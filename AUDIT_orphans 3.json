@@ -1,0 +1,44 @@
+[
+  {
+    "path": "/app/pro/[businessId]/dash-admin-process",
+    "file": "src/app/app/pro/[businessId]/dash-admin-process/page.tsx",
+    "status": "orphan_probable",
+    "references": []
+  },
+  {
+    "path": "/app/pro/[businessId]/dash-entreprise",
+    "file": "src/app/app/pro/[businessId]/dash-entreprise/page.tsx",
+    "status": "orphan_probable",
+    "references": []
+  },
+  {
+    "path": "/app/pro/[businessId]/dash-finances",
+    "file": "src/app/app/pro/[businessId]/dash-finances/page.tsx",
+    "status": "orphan_probable",
+    "references": []
+  },
+  {
+    "path": "/app/pro/[businessId]/dash-projets",
+    "file": "src/app/app/pro/[businessId]/dash-projets/page.tsx",
+    "status": "orphan_probable",
+    "references": []
+  },
+  {
+    "path": "/app/app/performance/*",
+    "file": "src/app/app/performance",
+    "status": "legacy_probable",
+    "references": []
+  },
+  {
+    "path": "/app/app/personal/dash-finances",
+    "file": "src/app/app/personal/dash-finances/page.tsx",
+    "status": "legacy_probable",
+    "references": []
+  },
+  {
+    "path": "/app/app/personal/dash-objectifs",
+    "file": "src/app/app/personal/dash-objectifs/page.tsx",
+    "status": "legacy_probable",
+    "references": []
+  }
+]

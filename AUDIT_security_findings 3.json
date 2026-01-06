@@ -1,0 +1,20 @@
+[
+  {
+    "severity": "P0",
+    "issue": "Prisma client missing BusinessDocument model causes runtime crash on documents route",
+    "file": "src/app/api/pro/businesses/[businessId]/clients/[clientId]/documents/route.ts",
+    "details": "prisma.businessDocument undefined -> TypeError findMany; migrations not applied. Requires prisma migrate + generate and guard removal after fix."
+  },
+  {
+    "severity": "P1",
+    "issue": "Check CSRF/rate limit on legacy mutations (services/process/products) to ensure assertSameOrigin + rateLimit are present",
+    "file": "src/app/api/pro/businesses/[businessId]/services/... and processes/...",
+    "details": "Most mutations use guards, but legacy endpoints need review for consistent CSRF and rate limiting."
+  },
+  {
+    "severity": "P1",
+    "issue": "/api/logo SSRF guard present but relies on memory cache; ensure timeouts stay low and host validation maintained",
+    "file": "src/app/api/logo/route.ts",
+    "details": "Timeout 2s/candidate, private-host check exists; keep guard if future refactors occur."
+  }
+]
