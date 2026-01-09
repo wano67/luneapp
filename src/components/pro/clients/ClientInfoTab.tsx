@@ -1,8 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Select } from '@/components/ui/select';
+import { Badge } from '@/components/ui/badge';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
+import { useActiveBusiness } from '@/app/app/pro/ActiveBusinessProvider';
 
 type ClientInfo = {
   id: string;
@@ -14,6 +17,9 @@ type ClientInfo = {
   sector?: string | null;
   status?: string | null;
   leadSource?: string | null;
+  categoryReferenceId?: string | null;
+  categoryReferenceName?: string | null;
+  tagReferences?: Array<{ id: string; name: string }>;
 };
 
 type Props = {
@@ -22,6 +28,8 @@ type Props = {
   client: ClientInfo;
   onUpdated: (client: ClientInfo) => void;
 };
+
+type ReferenceItem = { id: string; name: string };
 
 const STATUS_OPTIONS = [
   { value: 'ACTIVE', label: 'Actif' },
@@ -38,9 +46,15 @@ const LEAD_SOURCES = [
 ];
 
 export function ClientInfoTab({ businessId, clientId, client, onUpdated }: Props) {
+  const activeCtx = useActiveBusiness({ optional: true });
+  const isAdmin = activeCtx?.isAdmin ?? false;
+  const readOnlyMessage = 'Réservé aux admins/owners.';
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [referenceError, setReferenceError] = useState<string | null>(null);
+  const [categoryOptions, setCategoryOptions] = useState<ReferenceItem[]>([]);
+  const [tagOptions, setTagOptions] = useState<ReferenceItem[]>([]);
   const [form, setForm] = useState({
     name: client.name ?? '',
     email: client.email ?? '',
@@ -50,9 +64,46 @@ export function ClientInfoTab({ businessId, clientId, client, onUpdated }: Props
     status: client.status ?? 'ACTIVE',
     leadSource: client.leadSource ?? 'UNKNOWN',
     notes: client.notes ?? '',
+    categoryReferenceId: client.categoryReferenceId ?? '',
+    tagReferenceIds: client.tagReferences?.map((tag) => tag.id) ?? [],
   });
 
+  useEffect(() => {
+    const controller = new AbortController();
+    async function loadReferences() {
+      try {
+        setReferenceError(null);
+        const [categoriesRes, tagsRes] = await Promise.all([
+          fetchJson<{ items?: ReferenceItem[] }>(
+            `/api/pro/businesses/${businessId}/references?type=CATEGORY`,
+            {},
+            controller.signal
+          ),
+          fetchJson<{ items?: ReferenceItem[] }>(
+            `/api/pro/businesses/${businessId}/references?type=TAG`,
+            {},
+            controller.signal
+          ),
+        ]);
+        if (controller.signal.aborted) return;
+        if (!categoriesRes.ok || !tagsRes.ok) {
+          setReferenceError(categoriesRes.error ?? tagsRes.error ?? 'Impossible de charger les références.');
+          return;
+        }
+        setCategoryOptions(categoriesRes.data?.items ?? []);
+        setTagOptions(tagsRes.data?.items ?? []);
+      } catch (err) {
+        if (controller.signal.aborted) return;
+        setReferenceError(getErrorMessage(err));
+      }
+    }
+    void loadReferences();
+    return () => controller.abort();
+  }, [businessId]);
+
   const hasChanges = useMemo(() => {
+    const currentTags = [...form.tagReferenceIds].sort().join('|');
+    const initialTags = (client.tagReferences ?? []).map((tag) => tag.id).sort().join('|');
     return (
       form.name !== (client.name ?? '') ||
       form.email !== (client.email ?? '') ||
@@ -61,7 +112,9 @@ export function ClientInfoTab({ businessId, clientId, client, onUpdated }: Props
       form.sector !== (client.sector ?? '') ||
       form.status !== (client.status ?? 'ACTIVE') ||
       form.leadSource !== (client.leadSource ?? 'UNKNOWN') ||
-      form.notes !== (client.notes ?? '')
+      form.notes !== (client.notes ?? '') ||
+      form.categoryReferenceId !== (client.categoryReferenceId ?? '') ||
+      currentTags !== initialTags
     );
   }, [client, form]);
 
@@ -75,23 +128,31 @@ export function ClientInfoTab({ businessId, clientId, client, onUpdated }: Props
       status: client.status ?? 'ACTIVE',
       leadSource: client.leadSource ?? 'UNKNOWN',
       notes: client.notes ?? '',
+      categoryReferenceId: client.categoryReferenceId ?? '',
+      tagReferenceIds: client.tagReferences?.map((tag) => tag.id) ?? [],
     });
     setError(null);
   }
 
   async function handleSave() {
     setError(null);
+    if (!isAdmin) {
+      setError(readOnlyMessage);
+      return;
+    }
     try {
       setSaving(true);
       const body: Record<string, unknown> = {
         name: form.name.trim(),
-        email: form.email.trim(),
-        phone: form.phone.trim(),
-        websiteUrl: form.websiteUrl.trim(),
+        email: form.email.trim() || null,
+        phone: form.phone.trim() || null,
+        websiteUrl: form.websiteUrl.trim() || null,
         sector: form.sector.trim() || null,
         status: form.status,
         leadSource: form.leadSource,
-        notes: form.notes.trim(),
+        notes: form.notes.trim() || null,
+        categoryReferenceId: form.categoryReferenceId || null,
+        tagReferenceIds: form.tagReferenceIds,
       };
       const res = await fetchJson<{ item: ClientInfo }>(
         `/api/pro/businesses/${businessId}/clients/${clientId}`,
@@ -124,34 +185,54 @@ export function ClientInfoTab({ businessId, clientId, client, onUpdated }: Props
         <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:justify-end">
           {editing ? (
             <>
-              <Button variant="outline" onClick={() => { resetForm(); setEditing(false); }} className="w-full sm:w-auto">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  resetForm();
+                  setEditing(false);
+                }}
+                className="w-full sm:w-auto"
+                disabled={!isAdmin}
+              >
                 Annuler
               </Button>
-              <Button onClick={handleSave} disabled={!hasChanges || saving} className="w-full sm:w-auto bg-neutral-900 text-white hover:bg-neutral-800">
+              <Button
+                onClick={handleSave}
+                disabled={!hasChanges || saving || !isAdmin}
+                className="w-full sm:w-auto bg-neutral-900 text-white hover:bg-neutral-800"
+              >
                 {saving ? 'Enregistrement…' : 'Enregistrer'}
               </Button>
             </>
           ) : (
-            <Button variant="outline" onClick={() => setEditing(true)} className="w-full sm:w-auto">
+            <Button variant="outline" onClick={() => setEditing(true)} className="w-full sm:w-auto" disabled={!isAdmin}>
               Modifier
             </Button>
           )}
         </div>
       </div>
       {error ? <p className="text-sm text-rose-500">{error}</p> : null}
+      {!isAdmin ? <p className="text-xs text-[var(--text-secondary)]">{readOnlyMessage}</p> : null}
+      {referenceError ? <p className="text-xs text-rose-500">{referenceError}</p> : null}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card className="rounded-3xl border border-[var(--border)]/60 bg-[var(--surface)] p-4 sm:p-6 shadow-sm space-y-3">
           <p className="text-xs uppercase tracking-wide text-[var(--text-secondary)]">Identité</p>
           {editing ? (
             <div className="space-y-3">
-              <Input label="Nom" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} />
+              <Input
+                label="Nom"
+                value={form.name}
+                onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
+                disabled={!isAdmin}
+              />
               <label className="space-y-1 text-sm text-[var(--text-primary)]">
                 <span className="text-xs text-[var(--text-secondary)]">Statut</span>
                 <select
                   value={form.status}
                   onChange={(e) => setForm((p) => ({ ...p, status: e.target.value }))}
                   className="w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
+                  disabled={!isAdmin}
                 >
                   {STATUS_OPTIONS.map((opt) => (
                     <option key={opt.value} value={opt.value}>
@@ -160,7 +241,12 @@ export function ClientInfoTab({ businessId, clientId, client, onUpdated }: Props
                   ))}
                 </select>
               </label>
-              <Input label="Secteur" value={form.sector} onChange={(e) => setForm((p) => ({ ...p, sector: e.target.value }))} />
+              <Input
+                label="Secteur"
+                value={form.sector}
+                onChange={(e) => setForm((p) => ({ ...p, sector: e.target.value }))}
+                disabled={!isAdmin}
+              />
             </div>
           ) : (
             <div className="space-y-2 text-sm text-[var(--text-secondary)]">
@@ -175,14 +261,25 @@ export function ClientInfoTab({ businessId, clientId, client, onUpdated }: Props
           <p className="text-xs uppercase tracking-wide text-[var(--text-secondary)]">Contact</p>
           {editing ? (
             <div className="space-y-3">
-              <Input label="Email" value={form.email} onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))} />
-              <Input label="Téléphone" value={form.phone} onChange={(e) => setForm((p) => ({ ...p, phone: e.target.value }))} />
+              <Input
+                label="Email"
+                value={form.email}
+                onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))}
+                disabled={!isAdmin}
+              />
+              <Input
+                label="Téléphone"
+                value={form.phone}
+                onChange={(e) => setForm((p) => ({ ...p, phone: e.target.value }))}
+                disabled={!isAdmin}
+              />
               <label className="space-y-1 text-sm text-[var(--text-primary)]">
                 <span className="text-xs text-[var(--text-secondary)]">Source</span>
                 <select
                   value={form.leadSource}
                   onChange={(e) => setForm((p) => ({ ...p, leadSource: e.target.value }))}
                   className="w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
+                  disabled={!isAdmin}
                 >
                   {LEAD_SOURCES.map((opt) => (
                     <option key={opt.value} value={opt.value}>
@@ -204,7 +301,12 @@ export function ClientInfoTab({ businessId, clientId, client, onUpdated }: Props
         <Card className="rounded-3xl border border-[var(--border)]/60 bg-[var(--surface)] p-4 sm:p-6 shadow-sm space-y-3">
           <p className="text-xs uppercase tracking-wide text-[var(--text-secondary)]">Web</p>
           {editing ? (
-            <Input label="Site web" value={form.websiteUrl} onChange={(e) => setForm((p) => ({ ...p, websiteUrl: e.target.value }))} />
+            <Input
+              label="Site web"
+              value={form.websiteUrl}
+              onChange={(e) => setForm((p) => ({ ...p, websiteUrl: e.target.value }))}
+              disabled={!isAdmin}
+            />
           ) : (
             <div className="space-y-2 text-sm text-[var(--text-secondary)]">
               <InfoRow label="Site web" value={client.websiteUrl ?? '—'} />
@@ -222,6 +324,7 @@ export function ClientInfoTab({ businessId, clientId, client, onUpdated }: Props
                 value={form.notes}
                 onChange={(e) => setForm((p) => ({ ...p, notes: e.target.value }))}
                 className="w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
+                disabled={!isAdmin}
               />
             </label>
           ) : (
@@ -229,6 +332,63 @@ export function ClientInfoTab({ businessId, clientId, client, onUpdated }: Props
               <p className="rounded-2xl bg-[var(--surface-hover)]/60 px-3 py-2 text-[var(--text-primary)]">
                 {client.notes ? client.notes : '—'}
               </p>
+            </div>
+          )}
+        </Card>
+
+        <Card className="rounded-3xl border border-[var(--border)]/60 bg-[var(--surface)] p-4 sm:p-6 shadow-sm space-y-3 lg:col-span-2">
+          <p className="text-xs uppercase tracking-wide text-[var(--text-secondary)]">Catégories & tags</p>
+          {editing ? (
+            <div className="grid gap-3 md:grid-cols-2">
+              <Select
+                label="Catégorie"
+                value={form.categoryReferenceId}
+                onChange={(e) => setForm((p) => ({ ...p, categoryReferenceId: e.target.value }))}
+                disabled={!isAdmin}
+              >
+                <option value="">Aucune</option>
+                {categoryOptions.map((opt) => (
+                  <option key={opt.id} value={opt.id}>
+                    {opt.name}
+                  </option>
+                ))}
+              </Select>
+              <label className="text-sm text-[var(--text-primary)]">
+                <span className="text-xs text-[var(--text-secondary)]">Tags</span>
+                <Select
+                  multiple
+                  value={form.tagReferenceIds}
+                  onChange={(e) =>
+                    setForm((p) => ({
+                      ...p,
+                      tagReferenceIds: Array.from(e.target.selectedOptions).map((o) => o.value),
+                    }))
+                  }
+                  className="min-h-[140px]"
+                  disabled={!isAdmin}
+                >
+                  {tagOptions.map((tag) => (
+                    <option key={tag.id} value={tag.id}>
+                      {tag.name}
+                    </option>
+                  ))}
+                </Select>
+              </label>
+            </div>
+          ) : (
+            <div className="space-y-2 text-sm text-[var(--text-secondary)]">
+              <InfoRow label="Catégorie" value={client.categoryReferenceName ?? '—'} />
+              <div className="flex flex-wrap gap-2 rounded-xl bg-[var(--surface-hover)]/40 px-3 py-2">
+                {(client.tagReferences ?? []).length ? (
+                  client.tagReferences?.map((tag) => (
+                    <Badge key={tag.id} variant="neutral">
+                      {tag.name}
+                    </Badge>
+                  ))
+                ) : (
+                  <span className="text-[var(--text-secondary)] text-sm">Aucun tag</span>
+                )}
+              </div>
             </div>
           )}
         </Card>

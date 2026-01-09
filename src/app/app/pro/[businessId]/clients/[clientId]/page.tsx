@@ -29,6 +29,9 @@ type Client = {
   status?: string | null;
   leadSource?: string | null;
   company?: string | null;
+  categoryReferenceId?: string | null;
+  categoryReferenceName?: string | null;
+  tagReferences?: Array<{ id: string; name: string }>;
 };
 
 type ClientResponse = { item: Client };
@@ -330,10 +333,10 @@ export default function ClientDetailPage() {
     return (
       <div className="mx-auto max-w-5xl space-y-3 px-4 py-6">
         <Link
-          href={`/app/pro/${businessId}/agenda`}
+          href={`/app/pro/${businessId}/clients`}
           className="text-sm text-[var(--text-secondary)] underline-offset-4 hover:text-[var(--text-primary)]"
         >
-          ← Retour à l’agenda
+          ← Retour aux clients
         </Link>
         <Card className="p-4 text-sm text-rose-500">{error ?? 'Client introuvable'}</Card>
       </div>
@@ -384,9 +387,17 @@ export default function ClientDetailPage() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-5 px-4 py-6">
+      <div className="flex justify-end">
+        <Link
+          href={`/app/pro/${businessId}/agenda`}
+          className="text-xs font-semibold text-[var(--text-secondary)] underline underline-offset-4 transition hover:text-[var(--text-primary)]"
+        >
+          Ouvrir dans le CRM
+        </Link>
+      </div>
       <PageHeaderPro
-        backHref={`/app/pro/${businessId}/agenda`}
-        backLabel="Agenda"
+        backHref={`/app/pro/${businessId}/clients`}
+        backLabel="Clients"
         title={client.name}
         subtitle={
           <div className="flex flex-col gap-1 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2">
