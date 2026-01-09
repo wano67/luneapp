@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
-import Link from 'next/link';
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { fetchJson } from '@/lib/apiClient';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -10,6 +9,7 @@ import { KpiCirclesBlock } from '@/components/pro/KpiCirclesBlock';
 import { ContactCard } from '@/components/pro/crm/ContactCard';
 import { PageHeaderPro } from '@/components/pro/PageHeaderPro';
 import { TabsPills } from '@/components/pro/TabsPills';
+import { useActiveBusiness } from '@/app/app/pro/ActiveBusinessProvider';
 
 type ViewMode = 'agenda' | 'clients' | 'prospects';
 type Props = { businessId: string; view?: ViewMode };
@@ -35,6 +35,11 @@ const tabs = [
 ];
 
 export default function AgendaPage({ businessId, view = 'agenda' }: Props) {
+  const activeCtx = useActiveBusiness({ optional: true });
+  const isAdmin = activeCtx?.isAdmin ?? false;
+  const readOnlyMessage = 'Réservé aux admins/owners.';
+  const canWrite = isAdmin;
+  const isAgendaView = view === 'agenda';
   const [activeTab, setActiveTab] = useState<'clients' | 'prospects'>(view === 'prospects' ? 'prospects' : 'clients');
   const [clients, setClients] = useState<Contact[]>([]);
   const [prospects, setProspects] = useState<Contact[]>([]);
@@ -54,6 +59,19 @@ export default function AgendaPage({ businessId, view = 'agenda' }: Props) {
     websiteUrl: '',
   });
   const [projects, setProjects] = useState<ProjectRow[]>([]);
+
+  const openCreate = useCallback(
+    (type?: 'client' | 'prospect') => {
+      if (!canWrite) return;
+      if (type) {
+        setForm((prev) => ({ ...prev, type }));
+      }
+      setCreateError(null);
+      setCreateSuccess(null);
+      setCreateOpen(true);
+    },
+    [canWrite]
+  );
 
   useEffect(() => {
     const controller = new AbortController();
@@ -154,6 +172,10 @@ export default function AgendaPage({ businessId, view = 'agenda' }: Props) {
     e.preventDefault();
     setCreateError(null);
     setCreateSuccess(null);
+    if (!canWrite) {
+      setCreateError(readOnlyMessage);
+      return;
+    }
     if (!form.name.trim()) {
       setCreateError('Le nom est requis');
       return;
@@ -189,27 +211,95 @@ export default function AgendaPage({ businessId, view = 'agenda' }: Props) {
     }
   }
 
+  const isProspectView = view === 'prospects' || activeTab === 'prospects';
+  const pageTitle = view === 'clients' ? 'Clients' : view === 'prospects' ? 'Prospects' : 'Agenda';
+  const pageSubtitle =
+    view === 'clients'
+      ? 'Liste des clients de l’entreprise'
+      : view === 'prospects'
+        ? 'Suivi des prospects de l’entreprise'
+        : 'Clients et prospects de l’entreprise';
+
+  const listContent = loading ? (
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+      {[0, 1, 2].map((key) => (
+        <Card key={key} className="min-h-[240px] animate-pulse rounded-2xl border border-[var(--border)] bg-[var(--surface)]">
+          <div className="h-full w-full rounded-2xl bg-[var(--surface-hover)]" />
+        </Card>
+      ))}
+    </div>
+  ) : error ? (
+    <Card className="p-4 text-sm text-rose-500">{error}</Card>
+  ) : currentList.length === 0 ? (
+    <Card className="flex flex-col gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5">
+      <p className="text-sm font-semibold text-[var(--text-primary)]">
+        {isProspectView ? 'Aucun prospect' : 'Aucun client'} pour l’instant.
+      </p>
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-center">
+        <button
+          type="button"
+          onClick={() => openCreate(isProspectView ? 'prospect' : 'client')}
+          className="cursor-pointer rounded-md bg-neutral-900 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-neutral-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)] disabled:cursor-not-allowed disabled:opacity-50"
+          disabled={!canWrite}
+        >
+          {isProspectView ? 'Ajouter un prospect' : 'Ajouter un client'}
+        </button>
+        {!canWrite ? <span className="text-xs text-[var(--text-secondary)]">{readOnlyMessage}</span> : null}
+      </div>
+    </Card>
+  ) : (
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+      {currentList.map((contact) => {
+        const cardProspect = isProspectView;
+        const cardStats = statsByClient.get(contact.id);
+        const status: 'active' | 'inactive' | 'neutral' = cardProspect
+          ? 'neutral'
+          : (cardStats?.active ?? 0) > 0
+            ? 'active'
+            : 'inactive';
+        const cardHref = `/app/pro/${businessId}/${cardProspect ? 'prospects' : 'clients'}/${contact.id}`;
+        return (
+          <ContactCard
+            key={contact.id}
+            href={cardHref}
+            contact={contact}
+            stats={
+              cardStats
+                ? { ...cardStats, lastInteraction: contact.lastContactAt ?? cardStats.lastInteraction }
+                : undefined
+            }
+            status={status}
+          />
+        );
+      })}
+    </div>
+  );
+
   return (
-    <div className="mx-auto max-w-6xl space-y-4 px-4 py-6">
+    <div className="w-full space-y-6 px-5 py-6 md:px-8 xl:px-10">
       <PageHeaderPro
         backHref={`/app/pro/${businessId}`}
         backLabel="Dashboard"
-        title="Agenda"
-        subtitle="Clients et prospects de l’entreprise"
+        title={pageTitle}
+        subtitle={pageSubtitle}
         actions={
-          <button
-            type="button"
-            onClick={() => setCreateOpen(true)}
-            className="w-full cursor-pointer rounded-md bg-neutral-900 px-3 py-2 text-sm font-semibold text-white transition hover:bg-neutral-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)] sm:w-auto"
-          >
-            Ajouter un contact
-          </button>
+          <div className="flex flex-col gap-1 sm:items-end">
+            <button
+              type="button"
+              onClick={() => openCreate(isProspectView ? 'prospect' : 'client')}
+              className="w-full cursor-pointer rounded-md bg-neutral-900 px-3 py-2 text-sm font-semibold text-white transition hover:bg-neutral-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)] disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+              disabled={!canWrite}
+            >
+              Ajouter un contact
+            </button>
+            {!canWrite ? <span className="text-xs text-[var(--text-secondary)]">{readOnlyMessage}</span> : null}
+          </div>
         }
       />
 
       <KpiCirclesBlock items={kpis} />
 
-      {view === 'agenda' ? (
+      {isAgendaView ? (
         <TabsPills
           items={tabs}
           value={activeTab}
@@ -219,56 +309,7 @@ export default function AgendaPage({ businessId, view = 'agenda' }: Props) {
         />
       ) : null}
 
-      {loading ? (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {[0, 1, 2].map((key) => (
-            <Card key={key} className="min-h-[240px] animate-pulse rounded-2xl border border-[var(--border)] bg-[var(--surface)]">
-              <div className="h-full w-full rounded-2xl bg-[var(--surface-hover)]" />
-            </Card>
-          ))}
-        </div>
-      ) : error ? (
-        <Card className="p-4 text-sm text-rose-500">{error}</Card>
-      ) : currentList.length === 0 ? (
-        <Card className="flex flex-col gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5">
-          <p className="text-sm font-semibold text-[var(--text-primary)]">
-            {activeTab === 'clients' ? 'Aucun client' : 'Aucun prospect'} pour l’instant.
-          </p>
-          <div className="flex gap-2">
-            <Link
-              href={`/app/pro/${businessId}/clients`}
-              className="cursor-pointer rounded-md bg-neutral-900 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-neutral-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
-            >
-              {activeTab === 'clients' ? 'Ajouter un client' : 'Ajouter un prospect'}
-            </Link>
-          </div>
-        </Card>
-      ) : (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {currentList.map((contact) => {
-            const cardProspect = view === 'prospects' || activeTab === 'prospects';
-            const cardStats = statsByClient.get(contact.id);
-            const status: 'active' | 'inactive' | 'neutral' = cardProspect
-              ? 'neutral'
-              : (cardStats?.active ?? 0) > 0
-                ? 'active'
-                : 'inactive';
-            return (
-              <ContactCard
-                key={contact.id}
-                href={`/app/pro/${businessId}/${cardProspect ? 'prospects' : 'clients'}/${contact.id}`}
-                contact={contact}
-                stats={
-                  cardStats
-                    ? { ...cardStats, lastInteraction: contact.lastContactAt ?? cardStats.lastInteraction }
-                    : undefined
-                }
-                status={status}
-              />
-            );
-          })}
-        </div>
-      )}
+      <div className="space-y-4">{listContent}</div>
 
       <Modal
         open={createOpen}
@@ -282,23 +323,27 @@ export default function AgendaPage({ businessId, view = 'agenda' }: Props) {
             value={form.name}
             onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
             required
+            disabled={!canWrite}
           />
           <Input
             label="Email"
             value={form.email}
             onChange={(e) => setForm((prev) => ({ ...prev, email: e.target.value }))}
             type="email"
+            disabled={!canWrite}
           />
           <Input
             label="Entreprise"
             value={form.company}
             onChange={(e) => setForm((prev) => ({ ...prev, company: e.target.value }))}
+            disabled={!canWrite}
           />
           <Input
             label="Site web (logo)"
             value={form.websiteUrl}
             onChange={(e) => setForm((prev) => ({ ...prev, websiteUrl: e.target.value }))}
             placeholder="https://exemple.com"
+            disabled={!canWrite}
           />
           <label className="space-y-1 text-sm text-[var(--text-primary)]">
             <span className="text-xs text-[var(--text-secondary)]">Type</span>
@@ -306,6 +351,7 @@ export default function AgendaPage({ businessId, view = 'agenda' }: Props) {
               className="w-full cursor-pointer rounded-md border border-[var(--border)] bg-[var(--surface)] p-2 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
               value={form.type}
               onChange={(e) => setForm((prev) => ({ ...prev, type: e.target.value as 'client' | 'prospect' }))}
+              disabled={!canWrite}
             >
               <option value="client">Client</option>
               <option value="prospect">Prospect</option>
@@ -313,6 +359,7 @@ export default function AgendaPage({ businessId, view = 'agenda' }: Props) {
           </label>
           {createError ? <p className="text-xs text-rose-500">{createError}</p> : null}
           {createSuccess ? <p className="text-xs text-emerald-500">{createSuccess}</p> : null}
+          {!canWrite ? <p className="text-xs text-[var(--text-secondary)]">{readOnlyMessage}</p> : null}
           <div className="flex justify-end gap-2">
             <button
               type="button"
@@ -325,7 +372,7 @@ export default function AgendaPage({ businessId, view = 'agenda' }: Props) {
             <button
               type="submit"
               className="cursor-pointer rounded-md bg-neutral-900 px-3 py-2 text-sm font-semibold text-white transition hover:bg-neutral-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
-              disabled={creating}
+              disabled={creating || !canWrite}
             >
               {creating ? 'Ajout…' : 'Ajouter'}
             </button>
@@ -335,5 +382,3 @@ export default function AgendaPage({ businessId, view = 'agenda' }: Props) {
     </div>
   );
 }
-
-// ContactRow / MetricsRows remplacés par ContactCard partagé pour alignement Studio
