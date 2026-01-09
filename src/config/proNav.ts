@@ -10,8 +10,8 @@ import {
   Banknote,
   Users,
   Settings2,
-  BookOpen,
   Contact2,
+  BookOpen,
 } from 'lucide-react';
 
 export type ProNavItemConfig = {
@@ -64,12 +64,6 @@ export const proNavSections: ProNavSectionConfig[] = [
         activePatterns: (biz) => [startsWithRegex(`/app/pro/${biz}/projects`)],
       },
       {
-        id: 'agenda',
-        label: 'Agenda',
-        icon: CalendarClock,
-        href: (biz) => `/app/pro/${biz}/agenda`,
-      },
-      {
         id: 'tasks',
         label: 'Tâches',
         icon: ClipboardList,
@@ -82,6 +76,33 @@ export const proNavSections: ProNavSectionConfig[] = [
         icon: Workflow,
         href: (biz) => `/app/pro/${biz}/process`,
         activePatterns: (biz) => [startsWithRegex(`/app/pro/${biz}/process`)],
+      },
+    ],
+  },
+  {
+    id: 'crm',
+    title: 'CRM',
+    items: [
+      {
+        id: 'clients',
+        label: 'Clients',
+        icon: Contact2,
+        href: (biz) => `/app/pro/${biz}/clients`,
+        activePatterns: (biz) => [startsWithRegex(`/app/pro/${biz}/clients`)],
+      },
+      {
+        id: 'prospects',
+        label: 'Prospects',
+        icon: BookOpen,
+        href: (biz) => `/app/pro/${biz}/prospects`,
+        activePatterns: (biz) => [startsWithRegex(`/app/pro/${biz}/prospects`)],
+      },
+      {
+        id: 'agenda',
+        label: 'Agenda (Suivi)',
+        icon: CalendarClock,
+        href: (biz) => `/app/pro/${biz}/agenda`,
+        activePatterns: (biz) => [startsWithRegex(`/app/pro/${biz}/agenda`)],
       },
     ],
   },
@@ -115,27 +136,6 @@ export const proNavSections: ProNavSectionConfig[] = [
         icon: Banknote,
         href: (biz) => `/app/pro/${biz}/finances`,
         activePatterns: (biz) => [startsWithRegex(`/app/pro/${biz}/finances`)],
-      },
-    ],
-  },
-  {
-    id: 'crm',
-    title: 'CRM',
-    secondary: true,
-    items: [
-      {
-        id: 'prospects',
-        label: 'Prospects',
-        icon: BookOpen,
-        href: (biz) => `/app/pro/${biz}/prospects`,
-        activePatterns: (biz) => [startsWithRegex(`/app/pro/${biz}/prospects`)],
-      },
-      {
-        id: 'clients',
-        label: 'Clients',
-        icon: Contact2,
-        href: (biz) => `/app/pro/${biz}/clients`,
-        activePatterns: (biz) => [startsWithRegex(`/app/pro/${biz}/clients`)],
       },
     ],
   },
