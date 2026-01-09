@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import Link from 'next/link';
 import { fetchJson } from '@/lib/apiClient';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -28,6 +29,9 @@ type Contact = {
 type ListResponse = { items?: Contact[] };
 type ProjectRow = { id: string; clientId: string | null; status?: string | null; amountCents?: number | string | null };
 type ProjectsResponse = { items?: ProjectRow[] };
+type ProjectCreateResponse = { id: string };
+type ConvertResponse = { clientId: string; projectId: string };
+type ActionResult = { projectId: string; clientId?: string };
 
 const tabs = [
   { key: 'clients', label: 'Clients' },
@@ -59,6 +63,16 @@ export default function AgendaPage({ businessId, view = 'agenda' }: Props) {
     websiteUrl: '',
   });
   const [projects, setProjects] = useState<ProjectRow[]>([]);
+  const [actionOpen, setActionOpen] = useState(false);
+  const [actionTarget, setActionTarget] = useState<{
+    type: 'client' | 'prospect';
+    id: string;
+    name: string;
+  } | null>(null);
+  const [actionName, setActionName] = useState('');
+  const [actionLoading, setActionLoading] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionResult, setActionResult] = useState<ActionResult | null>(null);
 
   const openCreate = useCallback(
     (type?: 'client' | 'prospect') => {
@@ -72,6 +86,24 @@ export default function AgendaPage({ businessId, view = 'agenda' }: Props) {
     },
     [canWrite]
   );
+
+  const openAction = useCallback((type: 'client' | 'prospect', id: string, name?: string | null) => {
+    const label = name?.trim() || (type === 'client' ? 'Client' : 'Prospect');
+    setActionTarget({ type, id, name: label });
+    setActionName(`Projet - ${label}`);
+    setActionError(null);
+    setActionResult(null);
+    setActionOpen(true);
+  }, []);
+
+  const closeAction = useCallback(() => {
+    if (actionLoading) return;
+    setActionOpen(false);
+    setActionTarget(null);
+    setActionName('');
+    setActionError(null);
+    setActionResult(null);
+  }, [actionLoading]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -211,6 +243,54 @@ export default function AgendaPage({ businessId, view = 'agenda' }: Props) {
     }
   }
 
+  async function handleAction() {
+    if (!actionTarget) return;
+    setActionError(null);
+    setActionResult(null);
+    if (!canWrite) {
+      setActionError(readOnlyMessage);
+      return;
+    }
+    const name = actionName.trim() || `Projet - ${actionTarget.name || 'Contact'}`;
+    try {
+      setActionLoading(true);
+      if (actionTarget.type === 'client') {
+        const res = await fetchJson<ProjectCreateResponse>(`/api/pro/businesses/${businessId}/projects`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, clientId: actionTarget.id }),
+        });
+        if (!res.ok || !res.data) {
+          const msg = res.error ?? 'Création impossible';
+          setActionError(res.requestId ? `${msg} (Ref: ${res.requestId})` : msg);
+          return;
+        }
+        setActionResult({ projectId: res.data.id });
+      } else {
+        const payload = actionName.trim() ? { projectName: actionName.trim() } : {};
+        const res = await fetchJson<ConvertResponse>(
+          `/api/pro/businesses/${businessId}/prospects/${actionTarget.id}/convert`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          }
+        );
+        if (!res.ok || !res.data) {
+          const msg = res.error ?? 'Conversion impossible';
+          setActionError(res.requestId ? `${msg} (Ref: ${res.requestId})` : msg);
+          return;
+        }
+        setActionResult({ projectId: res.data.projectId, clientId: res.data.clientId });
+      }
+      setRefreshKey((v) => v + 1);
+    } catch (err) {
+      setActionError((err as Error)?.message ?? 'Action impossible');
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
   const isProspectView = view === 'prospects' || activeTab === 'prospects';
   const pageTitle = view === 'clients' ? 'Clients' : view === 'prospects' ? 'Prospects' : 'Agenda';
   const pageSubtitle =
@@ -219,6 +299,15 @@ export default function AgendaPage({ businessId, view = 'agenda' }: Props) {
       : view === 'prospects'
         ? 'Suivi des prospects de l’entreprise'
         : 'Clients et prospects de l’entreprise';
+  const actionTitle =
+    actionTarget?.type === 'client' ? 'Créer un projet' : actionTarget?.type === 'prospect' ? 'Convertir' : 'Action';
+  const actionDescription =
+    actionTarget?.type === 'client'
+      ? 'Créer un projet lié à ce client.'
+      : actionTarget?.type === 'prospect'
+        ? 'Convertir ce prospect en client et générer un projet.'
+        : 'Action rapide';
+  const actionPrimaryLabel = actionTarget?.type === 'client' ? 'Créer le projet' : 'Convertir';
 
   const listContent = loading ? (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -257,6 +346,7 @@ export default function AgendaPage({ businessId, view = 'agenda' }: Props) {
           : (cardStats?.active ?? 0) > 0
             ? 'active'
             : 'inactive';
+        const cardType = cardProspect ? 'prospect' : 'client';
         const cardHref = `/app/pro/${businessId}/${cardProspect ? 'prospects' : 'clients'}/${contact.id}`;
         return (
           <ContactCard
@@ -269,6 +359,23 @@ export default function AgendaPage({ businessId, view = 'agenda' }: Props) {
                 : undefined
             }
             status={status}
+            actions={
+              isAgendaView ? (
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <button
+                    type="button"
+                    onClick={() => openAction(cardType, contact.id, contact.name)}
+                    className="inline-flex items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-xs font-semibold text-[var(--text-primary)] transition hover:bg-[var(--surface-hover)] disabled:cursor-not-allowed disabled:opacity-50"
+                    disabled={!canWrite}
+                  >
+                    {cardType === 'client' ? 'Créer un projet' : 'Convertir'}
+                  </button>
+                  {!canWrite ? (
+                    <span className="text-[10px] text-[var(--text-secondary)]">{readOnlyMessage}</span>
+                  ) : null}
+                </div>
+              ) : null
+            }
           />
         );
       })}
@@ -375,6 +482,68 @@ export default function AgendaPage({ businessId, view = 'agenda' }: Props) {
               disabled={creating || !canWrite}
             >
               {creating ? 'Ajout…' : 'Ajouter'}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal
+        open={actionOpen}
+        onCloseAction={() => (!actionLoading ? closeAction() : null)}
+        title={actionTitle}
+        description={actionDescription}
+      >
+        <form
+          className="space-y-4"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void handleAction();
+          }}
+        >
+          <Input
+            label="Nom du projet"
+            value={actionName}
+            onChange={(event) => setActionName(event.target.value)}
+            disabled={!actionTarget || !canWrite || actionLoading}
+          />
+          {actionError ? <p className="text-xs text-rose-500">{actionError}</p> : null}
+          {actionResult ? (
+            <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 p-3 text-xs text-emerald-700">
+              {actionTarget?.type === 'client' ? 'Projet créé.' : 'Conversion réussie.'}
+              <div className="mt-2 flex flex-wrap gap-2">
+                <Link
+                  href={`/app/pro/${businessId}/projects/${actionResult.projectId}`}
+                  className="text-xs font-semibold underline underline-offset-4"
+                >
+                  Ouvrir le projet
+                </Link>
+                {actionResult.clientId ? (
+                  <Link
+                    href={`/app/pro/${businessId}/clients/${actionResult.clientId}`}
+                    className="text-xs font-semibold underline underline-offset-4"
+                  >
+                    Ouvrir le client
+                  </Link>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+          {!canWrite ? <p className="text-xs text-[var(--text-secondary)]">{readOnlyMessage}</p> : null}
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={closeAction}
+              className="cursor-pointer rounded-md border border-[var(--border)] px-3 py-2 text-sm text-[var(--text-primary)] hover:bg-[var(--surface-hover)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
+              disabled={actionLoading}
+            >
+              Fermer
+            </button>
+            <button
+              type="submit"
+              className="cursor-pointer rounded-md bg-neutral-900 px-3 py-2 text-sm font-semibold text-white transition hover:bg-neutral-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)] disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={!canWrite || actionLoading || !actionTarget || !!actionResult}
+            >
+              {actionLoading ? 'Traitement…' : actionPrimaryLabel}
             </button>
           </div>
         </form>

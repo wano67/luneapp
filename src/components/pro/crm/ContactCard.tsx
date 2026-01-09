@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import type { ReactNode } from 'react';
 import { LogoAvatar } from '@/components/pro/LogoAvatar';
 import { normalizeWebsiteUrl } from '@/lib/website';
 import { formatCurrencyEUR } from '@/lib/formatCurrency';
@@ -26,6 +27,7 @@ type Props = {
   contact: Contact;
   stats?: ContactStats;
   status: 'active' | 'inactive' | 'neutral';
+  actions?: ReactNode;
 };
 
 function formatDate(value: string | null | undefined) {
@@ -43,7 +45,7 @@ const STATUS_BORDER: Record<Props['status'], string> = {
   neutral: 'border border-[var(--border)]/60',
 };
 
-export function ContactCard({ href, contact, stats, status }: Props) {
+export function ContactCard({ href, contact, stats, status, actions }: Props) {
   const normalized = normalizeWebsiteUrl(contact.websiteUrl).value;
 
   const rows = [
@@ -54,45 +56,52 @@ export function ContactCard({ href, contact, stats, status }: Props) {
   ];
 
   return (
-    <Link
-      href={href}
-      className={cn(
-        'group card-interactive relative block min-h-[220px] rounded-3xl bg-[var(--surface)] p-4 pb-14 text-left shadow-sm transition hover:-translate-y-[1px] hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]',
-        STATUS_BORDER[status],
-      )}
-    >
-      <div className="flex h-full flex-col gap-4">
-        <div className="flex items-start gap-3">
-          <LogoAvatar name={contact.name || contact.company || 'Contact'} websiteUrl={normalized ?? undefined} size={48} />
-          <div className="min-w-0 space-y-1">
-            <p className="truncate text-sm font-semibold leading-tight text-[var(--text-primary)]">
-              {contact.name || 'Sans nom'}
-            </p>
-            {contact.company ? (
-              <p className="truncate text-[12px] text-[var(--text-secondary)]">{contact.company}</p>
-            ) : null}
-            {contact.email ? (
-              <p className="truncate text-[12px] text-[var(--text-secondary)]">{contact.email}</p>
-            ) : null}
+    <div className="space-y-1">
+      <Link
+        href={href}
+        className={cn(
+          'group card-interactive relative block min-h-[220px] rounded-3xl bg-[var(--surface)] p-4 pb-14 text-left shadow-sm transition hover:-translate-y-[1px] hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]',
+          STATUS_BORDER[status],
+        )}
+      >
+        <div className="flex h-full flex-col gap-4">
+          <div className="flex items-start gap-3">
+            <LogoAvatar
+              name={contact.name || contact.company || 'Contact'}
+              websiteUrl={normalized ?? undefined}
+              size={48}
+            />
+            <div className="min-w-0 space-y-1">
+              <p className="truncate text-sm font-semibold leading-tight text-[var(--text-primary)]">
+                {contact.name || 'Sans nom'}
+              </p>
+              {contact.company ? (
+                <p className="truncate text-[12px] text-[var(--text-secondary)]">{contact.company}</p>
+              ) : null}
+              {contact.email ? (
+                <p className="truncate text-[12px] text-[var(--text-secondary)]">{contact.email}</p>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="grid flex-1 grid-cols-1 gap-x-4 gap-y-3 text-[13px] text-[var(--text-secondary)] sm:grid-cols-2">
+            {rows.map((row) => (
+              <div key={row.label} className="flex items-center justify-between">
+                <span>{row.label}</span>
+                <span className="text-[var(--text-primary)] font-medium">{row.value}</span>
+              </div>
+            ))}
           </div>
         </div>
 
-        <div className="grid flex-1 grid-cols-1 gap-x-4 gap-y-3 text-[13px] text-[var(--text-secondary)] sm:grid-cols-2">
-          {rows.map((row) => (
-            <div key={row.label} className="flex items-center justify-between">
-              <span>{row.label}</span>
-              <span className="text-[var(--text-primary)] font-medium">{row.value}</span>
-            </div>
-          ))}
+        <div className="pointer-events-none absolute bottom-5 right-5">
+          <ArrowRight
+            strokeWidth={2.75}
+            className="text-[var(--text-secondary)] transition group-hover:translate-x-1 group-hover:text-[var(--text-primary)]"
+          />
         </div>
-      </div>
-
-      <div className="pointer-events-none absolute bottom-5 right-5">
-        <ArrowRight
-          strokeWidth={2.75}
-          className="text-[var(--text-secondary)] transition group-hover:translate-x-1 group-hover:text-[var(--text-primary)]"
-        />
-      </div>
-    </Link>
+      </Link>
+      {actions ? <div className="px-2">{actions}</div> : null}
+    </div>
   );
 }
