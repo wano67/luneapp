@@ -286,7 +286,7 @@ export default function ProspectDetailPage() {
     <div className="mx-auto max-w-5xl space-y-5 px-4 py-6">
       <div className="flex justify-end">
         <Link
-          href={`/app/pro/${businessId}/agenda`}
+          href={`/app/pro/${businessId}/agenda?prospectId=${prospectId}`}
           className="text-xs font-semibold text-[var(--text-secondary)] underline underline-offset-4 transition hover:text-[var(--text-primary)]"
         >
           Ouvrir dans le CRM
@@ -589,7 +589,7 @@ export default function ProspectDetailPage() {
                   Ouvrir le projet
                 </Link>
                 <Link
-                  href={`/app/pro/${businessId}/agenda`}
+                  href={`/app/pro/${businessId}/agenda?clientId=${convertResult.clientId}`}
                   className="text-xs font-semibold underline underline-offset-4"
                 >
                   Ouvrir dans l’agenda

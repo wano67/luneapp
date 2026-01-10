@@ -389,7 +389,7 @@ export default function ClientDetailPage() {
     <div className="mx-auto max-w-5xl space-y-5 px-4 py-6">
       <div className="flex justify-end">
         <Link
-          href={`/app/pro/${businessId}/agenda`}
+          href={`/app/pro/${businessId}/agenda?clientId=${clientId}`}
           className="text-xs font-semibold text-[var(--text-secondary)] underline underline-offset-4 transition hover:text-[var(--text-primary)]"
         >
           Ouvrir dans le CRM
