@@ -78,7 +78,7 @@ type TabKey = 'projects' | 'accounting' | 'interactions' | 'subscriptions' | 'do
 
 const tabs: { key: TabKey; label: string }[] = [
   { key: 'projects', label: 'Projets' },
-  { key: 'accounting', label: 'Comptabilité' },
+  { key: 'accounting', label: 'Facturation' },
   { key: 'interactions', label: 'Interactions' },
   { key: 'subscriptions', label: 'Abonnements' },
   { key: 'documents', label: 'Documents' },

@@ -8,6 +8,14 @@ type PricingItem = {
   totalCents: bigint;
 };
 
+export type PriceSource = 'project' | 'default' | 'tjm' | 'missing';
+
+export type PriceResolution = {
+  unitPriceCents: bigint;
+  source: PriceSource;
+  missingPrice: boolean;
+};
+
 export type ProjectPricing = {
   businessId: bigint;
   projectId: bigint;
@@ -21,6 +29,7 @@ export type ProjectPricing = {
   projectName?: string | null;
   clientName?: string | null;
   clientEmail?: string | null;
+  missingPriceServices?: Array<{ serviceId: bigint | null; label: string }>;
 };
 
 function roundPercent(amount: bigint, percent: number) {
@@ -28,9 +37,21 @@ function roundPercent(amount: bigint, percent: number) {
   return (amount * p + BigInt(50)) / BigInt(100);
 }
 
-function toNumber(value: bigint | null | undefined) {
-  if (value === null || value === undefined) return BigInt(0);
-  return value;
+export function resolveServiceUnitPriceCents(params: {
+  projectPriceCents?: bigint | null;
+  defaultPriceCents?: bigint | null;
+  tjmCents?: bigint | null;
+}): PriceResolution {
+  if (params.projectPriceCents !== null && params.projectPriceCents !== undefined) {
+    return { unitPriceCents: params.projectPriceCents, source: 'project', missingPrice: false };
+  }
+  if (params.defaultPriceCents !== null && params.defaultPriceCents !== undefined) {
+    return { unitPriceCents: params.defaultPriceCents, source: 'default', missingPrice: false };
+  }
+  if (params.tjmCents !== null && params.tjmCents !== undefined) {
+    return { unitPriceCents: params.tjmCents, source: 'tjm', missingPrice: false };
+  }
+  return { unitPriceCents: BigInt(0), source: 'missing', missingPrice: true };
 }
 
 export async function computeProjectPricing(businessId: bigint, projectId: bigint): Promise<ProjectPricing | null> {
@@ -44,15 +65,27 @@ export async function computeProjectPricing(businessId: bigint, projectId: bigin
   });
   if (!project) return null;
 
+  const missingPriceServices: Array<{ serviceId: bigint | null; label: string }> = [];
   const items: PricingItem[] = project.projectServices.map((ps) => {
-    const unit = toNumber(ps.priceCents ?? ps.service?.defaultPriceCents ?? null);
+    const label =
+      ps.service?.name ??
+      ps.service?.code ??
+      (ps.serviceId ? `Service ${ps.serviceId.toString()}` : 'Service');
+    const resolved = resolveServiceUnitPriceCents({
+      projectPriceCents: ps.priceCents ?? null,
+      defaultPriceCents: ps.service?.defaultPriceCents ?? null,
+      tjmCents: ps.service?.tjmCents ?? null,
+    });
+    if (resolved.missingPrice) {
+      missingPriceServices.push({ serviceId: ps.serviceId ?? null, label });
+    }
     const qty = ps.quantity && ps.quantity > 0 ? ps.quantity : 1;
-    const total = unit * BigInt(qty);
+    const total = resolved.unitPriceCents * BigInt(qty);
     return {
       serviceId: ps.serviceId ?? null,
-      label: ps.service?.name ?? ps.service?.code ?? 'Service',
+      label,
       quantity: qty,
-      unitPriceCents: unit,
+      unitPriceCents: resolved.unitPriceCents,
       totalCents: total,
     };
   });
@@ -75,5 +108,6 @@ export async function computeProjectPricing(businessId: bigint, projectId: bigin
     projectName: project.name,
     clientName: project.client?.name ?? null,
     clientEmail: project.client?.email ?? null,
+    ...(missingPriceServices.length ? { missingPriceServices } : {}),
   };
 }

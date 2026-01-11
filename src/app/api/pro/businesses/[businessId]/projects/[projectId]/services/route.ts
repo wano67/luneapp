@@ -6,6 +6,7 @@ import { assertSameOrigin, jsonNoStore, withNoStore } from '@/server/security/cs
 import { badRequest, getRequestId, notFound, unauthorized, withRequestId } from '@/server/http/apiUtils';
 import { rateLimit } from '@/server/security/rateLimit';
 import { applyServiceProcessTemplateToProjectService } from '@/server/services/process/applyServiceProcessTemplate';
+import { resolveServiceUnitPriceCents } from '@/server/services/pricing';
 
 function parseId(param: string | undefined) {
   if (!param || !/^\d+$/.test(param)) return null;
@@ -130,7 +131,7 @@ export async function POST(
   const generateTasks = body.generateTasks !== false;
   const quantity =
     typeof body.quantity === 'number' && Number.isFinite(body.quantity) ? Math.max(1, Math.trunc(body.quantity)) : 1;
-  const priceCents =
+  const priceCentsInput =
     typeof body.priceCents === 'number' && Number.isFinite(body.priceCents)
       ? Math.max(0, Math.trunc(body.priceCents))
       : null;
@@ -144,12 +145,31 @@ export async function POST(
     return withIdNoStore(notFound('Service introuvable.'), requestId);
   }
 
+  const resolvedPrice = resolveServiceUnitPriceCents({
+    projectPriceCents: priceCentsInput !== null ? BigInt(priceCentsInput) : null,
+    defaultPriceCents: service.defaultPriceCents ?? null,
+    tjmCents: service.tjmCents ?? null,
+  });
+
+  const warning = resolvedPrice.missingPrice
+    ? 'Prix manquant pour ce service. La tarification utilisera 0 EUR et la creation de devis sera bloquee tant qu un tarif nest pas defini.'
+    : null;
+
+  if (resolvedPrice.missingPrice) {
+    console.warn('project-service price missing (pricing will default to 0)', {
+      requestId,
+      businessId,
+      projectId,
+      serviceId: serviceIdBigInt.toString(),
+    });
+  }
+
   const created = await prisma.projectService.create({
     data: {
       projectId: projectIdBigInt,
       serviceId: serviceIdBigInt,
       quantity,
-      priceCents: priceCents ?? undefined,
+      priceCents: resolvedPrice.source === 'missing' ? undefined : resolvedPrice.unitPriceCents,
       notes: notes || undefined,
     },
     include: { service: true },
@@ -186,6 +206,7 @@ export async function POST(
         },
         generatedStepsCount,
         generatedTasksCount,
+        ...(warning ? { warning } : {}),
       },
       { status: 201 }
     ),

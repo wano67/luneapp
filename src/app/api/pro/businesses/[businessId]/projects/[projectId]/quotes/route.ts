@@ -167,6 +167,19 @@ export async function POST(
 
   const pricing = await computeProjectPricing(businessIdBigInt, projectIdBigInt);
   if (!pricing) return withIdNoStore(notFound('Projet introuvable.'), requestId);
+  if (pricing.items.length === 0) {
+    return withIdNoStore(
+      badRequest('Cannot create a quote with no billable items. Add services to the project first.'),
+      requestId
+    );
+  }
+  if (pricing.missingPriceServices?.length) {
+    const names = pricing.missingPriceServices.map((item) => item.label).join(', ');
+    return withIdNoStore(
+      badRequest(`Prix manquant pour les services suivants: ${names}. Definissez un tarif avant de creer un devis.`),
+      requestId
+    );
+  }
 
   const expiresAt = new Date();
   expiresAt.setDate(expiresAt.getDate() + 30);

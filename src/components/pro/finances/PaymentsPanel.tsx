@@ -41,30 +41,16 @@ function buildPaymentDate(p: PaymentRow) {
 
 type FinanceApiItem = {
   id: string;
-  businessId: string;
-  amountCents: string;
-  amount: number;
-  date: string;
-  type: 'INCOME' | 'EXPENSE';
-  category: string;
-  note?: string | null;
-  projectName?: string | null;
-  metadata?: Partial<{
-    clientName: string;
-    project: string;
-    invoiceId: string;
-    method: string;
-    status: string;
-    expectedAt: string;
-    receivedAt: string;
-    currency: string;
-    note: string;
-  }>;
+  invoiceId: string;
+  clientId: string | null;
+  amountCents: number;
+  currency: string;
+  paidAt: string;
+  reference: string | null;
 };
 
-type FinanceListResponse = {
-  items: FinanceApiItem[];
-};
+type FinanceListResponse = { items: FinanceApiItem[] };
+type ClientsListResponse = { items: Array<{ id: string; name: string }> };
 
 export function PaymentsPanel({ businessId }: { businessId: string }) {
   const [payments, setPayments] = useState<PaymentRow[]>([]);
@@ -102,28 +88,26 @@ export function PaymentsPanel({ businessId }: { businessId: string }) {
   });
   const [formError, setFormError] = useState<string | null>(null);
 
-  function toPaymentRow(item: FinanceApiItem): PaymentRow {
-    const meta = item.metadata ?? {};
-    const receivedAt = meta.receivedAt || item.date;
-    const expectedAt = meta.expectedAt || item.date;
-    const status = (meta.status as PaymentStatus) || (meta.receivedAt ? 'PAID' : 'PENDING');
-    const method = (meta.method as PaymentMethod) || 'VIREMENT';
-    const currency = meta.currency || 'EUR';
-    const clientName = meta.clientName || 'Client';
+  function toPaymentRow(item: FinanceApiItem, clientNames: Record<string, string>): PaymentRow {
+    const receivedAt = item.paidAt;
+    const expectedAt = item.paidAt;
+    const status: PaymentStatus = 'PAID';
+    const method: PaymentMethod = 'VIREMENT';
+    const clientName = item.clientId ? clientNames[item.clientId] ?? 'Client' : 'Client';
 
     return {
       id: item.id,
-      businessId: item.businessId,
-      invoiceId: meta.invoiceId,
+      businessId,
+      invoiceId: item.invoiceId,
       clientName,
-      project: meta.project || item.projectName || undefined,
+      project: undefined,
       amount: Number(item.amountCents) / 100,
-      currency,
+      currency: item.currency || 'EUR',
       receivedAt,
       expectedAt,
       method,
       status,
-      note: meta.note || item.note || undefined,
+      note: item.reference ?? undefined,
     };
   }
 
@@ -132,17 +116,30 @@ export function PaymentsPanel({ businessId }: { businessId: string }) {
       setLoading(true);
       setError(null);
       setRequestId(null);
-      const res = await fetchJson<FinanceListResponse>(
-        `/api/pro/businesses/${businessId}/finances?type=INCOME&category=PAYMENT`
-      );
+      const [paymentsRes, clientsRes] = await Promise.all([
+        fetchJson<FinanceListResponse>(`/api/pro/businesses/${businessId}/payments`),
+        fetchJson<ClientsListResponse>(`/api/pro/businesses/${businessId}/clients`),
+      ]);
 
-      setRequestId(res.requestId);
-      if (!res.ok || !res.data) {
-        setError(res.requestId ? `${res.error ?? 'Chargement impossible.'} (Ref: ${res.requestId})` : res.error ?? 'Chargement impossible.');
+      setRequestId(paymentsRes.requestId ?? clientsRes.requestId);
+      if (!paymentsRes.ok || !paymentsRes.data) {
+        setError(
+          paymentsRes.requestId
+            ? `${paymentsRes.error ?? 'Chargement impossible.'} (Ref: ${paymentsRes.requestId})`
+            : paymentsRes.error ?? 'Chargement impossible.'
+        );
         setPayments([]);
         return;
       }
-      setPayments(res.data.items.map(toPaymentRow));
+
+      const clientNames = clientsRes.ok && clientsRes.data
+        ? clientsRes.data.items.reduce<Record<string, string>>((acc, item) => {
+            acc[item.id] = item.name;
+            return acc;
+          }, {})
+        : {};
+
+      setPayments(paymentsRes.data.items.map((item) => toPaymentRow(item, clientNames)));
     } catch (err) {
       setError(getErrorMessage(err));
       setPayments([]);
@@ -218,7 +215,7 @@ export function PaymentsPanel({ businessId }: { businessId: string }) {
         backHref={`/app/pro/${businessId}/finances`}
         backLabel="Finances"
         title="Paiements"
-        subtitle="Suivi des encaissements/échéances issus des écritures financières."
+        subtitle="Paiements issus des factures payees."
       />
 
       <div className="grid gap-3 md:grid-cols-3">

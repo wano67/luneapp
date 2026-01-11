@@ -27,11 +27,39 @@ type Contact = {
 };
 
 type ListResponse = { items?: Contact[] };
-type ProjectRow = { id: string; clientId: string | null; status?: string | null; amountCents?: number | string | null };
+type ProjectRow = {
+  id: string;
+  name?: string | null;
+  clientId: string | null;
+  status?: string | null;
+  amountCents?: number | string | null;
+};
 type ProjectsResponse = { items?: ProjectRow[] };
 type ProjectCreateResponse = { id: string };
 type ConvertResponse = { clientId: string; projectId: string };
 type ActionResult = { projectId: string; clientId?: string };
+type DashboardTask = {
+  id: string;
+  title: string;
+  status: string;
+  dueDate: string | null;
+  projectId: string | null;
+  projectName: string | null;
+  createdAt: string | null;
+};
+type DashboardInteraction = {
+  id: string;
+  type: string;
+  nextActionDate: string | null;
+  clientId: string | null;
+  projectId: string | null;
+};
+type DashboardResponse = {
+  nextActions?: {
+    tasks?: DashboardTask[];
+    interactions?: DashboardInteraction[];
+  };
+};
 
 const tabs = [
   { key: 'clients', label: 'Clients' },
@@ -73,6 +101,12 @@ export default function AgendaPage({ businessId, view = 'agenda' }: Props) {
   const [actionLoading, setActionLoading] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionResult, setActionResult] = useState<ActionResult | null>(null);
+  const [followUps, setFollowUps] = useState<{ tasks: DashboardTask[]; interactions: DashboardInteraction[] }>({
+    tasks: [],
+    interactions: [],
+  });
+  const [followUpsLoading, setFollowUpsLoading] = useState(false);
+  const [followUpsError, setFollowUpsError] = useState<string | null>(null);
 
   const openCreate = useCallback(
     (type?: 'client' | 'prospect') => {
@@ -113,10 +147,21 @@ export default function AgendaPage({ businessId, view = 'agenda' }: Props) {
       try {
         setLoading(true);
         setError(null);
-        const [clientsRes, prospectsRes, projectsRes] = await Promise.all([
+        if (!isAgendaView) {
+          setFollowUps({ tasks: [], interactions: [] });
+          setFollowUpsError(null);
+          setFollowUpsLoading(false);
+        } else {
+          setFollowUpsLoading(true);
+          setFollowUpsError(null);
+        }
+        const [clientsRes, prospectsRes, projectsRes, dashboardRes] = await Promise.all([
           fetchJson<ListResponse>(`/api/pro/businesses/${businessId}/clients`, {}, controller.signal),
           fetchJson<ListResponse>(`/api/pro/businesses/${businessId}/prospects`, {}, controller.signal),
           fetchJson<ProjectsResponse>(`/api/pro/businesses/${businessId}/projects?archived=false`, {}, controller.signal),
+          isAgendaView
+            ? fetchJson<DashboardResponse>(`/api/pro/businesses/${businessId}/dashboard`, {}, controller.signal)
+            : Promise.resolve(null),
         ]);
         if (controller.signal.aborted) return;
         if (!clientsRes.ok || !prospectsRes.ok || !projectsRes.ok) {
@@ -126,16 +171,29 @@ export default function AgendaPage({ businessId, view = 'agenda' }: Props) {
         setClients(clientsRes.data?.items ?? []);
         setProspects(prospectsRes.data?.items ?? []);
         setProjects(projectsRes.data?.items ?? []);
+        if (isAgendaView && dashboardRes) {
+          if (!dashboardRes.ok || !dashboardRes.data) {
+            const msg = dashboardRes.error ?? 'Suivi indisponible';
+            setFollowUpsError(dashboardRes.requestId ? `${msg} (Ref: ${dashboardRes.requestId})` : msg);
+            setFollowUps({ tasks: [], interactions: [] });
+          } else {
+            setFollowUps({
+              tasks: dashboardRes.data.nextActions?.tasks ?? [],
+              interactions: dashboardRes.data.nextActions?.interactions ?? [],
+            });
+          }
+        }
       } catch (err) {
         if (controller.signal.aborted) return;
         setError((err as Error)?.message ?? 'Agenda indisponible');
       } finally {
         if (!controller.signal.aborted) setLoading(false);
+        if (!controller.signal.aborted && isAgendaView) setFollowUpsLoading(false);
       }
     }
     void load();
     return () => controller.abort();
-  }, [businessId, refreshKey]);
+  }, [businessId, isAgendaView, refreshKey]);
 
   const currentList = useMemo(() => {
     if (view === 'clients') return clients;
@@ -165,6 +223,22 @@ export default function AgendaPage({ businessId, view = 'agenda' }: Props) {
         entry.valueCents += Number.isFinite(amount) ? amount : 0;
       }
       map.set(p.clientId, entry);
+    }
+    return map;
+  }, [projects]);
+
+  const clientNames = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const client of clients) {
+      map.set(client.id, client.name);
+    }
+    return map;
+  }, [clients]);
+
+  const projectNames = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const project of projects) {
+      if (project.name) map.set(project.id, project.name);
     }
     return map;
   }, [projects]);
@@ -199,6 +273,49 @@ export default function AgendaPage({ businessId, view = 'agenda' }: Props) {
       },
     ];
   }, [activeTab, clients, prospects, statsByClient, view]);
+
+  const followUpItems = useMemo(() => {
+    if (!isAgendaView) return [];
+    const items: Array<{
+      id: string;
+      kind: 'task' | 'interaction';
+      title: string;
+      date: string | null;
+      clientName?: string | null;
+      projectName?: string | null;
+    }> = [];
+
+    for (const task of followUps.tasks) {
+      items.push({
+        id: task.id,
+        kind: 'task',
+        title: task.title,
+        date: task.dueDate,
+        projectName: task.projectName ?? (task.projectId ? projectNames.get(task.projectId) ?? null : null),
+      });
+    }
+
+    for (const interaction of followUps.interactions) {
+      const clientName = interaction.clientId ? clientNames.get(interaction.clientId) ?? null : null;
+      const projectName = interaction.projectId ? projectNames.get(interaction.projectId) ?? null : null;
+      items.push({
+        id: interaction.id,
+        kind: 'interaction',
+        title: interaction.type,
+        date: interaction.nextActionDate,
+        clientName,
+        projectName,
+      });
+    }
+
+    return items
+      .filter((item) => item.date)
+      .sort((a, b) => {
+        const aTime = a.date ? new Date(a.date).getTime() : 0;
+        const bTime = b.date ? new Date(b.date).getTime() : 0;
+        return aTime - bTime;
+      });
+  }, [clientNames, followUps.interactions, followUps.tasks, isAgendaView, projectNames]);
 
   async function handleCreate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -407,6 +524,67 @@ export default function AgendaPage({ businessId, view = 'agenda' }: Props) {
       <KpiCirclesBlock items={kpis} />
 
       {isAgendaView ? (
+        <Card className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="text-sm font-semibold text-[var(--text-primary)]">Suivi a venir</p>
+              <p className="text-xs text-[var(--text-secondary)]">Taches et prochaines actions (7 jours).</p>
+            </div>
+            {followUpsLoading ? <span className="text-xs text-[var(--text-secondary)]">Chargement...</span> : null}
+          </div>
+          {followUpsError ? (
+            <p className="mt-3 text-xs text-rose-500">{followUpsError}</p>
+          ) : followUpsLoading ? (
+            <div className="mt-3 space-y-2">
+              {[0, 1, 2].map((key) => (
+                <div key={key} className="h-10 rounded-lg bg-[var(--surface-hover)]" />
+              ))}
+            </div>
+          ) : followUpItems.length ? (
+            <div className="mt-3 space-y-2">
+              {followUpItems.slice(0, 6).map((item) => {
+                const dateLabel = item.date
+                  ? new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(item.date))
+                  : '—';
+                const meta = item.projectName || item.clientName;
+                const kindLabel = item.kind === 'task' ? 'Tache' : 'Interaction';
+                const title =
+                  item.kind === 'interaction'
+                    ? item.title === 'CALL'
+                      ? 'Appel'
+                      : item.title === 'MEETING'
+                        ? 'RDV'
+                        : item.title === 'EMAIL'
+                          ? 'Email'
+                          : item.title === 'NOTE'
+                            ? 'Note'
+                            : item.title === 'MESSAGE'
+                              ? 'Message'
+                              : item.title
+                    : item.title;
+                return (
+                  <div
+                    key={`${item.kind}-${item.id}`}
+                    className="flex items-center justify-between gap-3 rounded-xl border border-[var(--border)]/60 bg-[var(--surface-hover)]/40 px-3 py-2 text-sm"
+                  >
+                    <div className="min-w-0 space-y-1">
+                      <p className="truncate font-semibold text-[var(--text-primary)]">
+                        {kindLabel} · {title}
+                      </p>
+                      {meta ? <p className="text-xs text-[var(--text-secondary)]">{meta}</p> : null}
+                    </div>
+                    <span className="whitespace-nowrap text-xs text-[var(--text-secondary)]">{dateLabel}</span>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="mt-3 text-sm text-[var(--text-secondary)]">Aucun suivi a venir.</p>
+          )}
+        </Card>
+      ) : null}
+
+      {isAgendaView ? (
         <TabsPills
           items={tabs}
           value={activeTab}
@@ -481,7 +659,7 @@ export default function AgendaPage({ businessId, view = 'agenda' }: Props) {
               className="cursor-pointer rounded-md bg-neutral-900 px-3 py-2 text-sm font-semibold text-white transition hover:bg-neutral-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
               disabled={creating || !canWrite}
             >
-              {creating ? 'Ajout…' : 'Ajouter'}
+              {creating ? 'Ajout...' : 'Ajouter'}
             </button>
           </div>
         </form>
@@ -543,7 +721,7 @@ export default function AgendaPage({ businessId, view = 'agenda' }: Props) {
               className="cursor-pointer rounded-md bg-neutral-900 px-3 py-2 text-sm font-semibold text-white transition hover:bg-neutral-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)] disabled:cursor-not-allowed disabled:opacity-50"
               disabled={!canWrite || actionLoading || !actionTarget || !!actionResult}
             >
-              {actionLoading ? 'Traitement…' : actionPrimaryLabel}
+              {actionLoading ? 'Traitement...' : actionPrimaryLabel}
             </button>
           </div>
         </form>
