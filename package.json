@@ -49,12 +49,14 @@
     "smoke:clients-gdpr": "pnpm tsx scripts/smoke-clients-gdpr.ts",
     "smoke:tasks-billing-link": "pnpm tsx scripts/smoke-tasks-billing-link.ts",
     "db:migrate": "prisma migrate deploy",
+    "db:deploy": "prisma migrate deploy",
     "db:reset": "prisma migrate reset",
     "db:generate": "prisma generate",
     "db:status": "prisma migrate status",
     "db:exec": "prisma db execute --stdin",
     "db:inspect": "tsx scripts/db-inspect.ts",
-    "db:smoke": "tsx scripts/db-smoke.ts"
+    "db:smoke": "tsx scripts/db-smoke.ts",
+    "start:railway": "node scripts/check-env.js && pnpm -s db:deploy && NEXT_DIST_DIR=.next-build next start -p ${PORT:-8080}"
     ,"test:e2e": "playwright test",
     "verify": "pnpm -s lint && pnpm -s typecheck"
   },

@@ -96,14 +96,17 @@ export async function POST(
   const result = await prisma.$transaction(async (tx) => {
     const existingTasks = await tx.task.findMany({
       where: { projectId: projectIdBigInt, businessId: businessIdBigInt },
-      select: { title: true, phase: true },
+      select: { title: true, phase: true, projectServiceId: true },
     });
-    const existingKeys = new Set(existingTasks.map((t) => `${t.title}|${t.phase ?? ''}`));
+    const existingKeys = new Set(
+      existingTasks.map((t) => `${t.projectServiceId ?? 'none'}|${t.title}|${t.phase ?? ''}`)
+    );
 
     const tasksToCreate: {
       title: string;
       phase: TaskPhase | null;
       projectId: bigint;
+      projectServiceId?: bigint;
       businessId: bigint;
       status: 'TODO' | 'IN_PROGRESS' | 'DONE';
       dueDate?: Date;
@@ -113,13 +116,14 @@ export async function POST(
       for (const tpl of ps.service.taskTemplates) {
         const dueDate =
           tpl.defaultDueOffsetDays != null ? new Date(now.getTime() + tpl.defaultDueOffsetDays * 86400000) : undefined;
-        const key = `${tpl.title}|${tpl.phase ?? ''}`;
+        const key = `${ps.id}|${tpl.title}|${tpl.phase ?? ''}`;
         if (existingKeys.has(key)) continue;
         existingKeys.add(key);
         tasksToCreate.push({
           title: tpl.title,
           phase: (tpl.phase ?? null) as TaskPhase | null,
           projectId: projectIdBigInt,
+          projectServiceId: ps.id,
           businessId: businessIdBigInt,
           status: 'TODO',
           dueDate,

@@ -36,6 +36,8 @@ function serializeQuote(
     clientId: bigint | null;
     status: QuoteStatus;
     number: string | null;
+    cancelledAt?: Date | null;
+    cancelReason?: string | null;
     depositPercent: number;
     currency: string;
     totalCents: bigint;
@@ -43,6 +45,7 @@ function serializeQuote(
     balanceCents: bigint;
     note: string | null;
     issuedAt: Date | null;
+    signedAt?: Date | null;
     expiresAt: Date | null;
     createdAt: Date;
     updatedAt: Date;
@@ -72,6 +75,8 @@ function serializeQuote(
     clientId: quote.clientId ? quote.clientId.toString() : null,
     status: quote.status,
     number: quote.number,
+    cancelledAt: quote.cancelledAt ? quote.cancelledAt.toISOString() : null,
+    cancelReason: quote.cancelReason ?? null,
     depositPercent: quote.depositPercent,
     currency: quote.currency,
     totalCents: quote.totalCents.toString(),
@@ -79,6 +84,7 @@ function serializeQuote(
     balanceCents: quote.balanceCents.toString(),
     note: quote.note,
     issuedAt: quote.issuedAt ? quote.issuedAt.toISOString() : null,
+    signedAt: quote.signedAt ? quote.signedAt.toISOString() : null,
     expiresAt: quote.expiresAt ? quote.expiresAt.toISOString() : null,
     createdAt: quote.createdAt.toISOString(),
     updatedAt: quote.updatedAt.toISOString(),

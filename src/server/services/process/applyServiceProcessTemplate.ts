@@ -4,6 +4,8 @@ type Params = {
   businessId: bigint;
   projectId: bigint;
   projectServiceId: bigint;
+  assigneeUserId?: bigint | null;
+  dueOffsetDaysOverride?: number | null;
 };
 
 function addDays(base: Date, days: number) {
@@ -20,19 +22,15 @@ export async function applyServiceProcessTemplateToProjectService({
   businessId,
   projectId,
   projectServiceId,
-}: Params): Promise<{ createdStepsCount: number; createdTasksCount: number }> {
+  assigneeUserId,
+  dueOffsetDaysOverride,
+}: Params): Promise<{ templateFound: boolean; createdStepsCount: number; createdTasksCount: number }> {
   return prisma.$transaction(async (tx) => {
     const projectService = await tx.projectService.findFirst({
       where: { id: projectServiceId, projectId, project: { businessId } },
       select: { id: true, serviceId: true },
     });
-    if (!projectService) return { createdStepsCount: 0, createdTasksCount: 0 };
-
-    const existingSteps = await tx.projectServiceStep.count({ where: { projectServiceId } });
-    const existingTasks = await tx.task.count({ where: { projectServiceId } });
-    if (existingSteps > 0 || existingTasks > 0) {
-      return { createdStepsCount: 0, createdTasksCount: 0 };
-    }
+    if (!projectService) return { templateFound: false, createdStepsCount: 0, createdTasksCount: 0 };
 
     const template = await tx.serviceProcessTemplate.findFirst({
       where: { serviceId: projectService.serviceId, businessId },
@@ -49,7 +47,13 @@ export async function applyServiceProcessTemplateToProjectService({
       },
     });
 
-    if (!template) return { createdStepsCount: 0, createdTasksCount: 0 };
+    if (!template) return { templateFound: false, createdStepsCount: 0, createdTasksCount: 0 };
+
+    const existingSteps = await tx.projectServiceStep.count({ where: { projectServiceId } });
+    const existingTasks = await tx.task.count({ where: { projectServiceId } });
+    if (existingSteps > 0 || existingTasks > 0) {
+      return { templateFound: true, createdStepsCount: 0, createdTasksCount: 0 };
+    }
 
     let createdStepsCount = 0;
     let createdTasksCount = 0;
@@ -69,10 +73,13 @@ export async function applyServiceProcessTemplateToProjectService({
         createdStepsCount += 1;
 
         for (const task of step.tasks) {
-          const dueDate =
-            task.dueOffsetDays !== null && task.dueOffsetDays !== undefined
-              ? addDays(now, task.dueOffsetDays)
-              : null;
+          const offset =
+            dueOffsetDaysOverride != null
+              ? dueOffsetDaysOverride
+              : task.dueOffsetDays !== null && task.dueOffsetDays !== undefined
+                ? task.dueOffsetDays
+                : null;
+          const dueDate = offset != null ? addDays(now, offset) : null;
           await tx.task.create({
             data: {
               businessId,
@@ -83,6 +90,7 @@ export async function applyServiceProcessTemplateToProjectService({
               notes: task.description ?? undefined,
               status: 'TODO',
               dueDate: dueDate ?? undefined,
+              assigneeUserId: assigneeUserId ?? undefined,
             },
           });
           createdTasksCount += 1;
@@ -90,6 +98,6 @@ export async function applyServiceProcessTemplateToProjectService({
       }
     }
 
-    return { createdStepsCount, createdTasksCount };
+    return { templateFound: true, createdStepsCount, createdTasksCount };
   });
 }

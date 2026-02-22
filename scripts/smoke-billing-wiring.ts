@@ -112,6 +112,13 @@ async function main() {
   const serviceId = (createSvcJson as { id?: string })?.id;
   if (!serviceId) throw new Error('Service creation returned no id.');
 
+  console.log('Create task template for service…');
+  const tplRes = await request(`/api/pro/businesses/${businessId}/services/${serviceId}/templates`, {
+    method: 'POST',
+    body: { title: `Smoke task ${Date.now()}`, phase: 'DEV', defaultDueOffsetDays: 2 },
+  });
+  if (!tplRes.res.ok) throw new Error(`Template create failed (${tplRes.res.status}) ref=${getLastRequestId()}`);
+
   const code2 = `SER-${Date.now()}-B`;
   const { res: createSvcRes2, json: createSvcJson2 } = await request(
     `/api/pro/businesses/${businessId}/services`,
@@ -141,6 +148,15 @@ async function main() {
     throw new Error(`Create project failed (${createProjRes.status}) ref=${getLastRequestId()}`);
   const projectId = (createProjJson as { id?: string })?.id;
   if (!projectId) throw new Error('Project creation returned no id.');
+  console.log('Deposit paid date guard…');
+  const badDeposit = await request(`/api/pro/businesses/${businessId}/projects/${projectId}`, {
+    method: 'PATCH',
+    body: { depositPaidAt: new Date().toISOString() },
+    allowError: true,
+  });
+  if (badDeposit.res.status !== 400) {
+    throw new Error(`Expected 400 for depositPaidAt without PAID, got ${badDeposit.res.status}`);
+  }
   const prestationsUpdate = await request(`/api/pro/businesses/${businessId}/projects/${projectId}`, {
     method: 'PATCH',
     body: {
@@ -153,16 +169,25 @@ async function main() {
   }
   const { res: attachRes, json: attachJson } = await request(
     `/api/pro/businesses/${businessId}/projects/${projectId}/services`,
-    { method: 'POST', body: { serviceId, quantity: 1, priceCents: 10000 } }
+    { method: 'POST', body: { serviceId, quantity: 1, priceCents: 10000, generateTasks: true } }
   );
   if (!attachRes.ok)
     throw new Error(`Attach service failed (${attachRes.status}) ref=${getLastRequestId()} json=${JSON.stringify(attachJson)}`);
+  const projectServiceId = (attachJson as { id?: string })?.id;
+  if (!projectServiceId) throw new Error('Project service id missing.');
   const { res: attachResB, json: attachJsonB } = await request(
     `/api/pro/businesses/${businessId}/projects/${projectId}/services`,
-    { method: 'POST', body: { serviceId: serviceIdB, quantity: 1, priceCents: 15000 } }
+    { method: 'POST', body: { serviceId: serviceIdB, quantity: 1, priceCents: 15000, generateTasks: true } }
   );
   if (!attachResB.ok)
     throw new Error(`Attach service B failed (${attachResB.status}) ref=${getLastRequestId()} json=${JSON.stringify(attachJsonB)}`);
+
+  console.log('Validate tasks linked to project service…');
+  const { res: tasksRes, json: tasksJson } = await request(`/api/pro/businesses/${businessId}/tasks?projectId=${projectId}`);
+  if (!tasksRes.ok) throw new Error(`Tasks list failed (${tasksRes.status}) ref=${getLastRequestId()}`);
+  const linkedTasks =
+    (tasksJson as { items?: Array<{ projectServiceId?: string }> }).items?.filter((t) => t.projectServiceId === projectServiceId) ?? [];
+  if (!linkedTasks.length) throw new Error('Expected tasks linked to project service.');
 
   console.log('Reorder services…');
   const { res: listRes, json: listJson } = await request(
@@ -241,6 +266,13 @@ async function main() {
     throw new Error(`Staged invoice failed (${stagedRes.status}) ref=${getLastRequestId()}`);
   const stagedInvoiceId = (stagedJson as { invoice?: { id?: string } })?.invoice?.id;
   if (!stagedInvoiceId) throw new Error('Staged invoice id missing.');
+  const overInvoice = await request(
+    `/api/pro/businesses/${businessId}/projects/${projectId}/invoices/staged`,
+    { method: 'POST', body: { mode: 'PERCENT', value: 90 }, allowError: true }
+  );
+  if (overInvoice.res.status !== 400) {
+    throw new Error(`Expected 400 for over-invoicing, got ${overInvoice.res.status}`);
+  }
   const delStaged = await request(
     `/api/pro/businesses/${businessId}/invoices/${stagedInvoiceId}`,
     { method: 'DELETE' }
@@ -269,6 +301,14 @@ async function main() {
   if (quotePdfBuf.byteLength < 1000) throw new Error('Quote PDF too small.');
 
   console.log('Mark quote SENT then SIGNED…');
+  const signedAtGuard = await request(`/api/pro/businesses/${businessId}/quotes/${quoteId}`, {
+    method: 'PATCH',
+    body: { signedAt: new Date().toISOString() },
+    allowError: true,
+  });
+  if (signedAtGuard.res.status !== 400) {
+    throw new Error(`Expected 400 for signedAt when not SIGNED, got ${signedAtGuard.res.status}`);
+  }
   const sentResp = await request(
     `/api/pro/businesses/${businessId}/quotes/${quoteId}`,
     { method: 'PATCH', body: { status: 'SENT' } }
@@ -298,6 +338,41 @@ async function main() {
     (toSigned2.json as { quote?: { number?: string | null } })?.quote?.number ?? null;
   if (signedNumber !== quoteNumber) {
     throw new Error(`Quote number changed after SIGNED (${quoteNumber} -> ${signedNumber}) ref=${getLastRequestId()}`);
+  }
+
+  console.log('Verify billing reference…');
+  const { res: projectRes, json: projectJson } = await request(
+    `/api/pro/businesses/${businessId}/projects/${projectId}`
+  );
+  if (!projectRes.ok) throw new Error(`Project fetch failed (${projectRes.status}) ref=${getLastRequestId()}`);
+  const billingQuoteId =
+    (projectJson as { item?: { billingQuoteId?: string | null } })?.item?.billingQuoteId ?? null;
+  if (billingQuoteId !== quoteId) {
+    throw new Error(`Expected billingQuoteId=${quoteId}, got ${billingQuoteId ?? 'null'}`);
+  }
+
+  const signedAt = new Date().toISOString();
+  const signedAtRes = await request(`/api/pro/businesses/${businessId}/quotes/${quoteId}`, {
+    method: 'PATCH',
+    body: { signedAt },
+  });
+  if (!signedAtRes.res.ok) throw new Error(`SignedAt update failed (${signedAtRes.res.status}) ref=${getLastRequestId()}`);
+
+  console.log('Signed quote guards…');
+  const editSigned = await request(`/api/pro/businesses/${businessId}/quotes/${quoteId}`, {
+    method: 'PATCH',
+    body: { note: 'Should not be editable when signed' },
+    allowError: true,
+  });
+  if (editSigned.res.status !== 400) {
+    throw new Error(`Expected 400 for editing signed quote, got ${editSigned.res.status}`);
+  }
+  const deleteSigned = await request(`/api/pro/businesses/${businessId}/quotes/${quoteId}`, {
+    method: 'DELETE',
+    allowError: true,
+  });
+  if (deleteSigned.res.status !== 400) {
+    throw new Error(`Expected 400 for deleting signed quote, got ${deleteSigned.res.status}`);
   }
 
   console.log('Concurrent SENT on two quotes…');
@@ -336,6 +411,30 @@ async function main() {
   const invoice = (invJson as { invoice?: { id?: string; totalCents?: string } })?.invoice;
   if (!invoice?.id) throw new Error('Invoice id missing.');
   const invoiceTotal = toBigInt(invoice.totalCents ?? '0');
+
+  console.log('Cancel signed quote (reason required)…');
+  const cancelGuard = await request(`/api/pro/businesses/${businessId}/quotes/${quoteId}`, {
+    method: 'PATCH',
+    body: { status: 'CANCELLED' },
+    allowError: true,
+  });
+  if (cancelGuard.res.status !== 400) {
+    throw new Error(`Expected 400 for cancel without reason, got ${cancelGuard.res.status}`);
+  }
+  const cancelOk = await request(`/api/pro/businesses/${businessId}/quotes/${quoteId}`, {
+    method: 'PATCH',
+    body: { status: 'CANCELLED', cancelReason: 'Client a changé de périmètre' },
+  });
+  if (!cancelOk.res.ok) {
+    throw new Error(`Cancel signed quote failed (${cancelOk.res.status}) ref=${getLastRequestId()}`);
+  }
+  const deleteAfterCancel = await request(`/api/pro/businesses/${businessId}/quotes/${quoteId}`, {
+    method: 'DELETE',
+    allowError: true,
+  });
+  if (deleteAfterCancel.res.status !== 400) {
+    throw new Error(`Expected 400 for deleting cancelled signed quote, got ${deleteAfterCancel.res.status}`);
+  }
 
   console.log('Create + delete draft invoice…');
   const { res: delQuoteRes, json: delQuoteJson } = await request(
@@ -377,6 +476,14 @@ async function main() {
     { method: 'PATCH', body: { status: 'SENT' } }
   );
   if (!invSent.res.ok) throw new Error(`Invoice SENT failed (${invSent.res.status}) ref=${getLastRequestId()}`);
+  const paidAtGuard = await request(`/api/pro/businesses/${businessId}/invoices/${invoice.id}`, {
+    method: 'PATCH',
+    body: { paidAt: new Date().toISOString() },
+    allowError: true,
+  });
+  if (paidAtGuard.res.status !== 400) {
+    throw new Error(`Expected 400 for paidAt when not PAID, got ${paidAtGuard.res.status}`);
+  }
   const invoiceNumber =
     (invSent.json as { invoice?: { number?: string | null } })?.invoice?.number ?? null;
   if (!invoiceNumber || !numberRegex.test(invoiceNumber)) {
@@ -387,10 +494,28 @@ async function main() {
     { method: 'PATCH', body: { status: 'PAID' } }
   );
   if (!invPaid.res.ok) throw new Error(`Invoice PAID failed (${invPaid.res.status}) ref=${getLastRequestId()}`);
+  const paidAt = new Date().toISOString();
+  const paidAtRes = await request(`/api/pro/businesses/${businessId}/invoices/${invoice.id}`, {
+    method: 'PATCH',
+    body: { paidAt },
+  });
+  if (!paidAtRes.res.ok) throw new Error(`PaidAt update failed (${paidAtRes.res.status}) ref=${getLastRequestId()}`);
   const paidNumber =
     (invPaid.json as { invoice?: { number?: string | null } })?.invoice?.number ?? null;
   if (paidNumber !== invoiceNumber) {
     throw new Error(`Invoice number changed after PAID (${invoiceNumber} -> ${paidNumber}) ref=${getLastRequestId()}`);
+  }
+
+  console.log('Payments aggregation…');
+  const { res: paymentsRes, json: paymentsJson } = await request(
+    `/api/pro/businesses/${businessId}/payments`
+  );
+  if (!paymentsRes.ok) throw new Error(`Payments list failed (${paymentsRes.status}) ref=${getLastRequestId()}`);
+  const paymentItems =
+    (paymentsJson as { items?: Array<{ invoiceId?: string }> })?.items ?? [];
+  const paymentMatch = paymentItems.some((item) => item.invoiceId === invoice.id);
+  if (!paymentMatch) {
+    throw new Error('Paid invoice missing from payments list.');
   }
 
   console.log('Dashboard (after)…');

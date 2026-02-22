@@ -8,12 +8,11 @@ import {
   badRequest,
   forbidden,
   getRequestId,
-  notFound,
   unauthorized,
   withRequestId,
 } from '@/server/http/apiUtils';
-import { computeProjectPricing } from '@/server/services/pricing';
-import { InvoiceStatus, QuoteStatus } from '@/generated/prisma';
+import { computeProjectBillingSummary } from '@/server/billing/summary';
+import { InvoiceStatus } from '@/generated/prisma';
 
 function parseId(param: string | undefined) {
   if (!param || !/^\d+$/.test(param)) return null;
@@ -155,47 +154,14 @@ export async function POST(
   }
   const mode = modeRaw as StagedMode;
 
-  const project = await prisma.project.findFirst({
-    where: { id: projectIdBigInt, businessId: businessIdBigInt },
-    select: { id: true, clientId: true, quoteStatus: true },
-  });
-  if (!project) return withIdNoStore(notFound('Projet introuvable.'), requestId);
-
-  const signedQuote = await prisma.quote.findFirst({
-    where: { businessId: businessIdBigInt, projectId: projectIdBigInt, status: QuoteStatus.SIGNED },
-    orderBy: { issuedAt: 'desc' },
-    select: { totalCents: true, currency: true, clientId: true },
-  });
-
-  const shouldFallbackToLatestQuote =
-    !signedQuote && (project.quoteStatus === 'SIGNED' || project.quoteStatus === 'ACCEPTED');
-  const latestQuote = shouldFallbackToLatestQuote
-    ? await prisma.quote.findFirst({
-        where: { businessId: businessIdBigInt, projectId: projectIdBigInt },
-        orderBy: { issuedAt: 'desc' },
-        select: { totalCents: true, currency: true, clientId: true },
-      })
-    : null;
-
-  const pricing = signedQuote || latestQuote ? null : await computeProjectPricing(businessIdBigInt, projectIdBigInt);
-  const projectTotalCents = signedQuote?.totalCents ?? latestQuote?.totalCents ?? pricing?.totalCents ?? null;
-  const currency = signedQuote?.currency ?? latestQuote?.currency ?? pricing?.currency ?? 'EUR';
-  const clientId = signedQuote?.clientId ?? latestQuote?.clientId ?? project.clientId ?? null;
-
-  if (!projectTotalCents || projectTotalCents <= 0) {
+  const summary = await computeProjectBillingSummary(businessIdBigInt, projectIdBigInt);
+  if (!summary || summary.totalCents <= 0) {
     return withIdNoStore(badRequest('Total projet indisponible.'), requestId);
   }
-
-  const invoicedAgg = await prisma.invoice.aggregate({
-    _sum: { totalCents: true },
-    where: {
-      businessId: businessIdBigInt,
-      projectId: projectIdBigInt,
-      status: { not: InvoiceStatus.CANCELLED },
-    },
-  });
-  const alreadyInvoiced = invoicedAgg._sum.totalCents ?? BigInt(0);
-  const remaining = projectTotalCents - alreadyInvoiced;
+  const projectTotalCents = summary.totalCents;
+  const currency = summary.currency;
+  const clientId = summary.clientId ?? null;
+  const remaining = summary.remainingCents;
   if (remaining <= 0) {
     return withIdNoStore(badRequest('Aucun montant restant à facturer.'), requestId);
   }

@@ -152,7 +152,7 @@ export async function POST(
     where: { id: quoteIdBigInt, businessId: businessIdBigInt },
     include: {
       items: { orderBy: { id: 'asc' } },
-      project: { select: { id: true } },
+      project: { select: { id: true, billingQuoteId: true } },
       business: {
         select: {
           name: true,
@@ -209,6 +209,10 @@ export async function POST(
 
   if (!(quote.status === QuoteStatus.SIGNED || quote.status === QuoteStatus.SENT)) {
     return withIdNoStore(badRequest('Le devis doit être envoyé ou signé.'), requestId);
+  }
+
+  if (quote.project.billingQuoteId && quote.project.billingQuoteId !== quote.id) {
+    return withIdNoStore(badRequest('Ce devis n’est pas le devis de référence du projet.'), requestId);
   }
 
   const dueAt = new Date();

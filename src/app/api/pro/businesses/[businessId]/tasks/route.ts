@@ -298,6 +298,28 @@ export async function POST(
     }
   }
 
+  let projectServiceId: bigint | undefined;
+  if ('projectServiceId' in body && (body as { projectServiceId?: unknown }).projectServiceId) {
+    const raw = (body as { projectServiceId?: unknown }).projectServiceId;
+    if (typeof raw !== 'string' || !/^\d+$/.test(raw)) {
+      return withIdNoStore(badRequest('projectServiceId invalide.'), requestId);
+    }
+    projectServiceId = BigInt(raw);
+    const projectService = await prisma.projectService.findFirst({
+      where: { id: projectServiceId },
+      select: { projectId: true, project: { select: { businessId: true } } },
+    });
+    if (!projectService || projectService.project.businessId !== businessIdBigInt) {
+      return withIdNoStore(badRequest('projectServiceId doit appartenir au business.'), requestId);
+    }
+    if (projectId && projectId !== projectService.projectId) {
+      return withIdNoStore(badRequest('projectServiceId doit appartenir au même projet.'), requestId);
+    }
+    if (!projectId) {
+      projectId = projectService.projectId;
+    }
+  }
+
   let assigneeUserId: bigint | undefined;
   if ('assigneeUserId' in body && (body as { assigneeUserId?: unknown }).assigneeUserId) {
     const raw = (body as { assigneeUserId?: unknown }).assigneeUserId;
@@ -359,6 +381,7 @@ export async function POST(
     data: {
       businessId: businessIdBigInt,
       projectId,
+      projectServiceId,
       assigneeUserId,
       title,
       status,

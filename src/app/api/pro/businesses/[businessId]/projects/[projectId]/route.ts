@@ -18,6 +18,7 @@ import {
   unauthorized,
   withRequestId,
 } from '@/server/http/apiUtils';
+import { computeProjectBillingSummary } from '@/server/billing/summary';
 
 function parseId(param: string | undefined) {
   if (!param || !/^\d+$/.test(param)) {
@@ -30,19 +31,48 @@ function parseId(param: string | undefined) {
   }
 }
 
-function serializeProject(project: {
-  id: bigint;
-  businessId: bigint;
-  clientId: bigint | null;
-  name: string;
-  status: ProjectStatus;
-  quoteStatus: ProjectQuoteStatus;
-  depositStatus: ProjectDepositStatus;
-  startedAt: Date | null;
-  archivedAt: Date | null;
-  startDate: Date | null;
-  endDate: Date | null;
-  prestationsText?: string | null;
+function parseIsoDate(value: unknown): Date | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value !== 'string' || !value.trim()) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date;
+}
+
+type BillingSummary = NonNullable<Awaited<ReturnType<typeof computeProjectBillingSummary>>>;
+
+function serializeBillingSummary(summary: BillingSummary | null) {
+  if (!summary) return null;
+  return {
+    source: summary.source,
+    referenceQuoteId: summary.referenceQuoteId ? summary.referenceQuoteId.toString() : null,
+    currency: summary.currency,
+    totalCents: summary.totalCents.toString(),
+    depositPercent: summary.depositPercent,
+    depositCents: summary.depositCents.toString(),
+    balanceCents: summary.balanceCents.toString(),
+    alreadyInvoicedCents: summary.alreadyInvoicedCents.toString(),
+    alreadyPaidCents: summary.alreadyPaidCents.toString(),
+    remainingCents: summary.remainingCents.toString(),
+  };
+}
+
+function serializeProject(
+  project: {
+    id: bigint;
+    businessId: bigint;
+    clientId: bigint | null;
+    name: string;
+    status: ProjectStatus;
+    quoteStatus: ProjectQuoteStatus;
+    depositStatus: ProjectDepositStatus;
+    depositPaidAt: Date | null;
+    billingQuoteId?: bigint | null;
+    startedAt: Date | null;
+    archivedAt: Date | null;
+    startDate: Date | null;
+    endDate: Date | null;
+    prestationsText?: string | null;
   createdAt: Date;
   updatedAt: Date;
   categoryReferenceId?: bigint | null;
@@ -60,8 +90,10 @@ function serializeProject(project: {
     createdAt: Date;
     service: { id: bigint; code: string; name: string; type: string | null; defaultPriceCents: bigint | null };
   }[];
-  tasksSummary?: { total: number; open: number; done: number; progressPct: number };
-}) {
+    tasksSummary?: { total: number; open: number; done: number; progressPct: number };
+  },
+  opts?: { billingSummary?: BillingSummary | null }
+) {
   return {
     id: project.id.toString(),
     businessId: project.businessId.toString(),
@@ -80,11 +112,14 @@ function serializeProject(project: {
     status: project.status,
     quoteStatus: project.quoteStatus,
     depositStatus: project.depositStatus,
+    depositPaidAt: project.depositPaidAt ? project.depositPaidAt.toISOString() : null,
+    billingQuoteId: project.billingQuoteId ? project.billingQuoteId.toString() : null,
     startedAt: project.startedAt ? project.startedAt.toISOString() : null,
     archivedAt: project.archivedAt ? project.archivedAt.toISOString() : null,
     startDate: project.startDate ? project.startDate.toISOString() : null,
     endDate: project.endDate ? project.endDate.toISOString() : null,
     prestationsText: project.prestationsText ?? null,
+    billingSummary: opts?.billingSummary ? serializeBillingSummary(opts.billingSummary) : null,
     counts: project._count
       ? {
           tasks: project._count.tasks,
@@ -226,7 +261,11 @@ export async function GET(
     return { total, done, open, progressPct: Math.round(sum / total) };
   })();
 
-  return withIdNoStore(jsonNoStore({ item: serializeProject({ ...project, tasksSummary: summary }) }), requestId);
+  const billingSummary = await computeProjectBillingSummary(businessIdBigInt, projectIdBigInt);
+  return withIdNoStore(
+    jsonNoStore({ item: serializeProject({ ...project, tasksSummary: summary }, { billingSummary }) }),
+    requestId
+  );
 }
 
 // PATCH /api/pro/businesses/{businessId}/projects/{projectId}
@@ -280,6 +319,10 @@ export async function PATCH(
   }
 
   const data: Record<string, unknown> = {};
+  const depositPaidAtRaw = (body as { depositPaidAt?: unknown }).depositPaidAt;
+  const wantsDepositPaidAt = depositPaidAtRaw !== undefined;
+  const billingQuoteIdRaw = (body as { billingQuoteId?: unknown }).billingQuoteId;
+  const wantsBillingQuoteId = billingQuoteIdRaw !== undefined;
 
   if ('startedAt' in body || 'archivedAt' in body) {
     return withIdNoStore(badRequest('startedAt/archivedAt ne peuvent pas être modifiés ici.'), requestId);
@@ -321,6 +364,42 @@ export async function PATCH(
     data.depositStatus = depositStatus as ProjectDepositStatus;
   }
 
+  if (wantsDepositPaidAt) {
+    if (depositPaidAtRaw === null) {
+      data.depositPaidAt = null;
+    } else {
+      const depositPaidAt = parseIsoDate(depositPaidAtRaw);
+      if (!depositPaidAt) {
+        return withIdNoStore(badRequest('depositPaidAt invalide.'), requestId);
+      }
+      data.depositPaidAt = depositPaidAt;
+    }
+  }
+
+  if (wantsBillingQuoteId) {
+    if (billingQuoteIdRaw === null || billingQuoteIdRaw === '') {
+      data.billingQuoteId = null;
+    } else if (typeof billingQuoteIdRaw === 'string' && /^\d+$/.test(billingQuoteIdRaw)) {
+      const quoteIdBigInt = BigInt(billingQuoteIdRaw);
+      const quote = await prisma.quote.findFirst({
+        where: {
+          id: quoteIdBigInt,
+          businessId: businessIdBigInt,
+          projectId: projectIdBigInt,
+          status: 'SIGNED',
+        },
+        select: { id: true },
+      });
+      if (!quote) {
+        return withIdNoStore(badRequest('billingQuoteId doit référencer un devis signé du projet.'), requestId);
+      }
+      data.billingQuoteId = quoteIdBigInt;
+      data.quoteStatus = ProjectQuoteStatus.SIGNED;
+    } else {
+      return withIdNoStore(badRequest('billingQuoteId invalide.'), requestId);
+    }
+  }
+
   if ('clientId' in body) {
     if (body.clientId === null || body.clientId === undefined || body.clientId === '') {
       data.clientId = null;
@@ -358,6 +437,20 @@ export async function PATCH(
       data.endDate = end;
     } else {
       return withIdNoStore(badRequest('endDate invalide.'), requestId);
+    }
+  }
+
+  const nextDepositStatus =
+    (data.depositStatus as ProjectDepositStatus | undefined) ?? project.depositStatus;
+  if (wantsDepositPaidAt && depositPaidAtRaw !== null && nextDepositStatus !== ProjectDepositStatus.PAID) {
+    return withIdNoStore(badRequest('depositPaidAt requiert depositStatus=PAID.'), requestId);
+  }
+  if (!wantsDepositPaidAt && data.depositStatus !== undefined && data.depositStatus !== project.depositStatus) {
+    if (nextDepositStatus === ProjectDepositStatus.PAID && !project.depositPaidAt) {
+      data.depositPaidAt = new Date();
+    }
+    if (nextDepositStatus !== ProjectDepositStatus.PAID && project.depositPaidAt) {
+      data.depositPaidAt = null;
     }
   }
 
@@ -434,7 +527,8 @@ export async function PATCH(
     },
   });
 
-  return withIdNoStore(jsonNoStore({ item: serializeProject(updated) }), requestId);
+  const billingSummary = await computeProjectBillingSummary(businessIdBigInt, projectIdBigInt);
+  return withIdNoStore(jsonNoStore({ item: serializeProject(updated, { billingSummary }) }), requestId);
 }
 
 // DELETE /api/pro/businesses/{businessId}/projects/{projectId}

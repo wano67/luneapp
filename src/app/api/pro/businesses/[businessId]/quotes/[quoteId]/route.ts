@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/server/db/client';
-import { BillingUnit, DiscountType, QuoteStatus } from '@/generated/prisma';
+import { BillingUnit, DiscountType, ProjectQuoteStatus, QuoteStatus } from '@/generated/prisma';
 import { requireAuthPro } from '@/server/auth/requireAuthPro';
 import { requireBusinessRole } from '@/server/auth/businessRole';
 import { assertSameOrigin, jsonNoStore, withNoStore } from '@/server/security/csrf';
@@ -59,6 +59,8 @@ function serializeQuote(quote: QuoteWithItems) {
     clientId: quote.clientId ? quote.clientId.toString() : null,
     status: quote.status,
     number: quote.number,
+    cancelledAt: quote.cancelledAt ? quote.cancelledAt.toISOString() : null,
+    cancelReason: quote.cancelReason ?? null,
     depositPercent: quote.depositPercent,
     currency: quote.currency,
     totalCents: quote.totalCents.toString(),
@@ -66,6 +68,7 @@ function serializeQuote(quote: QuoteWithItems) {
     balanceCents: quote.balanceCents.toString(),
     note: quote.note,
     issuedAt: quote.issuedAt ? quote.issuedAt.toISOString() : null,
+    signedAt: quote.signedAt ? quote.signedAt.toISOString() : null,
     expiresAt: quote.expiresAt ? quote.expiresAt.toISOString() : null,
     createdAt: quote.createdAt.toISOString(),
     updatedAt: quote.updatedAt.toISOString(),
@@ -188,12 +191,26 @@ export async function PATCH(
 
   const noteRaw = (body as { note?: unknown }).note;
   const issuedAtRaw = (body as { issuedAt?: unknown }).issuedAt;
+  const signedAtRaw = (body as { signedAt?: unknown }).signedAt;
   const expiresAtRaw = (body as { expiresAt?: unknown }).expiresAt;
+  const cancelReasonRaw = (body as { cancelReason?: unknown }).cancelReason;
   const itemsRaw = (body as { items?: unknown }).items;
 
   const wantsItemsUpdate = itemsRaw !== undefined;
   const wantsMetaUpdate = noteRaw !== undefined || issuedAtRaw !== undefined || expiresAtRaw !== undefined;
-  const hasAnyChange = hasStatus || wantsItemsUpdate || wantsMetaUpdate;
+  const wantsSignedAt = signedAtRaw !== undefined;
+  const wantsCancelReason = cancelReasonRaw !== undefined;
+  const hasAnyChange = hasStatus || wantsItemsUpdate || wantsMetaUpdate || wantsSignedAt || wantsCancelReason;
+
+  if (wantsSignedAt && signedAtRaw !== null && nextStatus !== QuoteStatus.SIGNED) {
+    return withIdNoStore(badRequest('signedAt requiert status=SIGNED.'), requestId);
+  }
+  if (wantsCancelReason && !hasStatus) {
+    return withIdNoStore(badRequest('cancelReason requiert un changement de statut.'), requestId);
+  }
+  if (wantsCancelReason && nextStatus !== QuoteStatus.CANCELLED) {
+    return withIdNoStore(badRequest('cancelReason requiert status=CANCELLED.'), requestId);
+  }
 
   if (!hasAnyChange) {
     return withIdNoStore(badRequest('Aucune modification.'), requestId);
@@ -215,7 +232,7 @@ export async function PATCH(
   const transitions: Record<QuoteStatus, QuoteStatus[]> = {
     [QuoteStatus.DRAFT]: [QuoteStatus.SENT, QuoteStatus.CANCELLED],
     [QuoteStatus.SENT]: [QuoteStatus.SIGNED, QuoteStatus.CANCELLED, QuoteStatus.EXPIRED],
-    [QuoteStatus.SIGNED]: [],
+    [QuoteStatus.SIGNED]: [QuoteStatus.CANCELLED],
     [QuoteStatus.CANCELLED]: [],
     [QuoteStatus.EXPIRED]: [],
   };
@@ -250,6 +267,39 @@ export async function PATCH(
     const expiresAt = parseIsoDate(expiresAtRaw);
     if (expiresAtRaw !== null && !expiresAt) return withIdNoStore(badRequest('expiresAt invalide.'), requestId);
     data.expiresAt = expiresAt;
+  }
+
+  const isCancelling = hasStatus && nextStatus === QuoteStatus.CANCELLED;
+  let cancelReason: string | null = null;
+  if (wantsCancelReason) {
+    if (typeof cancelReasonRaw !== 'string') {
+      return withIdNoStore(badRequest('cancelReason invalide.'), requestId);
+    }
+    cancelReason = cancelReasonRaw.trim();
+    if (!cancelReason) {
+      return withIdNoStore(badRequest('cancelReason requis.'), requestId);
+    }
+    if (cancelReason.length > 1000) {
+      return withIdNoStore(badRequest('cancelReason trop long (1000 max).'), requestId);
+    }
+  }
+  if (isCancelling && !cancelReason) {
+    return withIdNoStore(badRequest('cancelReason requis pour annuler un devis.'), requestId);
+  }
+
+  if (isCancelling) {
+    data.cancelReason = cancelReason;
+    data.cancelledAt = new Date();
+  }
+
+  if (signedAtRaw !== undefined) {
+    if (signedAtRaw === null) {
+      data.signedAt = null;
+    } else {
+      const signedAt = parseIsoDate(signedAtRaw);
+      if (!signedAt) return withIdNoStore(badRequest('signedAt invalide.'), requestId);
+      data.signedAt = signedAt;
+    }
   }
 
   const updated = await prisma.$transaction(async (tx) => {
@@ -479,11 +529,55 @@ export async function PATCH(
       }
     }
 
+    if (nextStatus === QuoteStatus.SIGNED) {
+      const signedAt =
+        data.signedAt instanceof Date
+          ? data.signedAt
+          : existing.signedAt ?? new Date();
+      if (!existing.signedAt || data.signedAt) data.signedAt = signedAt;
+    }
+
     const updatedQuote = await tx.quote.update({
       where: { id: quoteIdBigInt },
       data,
       include: { items: { orderBy: { id: 'asc' } } },
     });
+
+    if (hasStatus && nextStatus === QuoteStatus.SIGNED) {
+      await tx.project.update({
+        where: { id: existing.projectId },
+        data: {
+          quoteStatus: ProjectQuoteStatus.SIGNED,
+          billingQuoteId: existing.id,
+        },
+      });
+    }
+
+    if (hasStatus && nextStatus === QuoteStatus.CANCELLED) {
+      const project = await tx.project.findUnique({
+        where: { id: existing.projectId },
+        select: { billingQuoteId: true },
+      });
+      if (project?.billingQuoteId === existing.id) {
+        const replacement = await tx.quote.findFirst({
+          where: {
+            businessId: businessIdBigInt,
+            projectId: existing.projectId,
+            status: QuoteStatus.SIGNED,
+            id: { not: existing.id },
+          },
+          orderBy: { issuedAt: 'desc' },
+          select: { id: true },
+        });
+        await tx.project.update({
+          where: { id: existing.projectId },
+          data: {
+            billingQuoteId: replacement?.id ?? null,
+            quoteStatus: replacement ? ProjectQuoteStatus.SIGNED : ProjectQuoteStatus.DRAFT,
+          },
+        });
+      }
+    }
 
     return updatedQuote;
   });
@@ -529,6 +623,10 @@ export async function DELETE(
 
   if (existing.invoice) {
     return withIdNoStore(badRequest('Impossible de supprimer: facture liée.'), requestId);
+  }
+
+  if (existing.status === QuoteStatus.SIGNED || existing.signedAt) {
+    return withIdNoStore(badRequest('Suppression interdite: devis signé.'), requestId);
   }
 
   const deletableStatuses: QuoteStatus[] = [QuoteStatus.DRAFT, QuoteStatus.CANCELLED, QuoteStatus.EXPIRED];

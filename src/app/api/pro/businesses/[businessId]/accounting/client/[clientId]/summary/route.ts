@@ -115,7 +115,7 @@ export async function GET(
         id: inv.id.toString(),
         amountCents: Number(inv.totalCents),
         currency: inv.currency,
-        paidAt: inv.paidAt ? inv.paidAt.toISOString() : inv.updatedAt.toISOString(),
+        paidAt: inv.paidAt ? inv.paidAt.toISOString() : null,
         reference: inv.number ?? `INV-${inv.id}`,
       })),
     }),

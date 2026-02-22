@@ -53,6 +53,7 @@ export async function GET(
   const where = {
     businessId: businessIdBigInt,
     status: InvoiceStatus.PAID,
+    paidAt: { not: null },
     ...(clientId ? { clientId } : {}),
   };
 
@@ -70,7 +71,7 @@ export async function GET(
         clientId: inv.clientId ? inv.clientId.toString() : null,
         amountCents: Number(inv.totalCents),
         currency: inv.currency,
-        paidAt: inv.paidAt ? inv.paidAt.toISOString() : inv.updatedAt.toISOString(),
+        paidAt: inv.paidAt ? inv.paidAt.toISOString() : null,
         reference: inv.number ?? `INV-${inv.id}`,
       })),
     }),

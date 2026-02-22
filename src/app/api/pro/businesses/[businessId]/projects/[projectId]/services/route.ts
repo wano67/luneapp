@@ -6,6 +6,7 @@ import { assertSameOrigin, jsonNoStore, withNoStore } from '@/server/security/cs
 import { badRequest, getRequestId, notFound, unauthorized, withRequestId } from '@/server/http/apiUtils';
 import { rateLimit } from '@/server/security/rateLimit';
 import { applyServiceProcessTemplateToProjectService } from '@/server/services/process/applyServiceProcessTemplate';
+import { applyServiceTaskTemplatesToProjectService } from '@/server/services/process/applyServiceTaskTemplates';
 import { resolveServiceUnitPriceCents } from '@/server/services/pricing';
 import { BillingUnit, DiscountType } from '@/generated/prisma';
 
@@ -137,6 +138,33 @@ export async function POST(
   if (!serviceIdBigInt) return withIdNoStore(badRequest('serviceId invalide.'), requestId);
 
   const generateTasks = body.generateTasks !== false;
+  const taskAssigneeRaw = (body as { taskAssigneeUserId?: unknown }).taskAssigneeUserId;
+  let taskAssigneeUserId: bigint | null = null;
+  if (taskAssigneeRaw !== undefined && taskAssigneeRaw !== null && taskAssigneeRaw !== '') {
+    if (typeof taskAssigneeRaw !== 'string' || !/^\d+$/.test(taskAssigneeRaw)) {
+      return withIdNoStore(badRequest('taskAssigneeUserId invalide.'), requestId);
+    }
+    const assigneeId = BigInt(taskAssigneeRaw);
+    const membership = await prisma.businessMembership.findUnique({
+      where: { businessId_userId: { businessId: businessIdBigInt, userId: assigneeId } },
+    });
+    if (!membership) return withIdNoStore(badRequest('taskAssigneeUserId doit être membre du business.'), requestId);
+    taskAssigneeUserId = assigneeId;
+  }
+  const dueOffsetRaw = (body as { taskDueOffsetDays?: unknown }).taskDueOffsetDays;
+  let taskDueOffsetDays: number | null = null;
+  if (dueOffsetRaw !== undefined) {
+    if (dueOffsetRaw === null) {
+      taskDueOffsetDays = null;
+    } else if (typeof dueOffsetRaw === 'number' && Number.isFinite(dueOffsetRaw)) {
+      taskDueOffsetDays = Math.trunc(dueOffsetRaw);
+      if (taskDueOffsetDays < 0 || taskDueOffsetDays > 365) {
+        return withIdNoStore(badRequest('taskDueOffsetDays invalide (0-365).'), requestId);
+      }
+    } else {
+      return withIdNoStore(badRequest('taskDueOffsetDays invalide.'), requestId);
+    }
+  }
   const quantity =
     typeof body.quantity === 'number' && Number.isFinite(body.quantity) ? Math.max(1, Math.trunc(body.quantity)) : 1;
   const priceCentsInput =
@@ -245,9 +273,22 @@ export async function POST(
       businessId: businessIdBigInt,
       projectId: projectIdBigInt,
       projectServiceId: created.id,
+      assigneeUserId: taskAssigneeUserId ?? undefined,
+      dueOffsetDaysOverride: taskDueOffsetDays ?? undefined,
     });
-    generatedStepsCount = generated.createdStepsCount;
-    generatedTasksCount = generated.createdTasksCount;
+    if (generated.templateFound) {
+      generatedStepsCount = generated.createdStepsCount;
+      generatedTasksCount = generated.createdTasksCount;
+    } else {
+      const fallback = await applyServiceTaskTemplatesToProjectService({
+        businessId: businessIdBigInt,
+        projectId: projectIdBigInt,
+        projectServiceId: created.id,
+        assigneeUserId: taskAssigneeUserId ?? undefined,
+        dueOffsetDaysOverride: taskDueOffsetDays ?? undefined,
+      });
+      generatedTasksCount = fallback.createdTasksCount;
+    }
   }
 
   return withIdNoStore(

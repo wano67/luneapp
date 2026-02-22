@@ -1163,7 +1163,7 @@ export default function ServicesPage() {
         open={templatesModalOpen}
         onCloseAction={closeTemplates}
         title={`Gérer templates ${templatesService ? `· ${templatesService.code}` : ''}`}
-        description="Ces templates deviennent les tâches générées automatiquement au démarrage d’un projet."
+        description="Ces templates deviennent les tâches générées automatiquement quand le service est ajouté à un projet."
       >
         <div className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1203,7 +1203,7 @@ export default function ServicesPage() {
           ) : templates.length === 0 ? (
             <Card className="space-y-3 border-dashed border-[var(--border)] bg-transparent p-4">
               <p className="text-sm text-[var(--text-secondary)]">
-                Aucun template → ce service ne génèrera pas de tâches au démarrage d’un projet.
+                Aucun template → ce service ne générera pas de tâches lors de l’ajout au projet.
               </p>
               <div className="flex flex-wrap gap-2">
                 <Button

@@ -227,6 +227,7 @@ export async function PATCH(
   const noteRaw = (body as { note?: unknown }).note;
   const issuedAtRaw = (body as { issuedAt?: unknown }).issuedAt;
   const dueAtRaw = (body as { dueAt?: unknown }).dueAt;
+  const paidAtRaw = (body as { paidAt?: unknown }).paidAt;
   const lineItemsRaw = (body as { lineItems?: unknown }).lineItems;
 
   const itemsRaw = (body as { items?: unknown }).items;
@@ -274,12 +275,17 @@ export async function PATCH(
 
   const hasLineUpdates = lineItemsRaw !== undefined;
   const hasMetaUpdates = noteRaw !== undefined || issuedAtRaw !== undefined || dueAtRaw !== undefined;
-  const hasAnyChange = hasStatus || itemUpdates.length > 0 || hasLineUpdates || hasMetaUpdates;
+  const wantsPaidAt = paidAtRaw !== undefined;
+  const hasAnyChange = hasStatus || itemUpdates.length > 0 || hasLineUpdates || hasMetaUpdates || wantsPaidAt;
   if (!hasAnyChange) {
     return withIdNoStore(badRequest('Aucune modification.'), requestId);
   }
 
   const effectiveNextStatus = hasStatus ? nextStatus : existing.status;
+
+  if (wantsPaidAt && paidAtRaw !== null && effectiveNextStatus !== InvoiceStatus.PAID) {
+    return withIdNoStore(badRequest('paidAt requiert status=PAID.'), requestId);
+  }
 
   if (itemUpdates.length) {
     const itemIds = itemUpdates.map((i) => i.id);
@@ -308,8 +314,10 @@ export async function PATCH(
     if (effectiveNextStatus !== InvoiceStatus.PAID || itemUpdates.length > 0 || hasLineUpdates || hasMetaUpdates) {
       return withIdNoStore(badRequest('Facture payée: modification interdite.'), requestId);
     }
-    const ledgerIds = await loadInvoiceLedgerIds(businessIdBigInt, invoiceIdBigInt);
-    return withIdNoStore(jsonNoStore({ invoice: serializeInvoice(existing as InvoiceWithItems, ledgerIds) }), requestId);
+    if (!wantsPaidAt) {
+      const ledgerIds = await loadInvoiceLedgerIds(businessIdBigInt, invoiceIdBigInt);
+      return withIdNoStore(jsonNoStore({ invoice: serializeInvoice(existing as InvoiceWithItems, ledgerIds) }), requestId);
+    }
   }
 
   if (hasLineUpdates && existing.status !== InvoiceStatus.DRAFT) {
@@ -511,6 +519,16 @@ export async function PATCH(
       data.dueAt = dueAt;
     }
 
+    if (paidAtRaw !== undefined) {
+      if (paidAtRaw === null) {
+        data.paidAt = null;
+      } else {
+        const paidAt = parseIsoDate(paidAtRaw);
+        if (!paidAt) return null;
+        data.paidAt = paidAt;
+      }
+    }
+
     if (itemUpdates.length && !hasLineUpdates) {
       for (const update of itemUpdates) {
         await tx.invoiceItem.update({
@@ -525,7 +543,7 @@ export async function PATCH(
     let issuedAt = data.issuedAt instanceof Date ? data.issuedAt : existing.issuedAt;
     if (effectiveNextStatus === InvoiceStatus.SENT && !issuedAt) issuedAt = now;
     if (effectiveNextStatus === InvoiceStatus.SENT) data.issuedAt = issuedAt;
-    if (isMarkingPaid) data.paidAt = now;
+    if (isMarkingPaid && data.paidAt === undefined) data.paidAt = now;
 
     if (effectiveNextStatus === InvoiceStatus.SENT && !existing.number && issuedAt) {
       const number = await assignDocumentNumber(tx, businessIdBigInt, 'INVOICE', issuedAt);
