@@ -13,6 +13,20 @@ type ClientInfo = {
   email: string | null;
   phone?: string | null;
   websiteUrl: string | null;
+  company?: string | null;
+  companyName?: string | null;
+  mainContactName?: string | null;
+  billingCompanyName?: string | null;
+  billingContactName?: string | null;
+  billingEmail?: string | null;
+  billingPhone?: string | null;
+  billingVatNumber?: string | null;
+  billingReference?: string | null;
+  billingAddressLine1?: string | null;
+  billingAddressLine2?: string | null;
+  billingPostalCode?: string | null;
+  billingCity?: string | null;
+  billingCountryCode?: string | null;
   notes: string | null;
   sector?: string | null;
   status?: string | null;
@@ -57,6 +71,8 @@ export function ClientInfoTab({ businessId, clientId, client, onUpdated }: Props
   const [tagOptions, setTagOptions] = useState<ReferenceItem[]>([]);
   const [form, setForm] = useState({
     name: client.name ?? '',
+    companyName: client.companyName ?? client.company ?? '',
+    mainContactName: client.mainContactName ?? '',
     email: client.email ?? '',
     phone: client.phone ?? '',
     websiteUrl: client.websiteUrl ?? '',
@@ -66,6 +82,17 @@ export function ClientInfoTab({ businessId, clientId, client, onUpdated }: Props
     notes: client.notes ?? '',
     categoryReferenceId: client.categoryReferenceId ?? '',
     tagReferenceIds: client.tagReferences?.map((tag) => tag.id) ?? [],
+    billingCompanyName: client.billingCompanyName ?? '',
+    billingContactName: client.billingContactName ?? '',
+    billingEmail: client.billingEmail ?? '',
+    billingPhone: client.billingPhone ?? '',
+    billingVatNumber: client.billingVatNumber ?? '',
+    billingReference: client.billingReference ?? '',
+    billingAddressLine1: client.billingAddressLine1 ?? '',
+    billingAddressLine2: client.billingAddressLine2 ?? '',
+    billingPostalCode: client.billingPostalCode ?? '',
+    billingCity: client.billingCity ?? '',
+    billingCountryCode: client.billingCountryCode ?? '',
   });
 
   useEffect(() => {
@@ -106,6 +133,8 @@ export function ClientInfoTab({ businessId, clientId, client, onUpdated }: Props
     const initialTags = (client.tagReferences ?? []).map((tag) => tag.id).sort().join('|');
     return (
       form.name !== (client.name ?? '') ||
+      form.companyName !== (client.companyName ?? client.company ?? '') ||
+      form.mainContactName !== (client.mainContactName ?? '') ||
       form.email !== (client.email ?? '') ||
       form.phone !== (client.phone ?? '') ||
       form.websiteUrl !== (client.websiteUrl ?? '') ||
@@ -114,13 +143,26 @@ export function ClientInfoTab({ businessId, clientId, client, onUpdated }: Props
       form.leadSource !== (client.leadSource ?? 'UNKNOWN') ||
       form.notes !== (client.notes ?? '') ||
       form.categoryReferenceId !== (client.categoryReferenceId ?? '') ||
-      currentTags !== initialTags
+      currentTags !== initialTags ||
+      form.billingCompanyName !== (client.billingCompanyName ?? '') ||
+      form.billingContactName !== (client.billingContactName ?? '') ||
+      form.billingEmail !== (client.billingEmail ?? '') ||
+      form.billingPhone !== (client.billingPhone ?? '') ||
+      form.billingVatNumber !== (client.billingVatNumber ?? '') ||
+      form.billingReference !== (client.billingReference ?? '') ||
+      form.billingAddressLine1 !== (client.billingAddressLine1 ?? '') ||
+      form.billingAddressLine2 !== (client.billingAddressLine2 ?? '') ||
+      form.billingPostalCode !== (client.billingPostalCode ?? '') ||
+      form.billingCity !== (client.billingCity ?? '') ||
+      form.billingCountryCode !== (client.billingCountryCode ?? '')
     );
   }, [client, form]);
 
   function resetForm() {
     setForm({
       name: client.name ?? '',
+      companyName: client.companyName ?? client.company ?? '',
+      mainContactName: client.mainContactName ?? '',
       email: client.email ?? '',
       phone: client.phone ?? '',
       websiteUrl: client.websiteUrl ?? '',
@@ -130,6 +172,17 @@ export function ClientInfoTab({ businessId, clientId, client, onUpdated }: Props
       notes: client.notes ?? '',
       categoryReferenceId: client.categoryReferenceId ?? '',
       tagReferenceIds: client.tagReferences?.map((tag) => tag.id) ?? [],
+      billingCompanyName: client.billingCompanyName ?? '',
+      billingContactName: client.billingContactName ?? '',
+      billingEmail: client.billingEmail ?? '',
+      billingPhone: client.billingPhone ?? '',
+      billingVatNumber: client.billingVatNumber ?? '',
+      billingReference: client.billingReference ?? '',
+      billingAddressLine1: client.billingAddressLine1 ?? '',
+      billingAddressLine2: client.billingAddressLine2 ?? '',
+      billingPostalCode: client.billingPostalCode ?? '',
+      billingCity: client.billingCity ?? '',
+      billingCountryCode: client.billingCountryCode ?? '',
     });
     setError(null);
   }
@@ -144,6 +197,8 @@ export function ClientInfoTab({ businessId, clientId, client, onUpdated }: Props
       setSaving(true);
       const body: Record<string, unknown> = {
         name: form.name.trim(),
+        companyName: form.companyName.trim() || null,
+        mainContactName: form.mainContactName.trim() || null,
         email: form.email.trim() || null,
         phone: form.phone.trim() || null,
         websiteUrl: form.websiteUrl.trim() || null,
@@ -153,6 +208,17 @@ export function ClientInfoTab({ businessId, clientId, client, onUpdated }: Props
         notes: form.notes.trim() || null,
         categoryReferenceId: form.categoryReferenceId || null,
         tagReferenceIds: form.tagReferenceIds,
+        billingCompanyName: form.billingCompanyName.trim() || null,
+        billingContactName: form.billingContactName.trim() || null,
+        billingEmail: form.billingEmail.trim() || null,
+        billingPhone: form.billingPhone.trim() || null,
+        billingVatNumber: form.billingVatNumber.trim() || null,
+        billingReference: form.billingReference.trim() || null,
+        billingAddressLine1: form.billingAddressLine1.trim() || null,
+        billingAddressLine2: form.billingAddressLine2.trim() || null,
+        billingPostalCode: form.billingPostalCode.trim() || null,
+        billingCity: form.billingCity.trim() || null,
+        billingCountryCode: form.billingCountryCode.trim() || null,
       };
       const res = await fetchJson<{ item: ClientInfo }>(
         `/api/pro/businesses/${businessId}/clients/${clientId}`,
@@ -226,6 +292,18 @@ export function ClientInfoTab({ businessId, clientId, client, onUpdated }: Props
                 onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
                 disabled={!isAdmin}
               />
+              <Input
+                label="Société"
+                value={form.companyName}
+                onChange={(e) => setForm((p) => ({ ...p, companyName: e.target.value }))}
+                disabled={!isAdmin}
+              />
+              <Input
+                label="Contact principal"
+                value={form.mainContactName}
+                onChange={(e) => setForm((p) => ({ ...p, mainContactName: e.target.value }))}
+                disabled={!isAdmin}
+              />
               <label className="space-y-1 text-sm text-[var(--text-primary)]">
                 <span className="text-xs text-[var(--text-secondary)]">Statut</span>
                 <select
@@ -251,6 +329,8 @@ export function ClientInfoTab({ businessId, clientId, client, onUpdated }: Props
           ) : (
             <div className="space-y-2 text-sm text-[var(--text-secondary)]">
               <InfoRow label="Nom" value={client.name} />
+              <InfoRow label="Société" value={client.companyName ?? client.company ?? '—'} />
+              <InfoRow label="Contact principal" value={client.mainContactName ?? '—'} />
               <InfoRow label="Statut" value={STATUS_OPTIONS.find((s) => s.value === (client.status ?? 'ACTIVE'))?.label ?? 'Actif'} />
               <InfoRow label="Secteur" value={client.sector ?? '—'} />
             </div>
@@ -310,6 +390,95 @@ export function ClientInfoTab({ businessId, clientId, client, onUpdated }: Props
           ) : (
             <div className="space-y-2 text-sm text-[var(--text-secondary)]">
               <InfoRow label="Site web" value={client.websiteUrl ?? '—'} />
+            </div>
+          )}
+        </Card>
+
+        <Card className="rounded-3xl border border-[var(--border)]/60 bg-[var(--surface)] p-4 sm:p-6 shadow-sm space-y-3 lg:col-span-2">
+          <p className="text-xs uppercase tracking-wide text-[var(--text-secondary)]">Facturation</p>
+          {editing ? (
+            <div className="grid gap-3 md:grid-cols-2">
+              <Input
+                label="Société facturation"
+                value={form.billingCompanyName}
+                onChange={(e) => setForm((p) => ({ ...p, billingCompanyName: e.target.value }))}
+                disabled={!isAdmin}
+              />
+              <Input
+                label="Contact facturation"
+                value={form.billingContactName}
+                onChange={(e) => setForm((p) => ({ ...p, billingContactName: e.target.value }))}
+                disabled={!isAdmin}
+              />
+              <Input
+                label="Email facturation"
+                value={form.billingEmail}
+                onChange={(e) => setForm((p) => ({ ...p, billingEmail: e.target.value }))}
+                disabled={!isAdmin}
+              />
+              <Input
+                label="Téléphone facturation"
+                value={form.billingPhone}
+                onChange={(e) => setForm((p) => ({ ...p, billingPhone: e.target.value }))}
+                disabled={!isAdmin}
+              />
+              <Input
+                label="TVA facturation"
+                value={form.billingVatNumber}
+                onChange={(e) => setForm((p) => ({ ...p, billingVatNumber: e.target.value }))}
+                disabled={!isAdmin}
+              />
+              <Input
+                label="Référence client"
+                value={form.billingReference}
+                onChange={(e) => setForm((p) => ({ ...p, billingReference: e.target.value }))}
+                disabled={!isAdmin}
+              />
+              <Input
+                label="Adresse facturation"
+                value={form.billingAddressLine1}
+                onChange={(e) => setForm((p) => ({ ...p, billingAddressLine1: e.target.value }))}
+                disabled={!isAdmin}
+              />
+              <Input
+                label="Complément adresse"
+                value={form.billingAddressLine2}
+                onChange={(e) => setForm((p) => ({ ...p, billingAddressLine2: e.target.value }))}
+                disabled={!isAdmin}
+              />
+              <Input
+                label="Code postal"
+                value={form.billingPostalCode}
+                onChange={(e) => setForm((p) => ({ ...p, billingPostalCode: e.target.value }))}
+                disabled={!isAdmin}
+              />
+              <Input
+                label="Ville"
+                value={form.billingCity}
+                onChange={(e) => setForm((p) => ({ ...p, billingCity: e.target.value }))}
+                disabled={!isAdmin}
+              />
+              <Input
+                label="Pays (ISO)"
+                value={form.billingCountryCode}
+                onChange={(e) => setForm((p) => ({ ...p, billingCountryCode: e.target.value }))}
+                placeholder="FR"
+                disabled={!isAdmin}
+              />
+            </div>
+          ) : (
+            <div className="grid gap-2 text-sm text-[var(--text-secondary)] md:grid-cols-2">
+              <InfoRow label="Société" value={client.billingCompanyName ?? '—'} />
+              <InfoRow label="Contact" value={client.billingContactName ?? '—'} />
+              <InfoRow label="Email" value={client.billingEmail ?? '—'} />
+              <InfoRow label="Téléphone" value={client.billingPhone ?? '—'} />
+              <InfoRow label="TVA" value={client.billingVatNumber ?? '—'} />
+              <InfoRow label="Référence" value={client.billingReference ?? '—'} />
+              <InfoRow label="Adresse" value={client.billingAddressLine1 ?? '—'} />
+              <InfoRow label="Complément" value={client.billingAddressLine2 ?? '—'} />
+              <InfoRow label="Code postal" value={client.billingPostalCode ?? '—'} />
+              <InfoRow label="Ville" value={client.billingCity ?? '—'} />
+              <InfoRow label="Pays" value={client.billingCountryCode ?? '—'} />
             </div>
           )}
         </Card>

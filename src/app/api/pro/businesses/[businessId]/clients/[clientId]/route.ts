@@ -94,6 +94,19 @@ function serializeClient(client: {
   email: string | null;
   websiteUrl: string | null;
   phone: string | null;
+  companyName?: string | null;
+  mainContactName?: string | null;
+  billingCompanyName?: string | null;
+  billingContactName?: string | null;
+  billingEmail?: string | null;
+  billingPhone?: string | null;
+  billingVatNumber?: string | null;
+  billingReference?: string | null;
+  billingAddressLine1?: string | null;
+  billingAddressLine2?: string | null;
+  billingPostalCode?: string | null;
+  billingCity?: string | null;
+  billingCountryCode?: string | null;
   notes: string | null;
   sector: string | null;
   status: ClientStatus;
@@ -122,6 +135,20 @@ function serializeClient(client: {
     email: client.email,
     websiteUrl: client.websiteUrl,
     phone: client.phone,
+    company: client.companyName ?? null,
+    companyName: client.companyName ?? null,
+    mainContactName: client.mainContactName ?? null,
+    billingCompanyName: client.billingCompanyName ?? null,
+    billingContactName: client.billingContactName ?? null,
+    billingEmail: client.billingEmail ?? null,
+    billingPhone: client.billingPhone ?? null,
+    billingVatNumber: client.billingVatNumber ?? null,
+    billingReference: client.billingReference ?? null,
+    billingAddressLine1: client.billingAddressLine1 ?? null,
+    billingAddressLine2: client.billingAddressLine2 ?? null,
+    billingPostalCode: client.billingPostalCode ?? null,
+    billingCity: client.billingCity ?? null,
+    billingCountryCode: client.billingCountryCode ?? null,
     notes: client.notes,
     sector: client.sector,
     status: client.status,
@@ -258,6 +285,38 @@ export async function PATCH(
     }
   }
 
+  if ('companyName' in body || 'company' in body) {
+    const raw =
+      'companyName' in body
+        ? (body as Record<string, unknown>).companyName
+        : (body as Record<string, unknown>).company;
+    if (raw == null || raw === '') {
+      data.companyName = null;
+    } else if (typeof raw === 'string') {
+      const companyName = normalizeStr(raw);
+      if (companyName && companyName.length > 160) {
+        return withNoStore(withRequestId(badRequest('Nom de société trop long (max 160).'), requestId));
+      }
+      data.companyName = companyName || null;
+    } else {
+      return withNoStore(withRequestId(badRequest('Nom de société invalide.'), requestId));
+    }
+  }
+
+  if ('mainContactName' in body) {
+    if (body.mainContactName == null || body.mainContactName === '') {
+      data.mainContactName = null;
+    } else if (typeof body.mainContactName === 'string') {
+      const mainContactName = normalizeStr(body.mainContactName);
+      if (mainContactName && mainContactName.length > 160) {
+        return withNoStore(withRequestId(badRequest('Contact principal trop long (max 160).'), requestId));
+      }
+      data.mainContactName = mainContactName || null;
+    } else {
+      return withNoStore(withRequestId(badRequest('Contact principal invalide.'), requestId));
+    }
+  }
+
   if ('phone' in body) {
     if (body.phone == null || body.phone === '') {
       data.phone = null;
@@ -269,6 +328,160 @@ export async function PATCH(
       data.phone = phone || null;
     } else {
       return withNoStore(withRequestId(badRequest('Téléphone invalide.'), requestId));
+    }
+  }
+
+  if ('billingCompanyName' in body) {
+    if (body.billingCompanyName == null || body.billingCompanyName === '') {
+      data.billingCompanyName = null;
+    } else if (typeof body.billingCompanyName === 'string') {
+      const billingCompanyName = normalizeStr(body.billingCompanyName);
+      if (billingCompanyName && billingCompanyName.length > 160) {
+        return withNoStore(withRequestId(badRequest('Société facturation trop longue (max 160).'), requestId));
+      }
+      data.billingCompanyName = billingCompanyName || null;
+    } else {
+      return withNoStore(withRequestId(badRequest('Société facturation invalide.'), requestId));
+    }
+  }
+
+  if ('billingContactName' in body) {
+    if (body.billingContactName == null || body.billingContactName === '') {
+      data.billingContactName = null;
+    } else if (typeof body.billingContactName === 'string') {
+      const billingContactName = normalizeStr(body.billingContactName);
+      if (billingContactName && billingContactName.length > 160) {
+        return withNoStore(withRequestId(badRequest('Contact facturation trop long (max 160).'), requestId));
+      }
+      data.billingContactName = billingContactName || null;
+    } else {
+      return withNoStore(withRequestId(badRequest('Contact facturation invalide.'), requestId));
+    }
+  }
+
+  if ('billingEmail' in body) {
+    if (body.billingEmail == null || body.billingEmail === '') {
+      data.billingEmail = null;
+    } else if (typeof body.billingEmail === 'string') {
+      const billingEmail = normalizeStr(body.billingEmail);
+      if (billingEmail && (billingEmail.length > 254 || !isValidEmail(billingEmail))) {
+        return withNoStore(withRequestId(badRequest('Email facturation invalide.'), requestId));
+      }
+      data.billingEmail = billingEmail || null;
+    } else {
+      return withNoStore(withRequestId(badRequest('Email facturation invalide.'), requestId));
+    }
+  }
+
+  if ('billingPhone' in body) {
+    if (body.billingPhone == null || body.billingPhone === '') {
+      data.billingPhone = null;
+    } else if (typeof body.billingPhone === 'string') {
+      const billingPhone = sanitizePhone(body.billingPhone);
+      if (billingPhone && (billingPhone.length > 32 || !isValidPhone(billingPhone))) {
+        return withNoStore(withRequestId(badRequest('Téléphone facturation invalide.'), requestId));
+      }
+      data.billingPhone = billingPhone || null;
+    } else {
+      return withNoStore(withRequestId(badRequest('Téléphone facturation invalide.'), requestId));
+    }
+  }
+
+  if ('billingVatNumber' in body) {
+    if (body.billingVatNumber == null || body.billingVatNumber === '') {
+      data.billingVatNumber = null;
+    } else if (typeof body.billingVatNumber === 'string') {
+      const billingVatNumber = normalizeStr(body.billingVatNumber);
+      if (billingVatNumber && billingVatNumber.length > 40) {
+        return withNoStore(withRequestId(badRequest('Numéro TVA trop long (40 max).'), requestId));
+      }
+      data.billingVatNumber = billingVatNumber || null;
+    } else {
+      return withNoStore(withRequestId(badRequest('Numéro TVA invalide.'), requestId));
+    }
+  }
+
+  if ('billingReference' in body) {
+    if (body.billingReference == null || body.billingReference === '') {
+      data.billingReference = null;
+    } else if (typeof body.billingReference === 'string') {
+      const billingReference = normalizeStr(body.billingReference);
+      if (billingReference && billingReference.length > 120) {
+        return withNoStore(withRequestId(badRequest('Référence client trop longue (120 max).'), requestId));
+      }
+      data.billingReference = billingReference || null;
+    } else {
+      return withNoStore(withRequestId(badRequest('Référence client invalide.'), requestId));
+    }
+  }
+
+  if ('billingAddressLine1' in body) {
+    if (body.billingAddressLine1 == null || body.billingAddressLine1 === '') {
+      data.billingAddressLine1 = null;
+    } else if (typeof body.billingAddressLine1 === 'string') {
+      const billingAddressLine1 = normalizeStr(body.billingAddressLine1);
+      if (billingAddressLine1 && billingAddressLine1.length > 200) {
+        return withNoStore(withRequestId(badRequest('Adresse facturation trop longue (200 max).'), requestId));
+      }
+      data.billingAddressLine1 = billingAddressLine1 || null;
+    } else {
+      return withNoStore(withRequestId(badRequest('Adresse facturation invalide.'), requestId));
+    }
+  }
+
+  if ('billingAddressLine2' in body) {
+    if (body.billingAddressLine2 == null || body.billingAddressLine2 === '') {
+      data.billingAddressLine2 = null;
+    } else if (typeof body.billingAddressLine2 === 'string') {
+      const billingAddressLine2 = normalizeStr(body.billingAddressLine2);
+      if (billingAddressLine2 && billingAddressLine2.length > 200) {
+        return withNoStore(withRequestId(badRequest('Complément adresse facturation trop long (200 max).'), requestId));
+      }
+      data.billingAddressLine2 = billingAddressLine2 || null;
+    } else {
+      return withNoStore(withRequestId(badRequest('Complément adresse facturation invalide.'), requestId));
+    }
+  }
+
+  if ('billingPostalCode' in body) {
+    if (body.billingPostalCode == null || body.billingPostalCode === '') {
+      data.billingPostalCode = null;
+    } else if (typeof body.billingPostalCode === 'string') {
+      const billingPostalCode = normalizeStr(body.billingPostalCode);
+      if (billingPostalCode && billingPostalCode.length > 20) {
+        return withNoStore(withRequestId(badRequest('Code postal facturation trop long (20 max).'), requestId));
+      }
+      data.billingPostalCode = billingPostalCode || null;
+    } else {
+      return withNoStore(withRequestId(badRequest('Code postal facturation invalide.'), requestId));
+    }
+  }
+
+  if ('billingCity' in body) {
+    if (body.billingCity == null || body.billingCity === '') {
+      data.billingCity = null;
+    } else if (typeof body.billingCity === 'string') {
+      const billingCity = normalizeStr(body.billingCity);
+      if (billingCity && billingCity.length > 100) {
+        return withNoStore(withRequestId(badRequest('Ville facturation trop longue (100 max).'), requestId));
+      }
+      data.billingCity = billingCity || null;
+    } else {
+      return withNoStore(withRequestId(badRequest('Ville facturation invalide.'), requestId));
+    }
+  }
+
+  if ('billingCountryCode' in body) {
+    if (body.billingCountryCode == null || body.billingCountryCode === '') {
+      data.billingCountryCode = null;
+    } else if (typeof body.billingCountryCode === 'string') {
+      const billingCountryCode = normalizeStr(body.billingCountryCode);
+      if (billingCountryCode && billingCountryCode.length !== 2) {
+        return withNoStore(withRequestId(badRequest('Pays facturation invalide (ISO 2 lettres).'), requestId));
+      }
+      data.billingCountryCode = billingCountryCode ? billingCountryCode.toUpperCase() : null;
+    } else {
+      return withNoStore(withRequestId(badRequest('Pays facturation invalide.'), requestId));
     }
   }
 

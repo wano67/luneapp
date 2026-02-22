@@ -50,7 +50,7 @@ export function ContactCard({ href, contact, stats, status, actions }: Props) {
 
   const rows = [
     { label: 'Projets', value: stats?.projects ?? 0 },
-    { label: 'En cours', value: stats?.active ?? 0 },
+    { label: 'Actifs', value: stats?.active ?? 0 },
     { label: 'Valeur', value: formatCurrencyEUR(stats?.valueCents) },
     { label: 'Dernière', value: formatDate(contact.lastContactAt ?? stats?.lastInteraction) },
   ];

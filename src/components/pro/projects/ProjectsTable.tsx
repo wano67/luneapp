@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableEmpty, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import type { ProjectListItem } from '@/lib/hooks/useProjects';
+import { getProjectScopeLabelFR, getProjectScopeVariant, getProjectStatusLabelFR } from '@/lib/projectStatusUi';
 
 type Props = {
   businessId: string;
@@ -13,19 +14,15 @@ type Props = {
   onRetry: () => void;
 };
 
-const statusColors: Record<string, string> = {
-  PLANNED: 'bg-[var(--surface-2)] text-[var(--text-secondary)]',
-  ACTIVE: 'bg-emerald-100 text-emerald-800 border border-emerald-500/60',
-  ON_HOLD: 'bg-amber-100 text-amber-800 border border-amber-500/60',
-  COMPLETED: 'bg-blue-100 text-blue-800 border border-blue-500/60',
-  CANCELLED: 'bg-rose-100 text-rose-800 border border-rose-500/60',
-};
-
-function StatusBadge({ status }: { status: string }) {
+function StatusBadge({ status, archivedAt }: { status: string; archivedAt?: string | null }) {
+  const statusLabel = getProjectStatusLabelFR(status);
+  const scopeLabel = getProjectScopeLabelFR(status, archivedAt ?? null);
+  const scopeVariant = getProjectScopeVariant(status, archivedAt ?? null);
   return (
-    <Badge variant="neutral" className={statusColors[status] ?? undefined}>
-      {status}
-    </Badge>
+    <div className="flex flex-wrap items-center gap-2">
+      <Badge variant="neutral">{statusLabel}</Badge>
+      <Badge variant={scopeVariant}>{scopeLabel}</Badge>
+    </div>
   );
 }
 
@@ -94,7 +91,7 @@ export function ProjectsTable({ businessId, items, isLoading, error, onRetry }: 
                 {project.clientName ?? '—'}
               </TableCell>
               <TableCell>
-                <StatusBadge status={project.status} />
+                <StatusBadge status={project.status} archivedAt={project.archivedAt} />
               </TableCell>
               <TableCell className="min-w-[160px]">
                 <div className="flex items-center gap-2">

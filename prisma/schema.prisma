@@ -165,6 +165,13 @@ model Business {
   addressLine2 String?
   postalCode String?
   city String?
+  billingEmail String?
+  billingPhone String?
+  iban String?
+  bic String?
+  bankName String?
+  accountHolder String?
+  billingLegalText String?
 
   ownerId BigInt
   owner   User   @relation("BusinessOwner", fields: [ownerId], references: [id])
@@ -186,6 +193,7 @@ model Business {
   references  BusinessReference[]
   processes   Process[]
   settings    BusinessSettings?
+  numberSequences NumberSequence[]
   products    Product[]
   inventoryMovements InventoryMovement[]
   inventoryReservations InventoryReservation[]
@@ -376,6 +384,17 @@ model Client {
   email           String?
   phone           String?
   address         String?
+  billingCompanyName String?
+  billingContactName String?
+  billingEmail       String?
+  billingPhone       String?
+  billingVatNumber   String?
+  billingReference   String?
+  billingAddressLine1 String?
+  billingAddressLine2 String?
+  billingPostalCode   String?
+  billingCity         String?
+  billingCountryCode  String?
   sector          String?
   entryDate       DateTime?
   leadSource      LeadSource?
@@ -420,6 +439,7 @@ model Project {
   archivedAt    DateTime?
   startDate  DateTime?
   endDate    DateTime?
+  prestationsText String?
 
   business Business @relation(fields: [businessId], references: [id])
   client   Client?  @relation(fields: [clientId], references: [id])
@@ -784,6 +804,13 @@ model ProjectService {
   quantity   Int      @default(1)
   priceCents BigInt?
   notes      String?
+  titleOverride String?
+  description   String?
+  discountType  DiscountType @default(NONE)
+  discountValue Int?
+  billingUnit   BillingUnit  @default(ONE_OFF)
+  unitLabel     String?
+  position   Int      @default(0)
   createdAt  DateTime @default(now())
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -792,6 +819,7 @@ model ProjectService {
   tasks   Task[]
 
   @@index([projectId, serviceId])
+  @@index([projectId, position])
 }
 
 model ProjectServiceStep {
@@ -940,8 +968,8 @@ model BusinessSettings {
   id                     BigInt   @id @default(autoincrement())
   businessId             BigInt   @unique
   currency               String   @default("EUR")
-  invoicePrefix          String   @default("INV-")
-  quotePrefix            String   @default("DEV-")
+  invoicePrefix          String   @default("SF-FAC")
+  quotePrefix            String   @default("SF-DEV")
   nextInvoiceNumber      Int      @default(1)
   nextQuoteNumber        Int      @default(1)
   defaultDepositPercent  Int      @default(30)
@@ -960,10 +988,46 @@ model BusinessSettings {
   ledgerSalesAccountCode       String   @default("706")
   ledgerVatCollectedAccountCode String   @default("44571")
   ledgerCashAccountCode        String   @default("512")
+  cgvText                String?
+  paymentTermsText       String?
+  lateFeesText           String?
+  fixedIndemnityText     String?
+  legalMentionsText      String?
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
 
   business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+}
+
+enum DiscountType {
+  NONE
+  PERCENT
+  AMOUNT
+}
+
+enum BillingUnit {
+  ONE_OFF
+  MONTHLY
+}
+
+enum NumberSequenceKind {
+  QUOTE
+  INVOICE
+}
+
+model NumberSequence {
+  id         BigInt            @id @default(autoincrement())
+  businessId BigInt
+  kind       NumberSequenceKind
+  year       Int
+  lastNumber Int
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@unique([businessId, kind, year])
+  @@index([businessId, kind, year])
 }
 
 model Quote {
@@ -980,6 +1044,9 @@ model Quote {
   depositCents    BigInt
   balanceCents    BigInt
   note            String?
+  prestationsSnapshotText String?
+  issuerSnapshotJson Json?
+  clientSnapshotJson Json?
   issuedAt        DateTime?
   expiresAt       DateTime?
   createdAt       DateTime    @default(now())
@@ -1000,6 +1067,12 @@ model QuoteItem {
   quoteId        BigInt
   serviceId      BigInt?
   label          String
+  description    String?
+  discountType   DiscountType @default(NONE)
+  discountValue  Int?
+  originalUnitPriceCents BigInt?
+  unitLabel      String?
+  billingUnit    BillingUnit @default(ONE_OFF)
   quantity       Int
   unitPriceCents BigInt
   totalCents     BigInt
@@ -1025,6 +1098,9 @@ model Invoice {
   depositCents    BigInt
   balanceCents    BigInt
   note            String?
+  prestationsSnapshotText String?
+  issuerSnapshotJson Json?
+  clientSnapshotJson Json?
   issuedAt        DateTime?
   dueAt           DateTime?
   paidAt          DateTime?
@@ -1048,6 +1124,12 @@ model InvoiceItem {
   serviceId      BigInt?
   productId      BigInt?
   label          String
+  description    String?
+  discountType   DiscountType @default(NONE)
+  discountValue  Int?
+  originalUnitPriceCents BigInt?
+  unitLabel      String?
+  billingUnit    BillingUnit @default(ONE_OFF)
   quantity       Int
   unitPriceCents BigInt
   totalCents     BigInt

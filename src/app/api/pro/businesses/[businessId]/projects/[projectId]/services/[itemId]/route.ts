@@ -5,6 +5,7 @@ import { requireBusinessRole } from '@/server/auth/businessRole';
 import { assertSameOrigin, jsonNoStore, withNoStore } from '@/server/security/csrf';
 import { badRequest, getRequestId, notFound, unauthorized, withRequestId } from '@/server/http/apiUtils';
 import { rateLimit } from '@/server/security/rateLimit';
+import { BillingUnit, DiscountType } from '@/generated/prisma';
 
 function parseId(param: string | undefined) {
   if (!param || !/^\d+$/.test(param)) return null;
@@ -89,13 +90,82 @@ export async function PATCH(
   const notes = typeof body.notes === 'string' ? body.notes.trim() : undefined;
   if (notes && notes.length > 2000) return withIdNoStore(badRequest('Notes trop longues.'), requestId);
 
+  const data: Record<string, unknown> = {
+    quantity: quantity ?? undefined,
+    priceCents: priceCents ?? undefined,
+    notes: notes ?? undefined,
+  };
+
+  if (Object.prototype.hasOwnProperty.call(body, 'titleOverride')) {
+    const titleOverride =
+      body.titleOverride == null ? null : typeof body.titleOverride === 'string' ? body.titleOverride.trim() : undefined;
+    if (titleOverride === undefined) return withIdNoStore(badRequest('Libellé invalide.'), requestId);
+    if (titleOverride && titleOverride.length > 200) {
+      return withIdNoStore(badRequest('Libellé trop long (200 max).'), requestId);
+    }
+    data.titleOverride = titleOverride || null;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(body, 'description')) {
+    const description =
+      body.description == null ? null : typeof body.description === 'string' ? body.description.trim() : undefined;
+    if (description === undefined) return withIdNoStore(badRequest('Description invalide.'), requestId);
+    if (description && description.length > 2000) {
+      return withIdNoStore(badRequest('Description trop longue (2000 max).'), requestId);
+    }
+    data.description = description || null;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(body, 'discountType') || Object.prototype.hasOwnProperty.call(body, 'discountValue')) {
+    const discountTypeRaw = (body as Record<string, unknown>).discountType;
+    const discountType =
+      typeof discountTypeRaw === 'string' && Object.values(DiscountType).includes(discountTypeRaw as DiscountType)
+        ? (discountTypeRaw as DiscountType)
+        : DiscountType.NONE;
+    const discountValueRaw =
+      typeof (body as Record<string, unknown>).discountValue === 'number' &&
+      Number.isFinite((body as Record<string, unknown>).discountValue)
+        ? Math.trunc((body as Record<string, unknown>).discountValue as number)
+        : null;
+    const discountValue =
+      discountType === DiscountType.PERCENT
+        ? discountValueRaw == null
+          ? null
+          : Math.min(100, Math.max(0, discountValueRaw))
+        : discountType === DiscountType.AMOUNT
+          ? discountValueRaw == null
+            ? null
+            : Math.max(0, discountValueRaw)
+          : null;
+    data.discountType = discountType;
+    data.discountValue = discountValue ?? null;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(body, 'billingUnit') || Object.prototype.hasOwnProperty.call(body, 'unitLabel')) {
+    const billingUnitRaw = (body as Record<string, unknown>).billingUnit;
+    if (billingUnitRaw !== undefined) {
+      if (typeof billingUnitRaw !== 'string' || !Object.values(BillingUnit).includes(billingUnitRaw as BillingUnit)) {
+        return withIdNoStore(badRequest('billingUnit invalide.'), requestId);
+      }
+      data.billingUnit = billingUnitRaw as BillingUnit;
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'unitLabel')) {
+      const unitLabelRaw = (body as Record<string, unknown>).unitLabel;
+      if (unitLabelRaw == null) {
+        data.unitLabel = null;
+      } else if (typeof unitLabelRaw === 'string') {
+        const unitLabel = unitLabelRaw.trim();
+        if (unitLabel.length > 20) return withIdNoStore(badRequest('Unité trop longue (20 max).'), requestId);
+        data.unitLabel = unitLabel || null;
+      } else {
+        return withIdNoStore(badRequest('unitLabel invalide.'), requestId);
+      }
+    }
+  }
+
   const updated = await prisma.projectService.update({
     where: { id: itemIdBigInt },
-    data: {
-      quantity: quantity ?? undefined,
-      priceCents: priceCents ?? undefined,
-      notes: notes ?? undefined,
-    },
+    data,
     include: { service: true },
   });
 
@@ -107,6 +177,12 @@ export async function PATCH(
       quantity: updated.quantity,
       priceCents: updated.priceCents?.toString() ?? null,
       notes: updated.notes,
+      titleOverride: updated.titleOverride ?? null,
+      description: updated.description ?? null,
+      discountType: updated.discountType,
+      discountValue: updated.discountValue ?? null,
+      billingUnit: updated.billingUnit,
+      unitLabel: updated.unitLabel ?? null,
       createdAt: updated.createdAt.toISOString(),
       service: {
         id: updated.service.id.toString(),

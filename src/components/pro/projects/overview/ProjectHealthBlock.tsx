@@ -1,8 +1,10 @@
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
+import { getProjectScopeLabelFR, getProjectScopeVariant, getProjectStatusLabelFR } from '@/lib/projectStatusUi';
 
 type Props = {
   status: string | null;
+  archivedAt?: string | null;
   progressPct: number;
   endDateLabel: string;
   nextActionLabel: string;
@@ -18,7 +20,17 @@ function ProgressBar({ value }: { value: number }) {
   );
 }
 
-export function ProjectHealthBlock({ status, progressPct, endDateLabel, nextActionLabel, isOverdue }: Props) {
+export function ProjectHealthBlock({
+  status,
+  archivedAt,
+  progressPct,
+  endDateLabel,
+  nextActionLabel,
+  isOverdue,
+}: Props) {
+  const statusLabel = getProjectStatusLabelFR(status);
+  const scopeLabel = getProjectScopeLabelFR(status, archivedAt ?? null);
+  const scopeVariant = getProjectScopeVariant(status, archivedAt ?? null);
   return (
     <Card className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -28,7 +40,10 @@ export function ProjectHealthBlock({ status, progressPct, endDateLabel, nextActi
       <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <div className="space-y-1 text-sm text-[var(--text-secondary)]">
           <p>Statut</p>
-          <Badge variant="neutral">{status || '—'}</Badge>
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="neutral">{statusLabel}</Badge>
+            <Badge variant={scopeVariant}>{scopeLabel}</Badge>
+          </div>
         </div>
         <div className="space-y-2 text-sm text-[var(--text-secondary)]">
           <div className="flex items-center justify-between text-[var(--text-primary)]">

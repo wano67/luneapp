@@ -112,10 +112,10 @@ export const proNavSections: ProNavSectionConfig[] = [
     items: [
       {
         id: 'catalog',
-        label: 'Catalogue',
+        label: 'Catalogue services',
         icon: Folder,
-        href: (biz) => `/app/pro/${biz}/catalog`,
-        activePatterns: (biz) => [startsWithRegex(`/app/pro/${biz}/catalog`)],
+        href: (biz) => `/app/pro/${biz}/services`,
+        activePatterns: (biz) => [startsWithRegex(`/app/pro/${biz}/services`)],
       },
       {
         id: 'stock',

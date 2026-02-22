@@ -1,0 +1,6638 @@
+{
+  "models": {
+    "User": {
+      "fields": [
+        {
+          "name": "id",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": "@id @default(autoincrement())"
+        },
+        {
+          "name": "email",
+          "type": "String",
+          "baseType": "String",
+          "optional": false,
+          "list": false,
+          "attrs": "@unique"
+        },
+        {
+          "name": "passwordHash",
+          "type": "String",
+          "baseType": "String",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "name",
+          "type": "String?",
+          "baseType": "String",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "role",
+          "type": "UserRole",
+          "baseType": "UserRole",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(USER)"
+        },
+        {
+          "name": "isActive",
+          "type": "Boolean",
+          "baseType": "Boolean",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(true)"
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "baseType": "DateTime",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(now())"
+        },
+        {
+          "name": "updatedAt",
+          "type": "DateTime",
+          "baseType": "DateTime",
+          "optional": false,
+          "list": false,
+          "attrs": "@updatedAt"
+        },
+        {
+          "name": "ownedBusinesses",
+          "type": "Business[]",
+          "baseType": "Business",
+          "optional": false,
+          "list": true,
+          "attrs": "@relation(\"BusinessOwner\")"
+        },
+        {
+          "name": "businessMemberships",
+          "type": "BusinessMembership[]",
+          "baseType": "BusinessMembership",
+          "optional": false,
+          "list": true,
+          "attrs": ""
+        },
+        {
+          "name": "assignedTasks",
+          "type": "Task[]",
+          "baseType": "Task",
+          "optional": false,
+          "list": true,
+          "attrs": ""
+        },
+        {
+          "name": "quotesCreated",
+          "type": "Quote[]",
+          "baseType": "Quote",
+          "optional": false,
+          "list": true,
+          "attrs": "@relation(\"QuoteCreatedBy\")"
+        },
+        {
+          "name": "invoicesCreated",
+          "type": "Invoice[]",
+          "baseType": "Invoice",
+          "optional": false,
+          "list": true,
+          "attrs": "@relation(\"InvoiceCreatedBy\")"
+        },
+        {
+          "name": "personalAccounts",
+          "type": "PersonalAccount[]",
+          "baseType": "PersonalAccount",
+          "optional": false,
+          "list": true,
+          "attrs": ""
+        },
+        {
+          "name": "personalTransactions",
+          "type": "PersonalTransaction[]",
+          "baseType": "PersonalTransaction",
+          "optional": false,
+          "list": true,
+          "attrs": ""
+        },
+        {
+          "name": "personalCategories",
+          "type": "PersonalCategory[]",
+          "baseType": "PersonalCategory",
+          "optional": false,
+          "list": true,
+          "attrs": ""
+        },
+        {
+          "name": "interactionsCreated",
+          "type": "Interaction[]",
+          "baseType": "Interaction",
+          "optional": false,
+          "list": true,
+          "attrs": "@relation(\"InteractionCreatedBy\")"
+        },
+        {
+          "name": "inventoryMovements",
+          "type": "InventoryMovement[]",
+          "baseType": "InventoryMovement",
+          "optional": false,
+          "list": true,
+          "attrs": ""
+        },
+        {
+          "name": "ledgerEntriesCreated",
+          "type": "LedgerEntry[]",
+          "baseType": "LedgerEntry",
+          "optional": false,
+          "list": true,
+          "attrs": ""
+        },
+        {
+          "name": "clientsAnonymized",
+          "type": "Client[]",
+          "baseType": "Client",
+          "optional": false,
+          "list": true,
+          "attrs": "@relation(\"ClientAnonymizedBy\")"
+        },
+        {
+          "name": "documentsCreated",
+          "type": "BusinessDocument[]",
+          "baseType": "BusinessDocument",
+          "optional": false,
+          "list": true,
+          "attrs": "@relation(\"DocumentCreatedBy\")"
+        }
+      ],
+      "attributes": []
+    },
+    "Business": {
+      "fields": [
+        {
+          "name": "id",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": "@id @default(autoincrement())"
+        },
+        {
+          "name": "name",
+          "type": "String",
+          "baseType": "String",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "websiteUrl",
+          "type": "String?",
+          "baseType": "String",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "legalName",
+          "type": "String?",
+          "baseType": "String",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "countryCode",
+          "type": "String",
+          "baseType": "String",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(\"FR\")"
+        },
+        {
+          "name": "siret",
+          "type": "String?",
+          "baseType": "String",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "vatNumber",
+          "type": "String?",
+          "baseType": "String",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "addressLine1",
+          "type": "String?",
+          "baseType": "String",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "addressLine2",
+          "type": "String?",
+          "baseType": "String",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "postalCode",
+          "type": "String?",
+          "baseType": "String",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "city",
+          "type": "String?",
+          "baseType": "String",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "ownerId",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "owner",
+          "type": "User",
+          "baseType": "User",
+          "optional": false,
+          "list": false,
+          "attrs": "@relation(\"BusinessOwner\", fields: [ownerId], references: [id])"
+        },
+        {
+          "name": "memberships",
+          "type": "BusinessMembership[]",
+          "baseType": "BusinessMembership",
+          "optional": false,
+          "list": true,
+          "attrs": ""
+        },
+        {
+          "name": "invites",
+          "type": "BusinessInvite[]",
+          "baseType": "BusinessInvite",
+          "optional": false,
+          "list": true,
+          "attrs": ""
+        },
+        {
+          "name": "prospects",
+          "type": "Prospect[]",
+          "baseType": "Prospect",
+          "optional": false,
+          "list": true,
+          "attrs": ""
+        },
+        {
+          "name": "clients",
+          "type": "Client[]",
+          "baseType": "Client",
+          "optional": false,
+          "list": true,
+          "attrs": ""
+        },
+        {
+          "name": "projects",
+          "type": "Project[]",
+          "baseType": "Project",
+          "optional": false,
+          "list": true,
+          "attrs": ""
+        },
+        {
+          "name": "tasks",
+          "type": "Task[]",
+          "baseType": "Task",
+          "optional": false,
+          "list": true,
+          "attrs": ""
+        },
+        {
+          "name": "finances",
+          "type": "Finance[]",
+          "baseType": "Finance",
+          "optional": false,
+          "list": true,
+          "attrs": ""
+        },
+        {
+          "name": "services",
+          "type": "Service[]",
+          "baseType": "Service",
+          "optional": false,
+          "list": true,
+          "attrs": ""
+        },
+        {
+          "name": "serviceProcessTemplates",
+          "type": "ServiceProcessTemplate[]",
+          "baseType": "ServiceProcessTemplate",
+          "optional": false,
+          "list": true,
+          "attrs": ""
+        },
+        {
+          "name": "interactions",
+          "type": "Interaction[]",
+          "baseType": "Interaction",
+          "optional": false,
+          "list": true,
+          "attrs": ""
+        },
+        {
+          "name": "quotes",
+          "type": "Quote[]",
+          "baseType": "Quote",
+          "optional": false,
+          "list": true,
+          "attrs": ""
+        },
+        {
+          "name": "invoices",
+          "type": "Invoice[]",
+          "baseType": "Invoice",
+          "optional": false,
+          "list": true,
+          "attrs": ""
+        },
+        {
+          "name": "documents",
+          "type": "BusinessDocument[]",
+          "baseType": "BusinessDocument",
+          "optional": false,
+          "list": true,
+          "attrs": ""
+        },
+        {
+          "name": "productImages",
+          "type": "ProductImage[]",
+          "baseType": "ProductImage",
+          "optional": false,
+          "list": true,
+          "attrs": ""
+        },
+        {
+          "name": "references",
+          "type": "BusinessReference[]",
+          "baseType": "BusinessReference",
+          "optional": false,
+          "list": true,
+          "attrs": ""
+        },
+        {
+          "name": "processes",
+          "type": "Process[]",
+          "baseType": "Process",
+          "optional": false,
+          "list": true,
+          "attrs": ""
+        },
+        {
+          "name": "settings",
+          "type": "BusinessSettings?",
+          "baseType": "BusinessSettings",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "products",
+          "type": "Product[]",
+          "baseType": "Product",
+          "optional": false,
+          "list": true,
+          "attrs": ""
+        },
+        {
+          "name": "inventoryMovements",
+          "type": "InventoryMovement[]",
+          "baseType": "InventoryMovement",
+          "optional": false,
+          "list": true,
+          "attrs": ""
+        },
+        {
+          "name": "inventoryReservations",
+          "type": "InventoryReservation[]",
+          "baseType": "InventoryReservation",
+          "optional": false,
+          "list": true,
+          "attrs": ""
+        },
+        {
+          "name": "ledgerEntries",
+          "type": "LedgerEntry[]",
+          "baseType": "LedgerEntry",
+          "optional": false,
+          "list": true,
+          "attrs": ""
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "baseType": "DateTime",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(now())"
+        },
+        {
+          "name": "updatedAt",
+          "type": "DateTime",
+          "baseType": "DateTime",
+          "optional": false,
+          "list": false,
+          "attrs": "@updatedAt"
+        }
+      ],
+      "attributes": []
+    },
+    "BusinessMembership": {
+      "fields": [
+        {
+          "name": "id",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": "@id @default(autoincrement())"
+        },
+        {
+          "name": "businessId",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "userId",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "role",
+          "type": "BusinessRole",
+          "baseType": "BusinessRole",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "business",
+          "type": "Business",
+          "baseType": "Business",
+          "optional": false,
+          "list": false,
+          "attrs": "@relation(fields: [businessId], references: [id])"
+        },
+        {
+          "name": "user",
+          "type": "User",
+          "baseType": "User",
+          "optional": false,
+          "list": false,
+          "attrs": "@relation(fields: [userId], references: [id])"
+        },
+        {
+          "name": "employeeProfile",
+          "type": "EmployeeProfile?",
+          "baseType": "EmployeeProfile",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "permissions",
+          "type": "BusinessMemberPermission[]",
+          "baseType": "BusinessMemberPermission",
+          "optional": false,
+          "list": true,
+          "attrs": ""
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "baseType": "DateTime",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(now())"
+        }
+      ],
+      "attributes": [
+        "@@unique([businessId, userId])"
+      ]
+    },
+    "EmployeeProfile": {
+      "fields": [
+        {
+          "name": "id",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": "@id @default(autoincrement())"
+        },
+        {
+          "name": "membershipId",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": "@unique"
+        },
+        {
+          "name": "jobTitle",
+          "type": "String?",
+          "baseType": "String",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "contractType",
+          "type": "String?",
+          "baseType": "String",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "startDate",
+          "type": "DateTime?",
+          "baseType": "DateTime",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "endDate",
+          "type": "DateTime?",
+          "baseType": "DateTime",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "weeklyHours",
+          "type": "Int?",
+          "baseType": "Int",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "hourlyCostCents",
+          "type": "BigInt?",
+          "baseType": "BigInt",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "status",
+          "type": "EmployeeStatus",
+          "baseType": "EmployeeStatus",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(ACTIVE)"
+        },
+        {
+          "name": "notes",
+          "type": "String?",
+          "baseType": "String",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "baseType": "DateTime",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(now())"
+        },
+        {
+          "name": "updatedAt",
+          "type": "DateTime",
+          "baseType": "DateTime",
+          "optional": false,
+          "list": false,
+          "attrs": "@updatedAt"
+        },
+        {
+          "name": "membership",
+          "type": "BusinessMembership",
+          "baseType": "BusinessMembership",
+          "optional": false,
+          "list": false,
+          "attrs": "@relation(fields: [membershipId], references: [id], onDelete: Cascade)"
+        }
+      ],
+      "attributes": []
+    },
+    "BusinessMemberPermission": {
+      "fields": [
+        {
+          "name": "id",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": "@id @default(autoincrement())"
+        },
+        {
+          "name": "membershipId",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "permission",
+          "type": "BusinessPermission",
+          "baseType": "BusinessPermission",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "baseType": "DateTime",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(now())"
+        },
+        {
+          "name": "membership",
+          "type": "BusinessMembership",
+          "baseType": "BusinessMembership",
+          "optional": false,
+          "list": false,
+          "attrs": "@relation(fields: [membershipId], references: [id], onDelete: Cascade)"
+        }
+      ],
+      "attributes": [
+        "@@unique([membershipId, permission])",
+        "@@index([permission])"
+      ]
+    },
+    "BusinessInvite": {
+      "fields": [
+        {
+          "name": "id",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": "@id @default(autoincrement())"
+        },
+        {
+          "name": "businessId",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "email",
+          "type": "String",
+          "baseType": "String",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "role",
+          "type": "BusinessRole",
+          "baseType": "BusinessRole",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "status",
+          "type": "BusinessInviteStatus",
+          "baseType": "BusinessInviteStatus",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(PENDING)"
+        },
+        {
+          "name": "token",
+          "type": "String",
+          "baseType": "String",
+          "optional": false,
+          "list": false,
+          "attrs": "@unique"
+        },
+        {
+          "name": "expiresAt",
+          "type": "DateTime?",
+          "baseType": "DateTime",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "baseType": "DateTime",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(now())"
+        },
+        {
+          "name": "business",
+          "type": "Business",
+          "baseType": "Business",
+          "optional": false,
+          "list": false,
+          "attrs": "@relation(fields: [businessId], references: [id])"
+        }
+      ],
+      "attributes": []
+    },
+    "Prospect": {
+      "fields": [
+        {
+          "name": "id",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": "@id @default(autoincrement())"
+        },
+        {
+          "name": "businessId",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "business",
+          "type": "Business",
+          "baseType": "Business",
+          "optional": false,
+          "list": false,
+          "attrs": "@relation(fields: [businessId], references: [id], onDelete: Cascade)"
+        },
+        {
+          "name": "name",
+          "type": "String",
+          "baseType": "String",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "title",
+          "type": "String?",
+          "baseType": "String",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "contactName",
+          "type": "String?",
+          "baseType": "String",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "contactEmail",
+          "type": "String?",
+          "baseType": "String",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "contactPhone",
+          "type": "String?",
+          "baseType": "String",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "source",
+          "type": "LeadSource?",
+          "baseType": "LeadSource",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "interestNote",
+          "type": "String?",
+          "baseType": "String",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "qualificationLevel",
+          "type": "QualificationLevel?",
+          "baseType": "QualificationLevel",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "projectIdea",
+          "type": "String?",
+          "baseType": "String",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "estimatedBudget",
+          "type": "Int?",
+          "baseType": "Int",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "origin",
+          "type": "String?",
+          "baseType": "String",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "probability",
+          "type": "Int",
+          "baseType": "Int",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(0)"
+        },
+        {
+          "name": "nextActionDate",
+          "type": "DateTime?",
+          "baseType": "DateTime",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "firstContactAt",
+          "type": "DateTime?",
+          "baseType": "DateTime",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "pipelineStatus",
+          "type": "ProspectPipelineStatus",
+          "baseType": "ProspectPipelineStatus",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(NEW)"
+        },
+        {
+          "name": "status",
+          "type": "ProspectStatus",
+          "baseType": "ProspectStatus",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(NEW)"
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "baseType": "DateTime",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(now())"
+        },
+        {
+          "name": "updatedAt",
+          "type": "DateTime",
+          "baseType": "DateTime",
+          "optional": false,
+          "list": false,
+          "attrs": "@updatedAt"
+        }
+      ],
+      "attributes": []
+    },
+    "Client": {
+      "fields": [
+        {
+          "name": "id",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": "@id @default(autoincrement())"
+        },
+        {
+          "name": "businessId",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "categoryReferenceId",
+          "type": "BigInt?",
+          "baseType": "BigInt",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "name",
+          "type": "String",
+          "baseType": "String",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "websiteUrl",
+          "type": "String?",
+          "baseType": "String",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "companyName",
+          "type": "String?",
+          "baseType": "String",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "mainContactName",
+          "type": "String?",
+          "baseType": "String",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "email",
+          "type": "String?",
+          "baseType": "String",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "phone",
+          "type": "String?",
+          "baseType": "String",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "address",
+          "type": "String?",
+          "baseType": "String",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "sector",
+          "type": "String?",
+          "baseType": "String",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "entryDate",
+          "type": "DateTime?",
+          "baseType": "DateTime",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "leadSource",
+          "type": "LeadSource?",
+          "baseType": "LeadSource",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "needsType",
+          "type": "String?",
+          "baseType": "String",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "estimatedBudget",
+          "type": "Int?",
+          "baseType": "Int",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "notes",
+          "type": "String?",
+          "baseType": "String",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "status",
+          "type": "ClientStatus",
+          "baseType": "ClientStatus",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(ACTIVE)"
+        },
+        {
+          "name": "archivedAt",
+          "type": "DateTime?",
+          "baseType": "DateTime",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "anonymizedAt",
+          "type": "DateTime?",
+          "baseType": "DateTime",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "anonymizedByUserId",
+          "type": "BigInt?",
+          "baseType": "BigInt",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "anonymizationReason",
+          "type": "String?",
+          "baseType": "String",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "business",
+          "type": "Business",
+          "baseType": "Business",
+          "optional": false,
+          "list": false,
+          "attrs": "@relation(fields: [businessId], references: [id], onDelete: Cascade)"
+        },
+        {
+          "name": "categoryReference",
+          "type": "BusinessReference?",
+          "baseType": "BusinessReference",
+          "optional": true,
+          "list": false,
+          "attrs": "@relation(\"ClientCategoryReference\", fields: [categoryReferenceId], references: [id], onDelete: SetNull)"
+        },
+        {
+          "name": "anonymizedBy",
+          "type": "User?",
+          "baseType": "User",
+          "optional": true,
+          "list": false,
+          "attrs": "@relation(\"ClientAnonymizedBy\", fields: [anonymizedByUserId], references: [id], onDelete: SetNull)"
+        },
+        {
+          "name": "tags",
+          "type": "ClientTag[]",
+          "baseType": "ClientTag",
+          "optional": false,
+          "list": true,
+          "attrs": ""
+        },
+        {
+          "name": "projects",
+          "type": "Project[]",
+          "baseType": "Project",
+          "optional": false,
+          "list": true,
+          "attrs": ""
+        },
+        {
+          "name": "interactions",
+          "type": "Interaction[]",
+          "baseType": "Interaction",
+          "optional": false,
+          "list": true,
+          "attrs": ""
+        },
+        {
+          "name": "quotes",
+          "type": "Quote[]",
+          "baseType": "Quote",
+          "optional": false,
+          "list": true,
+          "attrs": ""
+        },
+        {
+          "name": "invoices",
+          "type": "Invoice[]",
+          "baseType": "Invoice",
+          "optional": false,
+          "list": true,
+          "attrs": ""
+        },
+        {
+          "name": "documents",
+          "type": "BusinessDocument[]",
+          "baseType": "BusinessDocument",
+          "optional": false,
+          "list": true,
+          "attrs": ""
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "baseType": "DateTime",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(now())"
+        },
+        {
+          "name": "updatedAt",
+          "type": "DateTime",
+          "baseType": "DateTime",
+          "optional": false,
+          "list": false,
+          "attrs": "@updatedAt"
+        }
+      ],
+      "attributes": [
+        "@@index([businessId, name])",
+        "@@index([businessId, categoryReferenceId])",
+        "@@index([businessId, archivedAt])",
+        "@@index([businessId, anonymizedAt])"
+      ]
+    },
+    "Project": {
+      "fields": [
+        {
+          "name": "id",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": "@id @default(autoincrement())"
+        },
+        {
+          "name": "businessId",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "clientId",
+          "type": "BigInt?",
+          "baseType": "BigInt",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "categoryReferenceId",
+          "type": "BigInt?",
+          "baseType": "BigInt",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "name",
+          "type": "String",
+          "baseType": "String",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "status",
+          "type": "ProjectStatus",
+          "baseType": "ProjectStatus",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(PLANNED)"
+        },
+        {
+          "name": "quoteStatus",
+          "type": "ProjectQuoteStatus",
+          "baseType": "ProjectQuoteStatus",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(DRAFT)"
+        },
+        {
+          "name": "depositStatus",
+          "type": "ProjectDepositStatus",
+          "baseType": "ProjectDepositStatus",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(PENDING)"
+        },
+        {
+          "name": "startedAt",
+          "type": "DateTime?",
+          "baseType": "DateTime",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "archivedAt",
+          "type": "DateTime?",
+          "baseType": "DateTime",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "startDate",
+          "type": "DateTime?",
+          "baseType": "DateTime",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "endDate",
+          "type": "DateTime?",
+          "baseType": "DateTime",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "business",
+          "type": "Business",
+          "baseType": "Business",
+          "optional": false,
+          "list": false,
+          "attrs": "@relation(fields: [businessId], references: [id])"
+        },
+        {
+          "name": "client",
+          "type": "Client?",
+          "baseType": "Client",
+          "optional": true,
+          "list": false,
+          "attrs": "@relation(fields: [clientId], references: [id])"
+        },
+        {
+          "name": "categoryReference",
+          "type": "BusinessReference?",
+          "baseType": "BusinessReference",
+          "optional": true,
+          "list": false,
+          "attrs": "@relation(\"ProjectCategoryReference\", fields: [categoryReferenceId], references: [id], onDelete: SetNull)"
+        },
+        {
+          "name": "tasks",
+          "type": "Task[]",
+          "baseType": "Task",
+          "optional": false,
+          "list": true,
+          "attrs": ""
+        },
+        {
+          "name": "finances",
+          "type": "Finance[]",
+          "baseType": "Finance",
+          "optional": false,
+          "list": true,
+          "attrs": ""
+        },
+        {
+          "name": "projectServices",
+          "type": "ProjectService[]",
+          "baseType": "ProjectService",
+          "optional": false,
+          "list": true,
+          "attrs": ""
+        },
+        {
+          "name": "interactions",
+          "type": "Interaction[]",
+          "baseType": "Interaction",
+          "optional": false,
+          "list": true,
+          "attrs": ""
+        },
+        {
+          "name": "tags",
+          "type": "ProjectTag[]",
+          "baseType": "ProjectTag",
+          "optional": false,
+          "list": true,
+          "attrs": ""
+        },
+        {
+          "name": "quotes",
+          "type": "Quote[]",
+          "baseType": "Quote",
+          "optional": false,
+          "list": true,
+          "attrs": ""
+        },
+        {
+          "name": "invoices",
+          "type": "Invoice[]",
+          "baseType": "Invoice",
+          "optional": false,
+          "list": true,
+          "attrs": ""
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "baseType": "DateTime",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(now())"
+        },
+        {
+          "name": "updatedAt",
+          "type": "DateTime",
+          "baseType": "DateTime",
+          "optional": false,
+          "list": false,
+          "attrs": "@updatedAt"
+        }
+      ],
+      "attributes": [
+        "@@index([businessId, status])",
+        "@@index([businessId, categoryReferenceId])"
+      ]
+    },
+    "Task": {
+      "fields": [
+        {
+          "name": "id",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": "@id @default(autoincrement())"
+        },
+        {
+          "name": "businessId",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "projectId",
+          "type": "BigInt?",
+          "baseType": "BigInt",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "projectServiceId",
+          "type": "BigInt?",
+          "baseType": "BigInt",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "projectServiceStepId",
+          "type": "BigInt?",
+          "baseType": "BigInt",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "assigneeUserId",
+          "type": "BigInt?",
+          "baseType": "BigInt",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "categoryReferenceId",
+          "type": "BigInt?",
+          "baseType": "BigInt",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "title",
+          "type": "String",
+          "baseType": "String",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "status",
+          "type": "TaskStatus",
+          "baseType": "TaskStatus",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(TODO)"
+        },
+        {
+          "name": "dueDate",
+          "type": "DateTime?",
+          "baseType": "DateTime",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "phase",
+          "type": "TaskPhase?",
+          "baseType": "TaskPhase",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "progress",
+          "type": "Int",
+          "baseType": "Int",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(0)"
+        },
+        {
+          "name": "completedAt",
+          "type": "DateTime?",
+          "baseType": "DateTime",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "notes",
+          "type": "String?",
+          "baseType": "String",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "business",
+          "type": "Business",
+          "baseType": "Business",
+          "optional": false,
+          "list": false,
+          "attrs": "@relation(fields: [businessId], references: [id])"
+        },
+        {
+          "name": "project",
+          "type": "Project?",
+          "baseType": "Project",
+          "optional": true,
+          "list": false,
+          "attrs": "@relation(fields: [projectId], references: [id], onDelete: SetNull)"
+        },
+        {
+          "name": "projectService",
+          "type": "ProjectService?",
+          "baseType": "ProjectService",
+          "optional": true,
+          "list": false,
+          "attrs": "@relation(fields: [projectServiceId], references: [id], onDelete: SetNull)"
+        },
+        {
+          "name": "projectServiceStep",
+          "type": "ProjectServiceStep?",
+          "baseType": "ProjectServiceStep",
+          "optional": true,
+          "list": false,
+          "attrs": "@relation(fields: [projectServiceStepId], references: [id], onDelete: SetNull)"
+        },
+        {
+          "name": "assignee",
+          "type": "User?",
+          "baseType": "User",
+          "optional": true,
+          "list": false,
+          "attrs": "@relation(fields: [assigneeUserId], references: [id], onDelete: SetNull)"
+        },
+        {
+          "name": "categoryReference",
+          "type": "BusinessReference?",
+          "baseType": "BusinessReference",
+          "optional": true,
+          "list": false,
+          "attrs": "@relation(\"TaskCategoryReference\", fields: [categoryReferenceId], references: [id], onDelete: SetNull)"
+        },
+        {
+          "name": "tags",
+          "type": "TaskTag[]",
+          "baseType": "TaskTag",
+          "optional": false,
+          "list": true,
+          "attrs": ""
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "baseType": "DateTime",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(now())"
+        },
+        {
+          "name": "updatedAt",
+          "type": "DateTime",
+          "baseType": "DateTime",
+          "optional": false,
+          "list": false,
+          "attrs": "@updatedAt"
+        }
+      ],
+      "attributes": [
+        "@@index([businessId, status])",
+        "@@index([businessId, projectId])",
+        "@@index([projectServiceId])",
+        "@@index([projectServiceStepId])",
+        "@@index([projectId, projectServiceId])",
+        "@@index([businessId, categoryReferenceId])"
+      ]
+    },
+    "Process": {
+      "fields": [
+        {
+          "name": "id",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": "@id @default(autoincrement())"
+        },
+        {
+          "name": "businessId",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "name",
+          "type": "String",
+          "baseType": "String",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "description",
+          "type": "String?",
+          "baseType": "String",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "status",
+          "type": "ProcessStatus",
+          "baseType": "ProcessStatus",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(ACTIVE)"
+        },
+        {
+          "name": "business",
+          "type": "Business",
+          "baseType": "Business",
+          "optional": false,
+          "list": false,
+          "attrs": "@relation(fields: [businessId], references: [id], onDelete: Cascade)"
+        },
+        {
+          "name": "steps",
+          "type": "ProcessStep[]",
+          "baseType": "ProcessStep",
+          "optional": false,
+          "list": true,
+          "attrs": ""
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "baseType": "DateTime",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(now())"
+        },
+        {
+          "name": "updatedAt",
+          "type": "DateTime",
+          "baseType": "DateTime",
+          "optional": false,
+          "list": false,
+          "attrs": "@updatedAt"
+        }
+      ],
+      "attributes": [
+        "@@index([businessId])"
+      ]
+    },
+    "ProcessStep": {
+      "fields": [
+        {
+          "name": "id",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": "@id @default(autoincrement())"
+        },
+        {
+          "name": "processId",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "title",
+          "type": "String",
+          "baseType": "String",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "description",
+          "type": "String?",
+          "baseType": "String",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "position",
+          "type": "Int",
+          "baseType": "Int",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "isDone",
+          "type": "Boolean",
+          "baseType": "Boolean",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(false)"
+        },
+        {
+          "name": "process",
+          "type": "Process",
+          "baseType": "Process",
+          "optional": false,
+          "list": false,
+          "attrs": "@relation(fields: [processId], references: [id], onDelete: Cascade)"
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "baseType": "DateTime",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(now())"
+        },
+        {
+          "name": "updatedAt",
+          "type": "DateTime",
+          "baseType": "DateTime",
+          "optional": false,
+          "list": false,
+          "attrs": "@updatedAt"
+        }
+      ],
+      "attributes": [
+        "@@index([processId])"
+      ]
+    },
+    "Finance": {
+      "fields": [
+        {
+          "name": "id",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": "@id @default(autoincrement())"
+        },
+        {
+          "name": "businessId",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "projectId",
+          "type": "BigInt?",
+          "baseType": "BigInt",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "categoryReferenceId",
+          "type": "BigInt?",
+          "baseType": "BigInt",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "inventoryMovementId",
+          "type": "BigInt?",
+          "baseType": "BigInt",
+          "optional": true,
+          "list": false,
+          "attrs": "@unique"
+        },
+        {
+          "name": "inventoryProductId",
+          "type": "BigInt?",
+          "baseType": "BigInt",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "type",
+          "type": "FinanceType",
+          "baseType": "FinanceType",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "amountCents",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "category",
+          "type": "String",
+          "baseType": "String",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "date",
+          "type": "DateTime",
+          "baseType": "DateTime",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "note",
+          "type": "String?",
+          "baseType": "String",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "business",
+          "type": "Business",
+          "baseType": "Business",
+          "optional": false,
+          "list": false,
+          "attrs": "@relation(fields: [businessId], references: [id])"
+        },
+        {
+          "name": "project",
+          "type": "Project?",
+          "baseType": "Project",
+          "optional": true,
+          "list": false,
+          "attrs": "@relation(fields: [projectId], references: [id], onDelete: SetNull)"
+        },
+        {
+          "name": "categoryReference",
+          "type": "BusinessReference?",
+          "baseType": "BusinessReference",
+          "optional": true,
+          "list": false,
+          "attrs": "@relation(\"FinanceCategoryReference\", fields: [categoryReferenceId], references: [id], onDelete: SetNull)"
+        },
+        {
+          "name": "inventoryMovement",
+          "type": "InventoryMovement?",
+          "baseType": "InventoryMovement",
+          "optional": true,
+          "list": false,
+          "attrs": "@relation(\"InventoryMovementFinance\", fields: [inventoryMovementId], references: [id], onDelete: SetNull)"
+        },
+        {
+          "name": "inventoryProduct",
+          "type": "Product?",
+          "baseType": "Product",
+          "optional": true,
+          "list": false,
+          "attrs": "@relation(\"ProductFinance\", fields: [inventoryProductId], references: [id], onDelete: SetNull)"
+        },
+        {
+          "name": "tags",
+          "type": "FinanceTag[]",
+          "baseType": "FinanceTag",
+          "optional": false,
+          "list": true,
+          "attrs": ""
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "baseType": "DateTime",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(now())"
+        },
+        {
+          "name": "updatedAt",
+          "type": "DateTime",
+          "baseType": "DateTime",
+          "optional": false,
+          "list": false,
+          "attrs": "@updatedAt"
+        }
+      ],
+      "attributes": [
+        "@@index([businessId, date])",
+        "@@index([businessId, type])",
+        "@@index([businessId, categoryReferenceId])",
+        "@@index([businessId, inventoryProductId])"
+      ]
+    },
+    "Service": {
+      "fields": [
+        {
+          "name": "id",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": "@id @default(autoincrement())"
+        },
+        {
+          "name": "businessId",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "business",
+          "type": "Business",
+          "baseType": "Business",
+          "optional": false,
+          "list": false,
+          "attrs": "@relation(fields: [businessId], references: [id], onDelete: Cascade)"
+        },
+        {
+          "name": "code",
+          "type": "String",
+          "baseType": "String",
+          "optional": false,
+          "list": false,
+          "attrs": "@unique"
+        },
+        {
+          "name": "name",
+          "type": "String",
+          "baseType": "String",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "categoryReferenceId",
+          "type": "BigInt?",
+          "baseType": "BigInt",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "type",
+          "type": "String?",
+          "baseType": "String",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "description",
+          "type": "String?",
+          "baseType": "String",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "defaultPriceCents",
+          "type": "BigInt?",
+          "baseType": "BigInt",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "tjmCents",
+          "type": "BigInt?",
+          "baseType": "BigInt",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "durationHours",
+          "type": "Int?",
+          "baseType": "Int",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "vatRate",
+          "type": "Int?",
+          "baseType": "Int",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "categoryReference",
+          "type": "BusinessReference?",
+          "baseType": "BusinessReference",
+          "optional": true,
+          "list": false,
+          "attrs": "@relation(\"ServiceCategoryReference\", fields: [categoryReferenceId], references: [id], onDelete: SetNull)"
+        },
+        {
+          "name": "tags",
+          "type": "ServiceTag[]",
+          "baseType": "ServiceTag",
+          "optional": false,
+          "list": true,
+          "attrs": ""
+        },
+        {
+          "name": "taskTemplates",
+          "type": "ServiceTaskTemplate[]",
+          "baseType": "ServiceTaskTemplate",
+          "optional": false,
+          "list": true,
+          "attrs": ""
+        },
+        {
+          "name": "serviceProcessTemplate",
+          "type": "ServiceProcessTemplate?",
+          "baseType": "ServiceProcessTemplate",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "projectServices",
+          "type": "ProjectService[]",
+          "baseType": "ProjectService",
+          "optional": false,
+          "list": true,
+          "attrs": ""
+        },
+        {
+          "name": "quoteItems",
+          "type": "QuoteItem[]",
+          "baseType": "QuoteItem",
+          "optional": false,
+          "list": true,
+          "attrs": ""
+        },
+        {
+          "name": "invoiceItems",
+          "type": "InvoiceItem[]",
+          "baseType": "InvoiceItem",
+          "optional": false,
+          "list": true,
+          "attrs": ""
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "baseType": "DateTime",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(now())"
+        },
+        {
+          "name": "updatedAt",
+          "type": "DateTime",
+          "baseType": "DateTime",
+          "optional": false,
+          "list": false,
+          "attrs": "@updatedAt"
+        }
+      ],
+      "attributes": [
+        "@@index([businessId, code])",
+        "@@index([businessId, categoryReferenceId])"
+      ]
+    },
+    "Product": {
+      "fields": [
+        {
+          "name": "id",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": "@id @default(autoincrement())"
+        },
+        {
+          "name": "businessId",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "business",
+          "type": "Business",
+          "baseType": "Business",
+          "optional": false,
+          "list": false,
+          "attrs": "@relation(fields: [businessId], references: [id], onDelete: Cascade)"
+        },
+        {
+          "name": "sku",
+          "type": "String",
+          "baseType": "String",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "skuLower",
+          "type": "String",
+          "baseType": "String",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "name",
+          "type": "String",
+          "baseType": "String",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "description",
+          "type": "String?",
+          "baseType": "String",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "unit",
+          "type": "ProductUnit",
+          "baseType": "ProductUnit",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(PIECE)"
+        },
+        {
+          "name": "salePriceCents",
+          "type": "BigInt?",
+          "baseType": "BigInt",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "purchasePriceCents",
+          "type": "BigInt?",
+          "baseType": "BigInt",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "isArchived",
+          "type": "Boolean",
+          "baseType": "Boolean",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(false)"
+        },
+        {
+          "name": "productImages",
+          "type": "ProductImage[]",
+          "baseType": "ProductImage",
+          "optional": false,
+          "list": true,
+          "attrs": ""
+        },
+        {
+          "name": "movements",
+          "type": "InventoryMovement[]",
+          "baseType": "InventoryMovement",
+          "optional": false,
+          "list": true,
+          "attrs": ""
+        },
+        {
+          "name": "inventoryFinances",
+          "type": "Finance[]",
+          "baseType": "Finance",
+          "optional": false,
+          "list": true,
+          "attrs": "@relation(\"ProductFinance\")"
+        },
+        {
+          "name": "reservationItems",
+          "type": "InventoryReservationItem[]",
+          "baseType": "InventoryReservationItem",
+          "optional": false,
+          "list": true,
+          "attrs": ""
+        },
+        {
+          "name": "invoiceItems",
+          "type": "InvoiceItem[]",
+          "baseType": "InvoiceItem",
+          "optional": false,
+          "list": true,
+          "attrs": ""
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "baseType": "DateTime",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(now())"
+        },
+        {
+          "name": "updatedAt",
+          "type": "DateTime",
+          "baseType": "DateTime",
+          "optional": false,
+          "list": false,
+          "attrs": "@updatedAt"
+        }
+      ],
+      "attributes": [
+        "@@unique([businessId, skuLower])",
+        "@@index([businessId, isArchived])"
+      ]
+    },
+    "ProductImage": {
+      "fields": [
+        {
+          "name": "id",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": "@id @default(autoincrement())"
+        },
+        {
+          "name": "businessId",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "productId",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "storageKey",
+          "type": "String",
+          "baseType": "String",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "mimeType",
+          "type": "String",
+          "baseType": "String",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "alt",
+          "type": "String?",
+          "baseType": "String",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "position",
+          "type": "Int",
+          "baseType": "Int",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(0)"
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "baseType": "DateTime",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(now())"
+        },
+        {
+          "name": "business",
+          "type": "Business",
+          "baseType": "Business",
+          "optional": false,
+          "list": false,
+          "attrs": "@relation(fields: [businessId], references: [id], onDelete: Cascade)"
+        },
+        {
+          "name": "product",
+          "type": "Product",
+          "baseType": "Product",
+          "optional": false,
+          "list": false,
+          "attrs": "@relation(fields: [productId], references: [id], onDelete: Cascade)"
+        }
+      ],
+      "attributes": [
+        "@@index([productId])",
+        "@@index([businessId, productId, position])"
+      ]
+    },
+    "InventoryMovement": {
+      "fields": [
+        {
+          "name": "id",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": "@id @default(autoincrement())"
+        },
+        {
+          "name": "businessId",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "productId",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "type",
+          "type": "InventoryMovementType",
+          "baseType": "InventoryMovementType",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "source",
+          "type": "InventoryMovementSource",
+          "baseType": "InventoryMovementSource",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(MANUAL)"
+        },
+        {
+          "name": "quantity",
+          "type": "Int",
+          "baseType": "Int",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "unitCostCents",
+          "type": "BigInt?",
+          "baseType": "BigInt",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "reason",
+          "type": "String?",
+          "baseType": "String",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "date",
+          "type": "DateTime",
+          "baseType": "DateTime",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "createdByUserId",
+          "type": "BigInt?",
+          "baseType": "BigInt",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "financeEntry",
+          "type": "Finance?",
+          "baseType": "Finance",
+          "optional": true,
+          "list": false,
+          "attrs": "@relation(\"InventoryMovementFinance\")"
+        },
+        {
+          "name": "business",
+          "type": "Business",
+          "baseType": "Business",
+          "optional": false,
+          "list": false,
+          "attrs": "@relation(fields: [businessId], references: [id], onDelete: Cascade)"
+        },
+        {
+          "name": "product",
+          "type": "Product",
+          "baseType": "Product",
+          "optional": false,
+          "list": false,
+          "attrs": "@relation(fields: [productId], references: [id], onDelete: Cascade)"
+        },
+        {
+          "name": "createdBy",
+          "type": "User?",
+          "baseType": "User",
+          "optional": true,
+          "list": false,
+          "attrs": "@relation(fields: [createdByUserId], references: [id], onDelete: SetNull)"
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "baseType": "DateTime",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(now())"
+        },
+        {
+          "name": "updatedAt",
+          "type": "DateTime",
+          "baseType": "DateTime",
+          "optional": false,
+          "list": false,
+          "attrs": "@updatedAt"
+        }
+      ],
+      "attributes": [
+        "@@index([businessId, productId])",
+        "@@index([businessId, date])"
+      ]
+    },
+    "InventoryReservation": {
+      "fields": [
+        {
+          "name": "id",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": "@id @default(autoincrement())"
+        },
+        {
+          "name": "businessId",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "invoiceId",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": "@unique"
+        },
+        {
+          "name": "status",
+          "type": "InventoryReservationStatus",
+          "baseType": "InventoryReservationStatus",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(ACTIVE)"
+        },
+        {
+          "name": "items",
+          "type": "InventoryReservationItem[]",
+          "baseType": "InventoryReservationItem",
+          "optional": false,
+          "list": true,
+          "attrs": ""
+        },
+        {
+          "name": "business",
+          "type": "Business",
+          "baseType": "Business",
+          "optional": false,
+          "list": false,
+          "attrs": "@relation(fields: [businessId], references: [id], onDelete: Cascade)"
+        },
+        {
+          "name": "invoice",
+          "type": "Invoice",
+          "baseType": "Invoice",
+          "optional": false,
+          "list": false,
+          "attrs": "@relation(fields: [invoiceId], references: [id], onDelete: Cascade)"
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "baseType": "DateTime",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(now())"
+        },
+        {
+          "name": "updatedAt",
+          "type": "DateTime",
+          "baseType": "DateTime",
+          "optional": false,
+          "list": false,
+          "attrs": "@updatedAt"
+        }
+      ],
+      "attributes": [
+        "@@index([businessId, status])"
+      ]
+    },
+    "InventoryReservationItem": {
+      "fields": [
+        {
+          "name": "id",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": "@id @default(autoincrement())"
+        },
+        {
+          "name": "reservationId",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "productId",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "quantity",
+          "type": "Int",
+          "baseType": "Int",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "unitPriceCents",
+          "type": "BigInt?",
+          "baseType": "BigInt",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "baseType": "DateTime",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(now())"
+        },
+        {
+          "name": "reservation",
+          "type": "InventoryReservation",
+          "baseType": "InventoryReservation",
+          "optional": false,
+          "list": false,
+          "attrs": "@relation(fields: [reservationId], references: [id], onDelete: Cascade)"
+        },
+        {
+          "name": "product",
+          "type": "Product",
+          "baseType": "Product",
+          "optional": false,
+          "list": false,
+          "attrs": "@relation(fields: [productId], references: [id], onDelete: Cascade)"
+        }
+      ],
+      "attributes": [
+        "@@index([reservationId])",
+        "@@index([productId])"
+      ]
+    },
+    "ProjectTag": {
+      "fields": [
+        {
+          "name": "id",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": "@id @default(autoincrement())"
+        },
+        {
+          "name": "projectId",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "referenceId",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "project",
+          "type": "Project",
+          "baseType": "Project",
+          "optional": false,
+          "list": false,
+          "attrs": "@relation(fields: [projectId], references: [id], onDelete: Cascade)"
+        },
+        {
+          "name": "reference",
+          "type": "BusinessReference",
+          "baseType": "BusinessReference",
+          "optional": false,
+          "list": false,
+          "attrs": "@relation(\"ProjectTagReference\", fields: [referenceId], references: [id], onDelete: Cascade)"
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "baseType": "DateTime",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(now())"
+        }
+      ],
+      "attributes": [
+        "@@unique([projectId, referenceId])",
+        "@@index([referenceId])"
+      ]
+    },
+    "ServiceTag": {
+      "fields": [
+        {
+          "name": "id",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": "@id @default(autoincrement())"
+        },
+        {
+          "name": "serviceId",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "referenceId",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "service",
+          "type": "Service",
+          "baseType": "Service",
+          "optional": false,
+          "list": false,
+          "attrs": "@relation(fields: [serviceId], references: [id], onDelete: Cascade)"
+        },
+        {
+          "name": "reference",
+          "type": "BusinessReference",
+          "baseType": "BusinessReference",
+          "optional": false,
+          "list": false,
+          "attrs": "@relation(\"ServiceTagReference\", fields: [referenceId], references: [id], onDelete: Cascade)"
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "baseType": "DateTime",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(now())"
+        }
+      ],
+      "attributes": [
+        "@@unique([serviceId, referenceId])",
+        "@@index([referenceId])"
+      ]
+    },
+    "ServiceTaskTemplate": {
+      "fields": [
+        {
+          "name": "id",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": "@id @default(autoincrement())"
+        },
+        {
+          "name": "serviceId",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "service",
+          "type": "Service",
+          "baseType": "Service",
+          "optional": false,
+          "list": false,
+          "attrs": "@relation(fields: [serviceId], references: [id], onDelete: Cascade)"
+        },
+        {
+          "name": "phase",
+          "type": "TaskPhase?",
+          "baseType": "TaskPhase",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "title",
+          "type": "String",
+          "baseType": "String",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "defaultAssigneeRole",
+          "type": "String?",
+          "baseType": "String",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "defaultDueOffsetDays",
+          "type": "Int?",
+          "baseType": "Int",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "estimatedMinutes",
+          "type": "Int?",
+          "baseType": "Int",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "position",
+          "type": "Int",
+          "baseType": "Int",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(0)"
+        },
+        {
+          "name": "tasks",
+          "type": "ServiceTemplateTask[]",
+          "baseType": "ServiceTemplateTask",
+          "optional": false,
+          "list": true,
+          "attrs": ""
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "baseType": "DateTime",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(now())"
+        }
+      ],
+      "attributes": []
+    },
+    "ServiceTemplateTask": {
+      "fields": [
+        {
+          "name": "id",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": "@id @default(autoincrement())"
+        },
+        {
+          "name": "templateId",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "template",
+          "type": "ServiceTaskTemplate",
+          "baseType": "ServiceTaskTemplate",
+          "optional": false,
+          "list": false,
+          "attrs": "@relation(fields: [templateId], references: [id], onDelete: Cascade)"
+        },
+        {
+          "name": "title",
+          "type": "String",
+          "baseType": "String",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "description",
+          "type": "String?",
+          "baseType": "String",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "role",
+          "type": "String?",
+          "baseType": "String",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "estimatedMinutes",
+          "type": "Int?",
+          "baseType": "Int",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "position",
+          "type": "Int",
+          "baseType": "Int",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(0)"
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "baseType": "DateTime",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(now())"
+        }
+      ],
+      "attributes": [
+        "@@index([templateId])",
+        "@@index([templateId, position])"
+      ]
+    },
+    "ServiceProcessTemplate": {
+      "fields": [
+        {
+          "name": "id",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": "@id @default(autoincrement())"
+        },
+        {
+          "name": "businessId",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "serviceId",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": "@unique"
+        },
+        {
+          "name": "name",
+          "type": "String",
+          "baseType": "String",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "baseType": "DateTime",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(now())"
+        },
+        {
+          "name": "updatedAt",
+          "type": "DateTime",
+          "baseType": "DateTime",
+          "optional": false,
+          "list": false,
+          "attrs": "@updatedAt"
+        },
+        {
+          "name": "business",
+          "type": "Business",
+          "baseType": "Business",
+          "optional": false,
+          "list": false,
+          "attrs": "@relation(fields: [businessId], references: [id], onDelete: Cascade)"
+        },
+        {
+          "name": "service",
+          "type": "Service",
+          "baseType": "Service",
+          "optional": false,
+          "list": false,
+          "attrs": "@relation(fields: [serviceId], references: [id], onDelete: Cascade)"
+        },
+        {
+          "name": "phases",
+          "type": "ServiceProcessPhaseTemplate[]",
+          "baseType": "ServiceProcessPhaseTemplate",
+          "optional": false,
+          "list": true,
+          "attrs": ""
+        }
+      ],
+      "attributes": [
+        "@@index([businessId])"
+      ]
+    },
+    "ServiceProcessPhaseTemplate": {
+      "fields": [
+        {
+          "name": "id",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": "@id @default(autoincrement())"
+        },
+        {
+          "name": "templateId",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "name",
+          "type": "String",
+          "baseType": "String",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "order",
+          "type": "Int",
+          "baseType": "Int",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(0)"
+        },
+        {
+          "name": "template",
+          "type": "ServiceProcessTemplate",
+          "baseType": "ServiceProcessTemplate",
+          "optional": false,
+          "list": false,
+          "attrs": "@relation(fields: [templateId], references: [id], onDelete: Cascade)"
+        },
+        {
+          "name": "steps",
+          "type": "ServiceProcessStepTemplate[]",
+          "baseType": "ServiceProcessStepTemplate",
+          "optional": false,
+          "list": true,
+          "attrs": ""
+        }
+      ],
+      "attributes": [
+        "@@index([templateId])",
+        "@@index([templateId, order])"
+      ]
+    },
+    "ServiceProcessStepTemplate": {
+      "fields": [
+        {
+          "name": "id",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": "@id @default(autoincrement())"
+        },
+        {
+          "name": "phaseId",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "name",
+          "type": "String",
+          "baseType": "String",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "order",
+          "type": "Int",
+          "baseType": "Int",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(0)"
+        },
+        {
+          "name": "isBillableMilestone",
+          "type": "Boolean",
+          "baseType": "Boolean",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(false)"
+        },
+        {
+          "name": "phase",
+          "type": "ServiceProcessPhaseTemplate",
+          "baseType": "ServiceProcessPhaseTemplate",
+          "optional": false,
+          "list": false,
+          "attrs": "@relation(fields: [phaseId], references: [id], onDelete: Cascade)"
+        },
+        {
+          "name": "tasks",
+          "type": "ServiceProcessTaskTemplate[]",
+          "baseType": "ServiceProcessTaskTemplate",
+          "optional": false,
+          "list": true,
+          "attrs": ""
+        }
+      ],
+      "attributes": [
+        "@@index([phaseId])",
+        "@@index([phaseId, order])"
+      ]
+    },
+    "ServiceProcessTaskTemplate": {
+      "fields": [
+        {
+          "name": "id",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": "@id @default(autoincrement())"
+        },
+        {
+          "name": "stepId",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "title",
+          "type": "String",
+          "baseType": "String",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "order",
+          "type": "Int",
+          "baseType": "Int",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(0)"
+        },
+        {
+          "name": "description",
+          "type": "String?",
+          "baseType": "String",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "dueOffsetDays",
+          "type": "Int?",
+          "baseType": "Int",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "defaultAssigneeRole",
+          "type": "String?",
+          "baseType": "String",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "step",
+          "type": "ServiceProcessStepTemplate",
+          "baseType": "ServiceProcessStepTemplate",
+          "optional": false,
+          "list": false,
+          "attrs": "@relation(fields: [stepId], references: [id], onDelete: Cascade)"
+        }
+      ],
+      "attributes": [
+        "@@index([stepId])",
+        "@@index([stepId, order])"
+      ]
+    },
+    "ProjectService": {
+      "fields": [
+        {
+          "name": "id",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": "@id @default(autoincrement())"
+        },
+        {
+          "name": "projectId",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "serviceId",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "quantity",
+          "type": "Int",
+          "baseType": "Int",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(1)"
+        },
+        {
+          "name": "priceCents",
+          "type": "BigInt?",
+          "baseType": "BigInt",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "notes",
+          "type": "String?",
+          "baseType": "String",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "baseType": "DateTime",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(now())"
+        },
+        {
+          "name": "project",
+          "type": "Project",
+          "baseType": "Project",
+          "optional": false,
+          "list": false,
+          "attrs": "@relation(fields: [projectId], references: [id], onDelete: Cascade)"
+        },
+        {
+          "name": "service",
+          "type": "Service",
+          "baseType": "Service",
+          "optional": false,
+          "list": false,
+          "attrs": "@relation(fields: [serviceId], references: [id], onDelete: Cascade)"
+        },
+        {
+          "name": "steps",
+          "type": "ProjectServiceStep[]",
+          "baseType": "ProjectServiceStep",
+          "optional": false,
+          "list": true,
+          "attrs": ""
+        },
+        {
+          "name": "tasks",
+          "type": "Task[]",
+          "baseType": "Task",
+          "optional": false,
+          "list": true,
+          "attrs": ""
+        }
+      ],
+      "attributes": [
+        "@@index([projectId, serviceId])"
+      ]
+    },
+    "ProjectServiceStep": {
+      "fields": [
+        {
+          "name": "id",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": "@id @default(autoincrement())"
+        },
+        {
+          "name": "projectServiceId",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "name",
+          "type": "String",
+          "baseType": "String",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "order",
+          "type": "Int",
+          "baseType": "Int",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(0)"
+        },
+        {
+          "name": "phaseName",
+          "type": "String?",
+          "baseType": "String",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "isBillableMilestone",
+          "type": "Boolean",
+          "baseType": "Boolean",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(false)"
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "baseType": "DateTime",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(now())"
+        },
+        {
+          "name": "projectService",
+          "type": "ProjectService",
+          "baseType": "ProjectService",
+          "optional": false,
+          "list": false,
+          "attrs": "@relation(fields: [projectServiceId], references: [id], onDelete: Cascade)"
+        },
+        {
+          "name": "tasks",
+          "type": "Task[]",
+          "baseType": "Task",
+          "optional": false,
+          "list": true,
+          "attrs": ""
+        }
+      ],
+      "attributes": [
+        "@@index([projectServiceId])",
+        "@@index([projectServiceId, order])"
+      ]
+    },
+    "Interaction": {
+      "fields": [
+        {
+          "name": "id",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": "@id @default(autoincrement())"
+        },
+        {
+          "name": "businessId",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "clientId",
+          "type": "BigInt?",
+          "baseType": "BigInt",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "projectId",
+          "type": "BigInt?",
+          "baseType": "BigInt",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "type",
+          "type": "InteractionType",
+          "baseType": "InteractionType",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "content",
+          "type": "String",
+          "baseType": "String",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "happenedAt",
+          "type": "DateTime",
+          "baseType": "DateTime",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "nextActionDate",
+          "type": "DateTime?",
+          "baseType": "DateTime",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "createdByUserId",
+          "type": "BigInt?",
+          "baseType": "BigInt",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "baseType": "DateTime",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(now())"
+        },
+        {
+          "name": "business",
+          "type": "Business",
+          "baseType": "Business",
+          "optional": false,
+          "list": false,
+          "attrs": "@relation(fields: [businessId], references: [id], onDelete: Cascade)"
+        },
+        {
+          "name": "client",
+          "type": "Client?",
+          "baseType": "Client",
+          "optional": true,
+          "list": false,
+          "attrs": "@relation(fields: [clientId], references: [id], onDelete: SetNull)"
+        },
+        {
+          "name": "project",
+          "type": "Project?",
+          "baseType": "Project",
+          "optional": true,
+          "list": false,
+          "attrs": "@relation(fields: [projectId], references: [id], onDelete: SetNull)"
+        },
+        {
+          "name": "createdBy",
+          "type": "User?",
+          "baseType": "User",
+          "optional": true,
+          "list": false,
+          "attrs": "@relation(\"InteractionCreatedBy\", fields: [createdByUserId], references: [id], onDelete: SetNull)"
+        }
+      ],
+      "attributes": [
+        "@@index([businessId, clientId])",
+        "@@index([businessId, projectId])"
+      ]
+    },
+    "BusinessReference": {
+      "fields": [
+        {
+          "name": "id",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": "@id @default(autoincrement())"
+        },
+        {
+          "name": "businessId",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "type",
+          "type": "BusinessReferenceType",
+          "baseType": "BusinessReferenceType",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "name",
+          "type": "String",
+          "baseType": "String",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "value",
+          "type": "String?",
+          "baseType": "String",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "isArchived",
+          "type": "Boolean",
+          "baseType": "Boolean",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(false)"
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "baseType": "DateTime",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(now())"
+        },
+        {
+          "name": "updatedAt",
+          "type": "DateTime",
+          "baseType": "DateTime",
+          "optional": false,
+          "list": false,
+          "attrs": "@updatedAt"
+        },
+        {
+          "name": "business",
+          "type": "Business",
+          "baseType": "Business",
+          "optional": false,
+          "list": false,
+          "attrs": "@relation(fields: [businessId], references: [id], onDelete: Cascade)"
+        },
+        {
+          "name": "projectCategories",
+          "type": "Project[]",
+          "baseType": "Project",
+          "optional": false,
+          "list": true,
+          "attrs": "@relation(\"ProjectCategoryReference\")"
+        },
+        {
+          "name": "serviceCategories",
+          "type": "Service[]",
+          "baseType": "Service",
+          "optional": false,
+          "list": true,
+          "attrs": "@relation(\"ServiceCategoryReference\")"
+        },
+        {
+          "name": "clientCategories",
+          "type": "Client[]",
+          "baseType": "Client",
+          "optional": false,
+          "list": true,
+          "attrs": "@relation(\"ClientCategoryReference\")"
+        },
+        {
+          "name": "taskCategories",
+          "type": "Task[]",
+          "baseType": "Task",
+          "optional": false,
+          "list": true,
+          "attrs": "@relation(\"TaskCategoryReference\")"
+        },
+        {
+          "name": "financeCategories",
+          "type": "Finance[]",
+          "baseType": "Finance",
+          "optional": false,
+          "list": true,
+          "attrs": "@relation(\"FinanceCategoryReference\")"
+        },
+        {
+          "name": "projectTags",
+          "type": "ProjectTag[]",
+          "baseType": "ProjectTag",
+          "optional": false,
+          "list": true,
+          "attrs": "@relation(\"ProjectTagReference\")"
+        },
+        {
+          "name": "serviceTags",
+          "type": "ServiceTag[]",
+          "baseType": "ServiceTag",
+          "optional": false,
+          "list": true,
+          "attrs": "@relation(\"ServiceTagReference\")"
+        },
+        {
+          "name": "clientTags",
+          "type": "ClientTag[]",
+          "baseType": "ClientTag",
+          "optional": false,
+          "list": true,
+          "attrs": "@relation(\"ClientTagReference\")"
+        },
+        {
+          "name": "taskTags",
+          "type": "TaskTag[]",
+          "baseType": "TaskTag",
+          "optional": false,
+          "list": true,
+          "attrs": "@relation(\"TaskTagReference\")"
+        },
+        {
+          "name": "financeTags",
+          "type": "FinanceTag[]",
+          "baseType": "FinanceTag",
+          "optional": false,
+          "list": true,
+          "attrs": "@relation(\"FinanceTagReference\")"
+        }
+      ],
+      "attributes": [
+        "@@unique([businessId, type, name])",
+        "@@index([businessId, type])"
+      ]
+    },
+    "ClientTag": {
+      "fields": [
+        {
+          "name": "id",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": "@id @default(autoincrement())"
+        },
+        {
+          "name": "clientId",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "referenceId",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "client",
+          "type": "Client",
+          "baseType": "Client",
+          "optional": false,
+          "list": false,
+          "attrs": "@relation(fields: [clientId], references: [id], onDelete: Cascade)"
+        },
+        {
+          "name": "reference",
+          "type": "BusinessReference",
+          "baseType": "BusinessReference",
+          "optional": false,
+          "list": false,
+          "attrs": "@relation(\"ClientTagReference\", fields: [referenceId], references: [id], onDelete: Cascade)"
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "baseType": "DateTime",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(now())"
+        }
+      ],
+      "attributes": [
+        "@@unique([clientId, referenceId])",
+        "@@index([referenceId])"
+      ]
+    },
+    "TaskTag": {
+      "fields": [
+        {
+          "name": "id",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": "@id @default(autoincrement())"
+        },
+        {
+          "name": "taskId",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "referenceId",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "task",
+          "type": "Task",
+          "baseType": "Task",
+          "optional": false,
+          "list": false,
+          "attrs": "@relation(fields: [taskId], references: [id], onDelete: Cascade)"
+        },
+        {
+          "name": "reference",
+          "type": "BusinessReference",
+          "baseType": "BusinessReference",
+          "optional": false,
+          "list": false,
+          "attrs": "@relation(\"TaskTagReference\", fields: [referenceId], references: [id], onDelete: Cascade)"
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "baseType": "DateTime",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(now())"
+        }
+      ],
+      "attributes": [
+        "@@unique([taskId, referenceId])",
+        "@@index([referenceId])"
+      ]
+    },
+    "FinanceTag": {
+      "fields": [
+        {
+          "name": "id",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": "@id @default(autoincrement())"
+        },
+        {
+          "name": "financeId",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "referenceId",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "finance",
+          "type": "Finance",
+          "baseType": "Finance",
+          "optional": false,
+          "list": false,
+          "attrs": "@relation(fields: [financeId], references: [id], onDelete: Cascade)"
+        },
+        {
+          "name": "reference",
+          "type": "BusinessReference",
+          "baseType": "BusinessReference",
+          "optional": false,
+          "list": false,
+          "attrs": "@relation(\"FinanceTagReference\", fields: [referenceId], references: [id], onDelete: Cascade)"
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "baseType": "DateTime",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(now())"
+        }
+      ],
+      "attributes": [
+        "@@unique([financeId, referenceId])",
+        "@@index([referenceId])"
+      ]
+    },
+    "LedgerEntry": {
+      "fields": [
+        {
+          "name": "id",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": "@id @default(autoincrement())"
+        },
+        {
+          "name": "businessId",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "date",
+          "type": "DateTime",
+          "baseType": "DateTime",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "memo",
+          "type": "String?",
+          "baseType": "String",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "sourceType",
+          "type": "LedgerSourceType",
+          "baseType": "LedgerSourceType",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "sourceId",
+          "type": "BigInt?",
+          "baseType": "BigInt",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "createdByUserId",
+          "type": "BigInt?",
+          "baseType": "BigInt",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "lines",
+          "type": "LedgerLine[]",
+          "baseType": "LedgerLine",
+          "optional": false,
+          "list": true,
+          "attrs": ""
+        },
+        {
+          "name": "business",
+          "type": "Business",
+          "baseType": "Business",
+          "optional": false,
+          "list": false,
+          "attrs": "@relation(fields: [businessId], references: [id], onDelete: Cascade)"
+        },
+        {
+          "name": "createdBy",
+          "type": "User?",
+          "baseType": "User",
+          "optional": true,
+          "list": false,
+          "attrs": "@relation(fields: [createdByUserId], references: [id], onDelete: SetNull)"
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "baseType": "DateTime",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(now())"
+        },
+        {
+          "name": "updatedAt",
+          "type": "DateTime",
+          "baseType": "DateTime",
+          "optional": false,
+          "list": false,
+          "attrs": "@updatedAt"
+        }
+      ],
+      "attributes": [
+        "@@index([businessId, date])",
+        "@@index([sourceType, sourceId])",
+        "@@unique([sourceType, sourceId])"
+      ]
+    },
+    "LedgerLine": {
+      "fields": [
+        {
+          "name": "id",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": "@id @default(autoincrement())"
+        },
+        {
+          "name": "entryId",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "accountCode",
+          "type": "String",
+          "baseType": "String",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "accountName",
+          "type": "String?",
+          "baseType": "String",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "debitCents",
+          "type": "BigInt?",
+          "baseType": "BigInt",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "creditCents",
+          "type": "BigInt?",
+          "baseType": "BigInt",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "metadata",
+          "type": "Json?",
+          "baseType": "Json",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "entry",
+          "type": "LedgerEntry",
+          "baseType": "LedgerEntry",
+          "optional": false,
+          "list": false,
+          "attrs": "@relation(fields: [entryId], references: [id], onDelete: Cascade)"
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "baseType": "DateTime",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(now())"
+        }
+      ],
+      "attributes": [
+        "@@index([entryId])"
+      ]
+    },
+    "BusinessSettings": {
+      "fields": [
+        {
+          "name": "id",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": "@id @default(autoincrement())"
+        },
+        {
+          "name": "businessId",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": "@unique"
+        },
+        {
+          "name": "currency",
+          "type": "String",
+          "baseType": "String",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(\"EUR\")"
+        },
+        {
+          "name": "invoicePrefix",
+          "type": "String",
+          "baseType": "String",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(\"INV-\")"
+        },
+        {
+          "name": "quotePrefix",
+          "type": "String",
+          "baseType": "String",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(\"DEV-\")"
+        },
+        {
+          "name": "nextInvoiceNumber",
+          "type": "Int",
+          "baseType": "Int",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(1)"
+        },
+        {
+          "name": "nextQuoteNumber",
+          "type": "Int",
+          "baseType": "Int",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(1)"
+        },
+        {
+          "name": "defaultDepositPercent",
+          "type": "Int",
+          "baseType": "Int",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(30)"
+        },
+        {
+          "name": "paymentTermsDays",
+          "type": "Int",
+          "baseType": "Int",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(30)"
+        },
+        {
+          "name": "enableAutoNumbering",
+          "type": "Boolean",
+          "baseType": "Boolean",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(true)"
+        },
+        {
+          "name": "vatRatePercent",
+          "type": "Int",
+          "baseType": "Int",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(20)"
+        },
+        {
+          "name": "vatEnabled",
+          "type": "Boolean",
+          "baseType": "Boolean",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(false)"
+        },
+        {
+          "name": "allowMembersInvite",
+          "type": "Boolean",
+          "baseType": "Boolean",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(true)"
+        },
+        {
+          "name": "allowViewerExport",
+          "type": "Boolean",
+          "baseType": "Boolean",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(false)"
+        },
+        {
+          "name": "integrationStripeEnabled",
+          "type": "Boolean",
+          "baseType": "Boolean",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(false)"
+        },
+        {
+          "name": "integrationStripePublicKey",
+          "type": "String?",
+          "baseType": "String",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "accountInventoryCode",
+          "type": "String",
+          "baseType": "String",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(\"3700\")"
+        },
+        {
+          "name": "accountCogsCode",
+          "type": "String",
+          "baseType": "String",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(\"6000\")"
+        },
+        {
+          "name": "accountCashCode",
+          "type": "String",
+          "baseType": "String",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(\"5300\")"
+        },
+        {
+          "name": "accountRevenueCode",
+          "type": "String",
+          "baseType": "String",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(\"7000\")"
+        },
+        {
+          "name": "ledgerSalesAccountCode",
+          "type": "String",
+          "baseType": "String",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(\"706\")"
+        },
+        {
+          "name": "ledgerVatCollectedAccountCode",
+          "type": "String",
+          "baseType": "String",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(\"44571\")"
+        },
+        {
+          "name": "ledgerCashAccountCode",
+          "type": "String",
+          "baseType": "String",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(\"512\")"
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "baseType": "DateTime",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(now())"
+        },
+        {
+          "name": "updatedAt",
+          "type": "DateTime",
+          "baseType": "DateTime",
+          "optional": false,
+          "list": false,
+          "attrs": "@updatedAt"
+        },
+        {
+          "name": "business",
+          "type": "Business",
+          "baseType": "Business",
+          "optional": false,
+          "list": false,
+          "attrs": "@relation(fields: [businessId], references: [id], onDelete: Cascade)"
+        }
+      ],
+      "attributes": []
+    },
+    "Quote": {
+      "fields": [
+        {
+          "name": "id",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": "@id @default(autoincrement())"
+        },
+        {
+          "name": "businessId",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "projectId",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "clientId",
+          "type": "BigInt?",
+          "baseType": "BigInt",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "createdByUserId",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "status",
+          "type": "QuoteStatus",
+          "baseType": "QuoteStatus",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(DRAFT)"
+        },
+        {
+          "name": "number",
+          "type": "String?",
+          "baseType": "String",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "depositPercent",
+          "type": "Int",
+          "baseType": "Int",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(30)"
+        },
+        {
+          "name": "currency",
+          "type": "String",
+          "baseType": "String",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(\"EUR\")"
+        },
+        {
+          "name": "totalCents",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "depositCents",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "balanceCents",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "note",
+          "type": "String?",
+          "baseType": "String",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "issuedAt",
+          "type": "DateTime?",
+          "baseType": "DateTime",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "expiresAt",
+          "type": "DateTime?",
+          "baseType": "DateTime",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "baseType": "DateTime",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(now())"
+        },
+        {
+          "name": "updatedAt",
+          "type": "DateTime",
+          "baseType": "DateTime",
+          "optional": false,
+          "list": false,
+          "attrs": "@updatedAt"
+        },
+        {
+          "name": "business",
+          "type": "Business",
+          "baseType": "Business",
+          "optional": false,
+          "list": false,
+          "attrs": "@relation(fields: [businessId], references: [id], onDelete: Cascade)"
+        },
+        {
+          "name": "project",
+          "type": "Project",
+          "baseType": "Project",
+          "optional": false,
+          "list": false,
+          "attrs": "@relation(fields: [projectId], references: [id], onDelete: Cascade)"
+        },
+        {
+          "name": "client",
+          "type": "Client?",
+          "baseType": "Client",
+          "optional": true,
+          "list": false,
+          "attrs": "@relation(fields: [clientId], references: [id], onDelete: SetNull)"
+        },
+        {
+          "name": "createdBy",
+          "type": "User",
+          "baseType": "User",
+          "optional": false,
+          "list": false,
+          "attrs": "@relation(\"QuoteCreatedBy\", fields: [createdByUserId], references: [id], onDelete: Restrict)"
+        },
+        {
+          "name": "items",
+          "type": "QuoteItem[]",
+          "baseType": "QuoteItem",
+          "optional": false,
+          "list": true,
+          "attrs": ""
+        },
+        {
+          "name": "invoice",
+          "type": "Invoice?",
+          "baseType": "Invoice",
+          "optional": true,
+          "list": false,
+          "attrs": "@relation(\"QuoteInvoice\")"
+        }
+      ],
+      "attributes": [
+        "@@unique([businessId, number])"
+      ]
+    },
+    "QuoteItem": {
+      "fields": [
+        {
+          "name": "id",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": "@id @default(autoincrement())"
+        },
+        {
+          "name": "quoteId",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "serviceId",
+          "type": "BigInt?",
+          "baseType": "BigInt",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "label",
+          "type": "String",
+          "baseType": "String",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "quantity",
+          "type": "Int",
+          "baseType": "Int",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "unitPriceCents",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "totalCents",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "baseType": "DateTime",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(now())"
+        },
+        {
+          "name": "updatedAt",
+          "type": "DateTime",
+          "baseType": "DateTime",
+          "optional": false,
+          "list": false,
+          "attrs": "@updatedAt"
+        },
+        {
+          "name": "quote",
+          "type": "Quote",
+          "baseType": "Quote",
+          "optional": false,
+          "list": false,
+          "attrs": "@relation(fields: [quoteId], references: [id], onDelete: Cascade)"
+        },
+        {
+          "name": "service",
+          "type": "Service?",
+          "baseType": "Service",
+          "optional": true,
+          "list": false,
+          "attrs": "@relation(fields: [serviceId], references: [id], onDelete: SetNull)"
+        }
+      ],
+      "attributes": []
+    },
+    "Invoice": {
+      "fields": [
+        {
+          "name": "id",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": "@id @default(autoincrement())"
+        },
+        {
+          "name": "businessId",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "projectId",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "clientId",
+          "type": "BigInt?",
+          "baseType": "BigInt",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "quoteId",
+          "type": "BigInt?",
+          "baseType": "BigInt",
+          "optional": true,
+          "list": false,
+          "attrs": "@unique"
+        },
+        {
+          "name": "createdByUserId",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "status",
+          "type": "InvoiceStatus",
+          "baseType": "InvoiceStatus",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(DRAFT)"
+        },
+        {
+          "name": "number",
+          "type": "String?",
+          "baseType": "String",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "depositPercent",
+          "type": "Int",
+          "baseType": "Int",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(30)"
+        },
+        {
+          "name": "currency",
+          "type": "String",
+          "baseType": "String",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(\"EUR\")"
+        },
+        {
+          "name": "totalCents",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "depositCents",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "balanceCents",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "note",
+          "type": "String?",
+          "baseType": "String",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "issuedAt",
+          "type": "DateTime?",
+          "baseType": "DateTime",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "dueAt",
+          "type": "DateTime?",
+          "baseType": "DateTime",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "paidAt",
+          "type": "DateTime?",
+          "baseType": "DateTime",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "baseType": "DateTime",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(now())"
+        },
+        {
+          "name": "updatedAt",
+          "type": "DateTime",
+          "baseType": "DateTime",
+          "optional": false,
+          "list": false,
+          "attrs": "@updatedAt"
+        },
+        {
+          "name": "business",
+          "type": "Business",
+          "baseType": "Business",
+          "optional": false,
+          "list": false,
+          "attrs": "@relation(fields: [businessId], references: [id], onDelete: Cascade)"
+        },
+        {
+          "name": "project",
+          "type": "Project",
+          "baseType": "Project",
+          "optional": false,
+          "list": false,
+          "attrs": "@relation(fields: [projectId], references: [id], onDelete: Cascade)"
+        },
+        {
+          "name": "client",
+          "type": "Client?",
+          "baseType": "Client",
+          "optional": true,
+          "list": false,
+          "attrs": "@relation(fields: [clientId], references: [id], onDelete: SetNull)"
+        },
+        {
+          "name": "quote",
+          "type": "Quote?",
+          "baseType": "Quote",
+          "optional": true,
+          "list": false,
+          "attrs": "@relation(\"QuoteInvoice\", fields: [quoteId], references: [id], onDelete: SetNull)"
+        },
+        {
+          "name": "createdBy",
+          "type": "User",
+          "baseType": "User",
+          "optional": false,
+          "list": false,
+          "attrs": "@relation(\"InvoiceCreatedBy\", fields: [createdByUserId], references: [id], onDelete: Restrict)"
+        },
+        {
+          "name": "items",
+          "type": "InvoiceItem[]",
+          "baseType": "InvoiceItem",
+          "optional": false,
+          "list": true,
+          "attrs": ""
+        },
+        {
+          "name": "reservation",
+          "type": "InventoryReservation?",
+          "baseType": "InventoryReservation",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        }
+      ],
+      "attributes": [
+        "@@unique([businessId, number])"
+      ]
+    },
+    "InvoiceItem": {
+      "fields": [
+        {
+          "name": "id",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": "@id @default(autoincrement())"
+        },
+        {
+          "name": "invoiceId",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "serviceId",
+          "type": "BigInt?",
+          "baseType": "BigInt",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "productId",
+          "type": "BigInt?",
+          "baseType": "BigInt",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "label",
+          "type": "String",
+          "baseType": "String",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "quantity",
+          "type": "Int",
+          "baseType": "Int",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "unitPriceCents",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "totalCents",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "baseType": "DateTime",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(now())"
+        },
+        {
+          "name": "updatedAt",
+          "type": "DateTime",
+          "baseType": "DateTime",
+          "optional": false,
+          "list": false,
+          "attrs": "@updatedAt"
+        },
+        {
+          "name": "invoice",
+          "type": "Invoice",
+          "baseType": "Invoice",
+          "optional": false,
+          "list": false,
+          "attrs": "@relation(fields: [invoiceId], references: [id], onDelete: Cascade)"
+        },
+        {
+          "name": "service",
+          "type": "Service?",
+          "baseType": "Service",
+          "optional": true,
+          "list": false,
+          "attrs": "@relation(fields: [serviceId], references: [id], onDelete: SetNull)"
+        },
+        {
+          "name": "product",
+          "type": "Product?",
+          "baseType": "Product",
+          "optional": true,
+          "list": false,
+          "attrs": "@relation(fields: [productId], references: [id], onDelete: SetNull)"
+        }
+      ],
+      "attributes": [
+        "@@index([productId])"
+      ]
+    },
+    "BusinessDocument": {
+      "fields": [
+        {
+          "name": "id",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": "@id @default(autoincrement())"
+        },
+        {
+          "name": "businessId",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "clientId",
+          "type": "BigInt?",
+          "baseType": "BigInt",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "title",
+          "type": "String",
+          "baseType": "String",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "filename",
+          "type": "String",
+          "baseType": "String",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "mimeType",
+          "type": "String",
+          "baseType": "String",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "sizeBytes",
+          "type": "Int",
+          "baseType": "Int",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "storageKey",
+          "type": "String",
+          "baseType": "String",
+          "optional": false,
+          "list": false,
+          "attrs": "@unique"
+        },
+        {
+          "name": "sha256",
+          "type": "String?",
+          "baseType": "String",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "kind",
+          "type": "DocumentKind",
+          "baseType": "DocumentKind",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(FILE)"
+        },
+        {
+          "name": "createdByUserId",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "baseType": "DateTime",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(now())"
+        },
+        {
+          "name": "business",
+          "type": "Business",
+          "baseType": "Business",
+          "optional": false,
+          "list": false,
+          "attrs": "@relation(fields: [businessId], references: [id], onDelete: Cascade)"
+        },
+        {
+          "name": "client",
+          "type": "Client?",
+          "baseType": "Client",
+          "optional": true,
+          "list": false,
+          "attrs": "@relation(fields: [clientId], references: [id], onDelete: SetNull)"
+        },
+        {
+          "name": "createdBy",
+          "type": "User",
+          "baseType": "User",
+          "optional": false,
+          "list": false,
+          "attrs": "@relation(\"DocumentCreatedBy\", fields: [createdByUserId], references: [id], onDelete: Restrict)"
+        }
+      ],
+      "attributes": [
+        "@@index([businessId, clientId, createdAt])",
+        "@@index([businessId, createdAt])"
+      ]
+    },
+    "PersonalAccount": {
+      "fields": [
+        {
+          "name": "id",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": "@id @default(autoincrement())"
+        },
+        {
+          "name": "userId",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "user",
+          "type": "User",
+          "baseType": "User",
+          "optional": false,
+          "list": false,
+          "attrs": "@relation(fields: [userId], references: [id], onDelete: Cascade)"
+        },
+        {
+          "name": "name",
+          "type": "String",
+          "baseType": "String",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "type",
+          "type": "PersonalAccountType",
+          "baseType": "PersonalAccountType",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(CURRENT)"
+        },
+        {
+          "name": "currency",
+          "type": "String",
+          "baseType": "String",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(\"EUR\")"
+        },
+        {
+          "name": "institution",
+          "type": "String?",
+          "baseType": "String",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "iban",
+          "type": "String?",
+          "baseType": "String",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "initialCents",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(0)"
+        },
+        {
+          "name": "transactions",
+          "type": "PersonalTransaction[]",
+          "baseType": "PersonalTransaction",
+          "optional": false,
+          "list": true,
+          "attrs": ""
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "baseType": "DateTime",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(now())"
+        },
+        {
+          "name": "updatedAt",
+          "type": "DateTime",
+          "baseType": "DateTime",
+          "optional": false,
+          "list": false,
+          "attrs": "@updatedAt"
+        }
+      ],
+      "attributes": [
+        "@@index([userId, createdAt])"
+      ]
+    },
+    "PersonalCategory": {
+      "fields": [
+        {
+          "name": "id",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": "@id @default(autoincrement())"
+        },
+        {
+          "name": "userId",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "user",
+          "type": "User",
+          "baseType": "User",
+          "optional": false,
+          "list": false,
+          "attrs": "@relation(fields: [userId], references: [id], onDelete: Cascade)"
+        },
+        {
+          "name": "name",
+          "type": "String",
+          "baseType": "String",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "baseType": "DateTime",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(now())"
+        },
+        {
+          "name": "transactions",
+          "type": "PersonalTransaction[]",
+          "baseType": "PersonalTransaction",
+          "optional": false,
+          "list": true,
+          "attrs": ""
+        }
+      ],
+      "attributes": [
+        "@@unique([userId, name])"
+      ]
+    },
+    "PersonalTransaction": {
+      "fields": [
+        {
+          "name": "id",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": "@id @default(autoincrement())"
+        },
+        {
+          "name": "userId",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "user",
+          "type": "User",
+          "baseType": "User",
+          "optional": false,
+          "list": false,
+          "attrs": "@relation(fields: [userId], references: [id], onDelete: Cascade)"
+        },
+        {
+          "name": "accountId",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "account",
+          "type": "PersonalAccount",
+          "baseType": "PersonalAccount",
+          "optional": false,
+          "list": false,
+          "attrs": "@relation(fields: [accountId], references: [id], onDelete: Cascade)"
+        },
+        {
+          "name": "categoryId",
+          "type": "BigInt?",
+          "baseType": "BigInt",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "category",
+          "type": "PersonalCategory?",
+          "baseType": "PersonalCategory",
+          "optional": true,
+          "list": false,
+          "attrs": "@relation(fields: [categoryId], references: [id], onDelete: SetNull)"
+        },
+        {
+          "name": "type",
+          "type": "PersonalTransactionType",
+          "baseType": "PersonalTransactionType",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "date",
+          "type": "DateTime",
+          "baseType": "DateTime",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "amountCents",
+          "type": "BigInt",
+          "baseType": "BigInt",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "currency",
+          "type": "String",
+          "baseType": "String",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(\"EUR\")"
+        },
+        {
+          "name": "label",
+          "type": "String",
+          "baseType": "String",
+          "optional": false,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "note",
+          "type": "String?",
+          "baseType": "String",
+          "optional": true,
+          "list": false,
+          "attrs": ""
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "baseType": "DateTime",
+          "optional": false,
+          "list": false,
+          "attrs": "@default(now())"
+        },
+        {
+          "name": "updatedAt",
+          "type": "DateTime",
+          "baseType": "DateTime",
+          "optional": false,
+          "list": false,
+          "attrs": "@updatedAt"
+        }
+      ],
+      "attributes": [
+        "@@index([userId, date])",
+        "@@index([accountId, date])"
+      ]
+    }
+  },
+  "enums": {
+    "UserRole": [
+      "USER",
+      "ADMIN"
+    ],
+    "BusinessRole": [
+      "OWNER",
+      "ADMIN",
+      "MEMBER",
+      "VIEWER"
+    ],
+    "EmployeeStatus": [
+      "ACTIVE",
+      "INACTIVE"
+    ],
+    "BusinessPermission": [
+      "TEAM_EDIT",
+      "FINANCE_EDIT"
+    ],
+    "ProductUnit": [
+      "PIECE",
+      "KG",
+      "HOUR",
+      "LITER",
+      "OTHER"
+    ],
+    "InventoryMovementType": [
+      "IN",
+      "OUT",
+      "ADJUST"
+    ],
+    "InventoryReservationStatus": [
+      "ACTIVE",
+      "RELEASED",
+      "CONSUMED"
+    ],
+    "LedgerSourceType": [
+      "INVENTORY_MOVEMENT",
+      "INVOICE_STOCK_CONSUMPTION",
+      "INVOICE_CASH_SALE"
+    ],
+    "InventoryMovementSource": [
+      "MANUAL",
+      "PURCHASE",
+      "SALE"
+    ],
+    "DocumentKind": [
+      "FILE",
+      "INVOICE",
+      "QUOTE"
+    ],
+    "BusinessInviteStatus": [
+      "PENDING",
+      "ACCEPTED",
+      "REVOKED",
+      "EXPIRED"
+    ],
+    "LeadSource": [
+      "UNKNOWN",
+      "OUTBOUND",
+      "INBOUND",
+      "REFERRAL",
+      "OTHER"
+    ],
+    "ProspectStatus": [
+      "NEW",
+      "FOLLOW_UP",
+      "WON",
+      "LOST"
+    ],
+    "QualificationLevel": [
+      "COLD",
+      "WARM",
+      "HOT"
+    ],
+    "ProspectPipelineStatus": [
+      "NEW",
+      "IN_DISCUSSION",
+      "OFFER_SENT",
+      "FOLLOW_UP",
+      "CLOSED"
+    ],
+    "ClientStatus": [
+      "ACTIVE",
+      "PAUSED",
+      "FORMER"
+    ],
+    "ProjectStatus": [
+      "PLANNED",
+      "ACTIVE",
+      "ON_HOLD",
+      "COMPLETED",
+      "CANCELLED"
+    ],
+    "ProjectQuoteStatus": [
+      "DRAFT",
+      "SENT",
+      "ACCEPTED",
+      "SIGNED"
+    ],
+    "ProjectDepositStatus": [
+      "NOT_REQUIRED",
+      "PENDING",
+      "PAID"
+    ],
+    "QuoteStatus": [
+      "DRAFT",
+      "SENT",
+      "SIGNED",
+      "CANCELLED",
+      "EXPIRED"
+    ],
+    "InvoiceStatus": [
+      "DRAFT",
+      "SENT",
+      "PAID",
+      "CANCELLED"
+    ],
+    "TaskStatus": [
+      "TODO",
+      "IN_PROGRESS",
+      "DONE"
+    ],
+    "TaskPhase": [
+      "CADRAGE",
+      "UX",
+      "DESIGN",
+      "DEV",
+      "SEO",
+      "LAUNCH",
+      "FOLLOW_UP"
+    ],
+    "FinanceType": [
+      "INCOME",
+      "EXPENSE"
+    ],
+    "ProcessStatus": [
+      "ACTIVE",
+      "ARCHIVED"
+    ],
+    "InteractionType": [
+      "CALL",
+      "MEETING",
+      "EMAIL",
+      "NOTE",
+      "MESSAGE"
+    ],
+    "BusinessReferenceType": [
+      "CATEGORY",
+      "TAG",
+      "NUMBERING",
+      "AUTOMATION"
+    ],
+    "PersonalAccountType": [
+      "CURRENT",
+      "SAVINGS",
+      "INVEST",
+      "CASH"
+    ],
+    "PersonalTransactionType": [
+      "INCOME",
+      "EXPENSE",
+      "TRANSFER"
+    ]
+  },
+  "relations": [
+    {
+      "model": "Business",
+      "field": "owner",
+      "relatedModel": "User",
+      "fkFields": [
+        "ownerId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": null
+    },
+    {
+      "model": "BusinessMembership",
+      "field": "business",
+      "relatedModel": "Business",
+      "fkFields": [
+        "businessId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": null
+    },
+    {
+      "model": "BusinessMembership",
+      "field": "user",
+      "relatedModel": "User",
+      "fkFields": [
+        "userId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": null
+    },
+    {
+      "model": "EmployeeProfile",
+      "field": "membership",
+      "relatedModel": "BusinessMembership",
+      "fkFields": [
+        "membershipId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": "Cascade"
+    },
+    {
+      "model": "BusinessMemberPermission",
+      "field": "membership",
+      "relatedModel": "BusinessMembership",
+      "fkFields": [
+        "membershipId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": "Cascade"
+    },
+    {
+      "model": "BusinessInvite",
+      "field": "business",
+      "relatedModel": "Business",
+      "fkFields": [
+        "businessId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": null
+    },
+    {
+      "model": "Prospect",
+      "field": "business",
+      "relatedModel": "Business",
+      "fkFields": [
+        "businessId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": "Cascade"
+    },
+    {
+      "model": "Client",
+      "field": "business",
+      "relatedModel": "Business",
+      "fkFields": [
+        "businessId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": "Cascade"
+    },
+    {
+      "model": "Client",
+      "field": "categoryReference",
+      "relatedModel": "BusinessReference",
+      "fkFields": [
+        "categoryReferenceId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": "SetNull"
+    },
+    {
+      "model": "Client",
+      "field": "anonymizedBy",
+      "relatedModel": "User",
+      "fkFields": [
+        "anonymizedByUserId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": "SetNull"
+    },
+    {
+      "model": "Project",
+      "field": "business",
+      "relatedModel": "Business",
+      "fkFields": [
+        "businessId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": null
+    },
+    {
+      "model": "Project",
+      "field": "client",
+      "relatedModel": "Client",
+      "fkFields": [
+        "clientId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": null
+    },
+    {
+      "model": "Project",
+      "field": "categoryReference",
+      "relatedModel": "BusinessReference",
+      "fkFields": [
+        "categoryReferenceId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": "SetNull"
+    },
+    {
+      "model": "Task",
+      "field": "business",
+      "relatedModel": "Business",
+      "fkFields": [
+        "businessId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": null
+    },
+    {
+      "model": "Task",
+      "field": "project",
+      "relatedModel": "Project",
+      "fkFields": [
+        "projectId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": "SetNull"
+    },
+    {
+      "model": "Task",
+      "field": "projectService",
+      "relatedModel": "ProjectService",
+      "fkFields": [
+        "projectServiceId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": "SetNull"
+    },
+    {
+      "model": "Task",
+      "field": "projectServiceStep",
+      "relatedModel": "ProjectServiceStep",
+      "fkFields": [
+        "projectServiceStepId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": "SetNull"
+    },
+    {
+      "model": "Task",
+      "field": "assignee",
+      "relatedModel": "User",
+      "fkFields": [
+        "assigneeUserId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": "SetNull"
+    },
+    {
+      "model": "Task",
+      "field": "categoryReference",
+      "relatedModel": "BusinessReference",
+      "fkFields": [
+        "categoryReferenceId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": "SetNull"
+    },
+    {
+      "model": "Process",
+      "field": "business",
+      "relatedModel": "Business",
+      "fkFields": [
+        "businessId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": "Cascade"
+    },
+    {
+      "model": "ProcessStep",
+      "field": "process",
+      "relatedModel": "Process",
+      "fkFields": [
+        "processId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": "Cascade"
+    },
+    {
+      "model": "Finance",
+      "field": "business",
+      "relatedModel": "Business",
+      "fkFields": [
+        "businessId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": null
+    },
+    {
+      "model": "Finance",
+      "field": "project",
+      "relatedModel": "Project",
+      "fkFields": [
+        "projectId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": "SetNull"
+    },
+    {
+      "model": "Finance",
+      "field": "categoryReference",
+      "relatedModel": "BusinessReference",
+      "fkFields": [
+        "categoryReferenceId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": "SetNull"
+    },
+    {
+      "model": "Finance",
+      "field": "inventoryMovement",
+      "relatedModel": "InventoryMovement",
+      "fkFields": [
+        "inventoryMovementId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": "SetNull"
+    },
+    {
+      "model": "Finance",
+      "field": "inventoryProduct",
+      "relatedModel": "Product",
+      "fkFields": [
+        "inventoryProductId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": "SetNull"
+    },
+    {
+      "model": "Service",
+      "field": "business",
+      "relatedModel": "Business",
+      "fkFields": [
+        "businessId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": "Cascade"
+    },
+    {
+      "model": "Service",
+      "field": "categoryReference",
+      "relatedModel": "BusinessReference",
+      "fkFields": [
+        "categoryReferenceId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": "SetNull"
+    },
+    {
+      "model": "Product",
+      "field": "business",
+      "relatedModel": "Business",
+      "fkFields": [
+        "businessId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": "Cascade"
+    },
+    {
+      "model": "ProductImage",
+      "field": "business",
+      "relatedModel": "Business",
+      "fkFields": [
+        "businessId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": "Cascade"
+    },
+    {
+      "model": "ProductImage",
+      "field": "product",
+      "relatedModel": "Product",
+      "fkFields": [
+        "productId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": "Cascade"
+    },
+    {
+      "model": "InventoryMovement",
+      "field": "business",
+      "relatedModel": "Business",
+      "fkFields": [
+        "businessId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": "Cascade"
+    },
+    {
+      "model": "InventoryMovement",
+      "field": "product",
+      "relatedModel": "Product",
+      "fkFields": [
+        "productId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": "Cascade"
+    },
+    {
+      "model": "InventoryMovement",
+      "field": "createdBy",
+      "relatedModel": "User",
+      "fkFields": [
+        "createdByUserId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": "SetNull"
+    },
+    {
+      "model": "InventoryReservation",
+      "field": "business",
+      "relatedModel": "Business",
+      "fkFields": [
+        "businessId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": "Cascade"
+    },
+    {
+      "model": "InventoryReservation",
+      "field": "invoice",
+      "relatedModel": "Invoice",
+      "fkFields": [
+        "invoiceId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": "Cascade"
+    },
+    {
+      "model": "InventoryReservationItem",
+      "field": "reservation",
+      "relatedModel": "InventoryReservation",
+      "fkFields": [
+        "reservationId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": "Cascade"
+    },
+    {
+      "model": "InventoryReservationItem",
+      "field": "product",
+      "relatedModel": "Product",
+      "fkFields": [
+        "productId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": "Cascade"
+    },
+    {
+      "model": "ProjectTag",
+      "field": "project",
+      "relatedModel": "Project",
+      "fkFields": [
+        "projectId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": "Cascade"
+    },
+    {
+      "model": "ProjectTag",
+      "field": "reference",
+      "relatedModel": "BusinessReference",
+      "fkFields": [
+        "referenceId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": "Cascade"
+    },
+    {
+      "model": "ServiceTag",
+      "field": "service",
+      "relatedModel": "Service",
+      "fkFields": [
+        "serviceId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": "Cascade"
+    },
+    {
+      "model": "ServiceTag",
+      "field": "reference",
+      "relatedModel": "BusinessReference",
+      "fkFields": [
+        "referenceId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": "Cascade"
+    },
+    {
+      "model": "ServiceTaskTemplate",
+      "field": "service",
+      "relatedModel": "Service",
+      "fkFields": [
+        "serviceId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": "Cascade"
+    },
+    {
+      "model": "ServiceTemplateTask",
+      "field": "template",
+      "relatedModel": "ServiceTaskTemplate",
+      "fkFields": [
+        "templateId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": "Cascade"
+    },
+    {
+      "model": "ServiceProcessTemplate",
+      "field": "business",
+      "relatedModel": "Business",
+      "fkFields": [
+        "businessId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": "Cascade"
+    },
+    {
+      "model": "ServiceProcessTemplate",
+      "field": "service",
+      "relatedModel": "Service",
+      "fkFields": [
+        "serviceId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": "Cascade"
+    },
+    {
+      "model": "ServiceProcessPhaseTemplate",
+      "field": "template",
+      "relatedModel": "ServiceProcessTemplate",
+      "fkFields": [
+        "templateId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": "Cascade"
+    },
+    {
+      "model": "ServiceProcessStepTemplate",
+      "field": "phase",
+      "relatedModel": "ServiceProcessPhaseTemplate",
+      "fkFields": [
+        "phaseId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": "Cascade"
+    },
+    {
+      "model": "ServiceProcessTaskTemplate",
+      "field": "step",
+      "relatedModel": "ServiceProcessStepTemplate",
+      "fkFields": [
+        "stepId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": "Cascade"
+    },
+    {
+      "model": "ProjectService",
+      "field": "project",
+      "relatedModel": "Project",
+      "fkFields": [
+        "projectId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": "Cascade"
+    },
+    {
+      "model": "ProjectService",
+      "field": "service",
+      "relatedModel": "Service",
+      "fkFields": [
+        "serviceId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": "Cascade"
+    },
+    {
+      "model": "ProjectServiceStep",
+      "field": "projectService",
+      "relatedModel": "ProjectService",
+      "fkFields": [
+        "projectServiceId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": "Cascade"
+    },
+    {
+      "model": "Interaction",
+      "field": "business",
+      "relatedModel": "Business",
+      "fkFields": [
+        "businessId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": "Cascade"
+    },
+    {
+      "model": "Interaction",
+      "field": "client",
+      "relatedModel": "Client",
+      "fkFields": [
+        "clientId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": "SetNull"
+    },
+    {
+      "model": "Interaction",
+      "field": "project",
+      "relatedModel": "Project",
+      "fkFields": [
+        "projectId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": "SetNull"
+    },
+    {
+      "model": "Interaction",
+      "field": "createdBy",
+      "relatedModel": "User",
+      "fkFields": [
+        "createdByUserId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": "SetNull"
+    },
+    {
+      "model": "BusinessReference",
+      "field": "business",
+      "relatedModel": "Business",
+      "fkFields": [
+        "businessId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": "Cascade"
+    },
+    {
+      "model": "ClientTag",
+      "field": "client",
+      "relatedModel": "Client",
+      "fkFields": [
+        "clientId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": "Cascade"
+    },
+    {
+      "model": "ClientTag",
+      "field": "reference",
+      "relatedModel": "BusinessReference",
+      "fkFields": [
+        "referenceId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": "Cascade"
+    },
+    {
+      "model": "TaskTag",
+      "field": "task",
+      "relatedModel": "Task",
+      "fkFields": [
+        "taskId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": "Cascade"
+    },
+    {
+      "model": "TaskTag",
+      "field": "reference",
+      "relatedModel": "BusinessReference",
+      "fkFields": [
+        "referenceId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": "Cascade"
+    },
+    {
+      "model": "FinanceTag",
+      "field": "finance",
+      "relatedModel": "Finance",
+      "fkFields": [
+        "financeId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": "Cascade"
+    },
+    {
+      "model": "FinanceTag",
+      "field": "reference",
+      "relatedModel": "BusinessReference",
+      "fkFields": [
+        "referenceId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": "Cascade"
+    },
+    {
+      "model": "LedgerEntry",
+      "field": "business",
+      "relatedModel": "Business",
+      "fkFields": [
+        "businessId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": "Cascade"
+    },
+    {
+      "model": "LedgerEntry",
+      "field": "createdBy",
+      "relatedModel": "User",
+      "fkFields": [
+        "createdByUserId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": "SetNull"
+    },
+    {
+      "model": "LedgerLine",
+      "field": "entry",
+      "relatedModel": "LedgerEntry",
+      "fkFields": [
+        "entryId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": "Cascade"
+    },
+    {
+      "model": "BusinessSettings",
+      "field": "business",
+      "relatedModel": "Business",
+      "fkFields": [
+        "businessId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": "Cascade"
+    },
+    {
+      "model": "Quote",
+      "field": "business",
+      "relatedModel": "Business",
+      "fkFields": [
+        "businessId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": "Cascade"
+    },
+    {
+      "model": "Quote",
+      "field": "project",
+      "relatedModel": "Project",
+      "fkFields": [
+        "projectId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": "Cascade"
+    },
+    {
+      "model": "Quote",
+      "field": "client",
+      "relatedModel": "Client",
+      "fkFields": [
+        "clientId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": "SetNull"
+    },
+    {
+      "model": "Quote",
+      "field": "createdBy",
+      "relatedModel": "User",
+      "fkFields": [
+        "createdByUserId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": "Restrict"
+    },
+    {
+      "model": "QuoteItem",
+      "field": "quote",
+      "relatedModel": "Quote",
+      "fkFields": [
+        "quoteId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": "Cascade"
+    },
+    {
+      "model": "QuoteItem",
+      "field": "service",
+      "relatedModel": "Service",
+      "fkFields": [
+        "serviceId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": "SetNull"
+    },
+    {
+      "model": "Invoice",
+      "field": "business",
+      "relatedModel": "Business",
+      "fkFields": [
+        "businessId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": "Cascade"
+    },
+    {
+      "model": "Invoice",
+      "field": "project",
+      "relatedModel": "Project",
+      "fkFields": [
+        "projectId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": "Cascade"
+    },
+    {
+      "model": "Invoice",
+      "field": "client",
+      "relatedModel": "Client",
+      "fkFields": [
+        "clientId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": "SetNull"
+    },
+    {
+      "model": "Invoice",
+      "field": "quote",
+      "relatedModel": "Quote",
+      "fkFields": [
+        "quoteId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": "SetNull"
+    },
+    {
+      "model": "Invoice",
+      "field": "createdBy",
+      "relatedModel": "User",
+      "fkFields": [
+        "createdByUserId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": "Restrict"
+    },
+    {
+      "model": "InvoiceItem",
+      "field": "invoice",
+      "relatedModel": "Invoice",
+      "fkFields": [
+        "invoiceId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": "Cascade"
+    },
+    {
+      "model": "InvoiceItem",
+      "field": "service",
+      "relatedModel": "Service",
+      "fkFields": [
+        "serviceId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": "SetNull"
+    },
+    {
+      "model": "InvoiceItem",
+      "field": "product",
+      "relatedModel": "Product",
+      "fkFields": [
+        "productId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": "SetNull"
+    },
+    {
+      "model": "BusinessDocument",
+      "field": "business",
+      "relatedModel": "Business",
+      "fkFields": [
+        "businessId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": "Cascade"
+    },
+    {
+      "model": "BusinessDocument",
+      "field": "client",
+      "relatedModel": "Client",
+      "fkFields": [
+        "clientId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": "SetNull"
+    },
+    {
+      "model": "BusinessDocument",
+      "field": "createdBy",
+      "relatedModel": "User",
+      "fkFields": [
+        "createdByUserId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": "Restrict"
+    },
+    {
+      "model": "PersonalAccount",
+      "field": "user",
+      "relatedModel": "User",
+      "fkFields": [
+        "userId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": "Cascade"
+    },
+    {
+      "model": "PersonalCategory",
+      "field": "user",
+      "relatedModel": "User",
+      "fkFields": [
+        "userId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": "Cascade"
+    },
+    {
+      "model": "PersonalTransaction",
+      "field": "user",
+      "relatedModel": "User",
+      "fkFields": [
+        "userId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": "Cascade"
+    },
+    {
+      "model": "PersonalTransaction",
+      "field": "account",
+      "relatedModel": "PersonalAccount",
+      "fkFields": [
+        "accountId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": "Cascade"
+    },
+    {
+      "model": "PersonalTransaction",
+      "field": "category",
+      "relatedModel": "PersonalCategory",
+      "fkFields": [
+        "categoryId"
+      ],
+      "refFields": [
+        "id"
+      ],
+      "onDelete": "SetNull"
+    }
+  ],
+  "enumFields": [
+    {
+      "model": "User",
+      "field": "role",
+      "enum": "UserRole"
+    },
+    {
+      "model": "BusinessMembership",
+      "field": "role",
+      "enum": "BusinessRole"
+    },
+    {
+      "model": "EmployeeProfile",
+      "field": "status",
+      "enum": "EmployeeStatus"
+    },
+    {
+      "model": "BusinessMemberPermission",
+      "field": "permission",
+      "enum": "BusinessPermission"
+    },
+    {
+      "model": "BusinessInvite",
+      "field": "role",
+      "enum": "BusinessRole"
+    },
+    {
+      "model": "BusinessInvite",
+      "field": "status",
+      "enum": "BusinessInviteStatus"
+    },
+    {
+      "model": "Prospect",
+      "field": "source",
+      "enum": "LeadSource"
+    },
+    {
+      "model": "Prospect",
+      "field": "qualificationLevel",
+      "enum": "QualificationLevel"
+    },
+    {
+      "model": "Prospect",
+      "field": "pipelineStatus",
+      "enum": "ProspectPipelineStatus"
+    },
+    {
+      "model": "Prospect",
+      "field": "status",
+      "enum": "ProspectStatus"
+    },
+    {
+      "model": "Client",
+      "field": "leadSource",
+      "enum": "LeadSource"
+    },
+    {
+      "model": "Client",
+      "field": "status",
+      "enum": "ClientStatus"
+    },
+    {
+      "model": "Project",
+      "field": "status",
+      "enum": "ProjectStatus"
+    },
+    {
+      "model": "Project",
+      "field": "quoteStatus",
+      "enum": "ProjectQuoteStatus"
+    },
+    {
+      "model": "Project",
+      "field": "depositStatus",
+      "enum": "ProjectDepositStatus"
+    },
+    {
+      "model": "Task",
+      "field": "status",
+      "enum": "TaskStatus"
+    },
+    {
+      "model": "Task",
+      "field": "phase",
+      "enum": "TaskPhase"
+    },
+    {
+      "model": "Process",
+      "field": "status",
+      "enum": "ProcessStatus"
+    },
+    {
+      "model": "Finance",
+      "field": "type",
+      "enum": "FinanceType"
+    },
+    {
+      "model": "Product",
+      "field": "unit",
+      "enum": "ProductUnit"
+    },
+    {
+      "model": "InventoryMovement",
+      "field": "type",
+      "enum": "InventoryMovementType"
+    },
+    {
+      "model": "InventoryMovement",
+      "field": "source",
+      "enum": "InventoryMovementSource"
+    },
+    {
+      "model": "InventoryReservation",
+      "field": "status",
+      "enum": "InventoryReservationStatus"
+    },
+    {
+      "model": "ServiceTaskTemplate",
+      "field": "phase",
+      "enum": "TaskPhase"
+    },
+    {
+      "model": "Interaction",
+      "field": "type",
+      "enum": "InteractionType"
+    },
+    {
+      "model": "BusinessReference",
+      "field": "type",
+      "enum": "BusinessReferenceType"
+    },
+    {
+      "model": "LedgerEntry",
+      "field": "sourceType",
+      "enum": "LedgerSourceType"
+    },
+    {
+      "model": "Quote",
+      "field": "status",
+      "enum": "QuoteStatus"
+    },
+    {
+      "model": "Invoice",
+      "field": "status",
+      "enum": "InvoiceStatus"
+    },
+    {
+      "model": "BusinessDocument",
+      "field": "kind",
+      "enum": "DocumentKind"
+    },
+    {
+      "model": "PersonalAccount",
+      "field": "type",
+      "enum": "PersonalAccountType"
+    },
+    {
+      "model": "PersonalTransaction",
+      "field": "type",
+      "enum": "PersonalTransactionType"
+    }
+  ]
+}

@@ -1,10 +1,11 @@
 import { NextRequest } from 'next/server';
 import { prisma } from '@/server/db/client';
-import { TaskStatus, ProjectStatus, FinanceType } from '@/generated/prisma';
+import { TaskStatus, FinanceType } from '@/generated/prisma';
 import { requireAuthPro } from '@/server/auth/requireAuthPro';
 import { requireBusinessRole } from '@/server/auth/businessRole';
 import { getRequestId, badRequest, notFound, unauthorized, forbidden, withRequestId } from '@/server/http/apiUtils';
 import { jsonNoStore, withNoStore } from '@/server/security/csrf';
+import { getProjectCounts } from '@/server/queries/projects';
 
 function parseId(param: string | undefined) {
   if (!param || !/^\d+$/.test(param)) return null;
@@ -77,20 +78,14 @@ export async function GET(
 
   const [
     clientsCount,
-    projectsActiveCount,
-    projectsCompletedCount,
+    projectCounts,
     openTasksCount,
     upcomingTasks,
     upcomingInteractions,
     financeRows,
   ] = await Promise.all([
     prisma.client.count({ where: { businessId: businessIdBigInt } }),
-    prisma.project.count({
-      where: { businessId: businessIdBigInt, status: ProjectStatus.ACTIVE, archivedAt: null },
-    }),
-    prisma.project.count({
-      where: { businessId: businessIdBigInt, status: ProjectStatus.COMPLETED, archivedAt: null },
-    }),
+    getProjectCounts({ businessId: businessIdBigInt.toString() }),
     prisma.task.count({
       where: {
         businessId: businessIdBigInt,
@@ -183,6 +178,9 @@ export async function GET(
     projectName: t.project?.name ?? null,
   }));
 
+  const projectsActiveCount = projectCounts.active;
+  const projectsCompletedCount = projectCounts.inactive;
+
   const payload = {
     kpis: {
       projectsActiveCount,
@@ -191,6 +189,13 @@ export async function GET(
       mtdIncomeCents: mtdIncome.toString(),
       mtdExpenseCents: mtdExpense.toString(),
       mtdNetCents: (mtdIncome - mtdExpense).toString(),
+    },
+    projects: {
+      activeCount: projectCounts.active,
+      plannedCount: projectCounts.planned,
+      inactiveCount: projectCounts.inactive,
+      archivedCount: projectCounts.archived,
+      totalCount: projectCounts.total,
     },
     // Compatibilité avec l’ancien contrat UI
     clientsCount,

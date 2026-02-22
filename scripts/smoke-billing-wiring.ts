@@ -10,7 +10,7 @@ import { createRequester, getSmokeCreds, handleMissingCreds } from './smoke-util
 
 const baseUrl = process.env.BASE_URL?.trim() || 'http://localhost:3000';
 const { request, requestBinary, getLastRequestId } = createRequester(baseUrl);
-const numberRegex = /^[A-Za-z0-9_-]+-\d{4}-\d{4}$/;
+const numberRegex = /^SF-(DEV|FAC)-\d{4}-\d{4}$/;
 
 async function login(): Promise<void> {
   let creds;
@@ -46,14 +46,22 @@ async function main() {
     (bizJson as { items?: Array<{ business?: { id?: string } }> })?.items?.[0]?.business?.id;
   if (!businessId) throw new Error('No business found.');
 
-  console.log('Fetch settings…');
-  const { res: settingsRes, json: settingsJson } = await request(
-    `/api/pro/businesses/${businessId}/settings`
-  );
-  if (!settingsRes.ok) throw new Error(`Settings failed (${settingsRes.status}) ref=${getLastRequestId()}`);
-  const originalSettings = (settingsJson as { item?: { quotePrefix?: string; invoicePrefix?: string } })?.item || {};
-
   console.log(`Business ${businessId}`);
+
+  console.log('Update billing legal texts…');
+  const legalUpdate = await request(`/api/pro/businesses/${businessId}/settings`, {
+    method: 'PATCH',
+    body: {
+      cgvText: 'CGV smoke: conditions générales applicables à toutes prestations.',
+      paymentTermsText: 'Paiement sous 30 jours fin de mois.',
+      lateFeesText: 'Pénalités de retard: 3x le taux légal.',
+      fixedIndemnityText: 'Indemnité forfaitaire de 40€ pour frais de recouvrement.',
+      legalMentionsText: 'TVA non applicable, art. 293B du CGI.',
+    },
+  });
+  if (!legalUpdate.res.ok) {
+    throw new Error(`Update legal texts failed (${legalUpdate.res.status}) ref=${getLastRequestId()}`);
+  }
 
   console.log('Dashboard (before)…');
   const { res: dashBeforeRes, json: dashBefore } = await request(
@@ -64,35 +72,66 @@ async function main() {
     (dashBefore as { kpis?: { mtdIncomeCents?: string } })?.kpis?.mtdIncomeCents ?? '0'
   );
 
-  console.log('Fetch services…');
-  const { res: servicesRes, json: servicesJson } = await request(
-    `/api/pro/businesses/${businessId}/services`
+  console.log('Fetch categories…');
+  const { res: catRes, json: catJson } = await request(
+    `/api/pro/businesses/${businessId}/references?type=CATEGORY`
   );
-  if (!servicesRes.ok) throw new Error(`Services failed (${servicesRes.status}) ref=${getLastRequestId()}`);
-  let serviceId =
-    (servicesJson as { items?: Array<{ id?: string }> })?.items?.[0]?.id ??
-    (servicesJson as { items?: Array<{ service?: { id?: string } }> })?.items?.[0]?.service?.id;
-  if (!serviceId) {
-    console.log('No service available, creating a temporary one…');
-    const code = `SER-${Date.now()}`;
-    const { res: createSvcRes, json: createSvcJson } = await request(
-      `/api/pro/businesses/${businessId}/services`,
+  if (!catRes.ok) throw new Error(`Categories failed (${catRes.status}) ref=${getLastRequestId()}`);
+  let categoryId = (catJson as { items?: Array<{ id?: string }> })?.items?.[0]?.id ?? null;
+  if (!categoryId) {
+    console.log('No category found, creating a temporary one…');
+    const { res: createCatRes, json: createCatJson } = await request(
+      `/api/pro/businesses/${businessId}/references`,
       {
         method: 'POST',
-        body: {
-          code,
-          name: `Smoke Service ${Date.now()}`,
-          description: 'Smoke billing',
-          defaultPriceCents: 10000,
-        },
+        body: { type: 'CATEGORY', name: `Smoke catégorie ${Date.now()}` },
       }
     );
-    if (!createSvcRes.ok) throw new Error(`Create service failed (${createSvcRes.status}) ref=${getLastRequestId()}`);
-    serviceId = (createSvcJson as { id?: string })?.id;
-    if (!serviceId) throw new Error('Service creation returned no id.');
+    if (!createCatRes.ok)
+      throw new Error(`Create category failed (${createCatRes.status}) ref=${getLastRequestId()}`);
+    categoryId = (createCatJson as { item?: { id?: string } })?.item?.id ?? null;
   }
 
-  console.log('Create project and attach service…');
+  console.log('Create services…');
+  const code = `SER-${Date.now()}`;
+  const { res: createSvcRes, json: createSvcJson } = await request(
+    `/api/pro/businesses/${businessId}/services`,
+    {
+      method: 'POST',
+      body: {
+        code,
+        name: `Smoke Service ${Date.now()}`,
+        description: 'Smoke billing',
+        defaultPriceCents: 10000,
+        durationHours: 2,
+        categoryReferenceId: categoryId ?? undefined,
+      },
+    }
+  );
+  if (!createSvcRes.ok) throw new Error(`Create service failed (${createSvcRes.status}) ref=${getLastRequestId()}`);
+  const serviceId = (createSvcJson as { id?: string })?.id;
+  if (!serviceId) throw new Error('Service creation returned no id.');
+
+  const code2 = `SER-${Date.now()}-B`;
+  const { res: createSvcRes2, json: createSvcJson2 } = await request(
+    `/api/pro/businesses/${businessId}/services`,
+    {
+      method: 'POST',
+      body: {
+        code: code2,
+        name: `Smoke Service B ${Date.now()}`,
+        description: 'Smoke billing B',
+        defaultPriceCents: 15000,
+        durationHours: 1,
+        categoryReferenceId: categoryId ?? undefined,
+      },
+    }
+  );
+  if (!createSvcRes2.ok) throw new Error(`Create service B failed (${createSvcRes2.status}) ref=${getLastRequestId()}`);
+  const serviceIdB = (createSvcJson2 as { id?: string })?.id;
+  if (!serviceIdB) throw new Error('Service B creation returned no id.');
+
+  console.log('Create project and attach services…');
   const name = `Billing Smoke ${Date.now()}`;
   const { res: createProjRes, json: createProjJson } = await request(
     `/api/pro/businesses/${businessId}/projects`,
@@ -102,12 +141,50 @@ async function main() {
     throw new Error(`Create project failed (${createProjRes.status}) ref=${getLastRequestId()}`);
   const projectId = (createProjJson as { id?: string })?.id;
   if (!projectId) throw new Error('Project creation returned no id.');
+  const prestationsUpdate = await request(`/api/pro/businesses/${businessId}/projects/${projectId}`, {
+    method: 'PATCH',
+    body: {
+      prestationsText:
+        '1. Cadrage et définition du périmètre.\n2. Conception UX/UI et maquettes.\n3. Développement et tests.\n4. Mise en production et support.',
+    },
+  });
+  if (!prestationsUpdate.res.ok) {
+    throw new Error(`Update prestations failed (${prestationsUpdate.res.status}) ref=${getLastRequestId()}`);
+  }
   const { res: attachRes, json: attachJson } = await request(
     `/api/pro/businesses/${businessId}/projects/${projectId}/services`,
     { method: 'POST', body: { serviceId, quantity: 1, priceCents: 10000 } }
   );
   if (!attachRes.ok)
     throw new Error(`Attach service failed (${attachRes.status}) ref=${getLastRequestId()} json=${JSON.stringify(attachJson)}`);
+  const { res: attachResB, json: attachJsonB } = await request(
+    `/api/pro/businesses/${businessId}/projects/${projectId}/services`,
+    { method: 'POST', body: { serviceId: serviceIdB, quantity: 1, priceCents: 15000 } }
+  );
+  if (!attachResB.ok)
+    throw new Error(`Attach service B failed (${attachResB.status}) ref=${getLastRequestId()} json=${JSON.stringify(attachJsonB)}`);
+
+  console.log('Reorder services…');
+  const { res: listRes, json: listJson } = await request(
+    `/api/pro/businesses/${businessId}/projects/${projectId}/services`
+  );
+  if (!listRes.ok) throw new Error(`List services failed (${listRes.status}) ref=${getLastRequestId()}`);
+  const serviceItems = (listJson as { items?: Array<{ id?: string }> })?.items ?? [];
+  if (serviceItems.length < 2) throw new Error('Expected at least 2 services for reorder.');
+  const reordered = [...serviceItems].reverse().map((item, index) => ({ id: item.id, position: index }));
+  const { res: reorderRes } = await request(
+    `/api/pro/businesses/${businessId}/projects/${projectId}/services/reorder`,
+    { method: 'PATCH', body: { items: reordered } }
+  );
+  if (!reorderRes.ok) throw new Error(`Reorder failed (${reorderRes.status}) ref=${getLastRequestId()}`);
+  const { res: listResAfter, json: listJsonAfter } = await request(
+    `/api/pro/businesses/${businessId}/projects/${projectId}/services`
+  );
+  if (!listResAfter.ok) throw new Error(`List services after failed (${listResAfter.status}) ref=${getLastRequestId()}`);
+  const afterItems = (listJsonAfter as { items?: Array<{ id?: string }> })?.items ?? [];
+  if (afterItems[0]?.id !== reordered[0]?.id) {
+    throw new Error('Service reorder did not persist.');
+  }
 
   console.log(`Project ${projectId}`);
 
@@ -127,6 +204,62 @@ async function main() {
   if (!quoteRes.ok) throw new Error(`Quote create failed (${quoteRes.status}) ref=${getLastRequestId()}`);
   const quoteId = (quoteJson as { quote?: { id?: string } })?.quote?.id;
   if (!quoteId) throw new Error('Quote id missing.');
+
+  console.log('Verify quote line order…');
+  const { res: quoteListRes, json: quoteListJson } = await request(
+    `/api/pro/businesses/${businessId}/projects/${projectId}/quotes`
+  );
+  if (!quoteListRes.ok) throw new Error(`Quotes list failed (${quoteListRes.status}) ref=${getLastRequestId()}`);
+  const createdQuote = (quoteListJson as { items?: Array<{ id?: string; items?: Array<{ label?: string }> }> })?.items?.find((q) => q.id === quoteId);
+  if (!createdQuote || !createdQuote.items || createdQuote.items.length < 2) {
+    throw new Error('Quote items missing for order check.');
+  }
+  const expectedFirstServiceId = afterItems[0]?.id;
+  const expectedFirstService = afterItems.find((item) => item.id === expectedFirstServiceId) as { service?: { name?: string } };
+  const expectedLabel = expectedFirstService?.service?.name;
+  if (expectedLabel && !createdQuote.items[0].label?.includes(expectedLabel)) {
+    throw new Error('Quote line order does not match service order.');
+  }
+
+  console.log('Remove a service line…');
+  const removeId = afterItems[0]?.id ?? null;
+  if (removeId) {
+    const { res: deleteSvcRes } = await request(
+      `/api/pro/businesses/${businessId}/projects/${projectId}/services/${removeId}`,
+      { method: 'DELETE' }
+    );
+    if (!deleteSvcRes.ok)
+      throw new Error(`Delete service failed (${deleteSvcRes.status}) ref=${getLastRequestId()}`);
+  }
+
+  console.log('Create staged invoice…');
+  const { res: stagedRes, json: stagedJson } = await request(
+    `/api/pro/businesses/${businessId}/projects/${projectId}/invoices/staged`,
+    { method: 'POST', body: { mode: 'PERCENT', value: 25 } }
+  );
+  if (!stagedRes.ok)
+    throw new Error(`Staged invoice failed (${stagedRes.status}) ref=${getLastRequestId()}`);
+  const stagedInvoiceId = (stagedJson as { invoice?: { id?: string } })?.invoice?.id;
+  if (!stagedInvoiceId) throw new Error('Staged invoice id missing.');
+  const delStaged = await request(
+    `/api/pro/businesses/${businessId}/invoices/${stagedInvoiceId}`,
+    { method: 'DELETE' }
+  );
+  if (!delStaged.res.ok)
+    throw new Error(`Staged invoice delete failed (${delStaged.res.status}) ref=${getLastRequestId()}`);
+
+  console.log('Create + delete draft quote…');
+  const { res: deleteQuoteRes, json: deleteQuoteJson } = await request(
+    `/api/pro/businesses/${businessId}/projects/${projectId}/quotes`,
+    { method: 'POST' }
+  );
+  if (!deleteQuoteRes.ok)
+    throw new Error(`Quote create (delete test) failed (${deleteQuoteRes.status}) ref=${getLastRequestId()}`);
+  const deleteQuoteId = (deleteQuoteJson as { quote?: { id?: string } })?.quote?.id;
+  if (!deleteQuoteId) throw new Error('Quote id missing (delete test).');
+  const deleteQuote = await request(`/api/pro/businesses/${businessId}/quotes/${deleteQuoteId}`, { method: 'DELETE' });
+  if (!deleteQuote.res.ok)
+    throw new Error(`Quote delete failed (${deleteQuote.res.status}) ref=${getLastRequestId()}`);
 
   console.log('Quote PDF…');
   const { res: quotePdfRes, buf: quotePdfBuf } = await requestBinary(
@@ -204,6 +337,33 @@ async function main() {
   if (!invoice?.id) throw new Error('Invoice id missing.');
   const invoiceTotal = toBigInt(invoice.totalCents ?? '0');
 
+  console.log('Create + delete draft invoice…');
+  const { res: delQuoteRes, json: delQuoteJson } = await request(
+    `/api/pro/businesses/${businessId}/projects/${projectId}/quotes`,
+    { method: 'POST' }
+  );
+  if (!delQuoteRes.ok)
+    throw new Error(`Quote create (invoice delete) failed (${delQuoteRes.status}) ref=${getLastRequestId()}`);
+  const delQuoteId = (delQuoteJson as { quote?: { id?: string } })?.quote?.id;
+  if (!delQuoteId) throw new Error('Quote id missing (invoice delete).');
+  const delQuoteSent = await request(
+    `/api/pro/businesses/${businessId}/quotes/${delQuoteId}`,
+    { method: 'PATCH', body: { status: 'SENT' } }
+  );
+  if (!delQuoteSent.res.ok)
+    throw new Error(`Quote SENT (invoice delete) failed (${delQuoteSent.res.status}) ref=${getLastRequestId()}`);
+  const { res: delInvRes, json: delInvJson } = await request(
+    `/api/pro/businesses/${businessId}/quotes/${delQuoteId}/invoices`,
+    { method: 'POST' }
+  );
+  if (!delInvRes.ok)
+    throw new Error(`Invoice create (delete test) failed (${delInvRes.status}) ref=${getLastRequestId()}`);
+  const delInvoiceId = (delInvJson as { invoice?: { id?: string } })?.invoice?.id;
+  if (!delInvoiceId) throw new Error('Invoice id missing (delete test).');
+  const delInvoice = await request(`/api/pro/businesses/${businessId}/invoices/${delInvoiceId}`, { method: 'DELETE' });
+  if (!delInvoice.res.ok)
+    throw new Error(`Invoice delete failed (${delInvoice.res.status}) ref=${getLastRequestId()}`);
+
   console.log('Invoice PDF…');
   const { res: invPdfRes, buf: invPdfBuf } = await requestBinary(
     `/api/pro/businesses/${businessId}/invoices/${invoice.id}/pdf`
@@ -232,63 +392,6 @@ async function main() {
   if (paidNumber !== invoiceNumber) {
     throw new Error(`Invoice number changed after PAID (${invoiceNumber} -> ${paidNumber}) ref=${getLastRequestId()}`);
   }
-
-  console.log('Prefix change then numbering…');
-  const originalQuotePrefix = originalSettings.quotePrefix ?? 'DEV-';
-  const originalInvoicePrefix = originalSettings.invoicePrefix ?? 'INV-';
-  const newQuotePrefix = `QSMK${Date.now()}`;
-  const newInvoicePrefix = `ISMK${Date.now()}`;
-  const { res: patchPrefixRes } = await request(
-    `/api/pro/businesses/${businessId}/settings`,
-    { method: 'PATCH', body: { quotePrefix: newQuotePrefix, invoicePrefix: newInvoicePrefix } }
-  );
-  if (!patchPrefixRes.ok)
-    throw new Error(`Update prefixes failed (${patchPrefixRes.status}) ref=${getLastRequestId()}`);
-
-  const { res: newQuoteRes, json: newQuoteJson } = await request(
-    `/api/pro/businesses/${businessId}/projects/${projectId}/quotes`,
-    { method: 'POST' }
-  );
-  if (!newQuoteRes.ok) throw new Error(`Quote create (prefix test) failed (${newQuoteRes.status}) ref=${getLastRequestId()}`);
-  const newQuoteId = (newQuoteJson as { quote?: { id?: string } })?.quote?.id;
-  if (!newQuoteId) throw new Error('Quote id missing (prefix test).');
-  const newQuoteSent = await request(
-    `/api/pro/businesses/${businessId}/quotes/${newQuoteId}`,
-    { method: 'PATCH', body: { status: 'SENT' } }
-  );
-  if (!newQuoteSent.res.ok)
-    throw new Error(`Quote SENT (prefix test) failed (${newQuoteSent.res.status}) ref=${getLastRequestId()}`);
-  const newQuoteNumber =
-    (newQuoteSent.json as { quote?: { number?: string | null } })?.quote?.number ?? null;
-  if (!newQuoteNumber || !numberRegex.test(newQuoteNumber) || !newQuoteNumber.startsWith(`${newQuotePrefix}-`)) {
-    throw new Error(`Quote number prefix invalid (${newQuoteNumber}) ref=${getLastRequestId()}`);
-  }
-
-  const { res: newInvRes, json: newInvJson } = await request(
-    `/api/pro/businesses/${businessId}/quotes/${newQuoteId}/invoices`,
-    { method: 'POST' }
-  );
-  if (!newInvRes.ok) throw new Error(`Invoice create (prefix test) failed (${newInvRes.status}) ref=${getLastRequestId()}`);
-  const newInvoiceId = (newInvJson as { invoice?: { id?: string } })?.invoice?.id;
-  if (!newInvoiceId) throw new Error('Invoice id missing (prefix test).');
-  const newInvoiceSent = await request(
-    `/api/pro/businesses/${businessId}/invoices/${newInvoiceId}`,
-    { method: 'PATCH', body: { status: 'SENT' } }
-  );
-  if (!newInvoiceSent.res.ok)
-    throw new Error(`Invoice SENT (prefix test) failed (${newInvoiceSent.res.status}) ref=${getLastRequestId()}`);
-  const newInvoiceNumber =
-    (newInvoiceSent.json as { invoice?: { number?: string | null } })?.invoice?.number ?? null;
-  if (!newInvoiceNumber || !numberRegex.test(newInvoiceNumber) || !newInvoiceNumber.startsWith(`${newInvoicePrefix}-`)) {
-    throw new Error(`Invoice number prefix invalid (${newInvoiceNumber}) ref=${getLastRequestId()}`);
-  }
-
-  const { res: restorePrefixRes } = await request(
-    `/api/pro/businesses/${businessId}/settings`,
-    { method: 'PATCH', body: { quotePrefix: originalQuotePrefix, invoicePrefix: originalInvoicePrefix } }
-  );
-  if (!restorePrefixRes.ok)
-    throw new Error(`Restore prefixes failed (${restorePrefixRes.status}) ref=${getLastRequestId()}`);
 
   console.log('Dashboard (after)…');
   const { res: dashAfterRes, json: dashAfter } = await request(

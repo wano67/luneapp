@@ -1,11 +1,10 @@
-import type { Prisma, PrismaClient } from '@/generated/prisma';
+import type { Prisma, PrismaClient, NumberSequenceKind } from '@/generated/prisma';
 
 type TxClient = PrismaClient | Prisma.TransactionClient;
 
 type NumberingType = 'QUOTE' | 'INVOICE';
 
-function buildNumber(prefix: string, sequence: number, issuedAt?: Date | null) {
-  const year = (issuedAt ?? new Date()).getFullYear();
+function buildNumber(prefix: string, sequence: number, year: number) {
   const cleanPrefix = prefix.endsWith('-') ? prefix : `${prefix}-`;
   return `${cleanPrefix}${year}-${String(sequence).padStart(4, '0')}`;
 }
@@ -22,21 +21,17 @@ export async function assignDocumentNumber(
     create: { businessId },
   });
 
-  if (type === 'QUOTE') {
-    const updated = await tx.businessSettings.update({
-      where: { businessId },
-      data: { nextQuoteNumber: { increment: 1 } },
-      select: { nextQuoteNumber: true, quotePrefix: true },
-    });
-    const seq = updated.nextQuoteNumber - 1;
-    return buildNumber(updated.quotePrefix, seq, issuedAt);
-  }
+  const year = (issuedAt ?? new Date()).getFullYear();
+  const kind: NumberSequenceKind = type === 'QUOTE' ? 'QUOTE' : 'INVOICE';
 
-  const updated = await tx.businessSettings.update({
-    where: { businessId },
-    data: { nextInvoiceNumber: { increment: 1 } },
-    select: { nextInvoiceNumber: true, invoicePrefix: true },
+  const updated = await tx.numberSequence.upsert({
+    where: { businessId_kind_year: { businessId, kind, year } },
+    update: { lastNumber: { increment: 1 } },
+    create: { businessId, kind, year, lastNumber: 1 },
+    select: { lastNumber: true },
   });
-  const seq = updated.nextInvoiceNumber - 1;
-  return buildNumber(updated.invoicePrefix, seq, issuedAt);
+
+  const prefix = type === 'QUOTE' ? 'SF-DEV' : 'SF-FAC';
+
+  return buildNumber(prefix, updated.lastNumber, year);
 }

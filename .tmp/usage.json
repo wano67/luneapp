@@ -1,0 +1,743 @@
+{
+  "User": {
+    "files": [
+      "src/app/api/account/password/route.ts",
+      "src/app/api/account/profile/route.ts",
+      "src/app/api/auth/me/route.ts",
+      "src/app/api/pro/businesses/[businessId]/invites/route.ts",
+      "src/app/api/pro/businesses/invites/accept/route.ts",
+      "src/server/auth/auth.service.ts",
+      "src/server/auth/requireAuthBase.ts",
+      "src/server/dev/seed.ts"
+    ],
+    "operations": [
+      "create",
+      "findUnique",
+      "update"
+    ],
+    "featureTags": [
+      "API auth",
+      "API pro/studio",
+      "server auth",
+      "server dev seed"
+    ]
+  },
+  "Business": {
+    "files": [
+      "src/app/api/pro/businesses/[businessId]/clients/[clientId]/route.ts",
+      "src/app/api/pro/businesses/[businessId]/clients/route.ts",
+      "src/app/api/pro/businesses/[businessId]/dashboard/route.ts",
+      "src/app/api/pro/businesses/[businessId]/finances/route.ts",
+      "src/app/api/pro/businesses/[businessId]/invites/[inviteId]/route.ts",
+      "src/app/api/pro/businesses/[businessId]/invites/route.ts",
+      "src/app/api/pro/businesses/[businessId]/leave/route.ts",
+      "src/app/api/pro/businesses/[businessId]/members/route.ts",
+      "src/app/api/pro/businesses/[businessId]/processes/route.ts",
+      "src/app/api/pro/businesses/[businessId]/projects/route.ts",
+      "src/app/api/pro/businesses/[businessId]/prospects/[prospectId]/route.ts",
+      "src/app/api/pro/businesses/[businessId]/prospects/route.ts",
+      "src/app/api/pro/businesses/[businessId]/route.ts",
+      "src/app/api/pro/businesses/[businessId]/tasks/route.ts",
+      "src/app/api/pro/businesses/route.ts",
+      "src/server/dev/seed.ts"
+    ],
+    "operations": [
+      "create",
+      "delete",
+      "findFirst",
+      "findUnique",
+      "update"
+    ],
+    "featureTags": [
+      "API pro/studio",
+      "server dev seed"
+    ]
+  },
+  "BusinessMembership": {
+    "files": [
+      "src/app/api/pro/businesses/[businessId]/invites/route.ts",
+      "src/app/api/pro/businesses/[businessId]/leave/route.ts",
+      "src/app/api/pro/businesses/[businessId]/members/[userId]/route.ts",
+      "src/app/api/pro/businesses/[businessId]/members/route.ts",
+      "src/app/api/pro/businesses/[businessId]/route.ts",
+      "src/app/api/pro/businesses/[businessId]/tasks/[taskId]/route.ts",
+      "src/app/api/pro/businesses/[businessId]/tasks/route.ts",
+      "src/app/api/pro/businesses/invites/accept/route.ts",
+      "src/app/api/pro/businesses/route.ts",
+      "src/app/api/pro/overview/route.ts",
+      "src/server/auth/businessRole.ts",
+      "src/server/dev/seed.ts"
+    ],
+    "operations": [
+      "create",
+      "delete",
+      "deleteMany",
+      "findMany",
+      "findUnique",
+      "update",
+      "upsert"
+    ],
+    "featureTags": [
+      "API pro/studio",
+      "server auth",
+      "server dev seed"
+    ]
+  },
+  "EmployeeProfile": {
+    "files": [
+      "src/app/api/pro/businesses/[businessId]/members/[userId]/route.ts"
+    ],
+    "operations": [
+      "upsert"
+    ],
+    "featureTags": [
+      "API pro/studio"
+    ]
+  },
+  "BusinessMemberPermission": {
+    "files": [
+      "src/app/api/pro/businesses/[businessId]/members/[userId]/route.ts"
+    ],
+    "operations": [
+      "createMany",
+      "deleteMany"
+    ],
+    "featureTags": [
+      "API pro/studio"
+    ]
+  },
+  "BusinessInvite": {
+    "files": [
+      "src/app/api/pro/businesses/[businessId]/invites/[inviteId]/route.ts",
+      "src/app/api/pro/businesses/[businessId]/invites/route.ts",
+      "src/app/api/pro/businesses/[businessId]/route.ts",
+      "src/app/api/pro/businesses/invites/accept/route.ts"
+    ],
+    "operations": [
+      "create",
+      "deleteMany",
+      "findFirst",
+      "findMany",
+      "findUnique",
+      "update",
+      "updateMany"
+    ],
+    "featureTags": [
+      "API pro/studio"
+    ]
+  },
+  "Prospect": {
+    "files": [
+      "src/app/api/pro/businesses/[businessId]/prospects/[prospectId]/convert/route.ts",
+      "src/app/api/pro/businesses/[businessId]/prospects/[prospectId]/route.ts",
+      "src/app/api/pro/businesses/[businessId]/prospects/route.ts",
+      "src/app/api/pro/businesses/[businessId]/route.ts",
+      "src/server/dev/seed.ts"
+    ],
+    "operations": [
+      "create",
+      "deleteMany",
+      "findFirst",
+      "findMany",
+      "update",
+      "updateMany"
+    ],
+    "featureTags": [
+      "API pro/studio",
+      "server dev seed"
+    ]
+  },
+  "Client": {
+    "files": [
+      "src/app/api/pro/businesses/[businessId]/accounting/client/[clientId]/summary/route.ts",
+      "src/app/api/pro/businesses/[businessId]/clients/[clientId]/documents/route.ts",
+      "src/app/api/pro/businesses/[businessId]/clients/[clientId]/route.ts",
+      "src/app/api/pro/businesses/[businessId]/clients/bulk/route.ts",
+      "src/app/api/pro/businesses/[businessId]/clients/route.ts",
+      "src/app/api/pro/businesses/[businessId]/dashboard/route.ts",
+      "src/app/api/pro/businesses/[businessId]/interactions/route.ts",
+      "src/app/api/pro/businesses/[businessId]/projects/[projectId]/route.ts",
+      "src/app/api/pro/businesses/[businessId]/projects/route.ts",
+      "src/app/api/pro/businesses/[businessId]/prospects/[prospectId]/convert/route.ts",
+      "src/app/api/pro/businesses/[businessId]/route.ts"
+    ],
+    "operations": [
+      "count",
+      "create",
+      "deleteMany",
+      "findFirst",
+      "findMany",
+      "update",
+      "updateMany"
+    ],
+    "featureTags": [
+      "API pro/studio"
+    ]
+  },
+  "Project": {
+    "files": [
+      "src/app/api/pro/businesses/[businessId]/dashboard/route.ts",
+      "src/app/api/pro/businesses/[businessId]/finances/[financeId]/route.ts",
+      "src/app/api/pro/businesses/[businessId]/finances/route.ts",
+      "src/app/api/pro/businesses/[businessId]/interactions/route.ts",
+      "src/app/api/pro/businesses/[businessId]/projects/[projectId]/archive/route.ts",
+      "src/app/api/pro/businesses/[businessId]/projects/[projectId]/invoices/route.ts",
+      "src/app/api/pro/businesses/[businessId]/projects/[projectId]/quotes/route.ts",
+      "src/app/api/pro/businesses/[businessId]/projects/[projectId]/route.ts",
+      "src/app/api/pro/businesses/[businessId]/projects/[projectId]/services/route.ts",
+      "src/app/api/pro/businesses/[businessId]/projects/[projectId]/start/route.ts",
+      "src/app/api/pro/businesses/[businessId]/projects/[projectId]/unarchive/route.ts",
+      "src/app/api/pro/businesses/[businessId]/projects/route.ts",
+      "src/app/api/pro/businesses/[businessId]/prospects/[prospectId]/convert/route.ts",
+      "src/app/api/pro/businesses/[businessId]/route.ts",
+      "src/app/api/pro/businesses/[businessId]/tasks/[taskId]/route.ts",
+      "src/app/api/pro/businesses/[businessId]/tasks/route.ts",
+      "src/app/api/pro/overview/route.ts",
+      "src/server/services/pricing.ts"
+    ],
+    "operations": [
+      "count",
+      "create",
+      "delete",
+      "deleteMany",
+      "findFirst",
+      "findMany",
+      "update"
+    ],
+    "featureTags": [
+      "API pro/studio",
+      "server services"
+    ]
+  },
+  "Task": {
+    "files": [
+      "src/app/api/pro/businesses/[businessId]/dashboard/route.ts",
+      "src/app/api/pro/businesses/[businessId]/projects/[projectId]/route.ts",
+      "src/app/api/pro/businesses/[businessId]/projects/[projectId]/start/route.ts",
+      "src/app/api/pro/businesses/[businessId]/projects/route.ts",
+      "src/app/api/pro/businesses/[businessId]/tasks/[taskId]/route.ts",
+      "src/app/api/pro/businesses/[businessId]/tasks/route.ts",
+      "src/app/api/pro/overview/route.ts",
+      "src/server/services/process/applyServiceProcessTemplate.ts"
+    ],
+    "operations": [
+      "count",
+      "create",
+      "createMany",
+      "delete",
+      "findFirst",
+      "findMany",
+      "update"
+    ],
+    "featureTags": [
+      "API pro/studio",
+      "server services"
+    ]
+  },
+  "Process": {
+    "files": [
+      "src/app/api/pro/businesses/[businessId]/processes/[processId]/route.ts",
+      "src/app/api/pro/businesses/[businessId]/processes/[processId]/steps/route.ts",
+      "src/app/api/pro/businesses/[businessId]/processes/route.ts"
+    ],
+    "operations": [
+      "create",
+      "delete",
+      "findFirst",
+      "findMany",
+      "update"
+    ],
+    "featureTags": [
+      "API pro/studio"
+    ]
+  },
+  "ProcessStep": {
+    "files": [
+      "src/app/api/pro/businesses/[businessId]/processes/[processId]/steps/[stepId]/route.ts",
+      "src/app/api/pro/businesses/[businessId]/processes/[processId]/steps/route.ts"
+    ],
+    "operations": [
+      "create",
+      "delete",
+      "findFirst",
+      "update"
+    ],
+    "featureTags": [
+      "API pro/studio"
+    ]
+  },
+  "Finance": {
+    "files": [
+      "src/app/api/pro/businesses/[businessId]/dashboard/route.ts",
+      "src/app/api/pro/businesses/[businessId]/finances/[financeId]/route.ts",
+      "src/app/api/pro/businesses/[businessId]/finances/forecasting/route.ts",
+      "src/app/api/pro/businesses/[businessId]/finances/route.ts",
+      "src/app/api/pro/businesses/[businessId]/finances/treasury/route.ts",
+      "src/app/api/pro/businesses/[businessId]/finances/vat/route.ts",
+      "src/app/api/pro/businesses/[businessId]/invoices/[invoiceId]/route.ts",
+      "src/app/api/pro/businesses/[businessId]/products/[productId]/movements/[movementId]/route.ts",
+      "src/app/api/pro/businesses/[businessId]/products/[productId]/movements/route.ts",
+      "src/app/api/pro/overview/route.ts"
+    ],
+    "operations": [
+      "aggregate",
+      "create",
+      "delete",
+      "deleteMany",
+      "findFirst",
+      "findMany",
+      "groupBy",
+      "update",
+      "upsert"
+    ],
+    "featureTags": [
+      "API pro/studio"
+    ]
+  },
+  "Service": {
+    "files": [
+      "src/app/api/pro/businesses/[businessId]/projects/[projectId]/services/route.ts",
+      "src/app/api/pro/businesses/[businessId]/services/[serviceId]/process-template/route.ts",
+      "src/app/api/pro/businesses/[businessId]/services/[serviceId]/route.ts",
+      "src/app/api/pro/businesses/[businessId]/services/[serviceId]/templates/route.ts",
+      "src/app/api/pro/businesses/[businessId]/services/[serviceId]/templates/seed/route.ts",
+      "src/app/api/pro/businesses/[businessId]/services/import/route.ts",
+      "src/app/api/pro/businesses/[businessId]/services/route.ts",
+      "src/server/dev/seed.ts"
+    ],
+    "operations": [
+      "create",
+      "delete",
+      "findFirst",
+      "findMany",
+      "update"
+    ],
+    "featureTags": [
+      "API pro/studio",
+      "server dev seed"
+    ]
+  },
+  "Product": {
+    "files": [
+      "src/app/api/pro/businesses/[businessId]/inventory/summary/route.ts",
+      "src/app/api/pro/businesses/[businessId]/invoices/[invoiceId]/route.ts",
+      "src/app/api/pro/businesses/[businessId]/products/[productId]/images/route.ts",
+      "src/app/api/pro/businesses/[businessId]/products/[productId]/movements/route.ts",
+      "src/app/api/pro/businesses/[businessId]/products/[productId]/route.ts",
+      "src/app/api/pro/businesses/[businessId]/products/route.ts",
+      "src/server/services/ledger.ts"
+    ],
+    "operations": [
+      "create",
+      "findFirst",
+      "findMany",
+      "findUnique",
+      "update"
+    ],
+    "featureTags": [
+      "API pro/studio",
+      "server services"
+    ]
+  },
+  "ProductImage": {
+    "files": [
+      "src/app/api/pro/businesses/[businessId]/products/[productId]/images/[imageId]/route.ts",
+      "src/app/api/pro/businesses/[businessId]/products/[productId]/images/reorder/route.ts",
+      "src/app/api/pro/businesses/[businessId]/products/[productId]/images/route.ts"
+    ],
+    "operations": [
+      "aggregate",
+      "create",
+      "delete",
+      "findFirst",
+      "findMany",
+      "update"
+    ],
+    "featureTags": [
+      "API pro/studio"
+    ]
+  },
+  "InventoryMovement": {
+    "files": [
+      "src/app/api/pro/businesses/[businessId]/products/[productId]/movements/[movementId]/route.ts",
+      "src/app/api/pro/businesses/[businessId]/products/[productId]/movements/route.ts",
+      "src/app/api/pro/businesses/[businessId]/products/[productId]/route.ts",
+      "src/server/services/inventoryReservations.ts",
+      "src/server/services/ledger.ts"
+    ],
+    "operations": [
+      "create",
+      "delete",
+      "findFirst",
+      "findMany",
+      "update"
+    ],
+    "featureTags": [
+      "API pro/studio",
+      "server services"
+    ]
+  },
+  "InventoryReservation": {
+    "files": [
+      "src/server/services/inventoryReservations.ts"
+    ],
+    "operations": [
+      "findUnique",
+      "update",
+      "updateMany",
+      "upsert"
+    ],
+    "featureTags": [
+      "server services"
+    ]
+  },
+  "InventoryReservationItem": {
+    "files": [
+      "src/app/api/pro/businesses/[businessId]/inventory/summary/route.ts",
+      "src/server/services/inventoryReservations.ts"
+    ],
+    "operations": [
+      "createMany",
+      "deleteMany",
+      "findMany"
+    ],
+    "featureTags": [
+      "API pro/studio",
+      "server services"
+    ]
+  },
+  "ProjectTag": {
+    "files": [],
+    "operations": [],
+    "featureTags": []
+  },
+  "ServiceTag": {
+    "files": [],
+    "operations": [],
+    "featureTags": []
+  },
+  "ServiceTaskTemplate": {
+    "files": [
+      "src/app/api/pro/businesses/[businessId]/services/[serviceId]/templates/[templateId]/route.ts",
+      "src/app/api/pro/businesses/[businessId]/services/[serviceId]/templates/route.ts",
+      "src/app/api/pro/businesses/[businessId]/services/[serviceId]/templates/seed/route.ts"
+    ],
+    "operations": [
+      "create",
+      "createMany",
+      "delete",
+      "findFirst",
+      "findMany",
+      "update"
+    ],
+    "featureTags": [
+      "API pro/studio"
+    ]
+  },
+  "ServiceTemplateTask": {
+    "files": [],
+    "operations": [],
+    "featureTags": []
+  },
+  "ServiceProcessTemplate": {
+    "files": [
+      "src/app/api/pro/businesses/[businessId]/services/[serviceId]/process-template/route.ts",
+      "src/server/services/process/applyServiceProcessTemplate.ts"
+    ],
+    "operations": [
+      "create",
+      "delete",
+      "findFirst"
+    ],
+    "featureTags": [
+      "API pro/studio",
+      "server services"
+    ]
+  },
+  "ServiceProcessPhaseTemplate": {
+    "files": [],
+    "operations": [],
+    "featureTags": []
+  },
+  "ServiceProcessStepTemplate": {
+    "files": [],
+    "operations": [],
+    "featureTags": []
+  },
+  "ServiceProcessTaskTemplate": {
+    "files": [],
+    "operations": [],
+    "featureTags": []
+  },
+  "ProjectService": {
+    "files": [
+      "src/app/api/pro/businesses/[businessId]/projects/[projectId]/services/[itemId]/route.ts",
+      "src/app/api/pro/businesses/[businessId]/projects/[projectId]/services/route.ts",
+      "src/app/api/pro/businesses/[businessId]/tasks/[taskId]/route.ts",
+      "src/server/services/process/applyServiceProcessTemplate.ts"
+    ],
+    "operations": [
+      "create",
+      "delete",
+      "findFirst",
+      "findMany",
+      "update"
+    ],
+    "featureTags": [
+      "API pro/studio",
+      "server services"
+    ]
+  },
+  "ProjectServiceStep": {
+    "files": [
+      "src/server/services/process/applyServiceProcessTemplate.ts"
+    ],
+    "operations": [
+      "count",
+      "create"
+    ],
+    "featureTags": [
+      "server services"
+    ]
+  },
+  "Interaction": {
+    "files": [
+      "src/app/api/pro/businesses/[businessId]/dashboard/route.ts",
+      "src/app/api/pro/businesses/[businessId]/interactions/[interactionId]/route.ts",
+      "src/app/api/pro/businesses/[businessId]/interactions/route.ts"
+    ],
+    "operations": [
+      "create",
+      "delete",
+      "findFirst",
+      "findMany",
+      "update"
+    ],
+    "featureTags": [
+      "API pro/studio"
+    ]
+  },
+  "BusinessReference": {
+    "files": [
+      "src/app/api/pro/businesses/[businessId]/clients/[clientId]/route.ts",
+      "src/app/api/pro/businesses/[businessId]/clients/route.ts",
+      "src/app/api/pro/businesses/[businessId]/finances/[financeId]/route.ts",
+      "src/app/api/pro/businesses/[businessId]/finances/route.ts",
+      "src/app/api/pro/businesses/[businessId]/projects/[projectId]/route.ts",
+      "src/app/api/pro/businesses/[businessId]/projects/route.ts",
+      "src/app/api/pro/businesses/[businessId]/references/[referenceId]/route.ts",
+      "src/app/api/pro/businesses/[businessId]/references/route.ts",
+      "src/app/api/pro/businesses/[businessId]/services/[serviceId]/route.ts",
+      "src/app/api/pro/businesses/[businessId]/services/import/route.ts",
+      "src/app/api/pro/businesses/[businessId]/services/route.ts",
+      "src/app/api/pro/businesses/[businessId]/tasks/[taskId]/route.ts",
+      "src/app/api/pro/businesses/[businessId]/tasks/route.ts"
+    ],
+    "operations": [
+      "create",
+      "delete",
+      "findFirst",
+      "findMany",
+      "update"
+    ],
+    "featureTags": [
+      "API pro/studio"
+    ]
+  },
+  "ClientTag": {
+    "files": [],
+    "operations": [],
+    "featureTags": []
+  },
+  "TaskTag": {
+    "files": [],
+    "operations": [],
+    "featureTags": []
+  },
+  "FinanceTag": {
+    "files": [],
+    "operations": [],
+    "featureTags": []
+  },
+  "LedgerEntry": {
+    "files": [
+      "src/app/api/pro/businesses/[businessId]/invoices/[invoiceId]/route.ts",
+      "src/app/api/pro/businesses/[businessId]/ledger/[entryId]/route.ts",
+      "src/app/api/pro/businesses/[businessId]/ledger/route.ts",
+      "src/app/api/pro/businesses/[businessId]/products/[productId]/movements/[movementId]/route.ts",
+      "src/server/services/ledger.ts"
+    ],
+    "operations": [
+      "create",
+      "deleteMany",
+      "findFirst",
+      "findMany",
+      "findUnique",
+      "upsert"
+    ],
+    "featureTags": [
+      "API pro/studio",
+      "server services"
+    ]
+  },
+  "LedgerLine": {
+    "files": [
+      "src/server/services/ledger.ts"
+    ],
+    "operations": [
+      "createMany",
+      "deleteMany"
+    ],
+    "featureTags": [
+      "server services"
+    ]
+  },
+  "BusinessSettings": {
+    "files": [
+      "src/app/api/pro/businesses/[businessId]/settings/route.ts",
+      "src/server/services/ledger.ts",
+      "src/server/services/numbering.ts"
+    ],
+    "operations": [
+      "update",
+      "upsert"
+    ],
+    "featureTags": [
+      "API pro/studio",
+      "server services"
+    ]
+  },
+  "Quote": {
+    "files": [
+      "src/app/api/pro/businesses/[businessId]/clients/[clientId]/documents/route.ts",
+      "src/app/api/pro/businesses/[businessId]/clients/bulk/route.ts",
+      "src/app/api/pro/businesses/[businessId]/projects/[projectId]/quotes/route.ts",
+      "src/app/api/pro/businesses/[businessId]/quotes/[quoteId]/invoices/route.ts",
+      "src/app/api/pro/businesses/[businessId]/quotes/[quoteId]/pdf/route.ts",
+      "src/app/api/pro/businesses/[businessId]/quotes/[quoteId]/route.ts"
+    ],
+    "operations": [
+      "create",
+      "findFirst",
+      "findMany",
+      "groupBy",
+      "update"
+    ],
+    "featureTags": [
+      "API pro/studio"
+    ]
+  },
+  "QuoteItem": {
+    "files": [],
+    "operations": [],
+    "featureTags": []
+  },
+  "Invoice": {
+    "files": [
+      "src/app/api/pro/businesses/[businessId]/accounting/client/[clientId]/summary/route.ts",
+      "src/app/api/pro/businesses/[businessId]/clients/[clientId]/documents/route.ts",
+      "src/app/api/pro/businesses/[businessId]/clients/bulk/route.ts",
+      "src/app/api/pro/businesses/[businessId]/invoices/[invoiceId]/pdf/route.ts",
+      "src/app/api/pro/businesses/[businessId]/invoices/[invoiceId]/route.ts",
+      "src/app/api/pro/businesses/[businessId]/payments/route.ts",
+      "src/app/api/pro/businesses/[businessId]/projects/[projectId]/invoices/route.ts",
+      "src/app/api/pro/businesses/[businessId]/quotes/[quoteId]/invoices/route.ts"
+    ],
+    "operations": [
+      "aggregate",
+      "create",
+      "findFirst",
+      "findMany",
+      "findUnique",
+      "groupBy",
+      "update"
+    ],
+    "featureTags": [
+      "API pro/studio"
+    ]
+  },
+  "InvoiceItem": {
+    "files": [
+      "src/app/api/pro/businesses/[businessId]/invoices/[invoiceId]/route.ts"
+    ],
+    "operations": [
+      "findMany",
+      "update"
+    ],
+    "featureTags": [
+      "API pro/studio"
+    ]
+  },
+  "BusinessDocument": {
+    "files": [
+      "src/app/api/pro/businesses/[businessId]/clients/[clientId]/documents/route.ts",
+      "src/app/api/pro/businesses/[businessId]/documents/[documentId]/download/route.ts",
+      "src/app/api/pro/businesses/[businessId]/documents/[documentId]/view/route.ts"
+    ],
+    "operations": [
+      "create",
+      "findFirst",
+      "findMany"
+    ],
+    "featureTags": [
+      "API pro/studio"
+    ]
+  },
+  "PersonalAccount": {
+    "files": [
+      "src/app/api/personal/accounts/[accountId]/route.ts",
+      "src/app/api/personal/accounts/route.ts",
+      "src/app/api/personal/summary/route.ts",
+      "src/app/api/personal/transactions/[transactionId]/route.ts",
+      "src/app/api/personal/transactions/import/route.ts",
+      "src/app/api/personal/transactions/route.ts"
+    ],
+    "operations": [
+      "create",
+      "findFirst",
+      "findMany"
+    ],
+    "featureTags": [
+      "API personal wallet"
+    ]
+  },
+  "PersonalCategory": {
+    "files": [
+      "src/app/api/personal/categories/route.ts",
+      "src/app/api/personal/transactions/import/route.ts",
+      "src/app/api/personal/transactions/route.ts"
+    ],
+    "operations": [
+      "create",
+      "findFirst",
+      "findMany"
+    ],
+    "featureTags": [
+      "API personal wallet"
+    ]
+  },
+  "PersonalTransaction": {
+    "files": [
+      "src/app/api/personal/accounts/[accountId]/route.ts",
+      "src/app/api/personal/accounts/route.ts",
+      "src/app/api/personal/summary/route.ts",
+      "src/app/api/personal/transactions/[transactionId]/route.ts",
+      "src/app/api/personal/transactions/bulk-delete/route.ts",
+      "src/app/api/personal/transactions/import/route.ts",
+      "src/app/api/personal/transactions/route.ts"
+    ],
+    "operations": [
+      "aggregate",
+      "create",
+      "createMany",
+      "deleteMany",
+      "findFirst",
+      "findMany",
+      "groupBy",
+      "updateMany"
+    ],
+    "featureTags": [
+      "API personal wallet"
+    ]
+  }
+}

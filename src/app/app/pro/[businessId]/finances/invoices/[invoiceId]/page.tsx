@@ -8,6 +8,7 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
+import { getInvoiceStatusLabelFR } from '@/lib/billingStatus';
 import { useActiveBusiness } from '../../../../ActiveBusinessProvider';
 
 type InvoiceStatus = 'DRAFT' | 'SENT' | 'PAID' | 'CANCELLED';
@@ -48,13 +49,6 @@ type InvoiceDetail = {
 };
 
 type InvoiceResponse = { invoice: InvoiceDetail };
-
-const STATUS_LABELS: Record<InvoiceStatus, string> = {
-  DRAFT: 'Brouillon',
-  SENT: 'Envoyée',
-  PAID: 'Payée',
-  CANCELLED: 'Annulée',
-};
 
 function formatDate(value: string | null | undefined) {
   if (!value) return '—';
@@ -163,7 +157,7 @@ export default function InvoiceDetailPage() {
     }
 
     setInvoice(res.data.invoice);
-    setInfo(`Statut mis à jour (${STATUS_LABELS[nextStatus]}).`);
+    setInfo(`Statut mis à jour (${getInvoiceStatusLabelFR(nextStatus)}).`);
     setUpdating(false);
   }
 
@@ -205,7 +199,7 @@ export default function InvoiceDetailPage() {
             <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
               <div className="space-y-1">
                 <p className="text-sm font-semibold text-[var(--text-primary)]">
-                  Statut: {STATUS_LABELS[invoice.status]}
+                  Statut: {getInvoiceStatusLabelFR(invoice.status)}
                 </p>
                 <p className="text-[11px] text-[var(--text-secondary)]">
                   Réservation stock: {invoice.reservationStatus ?? '—'}

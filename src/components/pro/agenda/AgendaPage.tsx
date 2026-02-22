@@ -11,6 +11,7 @@ import { ContactCard } from '@/components/pro/crm/ContactCard';
 import { PageHeaderPro } from '@/components/pro/PageHeaderPro';
 import { TabsPills } from '@/components/pro/TabsPills';
 import { useActiveBusiness } from '@/app/app/pro/ActiveBusinessProvider';
+import { isProjectActive } from '@/lib/projectStatus';
 
 type ViewMode = 'agenda' | 'clients' | 'prospects';
 type Props = { businessId: string; view?: ViewMode };
@@ -33,6 +34,7 @@ type ProjectRow = {
   clientId: string | null;
   status?: string | null;
   amountCents?: number | string | null;
+  archivedAt?: string | null;
 };
 type ProjectsResponse = { items?: ProjectRow[] };
 type ProjectCreateResponse = { id: string };
@@ -158,7 +160,7 @@ export default function AgendaPage({ businessId, view = 'agenda' }: Props) {
         const [clientsRes, prospectsRes, projectsRes, dashboardRes] = await Promise.all([
           fetchJson<ListResponse>(`/api/pro/businesses/${businessId}/clients`, {}, controller.signal),
           fetchJson<ListResponse>(`/api/pro/businesses/${businessId}/prospects`, {}, controller.signal),
-          fetchJson<ProjectsResponse>(`/api/pro/businesses/${businessId}/projects?archived=false`, {}, controller.signal),
+          fetchJson<ProjectsResponse>(`/api/pro/businesses/${businessId}/projects?scope=ALL`, {}, controller.signal),
           isAgendaView
             ? fetchJson<DashboardResponse>(`/api/pro/businesses/${businessId}/dashboard`, {}, controller.signal)
             : Promise.resolve(null),
@@ -210,7 +212,7 @@ export default function AgendaPage({ businessId, view = 'agenda' }: Props) {
       if (!p.clientId) continue;
       const entry = map.get(p.clientId) ?? { projects: 0, active: 0, valueCents: 0, lastInteraction: null };
       entry.projects += 1;
-      if (p.status === 'IN_PROGRESS' || p.status === 'ACTIVE' || p.status === 'ONGOING') {
+      if (isProjectActive(p.status, p.archivedAt ?? null)) {
         entry.active += 1;
       }
       if (p.amountCents) {

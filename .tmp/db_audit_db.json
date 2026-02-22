@@ -1,0 +1,843 @@
+{
+  "prismaSource": "./src/generated/prisma",
+  "prismaLoadError": "Cannot find module '.prisma/client/default'\nRequire stack:\n- /Users/diwan/Documents/GitHub/luneapp/luneapp/node_modules/.pnpm/@prisma+client@7.2.0_prisma@7.2.0_@types+react@19.2.7_react-dom@19.2.1_react@19.2.1__re_8f49e98d9802d77cdb310828475bfe2d/node_modules/@prisma/client/default.js\n- /Users/diwan/Documents/GitHub/luneapp/luneapp/[stdin]",
+  "counts": {
+    "User": 3,
+    "Business": 2,
+    "BusinessMembership": 3,
+    "EmployeeProfile": 0,
+    "BusinessMemberPermission": 0,
+    "BusinessInvite": 1,
+    "Prospect": 2,
+    "Client": 6,
+    "Project": 6,
+    "Task": 0,
+    "Process": 0,
+    "ProcessStep": 0,
+    "Finance": 0,
+    "Service": 16,
+    "Product": 0,
+    "ProductImage": 0,
+    "InventoryMovement": 0,
+    "InventoryReservation": 0,
+    "InventoryReservationItem": 0,
+    "ProjectTag": 0,
+    "ServiceTag": 0,
+    "ServiceTaskTemplate": 0,
+    "ServiceTemplateTask": 0,
+    "ServiceProcessTemplate": 0,
+    "ServiceProcessPhaseTemplate": 0,
+    "ServiceProcessStepTemplate": 0,
+    "ServiceProcessTaskTemplate": 0,
+    "ProjectService": 3,
+    "ProjectServiceStep": 0,
+    "Interaction": 0,
+    "BusinessReference": 0,
+    "ClientTag": 0,
+    "TaskTag": 0,
+    "FinanceTag": 0,
+    "LedgerEntry": 0,
+    "LedgerLine": 0,
+    "BusinessSettings": 2,
+    "Quote": 1,
+    "QuoteItem": 1,
+    "Invoice": 0,
+    "InvoiceItem": 0,
+    "BusinessDocument": 1,
+    "PersonalAccount": 0,
+    "PersonalCategory": 0,
+    "PersonalTransaction": 0
+  },
+  "orphanChecks": {
+    "Business.ownerId -> User.id": {
+      "count": "0"
+    },
+    "BusinessMembership.businessId -> Business.id": {
+      "count": "0"
+    },
+    "BusinessMembership.userId -> User.id": {
+      "count": "0"
+    },
+    "EmployeeProfile.membershipId -> BusinessMembership.id": {
+      "count": "0"
+    },
+    "BusinessMemberPermission.membershipId -> BusinessMembership.id": {
+      "count": "0"
+    },
+    "BusinessInvite.businessId -> Business.id": {
+      "count": "0"
+    },
+    "Prospect.businessId -> Business.id": {
+      "count": "0"
+    },
+    "Client.businessId -> Business.id": {
+      "count": "0"
+    },
+    "Client.categoryReferenceId -> BusinessReference.id": {
+      "count": "0"
+    },
+    "Client.anonymizedByUserId -> User.id": {
+      "count": "0"
+    },
+    "Project.businessId -> Business.id": {
+      "count": "0"
+    },
+    "Project.clientId -> Client.id": {
+      "count": "0"
+    },
+    "Project.categoryReferenceId -> BusinessReference.id": {
+      "count": "0"
+    },
+    "Task.businessId -> Business.id": {
+      "count": "0"
+    },
+    "Task.projectId -> Project.id": {
+      "count": "0"
+    },
+    "Task.projectServiceId -> ProjectService.id": {
+      "count": "0"
+    },
+    "Task.projectServiceStepId -> ProjectServiceStep.id": {
+      "count": "0"
+    },
+    "Task.assigneeUserId -> User.id": {
+      "count": "0"
+    },
+    "Task.categoryReferenceId -> BusinessReference.id": {
+      "count": "0"
+    },
+    "Process.businessId -> Business.id": {
+      "count": "0"
+    },
+    "ProcessStep.processId -> Process.id": {
+      "count": "0"
+    },
+    "Finance.businessId -> Business.id": {
+      "count": "0"
+    },
+    "Finance.projectId -> Project.id": {
+      "count": "0"
+    },
+    "Finance.categoryReferenceId -> BusinessReference.id": {
+      "count": "0"
+    },
+    "Finance.inventoryMovementId -> InventoryMovement.id": {
+      "count": "0"
+    },
+    "Finance.inventoryProductId -> Product.id": {
+      "count": "0"
+    },
+    "Service.businessId -> Business.id": {
+      "count": "0"
+    },
+    "Service.categoryReferenceId -> BusinessReference.id": {
+      "count": "0"
+    },
+    "Product.businessId -> Business.id": {
+      "count": "0"
+    },
+    "ProductImage.businessId -> Business.id": {
+      "count": "0"
+    },
+    "ProductImage.productId -> Product.id": {
+      "count": "0"
+    },
+    "InventoryMovement.businessId -> Business.id": {
+      "count": "0"
+    },
+    "InventoryMovement.productId -> Product.id": {
+      "count": "0"
+    },
+    "InventoryMovement.createdByUserId -> User.id": {
+      "count": "0"
+    },
+    "InventoryReservation.businessId -> Business.id": {
+      "count": "0"
+    },
+    "InventoryReservation.invoiceId -> Invoice.id": {
+      "count": "0"
+    },
+    "InventoryReservationItem.reservationId -> InventoryReservation.id": {
+      "count": "0"
+    },
+    "InventoryReservationItem.productId -> Product.id": {
+      "count": "0"
+    },
+    "ProjectTag.projectId -> Project.id": {
+      "count": "0"
+    },
+    "ProjectTag.referenceId -> BusinessReference.id": {
+      "count": "0"
+    },
+    "ServiceTag.serviceId -> Service.id": {
+      "count": "0"
+    },
+    "ServiceTag.referenceId -> BusinessReference.id": {
+      "count": "0"
+    },
+    "ServiceTaskTemplate.serviceId -> Service.id": {
+      "count": "0"
+    },
+    "ServiceTemplateTask.templateId -> ServiceTaskTemplate.id": {
+      "count": "0"
+    },
+    "ServiceProcessTemplate.businessId -> Business.id": {
+      "count": "0"
+    },
+    "ServiceProcessTemplate.serviceId -> Service.id": {
+      "count": "0"
+    },
+    "ServiceProcessPhaseTemplate.templateId -> ServiceProcessTemplate.id": {
+      "count": "0"
+    },
+    "ServiceProcessStepTemplate.phaseId -> ServiceProcessPhaseTemplate.id": {
+      "count": "0"
+    },
+    "ServiceProcessTaskTemplate.stepId -> ServiceProcessStepTemplate.id": {
+      "count": "0"
+    },
+    "ProjectService.projectId -> Project.id": {
+      "count": "0"
+    },
+    "ProjectService.serviceId -> Service.id": {
+      "count": "0"
+    },
+    "ProjectServiceStep.projectServiceId -> ProjectService.id": {
+      "count": "0"
+    },
+    "Interaction.businessId -> Business.id": {
+      "count": "0"
+    },
+    "Interaction.clientId -> Client.id": {
+      "count": "0"
+    },
+    "Interaction.projectId -> Project.id": {
+      "count": "0"
+    },
+    "Interaction.createdByUserId -> User.id": {
+      "count": "0"
+    },
+    "BusinessReference.businessId -> Business.id": {
+      "count": "0"
+    },
+    "ClientTag.clientId -> Client.id": {
+      "count": "0"
+    },
+    "ClientTag.referenceId -> BusinessReference.id": {
+      "count": "0"
+    },
+    "TaskTag.taskId -> Task.id": {
+      "count": "0"
+    },
+    "TaskTag.referenceId -> BusinessReference.id": {
+      "count": "0"
+    },
+    "FinanceTag.financeId -> Finance.id": {
+      "count": "0"
+    },
+    "FinanceTag.referenceId -> BusinessReference.id": {
+      "count": "0"
+    },
+    "LedgerEntry.businessId -> Business.id": {
+      "count": "0"
+    },
+    "LedgerEntry.createdByUserId -> User.id": {
+      "count": "0"
+    },
+    "LedgerLine.entryId -> LedgerEntry.id": {
+      "count": "0"
+    },
+    "BusinessSettings.businessId -> Business.id": {
+      "count": "0"
+    },
+    "Quote.businessId -> Business.id": {
+      "count": "0"
+    },
+    "Quote.projectId -> Project.id": {
+      "count": "0"
+    },
+    "Quote.clientId -> Client.id": {
+      "count": "0"
+    },
+    "Quote.createdByUserId -> User.id": {
+      "count": "0"
+    },
+    "QuoteItem.quoteId -> Quote.id": {
+      "count": "0"
+    },
+    "QuoteItem.serviceId -> Service.id": {
+      "count": "0"
+    },
+    "Invoice.businessId -> Business.id": {
+      "count": "0"
+    },
+    "Invoice.projectId -> Project.id": {
+      "count": "0"
+    },
+    "Invoice.clientId -> Client.id": {
+      "count": "0"
+    },
+    "Invoice.quoteId -> Quote.id": {
+      "count": "0"
+    },
+    "Invoice.createdByUserId -> User.id": {
+      "count": "0"
+    },
+    "InvoiceItem.invoiceId -> Invoice.id": {
+      "count": "0"
+    },
+    "InvoiceItem.serviceId -> Service.id": {
+      "count": "0"
+    },
+    "InvoiceItem.productId -> Product.id": {
+      "count": "0"
+    },
+    "BusinessDocument.businessId -> Business.id": {
+      "count": "0"
+    },
+    "BusinessDocument.clientId -> Client.id": {
+      "count": "0"
+    },
+    "BusinessDocument.createdByUserId -> User.id": {
+      "count": "0"
+    },
+    "PersonalAccount.userId -> User.id": {
+      "count": "0"
+    },
+    "PersonalCategory.userId -> User.id": {
+      "count": "0"
+    },
+    "PersonalTransaction.userId -> User.id": {
+      "count": "0"
+    },
+    "PersonalTransaction.accountId -> PersonalAccount.id": {
+      "count": "0"
+    },
+    "PersonalTransaction.categoryId -> PersonalCategory.id": {
+      "count": "0"
+    }
+  },
+  "nullForeignKeys": {
+    "Business.ownerId": {
+      "count": "0",
+      "optional": false
+    },
+    "BusinessMembership.businessId": {
+      "count": "0",
+      "optional": false
+    },
+    "BusinessMembership.userId": {
+      "count": "0",
+      "optional": false
+    },
+    "EmployeeProfile.membershipId": {
+      "count": "0",
+      "optional": false
+    },
+    "BusinessMemberPermission.membershipId": {
+      "count": "0",
+      "optional": false
+    },
+    "BusinessInvite.businessId": {
+      "count": "0",
+      "optional": false
+    },
+    "Prospect.businessId": {
+      "count": "0",
+      "optional": false
+    },
+    "Client.businessId": {
+      "count": "0",
+      "optional": false
+    },
+    "Client.categoryReferenceId": {
+      "count": "6",
+      "optional": true
+    },
+    "Client.anonymizedByUserId": {
+      "count": "6",
+      "optional": true
+    },
+    "Project.businessId": {
+      "count": "0",
+      "optional": false
+    },
+    "Project.clientId": {
+      "count": "0",
+      "optional": true
+    },
+    "Project.categoryReferenceId": {
+      "count": "6",
+      "optional": true
+    },
+    "Task.businessId": {
+      "count": "0",
+      "optional": false
+    },
+    "Task.projectId": {
+      "count": "0",
+      "optional": true
+    },
+    "Task.projectServiceId": {
+      "count": "0",
+      "optional": true
+    },
+    "Task.projectServiceStepId": {
+      "count": "0",
+      "optional": true
+    },
+    "Task.assigneeUserId": {
+      "count": "0",
+      "optional": true
+    },
+    "Task.categoryReferenceId": {
+      "count": "0",
+      "optional": true
+    },
+    "Process.businessId": {
+      "count": "0",
+      "optional": false
+    },
+    "ProcessStep.processId": {
+      "count": "0",
+      "optional": false
+    },
+    "Finance.businessId": {
+      "count": "0",
+      "optional": false
+    },
+    "Finance.projectId": {
+      "count": "0",
+      "optional": true
+    },
+    "Finance.categoryReferenceId": {
+      "count": "0",
+      "optional": true
+    },
+    "Finance.inventoryMovementId": {
+      "count": "0",
+      "optional": true
+    },
+    "Finance.inventoryProductId": {
+      "count": "0",
+      "optional": true
+    },
+    "Service.businessId": {
+      "count": "0",
+      "optional": false
+    },
+    "Service.categoryReferenceId": {
+      "count": "16",
+      "optional": true
+    },
+    "Product.businessId": {
+      "count": "0",
+      "optional": false
+    },
+    "ProductImage.businessId": {
+      "count": "0",
+      "optional": false
+    },
+    "ProductImage.productId": {
+      "count": "0",
+      "optional": false
+    },
+    "InventoryMovement.businessId": {
+      "count": "0",
+      "optional": false
+    },
+    "InventoryMovement.productId": {
+      "count": "0",
+      "optional": false
+    },
+    "InventoryMovement.createdByUserId": {
+      "count": "0",
+      "optional": true
+    },
+    "InventoryReservation.businessId": {
+      "count": "0",
+      "optional": false
+    },
+    "InventoryReservation.invoiceId": {
+      "count": "0",
+      "optional": false
+    },
+    "InventoryReservationItem.reservationId": {
+      "count": "0",
+      "optional": false
+    },
+    "InventoryReservationItem.productId": {
+      "count": "0",
+      "optional": false
+    },
+    "ProjectTag.projectId": {
+      "count": "0",
+      "optional": false
+    },
+    "ProjectTag.referenceId": {
+      "count": "0",
+      "optional": false
+    },
+    "ServiceTag.serviceId": {
+      "count": "0",
+      "optional": false
+    },
+    "ServiceTag.referenceId": {
+      "count": "0",
+      "optional": false
+    },
+    "ServiceTaskTemplate.serviceId": {
+      "count": "0",
+      "optional": false
+    },
+    "ServiceTemplateTask.templateId": {
+      "count": "0",
+      "optional": false
+    },
+    "ServiceProcessTemplate.businessId": {
+      "count": "0",
+      "optional": false
+    },
+    "ServiceProcessTemplate.serviceId": {
+      "count": "0",
+      "optional": false
+    },
+    "ServiceProcessPhaseTemplate.templateId": {
+      "count": "0",
+      "optional": false
+    },
+    "ServiceProcessStepTemplate.phaseId": {
+      "count": "0",
+      "optional": false
+    },
+    "ServiceProcessTaskTemplate.stepId": {
+      "count": "0",
+      "optional": false
+    },
+    "ProjectService.projectId": {
+      "count": "0",
+      "optional": false
+    },
+    "ProjectService.serviceId": {
+      "count": "0",
+      "optional": false
+    },
+    "ProjectServiceStep.projectServiceId": {
+      "count": "0",
+      "optional": false
+    },
+    "Interaction.businessId": {
+      "count": "0",
+      "optional": false
+    },
+    "Interaction.clientId": {
+      "count": "0",
+      "optional": true
+    },
+    "Interaction.projectId": {
+      "count": "0",
+      "optional": true
+    },
+    "Interaction.createdByUserId": {
+      "count": "0",
+      "optional": true
+    },
+    "BusinessReference.businessId": {
+      "count": "0",
+      "optional": false
+    },
+    "ClientTag.clientId": {
+      "count": "0",
+      "optional": false
+    },
+    "ClientTag.referenceId": {
+      "count": "0",
+      "optional": false
+    },
+    "TaskTag.taskId": {
+      "count": "0",
+      "optional": false
+    },
+    "TaskTag.referenceId": {
+      "count": "0",
+      "optional": false
+    },
+    "FinanceTag.financeId": {
+      "count": "0",
+      "optional": false
+    },
+    "FinanceTag.referenceId": {
+      "count": "0",
+      "optional": false
+    },
+    "LedgerEntry.businessId": {
+      "count": "0",
+      "optional": false
+    },
+    "LedgerEntry.sourceId": {
+      "count": "0",
+      "optional": true
+    },
+    "LedgerEntry.createdByUserId": {
+      "count": "0",
+      "optional": true
+    },
+    "LedgerLine.entryId": {
+      "count": "0",
+      "optional": false
+    },
+    "BusinessSettings.businessId": {
+      "count": "0",
+      "optional": false
+    },
+    "Quote.businessId": {
+      "count": "0",
+      "optional": false
+    },
+    "Quote.projectId": {
+      "count": "0",
+      "optional": false
+    },
+    "Quote.clientId": {
+      "count": "0",
+      "optional": true
+    },
+    "Quote.createdByUserId": {
+      "count": "0",
+      "optional": false
+    },
+    "QuoteItem.quoteId": {
+      "count": "0",
+      "optional": false
+    },
+    "QuoteItem.serviceId": {
+      "count": "0",
+      "optional": true
+    },
+    "Invoice.businessId": {
+      "count": "0",
+      "optional": false
+    },
+    "Invoice.projectId": {
+      "count": "0",
+      "optional": false
+    },
+    "Invoice.clientId": {
+      "count": "0",
+      "optional": true
+    },
+    "Invoice.quoteId": {
+      "count": "0",
+      "optional": true
+    },
+    "Invoice.createdByUserId": {
+      "count": "0",
+      "optional": false
+    },
+    "InvoiceItem.invoiceId": {
+      "count": "0",
+      "optional": false
+    },
+    "InvoiceItem.serviceId": {
+      "count": "0",
+      "optional": true
+    },
+    "InvoiceItem.productId": {
+      "count": "0",
+      "optional": true
+    },
+    "BusinessDocument.businessId": {
+      "count": "0",
+      "optional": false
+    },
+    "BusinessDocument.clientId": {
+      "count": "0",
+      "optional": true
+    },
+    "BusinessDocument.createdByUserId": {
+      "count": "0",
+      "optional": false
+    },
+    "PersonalAccount.userId": {
+      "count": "0",
+      "optional": false
+    },
+    "PersonalCategory.userId": {
+      "count": "0",
+      "optional": false
+    },
+    "PersonalTransaction.userId": {
+      "count": "0",
+      "optional": false
+    },
+    "PersonalTransaction.accountId": {
+      "count": "0",
+      "optional": false
+    },
+    "PersonalTransaction.categoryId": {
+      "count": "0",
+      "optional": true
+    }
+  },
+  "enumValues": {
+    "User.role": {
+      "enum": "UserRole",
+      "values": [
+        "USER"
+      ]
+    },
+    "BusinessMembership.role": {
+      "enum": "BusinessRole",
+      "values": [
+        "OWNER",
+        "MEMBER"
+      ]
+    },
+    "EmployeeProfile.status": {
+      "enum": "EmployeeStatus",
+      "values": []
+    },
+    "BusinessMemberPermission.permission": {
+      "enum": "BusinessPermission",
+      "values": []
+    },
+    "BusinessInvite.role": {
+      "enum": "BusinessRole",
+      "values": [
+        "MEMBER"
+      ]
+    },
+    "BusinessInvite.status": {
+      "enum": "BusinessInviteStatus",
+      "values": [
+        "ACCEPTED"
+      ]
+    },
+    "Prospect.source": {
+      "enum": "LeadSource",
+      "values": []
+    },
+    "Prospect.qualificationLevel": {
+      "enum": "QualificationLevel",
+      "values": []
+    },
+    "Prospect.pipelineStatus": {
+      "enum": "ProspectPipelineStatus",
+      "values": [
+        "NEW",
+        "IN_DISCUSSION"
+      ]
+    },
+    "Prospect.status": {
+      "enum": "ProspectStatus",
+      "values": [
+        "NEW"
+      ]
+    },
+    "Client.leadSource": {
+      "enum": "LeadSource",
+      "values": []
+    },
+    "Client.status": {
+      "enum": "ClientStatus",
+      "values": [
+        "ACTIVE"
+      ]
+    },
+    "Project.status": {
+      "enum": "ProjectStatus",
+      "values": [
+        "PLANNED",
+        "ACTIVE"
+      ]
+    },
+    "Project.quoteStatus": {
+      "enum": "ProjectQuoteStatus",
+      "values": [
+        "DRAFT"
+      ]
+    },
+    "Project.depositStatus": {
+      "enum": "ProjectDepositStatus",
+      "values": [
+        "PENDING"
+      ]
+    },
+    "Task.status": {
+      "enum": "TaskStatus",
+      "values": []
+    },
+    "Task.phase": {
+      "enum": "TaskPhase",
+      "values": []
+    },
+    "Process.status": {
+      "enum": "ProcessStatus",
+      "values": []
+    },
+    "Finance.type": {
+      "enum": "FinanceType",
+      "values": []
+    },
+    "Product.unit": {
+      "enum": "ProductUnit",
+      "values": []
+    },
+    "InventoryMovement.type": {
+      "enum": "InventoryMovementType",
+      "values": []
+    },
+    "InventoryMovement.source": {
+      "enum": "InventoryMovementSource",
+      "values": []
+    },
+    "InventoryReservation.status": {
+      "enum": "InventoryReservationStatus",
+      "values": []
+    },
+    "ServiceTaskTemplate.phase": {
+      "enum": "TaskPhase",
+      "values": []
+    },
+    "Interaction.type": {
+      "enum": "InteractionType",
+      "values": []
+    },
+    "BusinessReference.type": {
+      "enum": "BusinessReferenceType",
+      "values": []
+    },
+    "LedgerEntry.sourceType": {
+      "enum": "LedgerSourceType",
+      "values": []
+    },
+    "Quote.status": {
+      "enum": "QuoteStatus",
+      "values": [
+        "DRAFT"
+      ]
+    },
+    "Invoice.status": {
+      "enum": "InvoiceStatus",
+      "values": []
+    },
+    "BusinessDocument.kind": {
+      "enum": "DocumentKind",
+      "values": [
+        "FILE"
+      ]
+    },
+    "PersonalAccount.type": {
+      "enum": "PersonalAccountType",
+      "values": []
+    },
+    "PersonalTransaction.type": {
+      "enum": "PersonalTransactionType",
+      "values": []
+    }
+  },
+  "errors": [],
+  "notes": [
+    "Audit run set NODE_TLS_REJECT_UNAUTHORIZED=0 and forced SSL rejectUnauthorized=false to bypass self-signed certificate errors. Do not use in production without validation."
+  ]
+}

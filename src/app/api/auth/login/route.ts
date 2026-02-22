@@ -9,6 +9,8 @@ import { rateLimit, makeIpKey } from '@/server/security/rateLimit';
 import { assertSameOrigin } from '@/server/security/csrf';
 import { NextRequest, NextResponse } from 'next/server';
 import { badRequest, getRequestId, withRequestId } from '@/server/http/apiUtils';
+import { isTransientDbError } from '@/server/db/prisma-errors';
+import { isDbCircuitOpen, markDbDown } from '@/server/db/db-circuit';
 
 function normalizeEmail(email: string) {
   return email.trim().toLowerCase();
@@ -51,6 +53,19 @@ export async function POST(request: NextRequest) {
     return res;
   }
 
+  if (isDbCircuitOpen()) {
+    const res = NextResponse.json(
+      {
+        ok: false,
+        error: 'SERVICE_UNAVAILABLE',
+        message: 'Database temporarily unavailable. Please retry.',
+      },
+      { status: 503 }
+    );
+    res.headers.set('Cache-Control', 'no-store');
+    return withRequestId(res, requestId);
+  }
+
   try {
     const user = await authenticateUser({
       email: normalizeEmail(body.email),
@@ -75,7 +90,22 @@ export async function POST(request: NextRequest) {
     response.headers.set('Cache-Control', 'no-store');
     return withRequestId(response, requestId);
   } catch (error) {
-    console.error('Login error', error);
+    if (isTransientDbError(error)) {
+      markDbDown();
+      const res = NextResponse.json(
+        {
+          ok: false,
+          error: 'SERVICE_UNAVAILABLE',
+          message: 'Database temporarily unavailable. Please retry.',
+        },
+        { status: 503 }
+      );
+      res.headers.set('Cache-Control', 'no-store');
+      return withRequestId(res, requestId);
+    }
+
+    const message = error instanceof Error ? error.message : 'unknown error';
+    console.error('Login error', message);
 
     const res = NextResponse.json({ error: 'Impossible de se connecter pour le moment.' }, { status: 500 });
     res.headers.set('Cache-Control', 'no-store');

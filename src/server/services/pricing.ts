@@ -1,10 +1,17 @@
 import { prisma } from '@/server/db/client';
+import type { BillingUnit, DiscountType } from '@/generated/prisma';
 
 type PricingItem = {
   serviceId: bigint | null;
   label: string;
+  description?: string | null;
   quantity: number;
   unitPriceCents: bigint;
+  originalUnitPriceCents?: bigint | null;
+  discountType?: DiscountType;
+  discountValue?: number | null;
+  billingUnit?: BillingUnit;
+  unitLabel?: string | null;
   totalCents: bigint;
 };
 
@@ -37,6 +44,26 @@ function roundPercent(amount: bigint, percent: number) {
   return (amount * p + BigInt(50)) / BigInt(100);
 }
 
+function applyDiscount(params: {
+  unitPriceCents: bigint;
+  discountType?: DiscountType | null;
+  discountValue?: number | null;
+}) {
+  const discountType = params.discountType ?? 'NONE';
+  const discountValue = params.discountValue ?? null;
+  if (discountType === 'PERCENT' && discountValue != null && Number.isFinite(discountValue)) {
+    const bounded = Math.min(100, Math.max(0, Math.trunc(discountValue)));
+    const final = (params.unitPriceCents * BigInt(100 - bounded)) / BigInt(100);
+    return { finalUnit: final, originalUnit: params.unitPriceCents, discountValue: bounded };
+  }
+  if (discountType === 'AMOUNT' && discountValue != null && Number.isFinite(discountValue)) {
+    const bounded = Math.max(0, Math.trunc(discountValue));
+    const final = params.unitPriceCents - BigInt(bounded);
+    return { finalUnit: final > BigInt(0) ? final : BigInt(0), originalUnit: params.unitPriceCents, discountValue: bounded };
+  }
+  return { finalUnit: params.unitPriceCents, originalUnit: null, discountValue: null };
+}
+
 export function resolveServiceUnitPriceCents(params: {
   projectPriceCents?: bigint | null;
   defaultPriceCents?: bigint | null;
@@ -58,9 +85,9 @@ export async function computeProjectPricing(businessId: bigint, projectId: bigin
   const project = await prisma.project.findFirst({
     where: { id: projectId, businessId },
     include: {
-      projectServices: { include: { service: true } },
+      projectServices: { include: { service: true }, orderBy: { position: 'asc' } },
       client: { select: { id: true, name: true, email: true } },
-      business: { select: { id: true } },
+      business: { select: { settings: { select: { defaultDepositPercent: true } } } },
     },
   });
   if (!project) return null;
@@ -68,8 +95,9 @@ export async function computeProjectPricing(businessId: bigint, projectId: bigin
   const missingPriceServices: Array<{ serviceId: bigint | null; label: string }> = [];
   const items: PricingItem[] = project.projectServices.map((ps) => {
     const label =
-      ps.service?.name ??
-      ps.service?.code ??
+      ps.titleOverride?.trim() ||
+      ps.service?.name ||
+      ps.service?.code ||
       (ps.serviceId ? `Service ${ps.serviceId.toString()}` : 'Service');
     const resolved = resolveServiceUnitPriceCents({
       projectPriceCents: ps.priceCents ?? null,
@@ -80,18 +108,34 @@ export async function computeProjectPricing(businessId: bigint, projectId: bigin
       missingPriceServices.push({ serviceId: ps.serviceId ?? null, label });
     }
     const qty = ps.quantity && ps.quantity > 0 ? ps.quantity : 1;
-    const total = resolved.unitPriceCents * BigInt(qty);
+    const discount = applyDiscount({
+      unitPriceCents: resolved.unitPriceCents,
+      discountType: ps.discountType ?? 'NONE',
+      discountValue: ps.discountValue ?? null,
+    });
+    const total = discount.finalUnit * BigInt(qty);
+    const unitLabel =
+      ps.unitLabel ?? (ps.billingUnit === 'MONTHLY' ? '/mois' : null);
     return {
       serviceId: ps.serviceId ?? null,
       label,
+      description: ps.description ?? ps.notes ?? null,
       quantity: qty,
-      unitPriceCents: resolved.unitPriceCents,
+      unitPriceCents: discount.finalUnit,
+      originalUnitPriceCents: discount.originalUnit,
+      discountType: ps.discountType ?? 'NONE',
+      discountValue: discount.discountValue,
+      billingUnit: ps.billingUnit ?? 'ONE_OFF',
+      unitLabel,
       totalCents: total,
     };
   });
 
   const totalCents = items.reduce((sum, item) => sum + item.totalCents, BigInt(0));
-  const depositPercent = 30;
+  const rawDepositPercent = project.business?.settings?.defaultDepositPercent;
+  const depositPercent = Number.isFinite(rawDepositPercent)
+    ? Math.min(100, Math.max(0, Number(rawDepositPercent)))
+    : 0;
   const depositCents = roundPercent(totalCents, depositPercent);
   const balanceCents = totalCents - depositCents;
 

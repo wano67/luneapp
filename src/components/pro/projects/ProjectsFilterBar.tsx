@@ -6,13 +6,11 @@ import { Badge } from '@/components/ui/badge';
 import type { ProjectFilters } from '@/lib/hooks/useProjects';
 import { useClientsLite } from '@/lib/hooks/useClientsLite';
 
-const statusOptions = [
-  { value: 'all', label: 'Tous les statuts' },
-  { value: 'PLANNED', label: 'Planifié' },
-  { value: 'ACTIVE', label: 'En cours' },
-  { value: 'ON_HOLD', label: 'En attente' },
-  { value: 'COMPLETED', label: 'Terminé' },
-  { value: 'CANCELLED', label: 'Annulé' },
+const scopeOptions = [
+  { value: 'ALL', label: 'Tous' },
+  { value: 'ACTIVE', label: 'Actifs' },
+  { value: 'PLANNED', label: 'En attente' },
+  { value: 'INACTIVE', label: 'Inactifs' },
 ];
 
 type Props = {
@@ -34,8 +32,8 @@ export function ProjectsFilterBar({ initialFilters, onChange, businessId }: Prop
     (filters.clientId ? clients.find((c) => c.id === filters.clientId)?.name ?? '' : '');
 
   const activeChips = [
-    filters.status && filters.status !== 'all'
-      ? { label: statusOptions.find((s) => s.value === filters.status)?.label ?? filters.status, key: 'status' }
+    filters.scope && filters.scope !== 'ALL'
+      ? { label: scopeOptions.find((s) => s.value === filters.scope)?.label ?? filters.scope, key: 'scope' }
       : null,
     filters.clientId ? { label: derivedClientName || `Client #${filters.clientId}`, key: 'clientId' } : null,
     filters.archived ? { label: filters.archived === 'true' ? 'Archivés' : 'Actifs', key: 'archived' } : null,
@@ -43,11 +41,11 @@ export function ProjectsFilterBar({ initialFilters, onChange, businessId }: Prop
   ].filter(Boolean) as Array<{ label: string; key: keyof ProjectFilters }>;
 
   function clearAll() {
-    const reset = { status: 'all', q: '', clientId: '', archived: undefined };
+    const reset: ProjectFilters = { scope: 'ALL', q: '', clientId: '', archived: undefined };
     setFilters(reset);
     setSearchInput('');
     setSelectedClientName('');
-    onChange({ status: 'all', q: '' });
+    onChange({ scope: 'ALL', q: '' });
   }
 
   // debounce search
@@ -84,10 +82,10 @@ export function ProjectsFilterBar({ initialFilters, onChange, businessId }: Prop
         />
         <Select
           label="Statut"
-          value={filters.status ?? 'all'}
-          onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))}
+          value={filters.scope ?? 'ALL'}
+          onChange={(e) => setFilters((prev) => ({ ...prev, scope: e.target.value as ProjectFilters['scope'] }))}
         >
-          {statusOptions.map((opt) => (
+          {scopeOptions.map((opt) => (
             <option key={opt.value} value={opt.value}>
               {opt.label}
             </option>

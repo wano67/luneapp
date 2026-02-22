@@ -17,6 +17,7 @@ import { TabsPills } from '@/components/pro/TabsPills';
 import { ClientInteractionsTab } from '@/components/pro/clients/ClientInteractionsTab';
 import { ClientDocumentsTab } from '@/components/pro/clients/ClientDocumentsTab';
 import { ClientInfoTab } from '@/components/pro/clients/ClientInfoTab';
+import { isProjectActive } from '@/lib/projectStatus';
 
 type Client = {
   id: string;
@@ -29,6 +30,19 @@ type Client = {
   status?: string | null;
   leadSource?: string | null;
   company?: string | null;
+  companyName?: string | null;
+  mainContactName?: string | null;
+  billingCompanyName?: string | null;
+  billingContactName?: string | null;
+  billingEmail?: string | null;
+  billingPhone?: string | null;
+  billingVatNumber?: string | null;
+  billingReference?: string | null;
+  billingAddressLine1?: string | null;
+  billingAddressLine2?: string | null;
+  billingPostalCode?: string | null;
+  billingCity?: string | null;
+  billingCountryCode?: string | null;
   categoryReferenceId?: string | null;
   categoryReferenceName?: string | null;
   tagReferences?: Array<{ id: string; name: string }>;
@@ -85,10 +99,6 @@ const tabs: { key: TabKey; label: string }[] = [
   { key: 'infos', label: 'Infos' },
 ];
 
-function isActiveProjectStatus(status?: string | null) {
-  return status === 'IN_PROGRESS' || status === 'ACTIVE' || status === 'ONGOING';
-}
-
 export default function ClientDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -105,7 +115,7 @@ export default function ClientDetailPage() {
   const [interactionsLoaded, setInteractionsLoaded] = useState(false);
   const [kpis, setKpis] = useState<Array<{ label: string; value: string | number }>>([
     { label: 'Projets', value: '—' },
-    { label: 'En cours', value: '—' },
+    { label: 'Actifs', value: '—' },
     { label: 'Valeur', value: '—' },
   ]);
   const [activeTab, setActiveTab] = useState<TabKey>('projects');
@@ -128,7 +138,7 @@ export default function ClientDetailPage() {
         const [clientRes, projectsRes] = await Promise.all([
           fetchJson<ClientResponse>(`/api/pro/businesses/${businessId}/clients/${clientId}`, {}, controller.signal),
           fetchJson<ProjectsResponse>(
-            `/api/pro/businesses/${businessId}/projects?clientId=${clientId}&archived=false`,
+            `/api/pro/businesses/${businessId}/projects?clientId=${clientId}&scope=ALL`,
             {},
             controller.signal,
           ),
@@ -166,7 +176,7 @@ export default function ClientDetailPage() {
     let valueCents = 0;
     for (const p of projects) {
       total += 1;
-      if (isActiveProjectStatus(p.status)) active += 1;
+      if (isProjectActive(p.status, p.archivedAt ?? null)) active += 1;
       const amount =
         typeof p.amountCents === 'string'
           ? Number(p.amountCents)
@@ -177,7 +187,7 @@ export default function ClientDetailPage() {
     }
     return [
       { label: 'Projets', value: total },
-      { label: 'En cours', value: active },
+      { label: 'Actifs', value: active },
       { label: 'Valeur', value: formatCurrencyEUR(valueCents) },
     ];
   }, [projects]);
@@ -262,7 +272,7 @@ export default function ClientDetailPage() {
     let active = 0;
     for (const p of projects) {
       total += 1;
-      if (isActiveProjectStatus(p.status)) active += 1;
+      if (isProjectActive(p.status, p.archivedAt ?? null)) active += 1;
     }
     return { total, active };
   }, [projects]);
@@ -270,7 +280,7 @@ export default function ClientDetailPage() {
   const hasChanges = client
     ? form.name !== (client.name ?? '') ||
       form.email !== (client.email ?? '') ||
-      form.company !== (client.company ?? '') ||
+      form.company !== (client.company ?? client.companyName ?? '') ||
       form.websiteUrl !== (client.websiteUrl ?? '')
     : false;
 
@@ -280,7 +290,7 @@ export default function ClientDetailPage() {
       setForm({
         name: updated.name ?? '',
         email: updated.email ?? '',
-        company: updated.company ?? '',
+        company: updated.company ?? updated.companyName ?? '',
         websiteUrl: updated.websiteUrl ?? '',
       });
     },
@@ -375,7 +385,7 @@ export default function ClientDetailPage() {
       setForm({
         name: res.data.item.name ?? '',
         email: res.data.item.email ?? '',
-        company: res.data.item.company ?? '',
+        company: res.data.item.company ?? res.data.item.companyName ?? '',
         websiteUrl: res.data.item.websiteUrl ?? '',
       });
     } catch (err) {

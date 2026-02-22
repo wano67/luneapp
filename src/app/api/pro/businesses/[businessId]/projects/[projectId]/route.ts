@@ -42,6 +42,7 @@ function serializeProject(project: {
   archivedAt: Date | null;
   startDate: Date | null;
   endDate: Date | null;
+  prestationsText?: string | null;
   createdAt: Date;
   updatedAt: Date;
   categoryReferenceId?: bigint | null;
@@ -83,6 +84,7 @@ function serializeProject(project: {
     archivedAt: project.archivedAt ? project.archivedAt.toISOString() : null,
     startDate: project.startDate ? project.startDate.toISOString() : null,
     endDate: project.endDate ? project.endDate.toISOString() : null,
+    prestationsText: project.prestationsText ?? null,
     counts: project._count
       ? {
           tasks: project._count.tasks,
@@ -356,6 +358,20 @@ export async function PATCH(
       data.endDate = end;
     } else {
       return withIdNoStore(badRequest('endDate invalide.'), requestId);
+    }
+  }
+
+  if ('prestationsText' in body) {
+    if (body.prestationsText === null || body.prestationsText === undefined || body.prestationsText === '') {
+      data.prestationsText = null;
+    } else if (typeof body.prestationsText === 'string') {
+      const text = body.prestationsText.trim();
+      if (text.length > 20000) {
+        return withIdNoStore(badRequest('prestationsText trop long (20000 max).'), requestId);
+      }
+      data.prestationsText = text || null;
+    } else {
+      return withIdNoStore(badRequest('prestationsText invalide.'), requestId);
     }
   }
 

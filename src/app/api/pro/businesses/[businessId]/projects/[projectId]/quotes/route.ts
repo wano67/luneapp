@@ -50,6 +50,12 @@ function serializeQuote(
       id: bigint;
       serviceId: bigint | null;
       label: string;
+      description: string | null;
+      discountType: string;
+      discountValue: number | null;
+      originalUnitPriceCents: bigint | null;
+      unitLabel: string | null;
+      billingUnit: string;
       quantity: number;
       unitPriceCents: bigint;
       totalCents: bigint;
@@ -82,6 +88,12 @@ function serializeQuote(
             id: item.id.toString(),
             serviceId: item.serviceId ? item.serviceId.toString() : null,
             label: item.label,
+            description: item.description ?? null,
+            discountType: item.discountType,
+            discountValue: item.discountValue ?? null,
+            originalUnitPriceCents: item.originalUnitPriceCents?.toString() ?? null,
+            unitLabel: item.unitLabel ?? null,
+            billingUnit: item.billingUnit,
             quantity: item.quantity,
             unitPriceCents: item.unitPriceCents.toString(),
             totalCents: item.totalCents.toString(),
@@ -126,7 +138,7 @@ export async function GET(
   const quotes = await prisma.quote.findMany({
     where: { businessId: businessIdBigInt, projectId: projectIdBigInt },
     orderBy: { createdAt: 'desc' },
-    include: { items: true },
+    include: { items: { orderBy: { id: 'asc' } } },
   });
 
   return withIdNoStore(jsonNoStore({ items: quotes.map((q) => serializeQuote(q, { includeItems: true })) }), requestId);
@@ -202,6 +214,12 @@ export async function POST(
           create: pricing.items.map((item) => ({
             serviceId: item.serviceId ?? undefined,
             label: item.label,
+            description: item.description ?? undefined,
+            discountType: item.discountType ?? 'NONE',
+            discountValue: item.discountValue ?? undefined,
+            originalUnitPriceCents: item.originalUnitPriceCents ?? undefined,
+            unitLabel: item.unitLabel ?? undefined,
+            billingUnit: item.billingUnit ?? 'ONE_OFF',
             quantity: item.quantity,
             unitPriceCents: item.unitPriceCents,
             totalCents: item.totalCents,

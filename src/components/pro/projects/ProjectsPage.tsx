@@ -8,43 +8,30 @@ import { Card } from '@/components/ui/card';
 import { KpiCirclesBlock } from '@/components/pro/KpiCirclesBlock';
 import { TabsPills } from '@/components/pro/TabsPills';
 import { ProjectCard } from '@/components/pro/projects/ProjectCard';
-import { useProjects } from '@/lib/hooks/useProjects';
+import { useProjects, type ProjectScope } from '@/lib/hooks/useProjects';
 
 type Props = { businessId: string };
 
-function isActiveStatus(status: string | null | undefined) {
-  if (!status) return false;
-  const normalized = status.toUpperCase();
-  return normalized === 'IN_PROGRESS' || normalized === 'ACTIVE' || normalized === 'ONGOING' || normalized === 'PLANNED';
-}
-
 export default function ProjectsPage({ businessId }: Props) {
-  const { data, isLoading, error, refetch } = useProjects(businessId, {});
-  const [view, setView] = useState<'active' | 'done'>('active');
+  const [scope, setScope] = useState<ProjectScope>('ACTIVE');
+  const { data, counts, isLoading, error, refetch } = useProjects(businessId, { scope });
 
   const kpis = useMemo(() => {
-    const items = data ?? [];
-    const total = items.length;
-    const active = items.filter((p) => isActiveStatus(p.status) && !p.archivedAt).length;
-    const late = items.filter((p) => {
-      if (!p.endDate) return false;
-      if (!isActiveStatus(p.status) || p.archivedAt) return false;
-      return new Date(p.endDate) < new Date();
-    }).length;
+    const snapshot = counts ?? { active: 0, planned: 0, inactive: 0 };
     return [
-      { label: 'Projets', value: total },
-      { label: 'En cours', value: active },
-      { label: 'En retard', value: late },
+      { label: 'Actifs', value: snapshot.active },
+      { label: 'En attente', value: snapshot.planned },
+      { label: 'Inactifs', value: snapshot.inactive },
     ];
-  }, [data]);
+  }, [counts]);
 
-  const filtered = useMemo(() => {
-    const items = data ?? [];
-    if (view === 'done') {
-      return items.filter((p) => !isActiveStatus(p.status) || p.archivedAt);
-    }
-    return items.filter((p) => isActiveStatus(p.status) && !p.archivedAt);
-  }, [data, view]);
+  const items = data ?? [];
+  const emptyLabel =
+    scope === 'ACTIVE'
+      ? 'Aucun projet actif pour l’instant.'
+      : scope === 'PLANNED'
+        ? 'Aucun projet en attente pour l’instant.'
+        : 'Aucun projet inactif pour l’instant.';
 
   return (
     <div className="mx-auto max-w-6xl space-y-4 px-4 py-6">
@@ -71,11 +58,12 @@ export default function ProjectsPage({ businessId }: Props) {
 
       <TabsPills
         items={[
-          { key: 'active', label: 'En cours' },
-          { key: 'done', label: 'Terminés' },
+          { key: 'ACTIVE', label: 'Actifs' },
+          { key: 'PLANNED', label: 'En attente' },
+          { key: 'INACTIVE', label: 'Inactifs' },
         ]}
-        value={view}
-        onChange={(key) => setView(key as 'active' | 'done')}
+        value={scope}
+        onChange={(key) => setScope(key as ProjectScope)}
         ariaLabel="Filtre projets"
         className="-mx-1 px-1"
       />
@@ -102,9 +90,9 @@ export default function ProjectsPage({ businessId }: Props) {
             Réessayer
           </button>
         </Card>
-      ) : !filtered || filtered.length === 0 ? (
+      ) : !items || items.length === 0 ? (
         <Card className="flex flex-col gap-3 rounded-3xl border border-[var(--border)] bg-[var(--surface)] p-5">
-          <p className="text-sm font-semibold text-[var(--text-primary)]">Aucun projet pour l’instant.</p>
+          <p className="text-sm font-semibold text-[var(--text-primary)]">{emptyLabel}</p>
           <div className="flex gap-2">
             <Link
               href={`/app/pro/${businessId}/projects/new`}
@@ -116,8 +104,8 @@ export default function ProjectsPage({ businessId }: Props) {
         </Card>
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {filtered.map((project) => (
-            <ProjectCard key={project.id} businessId={businessId} project={project} />
+          {items.map((project) => (
+            <ProjectCard key={project.id} businessId={businessId} project={project} onMutate={refetch} />
           ))}
         </div>
       )}

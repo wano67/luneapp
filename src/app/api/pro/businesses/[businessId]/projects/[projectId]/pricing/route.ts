@@ -35,8 +35,14 @@ function serializePricing(pricing: Awaited<ReturnType<typeof computeProjectPrici
     items: pricing.items.map((item) => ({
       serviceId: item.serviceId ? item.serviceId.toString() : null,
       label: item.label,
+      description: item.description ?? null,
       quantity: item.quantity,
       unitPriceCents: item.unitPriceCents.toString(),
+      originalUnitPriceCents: item.originalUnitPriceCents ? item.originalUnitPriceCents.toString() : null,
+      discountType: item.discountType ?? 'NONE',
+      discountValue: item.discountValue ?? null,
+      billingUnit: item.billingUnit ?? 'ONE_OFF',
+      unitLabel: item.unitLabel ?? null,
       totalCents: item.totalCents.toString(),
     })),
   };

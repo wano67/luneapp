@@ -3,12 +3,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
 import { KpiCirclesBlock } from '@/components/pro/KpiCirclesBlock';
 import { TabsPills } from '@/components/pro/TabsPills';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import { formatCurrencyEUR } from '@/lib/formatCurrency';
+import { getProjectScopeLabelFR, getProjectScopeVariant, getProjectStatusLabelFR, isProjectOverdue } from '@/lib/projectStatusUi';
 import { ProjectHealthBlock } from '@/components/pro/projects/overview/ProjectHealthBlock';
 import {
   ServiceProgressList,
@@ -25,6 +27,7 @@ type ProjectDetail = {
   clientName: string | null;
   clientId: string | null;
   status: string;
+  archivedAt?: string | null;
   startDate: string | null;
   endDate: string | null;
   updatedAt: string;
@@ -155,24 +158,16 @@ export default function ProjectHub({ businessId, projectId }: Props) {
     ];
   }, [project, servicesTotalCents]);
 
-  const isActiveStatus = (status: string | undefined | null) => {
-    if (!status) return false;
-    const normalized = status.toUpperCase();
-    return normalized === 'IN_PROGRESS' || normalized === 'ACTIVE' || normalized === 'ONGOING' || normalized === 'PLANNED';
-  };
-
   const health = useMemo(() => {
     const progress = project?.tasksSummary?.progressPct ?? 0;
     const endDateLabel = formatDate(project?.endDate ?? null);
-    const isOverdue = project?.endDate
-      ? new Date(project.endDate) < new Date() && isActiveStatus(project.status)
-      : false;
+    const isOverdue = isProjectOverdue(project?.endDate ?? null, project?.status ?? null, project?.archivedAt ?? null);
     const upcomingTask = tasks
       .filter((t) => t.status !== 'DONE')
       .sort((a, b) => (a.dueDate ? new Date(a.dueDate).getTime() : Infinity) - (b.dueDate ? new Date(b.dueDate).getTime() : Infinity))[0];
     const nextActionLabel = upcomingTask ? `${upcomingTask.title} · ${formatDate(upcomingTask.dueDate)}` : '—';
     return { progress, endDateLabel, isOverdue, nextActionLabel };
-  }, [project?.endDate, project?.status, project?.tasksSummary?.progressPct, tasks]);
+  }, [project?.archivedAt, project?.endDate, project?.status, project?.tasksSummary?.progressPct, tasks]);
 
   return (
     <div className="mx-auto max-w-6xl space-y-4 px-4 py-6">
@@ -191,8 +186,17 @@ export default function ProjectHub({ businessId, projectId }: Props) {
           </div>
         </div>
         <h1 className="text-xl font-semibold text-[var(--text-primary)]">{project?.name ?? `Projet #${projectId}`}</h1>
-        <p className="text-sm text-[var(--text-secondary)]">
-          {project?.clientName ? `Client: ${project.clientName}` : 'Projet'} · Statut: {project?.status ?? '—'} · Dates: {formatDate(project?.startDate ?? null)} → {formatDate(project?.endDate ?? null)}
+        <p className="flex flex-wrap items-center gap-2 text-sm text-[var(--text-secondary)]">
+          <span>{project?.clientName ? `Client: ${project.clientName}` : 'Projet'}</span>
+          <span aria-hidden>·</span>
+          <span>Statut: {getProjectStatusLabelFR(project?.status ?? null)}</span>
+          <Badge variant={getProjectScopeVariant(project?.status ?? null, project?.archivedAt ?? null)}>
+            {getProjectScopeLabelFR(project?.status ?? null, project?.archivedAt ?? null)}
+          </Badge>
+          <span aria-hidden>·</span>
+          <span>
+            Dates: {formatDate(project?.startDate ?? null)} → {formatDate(project?.endDate ?? null)}
+          </span>
         </p>
       </div>
 
@@ -223,6 +227,7 @@ export default function ProjectHub({ businessId, projectId }: Props) {
           <>
             <ProjectHealthBlock
               status={project.status ?? '—'}
+              archivedAt={project.archivedAt ?? null}
               progressPct={health.progress}
               endDateLabel={health.endDateLabel}
               nextActionLabel={health.nextActionLabel}

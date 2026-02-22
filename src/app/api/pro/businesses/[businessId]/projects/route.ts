@@ -2,11 +2,18 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/server/db/client';
 import {
   BusinessReferenceType,
+  Prisma,
   ProjectStatus,
   ProjectQuoteStatus,
   ProjectDepositStatus,
   TaskStatus,
 } from '@/generated/prisma';
+import {
+  buildProjectWhere,
+  getProjectCounts,
+  mapProjectStatusToScope,
+  type ProjectScope,
+} from '@/server/queries/projects';
 import { requireBusinessRole } from '@/server/auth/businessRole';
 import { assertSameOrigin, jsonNoStore, withNoStore } from '@/server/security/csrf';
 import { rateLimit } from '@/server/security/rateLimit';
@@ -29,6 +36,15 @@ function parseId(param: string | undefined) {
   } catch {
     return null;
   }
+}
+
+function parseScope(value: string | null): ProjectScope | null {
+  if (!value) return null;
+  const upper = value.toUpperCase();
+  if (upper === 'ACTIVE' || upper === 'PLANNED' || upper === 'INACTIVE' || upper === 'ALL') {
+    return upper as ProjectScope;
+  }
+  return null;
 }
 
 function withIdNoStore(res: NextResponse, requestId: string) {
@@ -98,6 +114,7 @@ export async function GET(
   if (!membership) return withIdNoStore(forbidden(), requestId);
 
   const { searchParams } = new URL(request.url);
+  const scopeParam = searchParams.get('scope');
   const statusParam = searchParams.get('status');
   const status =
     statusParam && Object.values(ProjectStatus).includes(statusParam as ProjectStatus)
@@ -109,8 +126,6 @@ export async function GET(
   const categoryReferenceIdParam = searchParams.get('categoryReferenceId');
   const tagReferenceIdParam = searchParams.get('tagReferenceId');
 
-  const archivedFilter =
-    archivedParam === 'true' ? { archivedAt: { not: null } } : archivedParam === 'false' ? { archivedAt: null } : {};
   const clientId =
     clientIdParam && /^\d+$/.test(clientIdParam) ? BigInt(clientIdParam) : null;
   const categoryReferenceId = categoryReferenceIdParam ? parseId(categoryReferenceIdParam) : null;
@@ -122,23 +137,45 @@ export async function GET(
     return withIdNoStore(badRequest('tagReferenceId invalide.'), requestId);
   }
 
-  const projects = await prisma.project.findMany({
-    where: {
-      businessId: businessIdBigInt,
-      ...(status ? { status } : {}),
-      ...(clientId ? { clientId } : {}),
-      ...archivedFilter,
-      ...(q ? { name: { contains: q, mode: 'insensitive' } } : {}),
-      ...(categoryReferenceId ? { categoryReferenceId } : {}),
-      ...(tagReferenceId ? { tags: { some: { referenceId: tagReferenceId } } } : {}),
-    },
-    orderBy: { createdAt: 'desc' },
-    include: {
-      client: { select: { id: true, name: true } },
-      categoryReference: { select: { id: true, name: true } },
-      tags: { include: { reference: { select: { id: true, name: true } } } },
-    },
+  const scope = parseScope(scopeParam) ?? (status ? mapProjectStatusToScope(status) : null) ?? 'ACTIVE';
+  const archivedOverride =
+    scope === 'ALL'
+      ? archivedParam === 'true'
+        ? { archivedAt: { not: null } }
+        : archivedParam === 'false'
+          ? { archivedAt: null }
+          : {}
+      : {};
+  const includeArchived = scope === 'ALL' ? archivedParam !== 'false' : undefined;
+
+  const baseWhere = buildProjectWhere({
+    businessId: businessIdBigInt.toString(),
+    scope,
+    includeArchived,
   });
+
+  const where: Prisma.ProjectWhereInput = {
+    ...baseWhere,
+    ...archivedOverride,
+    ...(clientId ? { clientId } : {}),
+    ...(q ? { name: { contains: q, mode: 'insensitive' } } : {}),
+    ...(categoryReferenceId ? { categoryReferenceId } : {}),
+    ...(tagReferenceId ? { tags: { some: { referenceId: tagReferenceId } } } : {}),
+  };
+
+  const [projects, totalCount, counts] = await Promise.all([
+    prisma.project.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      include: {
+        client: { select: { id: true, name: true } },
+        categoryReference: { select: { id: true, name: true } },
+        tags: { include: { reference: { select: { id: true, name: true } } } },
+      },
+    }),
+    prisma.project.count({ where }),
+    getProjectCounts({ businessId: businessIdBigInt.toString() }),
+  ]);
 
   const progressByProject = new Map<
     bigint,
@@ -172,6 +209,8 @@ export async function GET(
 
   return withIdNoStore(
     jsonNoStore({
+      counts,
+      totalCount,
       items: projects.map((p) => ({
         id: p.id.toString(),
         businessId: p.businessId.toString(),

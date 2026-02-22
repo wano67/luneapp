@@ -33,6 +33,7 @@ type Field =
       helper?: string;
       type: 'text';
       placeholder?: string;
+      readOnly?: boolean;
     }
   | {
       key:
@@ -45,6 +46,7 @@ type Field =
       min?: number;
       max?: number;
       suffix?: string;
+      readOnly?: boolean;
     }
   | {
       key:
@@ -56,6 +58,7 @@ type Field =
       label: string;
       helper?: string;
       type: 'checkbox';
+      readOnly?: boolean;
     };
 
 type Props = {
@@ -196,7 +199,7 @@ export function SettingsForm({ businessId, title, description, fields }: Props) 
           <form className="space-y-4" onSubmit={handleSubmit}>
             <div className="grid gap-4 md:grid-cols-2">
               {visibleFields.map((field) => {
-                const disabled = saving || !isAdmin;
+                const disabled = saving || !isAdmin || Boolean(field.readOnly);
                 if (field.type === 'checkbox') {
                   return (
                     <label key={field.key} className="flex items-start gap-3 border border-[var(--border)] rounded-xl px-3 py-2">

@@ -316,8 +316,8 @@ export default function AppHomePage() {
           <QuickAction
             icon={<FolderPlus size={16} />}
             title="Ajouter un produit"
-            href={lastBusiness ? `/app/pro/${lastBusiness.id}/catalog?tab=products` : '#'}
-            helper={disablePro ? 'Crée une entreprise' : 'Catalogue'}
+            href={lastBusiness ? `/app/pro/${lastBusiness.id}/stock` : '#'}
+            helper={disablePro ? 'Crée une entreprise' : 'Stock'}
             disabled={disablePro}
           />
           <QuickAction
@@ -355,7 +355,7 @@ export default function AppHomePage() {
                   <Link href={`/app/pro/${lastBusiness.id}/projects`}>Projets</Link>
                 </Button>
                 <Button asChild size="sm" variant="outline">
-                  <Link href={`/app/pro/${lastBusiness.id}/catalog`}>Catalogue</Link>
+                  <Link href={`/app/pro/${lastBusiness.id}/services`}>Catalogue services</Link>
                 </Button>
               </div>
             </Card>

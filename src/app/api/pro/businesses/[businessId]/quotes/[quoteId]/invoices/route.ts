@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/server/db/client';
-import { InvoiceStatus, QuoteStatus } from '@/generated/prisma';
+import { BillingUnit, DiscountType, InvoiceStatus, QuoteStatus } from '@/generated/prisma';
 import { requireAuthPro } from '@/server/auth/requireAuthPro';
 import { requireBusinessRole } from '@/server/auth/businessRole';
 import { assertSameOrigin, jsonNoStore, withNoStore } from '@/server/security/csrf';
@@ -13,6 +13,7 @@ import {
   unauthorized,
   withRequestId,
 } from '@/server/http/apiUtils';
+import { buildClientSnapshot, buildIssuerSnapshot } from '@/server/billing/snapshots';
 
 function parseId(param: string | undefined) {
   if (!param || !/^\d+$/.test(param)) return null;
@@ -50,6 +51,12 @@ function serializeInvoice(
       id: bigint;
       serviceId: bigint | null;
       label: string;
+      description: string | null;
+      discountType: DiscountType;
+      discountValue: number | null;
+      originalUnitPriceCents: bigint | null;
+      unitLabel: string | null;
+      billingUnit: BillingUnit;
       quantity: number;
       unitPriceCents: bigint;
       totalCents: bigint;
@@ -83,6 +90,12 @@ function serializeInvoice(
             id: item.id.toString(),
             serviceId: item.serviceId ? item.serviceId.toString() : null,
             label: item.label,
+            description: item.description ?? null,
+            discountType: item.discountType,
+            discountValue: item.discountValue ?? null,
+            originalUnitPriceCents: item.originalUnitPriceCents?.toString() ?? null,
+            unitLabel: item.unitLabel ?? null,
+            billingUnit: item.billingUnit,
             quantity: item.quantity,
             unitPriceCents: item.unitPriceCents.toString(),
             totalCents: item.totalCents.toString(),
@@ -137,7 +150,60 @@ export async function POST(
 
   const quote = await prisma.quote.findFirst({
     where: { id: quoteIdBigInt, businessId: businessIdBigInt },
-    include: { items: true, project: { select: { id: true } } },
+    include: {
+      items: { orderBy: { id: 'asc' } },
+      project: { select: { id: true } },
+      business: {
+        select: {
+          name: true,
+          legalName: true,
+          websiteUrl: true,
+          siret: true,
+          vatNumber: true,
+          addressLine1: true,
+          addressLine2: true,
+          postalCode: true,
+          city: true,
+          countryCode: true,
+          billingEmail: true,
+          billingPhone: true,
+          iban: true,
+          bic: true,
+          bankName: true,
+          accountHolder: true,
+          billingLegalText: true,
+          settings: {
+            select: {
+              cgvText: true,
+              paymentTermsText: true,
+              lateFeesText: true,
+              fixedIndemnityText: true,
+              legalMentionsText: true,
+            },
+          },
+        },
+      },
+      client: {
+        select: {
+          name: true,
+          companyName: true,
+          email: true,
+          phone: true,
+          address: true,
+          billingCompanyName: true,
+          billingContactName: true,
+          billingEmail: true,
+          billingPhone: true,
+          billingVatNumber: true,
+          billingReference: true,
+          billingAddressLine1: true,
+          billingAddressLine2: true,
+          billingPostalCode: true,
+          billingCity: true,
+          billingCountryCode: true,
+        },
+      },
+    },
   });
   if (!quote) return withIdNoStore(notFound('Devis introuvable.'), requestId);
 
@@ -163,10 +229,44 @@ export async function POST(
         depositCents: quote.depositCents,
         balanceCents: quote.balanceCents,
         dueAt,
+        issuerSnapshotJson:
+          quote.issuerSnapshotJson ??
+          buildIssuerSnapshot({
+            name: quote.business.name,
+            legalName: quote.business.legalName,
+            websiteUrl: quote.business.websiteUrl,
+            siret: quote.business.siret,
+            vatNumber: quote.business.vatNumber,
+            addressLine1: quote.business.addressLine1,
+            addressLine2: quote.business.addressLine2,
+            postalCode: quote.business.postalCode,
+            city: quote.business.city,
+            countryCode: quote.business.countryCode,
+            billingEmail: quote.business.billingEmail,
+            billingPhone: quote.business.billingPhone,
+            iban: quote.business.iban,
+            bic: quote.business.bic,
+            bankName: quote.business.bankName,
+            accountHolder: quote.business.accountHolder,
+            billingLegalText: quote.business.billingLegalText,
+            cgvText: quote.business.settings?.cgvText ?? null,
+            paymentTermsText: quote.business.settings?.paymentTermsText ?? null,
+            lateFeesText: quote.business.settings?.lateFeesText ?? null,
+            fixedIndemnityText: quote.business.settings?.fixedIndemnityText ?? null,
+            legalMentionsText: quote.business.settings?.legalMentionsText ?? null,
+          }),
+        clientSnapshotJson: quote.clientSnapshotJson ?? buildClientSnapshot(quote.client) ?? undefined,
+        prestationsSnapshotText: quote.prestationsSnapshotText ?? undefined,
         items: {
           create: quote.items.map((item) => ({
             serviceId: item.serviceId ?? undefined,
             label: item.label,
+            description: item.description ?? undefined,
+            discountType: item.discountType,
+            discountValue: item.discountValue ?? undefined,
+            originalUnitPriceCents: item.originalUnitPriceCents ?? undefined,
+            unitLabel: item.unitLabel ?? undefined,
+            billingUnit: item.billingUnit,
             quantity: item.quantity,
             unitPriceCents: item.unitPriceCents,
             totalCents: item.totalCents,

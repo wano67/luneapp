@@ -1,8 +1,8 @@
-import { CatalogPage } from '@/components/pro/catalog/CatalogPage';
+import { redirect } from 'next/navigation';
 
 type Props = { params: Promise<{ businessId: string }> };
 
 export default async function CatalogRoutePage({ params }: Props) {
   const { businessId } = await params;
-  return <CatalogPage businessId={businessId} />;
+  redirect(`/app/pro/${businessId}/services`);
 }

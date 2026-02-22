@@ -28,6 +28,21 @@ function serializeBusiness(business: {
   id: bigint;
   name: string;
   websiteUrl: string | null;
+  legalName: string | null;
+  siret: string | null;
+  vatNumber: string | null;
+  addressLine1: string | null;
+  addressLine2: string | null;
+  postalCode: string | null;
+  city: string | null;
+  countryCode: string;
+  billingEmail: string | null;
+  billingPhone: string | null;
+  iban: string | null;
+  bic: string | null;
+  bankName: string | null;
+  accountHolder: string | null;
+  billingLegalText: string | null;
   ownerId: bigint;
   createdAt: Date;
   updatedAt: Date;
@@ -36,6 +51,21 @@ function serializeBusiness(business: {
     id: business.id.toString(),
     name: business.name,
     websiteUrl: business.websiteUrl,
+    legalName: business.legalName,
+    siret: business.siret,
+    vatNumber: business.vatNumber,
+    addressLine1: business.addressLine1,
+    addressLine2: business.addressLine2,
+    postalCode: business.postalCode,
+    city: business.city,
+    countryCode: business.countryCode,
+    billingEmail: business.billingEmail,
+    billingPhone: business.billingPhone,
+    iban: business.iban,
+    bic: business.bic,
+    bankName: business.bankName,
+    accountHolder: business.accountHolder,
+    billingLegalText: business.billingLegalText,
     ownerId: business.ownerId.toString(),
     createdAt: business.createdAt.toISOString(),
     updatedAt: business.updatedAt.toISOString(),
@@ -169,6 +199,128 @@ export async function PATCH(
       return withRequestId(badRequest(normalizedWebsite.error), requestId);
     }
     data.websiteUrl = normalizedWebsite.value;
+  }
+
+  const readString = (value: unknown) => (typeof value === 'string' ? value.trim() : null);
+
+  if (Object.prototype.hasOwnProperty.call(body, 'legalName')) {
+    const legalName = readString((body as Record<string, unknown>).legalName);
+    if (legalName && legalName.length > 200) {
+      return withRequestId(badRequest('Raison sociale trop longue (200 max).'), requestId);
+    }
+    data.legalName = legalName || null;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(body, 'siret')) {
+    const siret = readString((body as Record<string, unknown>).siret);
+    if (siret && siret.length > 40) {
+      return withRequestId(badRequest('SIRET trop long (40 max).'), requestId);
+    }
+    data.siret = siret || null;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(body, 'vatNumber')) {
+    const vatNumber = readString((body as Record<string, unknown>).vatNumber);
+    if (vatNumber && vatNumber.length > 40) {
+      return withRequestId(badRequest('Numéro de TVA trop long (40 max).'), requestId);
+    }
+    data.vatNumber = vatNumber || null;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(body, 'addressLine1')) {
+    const addressLine1 = readString((body as Record<string, unknown>).addressLine1);
+    if (addressLine1 && addressLine1.length > 200) {
+      return withRequestId(badRequest('Adresse ligne 1 trop longue (200 max).'), requestId);
+    }
+    data.addressLine1 = addressLine1 || null;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(body, 'addressLine2')) {
+    const addressLine2 = readString((body as Record<string, unknown>).addressLine2);
+    if (addressLine2 && addressLine2.length > 200) {
+      return withRequestId(badRequest('Adresse ligne 2 trop longue (200 max).'), requestId);
+    }
+    data.addressLine2 = addressLine2 || null;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(body, 'postalCode')) {
+    const postalCode = readString((body as Record<string, unknown>).postalCode);
+    if (postalCode && postalCode.length > 20) {
+      return withRequestId(badRequest('Code postal trop long (20 max).'), requestId);
+    }
+    data.postalCode = postalCode || null;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(body, 'city')) {
+    const city = readString((body as Record<string, unknown>).city);
+    if (city && city.length > 100) {
+      return withRequestId(badRequest('Ville trop longue (100 max).'), requestId);
+    }
+    data.city = city || null;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(body, 'countryCode')) {
+    const countryCode = readString((body as Record<string, unknown>).countryCode);
+    if (countryCode && countryCode.length !== 2) {
+      return withRequestId(badRequest('countryCode doit être un code ISO à 2 lettres.'), requestId);
+    }
+    if (countryCode) data.countryCode = countryCode.toUpperCase();
+  }
+
+  if (Object.prototype.hasOwnProperty.call(body, 'billingEmail')) {
+    const billingEmail = readString((body as Record<string, unknown>).billingEmail);
+    if (billingEmail && billingEmail.length > 200) {
+      return withRequestId(badRequest('Email de facturation trop long (200 max).'), requestId);
+    }
+    data.billingEmail = billingEmail || null;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(body, 'billingPhone')) {
+    const billingPhone = readString((body as Record<string, unknown>).billingPhone);
+    if (billingPhone && billingPhone.length > 40) {
+      return withRequestId(badRequest('Téléphone de facturation trop long (40 max).'), requestId);
+    }
+    data.billingPhone = billingPhone || null;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(body, 'iban')) {
+    const iban = readString((body as Record<string, unknown>).iban);
+    if (iban && iban.length > 64) {
+      return withRequestId(badRequest('IBAN trop long (64 max).'), requestId);
+    }
+    data.iban = iban || null;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(body, 'bic')) {
+    const bic = readString((body as Record<string, unknown>).bic);
+    if (bic && bic.length > 32) {
+      return withRequestId(badRequest('BIC trop long (32 max).'), requestId);
+    }
+    data.bic = bic || null;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(body, 'bankName')) {
+    const bankName = readString((body as Record<string, unknown>).bankName);
+    if (bankName && bankName.length > 120) {
+      return withRequestId(badRequest('Nom de banque trop long (120 max).'), requestId);
+    }
+    data.bankName = bankName || null;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(body, 'accountHolder')) {
+    const accountHolder = readString((body as Record<string, unknown>).accountHolder);
+    if (accountHolder && accountHolder.length > 120) {
+      return withRequestId(badRequest('Titulaire du compte trop long (120 max).'), requestId);
+    }
+    data.accountHolder = accountHolder || null;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(body, 'billingLegalText')) {
+    const billingLegalText = readString((body as Record<string, unknown>).billingLegalText);
+    if (billingLegalText && billingLegalText.length > 2000) {
+      return withRequestId(badRequest('Mentions légales trop longues (2000 max).'), requestId);
+    }
+    data.billingLegalText = billingLegalText || null;
   }
 
   if (Object.keys(data).length === 0) {

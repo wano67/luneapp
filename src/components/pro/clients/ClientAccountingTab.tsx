@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { Card } from '@/components/ui/card';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import { formatCurrencyEUR } from '@/lib/formatCurrency';
+import { getInvoiceStatusLabelFR, getQuoteStatusLabelFR } from '@/lib/billingStatus';
 
 type SummaryResponse = {
   totals: { invoicedCents: number; paidCents: number; outstandingCents: number };
@@ -69,13 +70,8 @@ function formatDate(value: string | null | undefined) {
 }
 
 function formatStatus(status: string) {
-  if (status === 'PAID') return 'Payée';
-  if (status === 'SENT') return 'Envoyée';
-  if (status === 'DRAFT') return 'Brouillon';
-  if (status === 'CANCELLED') return 'Annulée';
-  if (status === 'SIGNED') return 'Signé';
-  if (status === 'ACCEPTED') return 'Accepté';
-  if (status === 'EXPIRED') return 'Expiré';
+  if (['PAID', 'SENT', 'DRAFT', 'CANCELLED'].includes(status)) return getInvoiceStatusLabelFR(status);
+  if (['SIGNED', 'ACCEPTED', 'EXPIRED'].includes(status)) return getQuoteStatusLabelFR(status);
   return status || '—';
 }
 

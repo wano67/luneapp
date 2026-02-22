@@ -3,6 +3,8 @@
 import { useParams } from 'next/navigation';
 import { SettingsForm } from '../SettingsForm';
 import { PageHeader } from '../../../../components/PageHeader';
+import { BillingProfileForm } from './BillingProfileForm';
+import { BillingLegalTextsForm } from './BillingLegalTextsForm';
 
 export default function BillingSettingsPage() {
   const params = useParams();
@@ -15,14 +17,26 @@ export default function BillingSettingsPage() {
         title="Paramètres de facturation"
         subtitle="Préfixes, acompte par défaut et délais de paiement."
       />
-      <div className="max-w-4xl">
+      <div className="max-w-4xl space-y-6">
         <SettingsForm
           businessId={businessId}
           title="Paramètres de facturation"
           description="Préfixes, acompte par défaut et délais de paiement."
           fields={[
-            { key: 'invoicePrefix', label: 'Préfixe factures', type: 'text', helper: 'Exemple: INV-' },
-            { key: 'quotePrefix', label: 'Préfixe devis', type: 'text', helper: 'Exemple: DEV-' },
+            {
+              key: 'invoicePrefix',
+              label: 'Préfixe factures',
+              type: 'text',
+              helper: 'Format imposé: SF-FAC-YYYY-####',
+              readOnly: true,
+            },
+            {
+              key: 'quotePrefix',
+              label: 'Préfixe devis',
+              type: 'text',
+              helper: 'Format imposé: SF-DEV-YYYY-####',
+              readOnly: true,
+            },
             {
               key: 'defaultDepositPercent',
               label: 'Acompte par défaut (%)',
@@ -46,6 +60,8 @@ export default function BillingSettingsPage() {
             },
           ]}
         />
+        <BillingProfileForm businessId={businessId} />
+        <BillingLegalTextsForm businessId={businessId} />
       </div>
     </div>
   );

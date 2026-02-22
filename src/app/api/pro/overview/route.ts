@@ -1,9 +1,10 @@
 import { NextRequest } from 'next/server';
 import { prisma } from '@/server/db/client';
-import { ProjectStatus, TaskStatus, FinanceType } from '@/generated/prisma';
+import { TaskStatus, FinanceType } from '@/generated/prisma';
 import { requireAuthPro } from '@/server/auth/requireAuthPro';
 import { getRequestId, unauthorized, withRequestId } from '@/server/http/apiUtils';
 import { jsonNoStore, withNoStore } from '@/server/security/csrf';
+import { buildProjectScopeWhere } from '@/server/queries/projects';
 
 export async function GET(request: NextRequest) {
   const requestId = getRequestId(request);
@@ -36,7 +37,7 @@ export async function GET(request: NextRequest) {
 
   const [projectsActiveCount, incomeSum, expenseSum, upcomingTasks] = await Promise.all([
     prisma.project.count({
-      where: { businessId: { in: businessIds }, status: ProjectStatus.ACTIVE, archivedAt: null },
+      where: { businessId: { in: businessIds }, ...buildProjectScopeWhere({ scope: 'ACTIVE' }) },
     }),
     prisma.finance.aggregate({
       where: { businessId: { in: businessIds }, type: FinanceType.INCOME },

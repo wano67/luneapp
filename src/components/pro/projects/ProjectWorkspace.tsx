@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type DragEvent } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, GripVertical } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -13,10 +14,24 @@ import { Modal } from '@/components/ui/modal';
 import { TabsPills } from '@/components/pro/TabsPills';
 import { KpiCirclesBlock } from '@/components/pro/KpiCirclesBlock';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
+import {
+  getInvoiceStatusLabelFR,
+  getProjectDepositStatusLabelFR,
+  getProjectQuoteStatusLabelFR,
+  getQuoteStatusLabelFR,
+} from '@/lib/billingStatus';
 import { formatCurrencyEUR } from '@/lib/formatCurrency';
+import { useActiveBusiness } from '@/app/app/pro/ActiveBusinessProvider';
 import { ProjectSetupChecklist, type ChecklistItem } from '@/components/pro/projects/ProjectSetupChecklist';
 import { ServiceProgressRow } from '@/components/pro/projects/ServiceProgressRow';
 import { GuidedCtaCard } from '@/components/pro/shared/GuidedCtaCard';
+import {
+  getProjectScopeLabelFR,
+  getProjectScopeVariant,
+  getProjectStatusLabelFR,
+  isProjectOverdue,
+  shouldWarnProjectCompletion,
+} from '@/lib/projectStatusUi';
 
 type ProjectDetail = {
   id: string;
@@ -24,8 +39,12 @@ type ProjectDetail = {
   clientId: string | null;
   clientName: string | null;
   status: string;
+  quoteStatus?: string | null;
+  depositStatus?: string | null;
+  archivedAt?: string | null;
   startDate: string | null;
   endDate: string | null;
+  prestationsText?: string | null;
   updatedAt: string;
   tasksSummary?: { total: number; open: number; done: number; progressPct: number };
   projectServices?: Array<{
@@ -44,7 +63,25 @@ type ServiceItem = {
   serviceId: string;
   priceCents: string | null;
   quantity: number;
+  notes: string | null;
+  titleOverride?: string | null;
+  description?: string | null;
+  discountType?: string | null;
+  discountValue?: number | null;
+  billingUnit?: string | null;
+  unitLabel?: string | null;
+  position?: number;
   service: { id: string; code: string; name: string; type: string | null };
+};
+
+type CatalogService = {
+  id: string;
+  code: string;
+  name: string;
+  type: string | null;
+  defaultPriceCents: string | null;
+  tjmCents: string | null;
+  durationHours: number | null;
 };
 
 type TaskItem = {
@@ -63,6 +100,91 @@ type MemberItem = { userId: string; email: string; role: string };
 type ClientDocument = { id: string; title: string };
 type ClientLite = { id: string; name: string; email: string | null };
 
+type QuoteItem = {
+  id: string;
+  status: string;
+  number: string | null;
+  totalCents: string;
+  depositCents: string;
+  balanceCents: string;
+  depositPercent: number;
+  currency: string;
+  issuedAt: string | null;
+  expiresAt: string | null;
+  note: string | null;
+  createdAt: string;
+  items?: Array<{
+    id: string;
+    serviceId: string | null;
+    label: string;
+    description?: string | null;
+    quantity: number;
+    unitPriceCents: string;
+    totalCents: string;
+  }>;
+};
+
+type InvoiceItem = {
+  id: string;
+  status: string;
+  number: string | null;
+  totalCents: string;
+  depositCents: string;
+  balanceCents: string;
+  currency: string;
+  issuedAt: string | null;
+  dueAt: string | null;
+  paidAt: string | null;
+  createdAt: string;
+  quoteId: string | null;
+};
+
+type EditableLine = {
+  id: string;
+  label: string;
+  description: string;
+  quantity: string;
+  unitPrice: string;
+  serviceId?: string | null;
+  productId?: string | null;
+};
+
+type InvoiceLineItem = {
+  id: string;
+  serviceId: string | null;
+  productId: string | null;
+  label: string;
+  description?: string | null;
+  quantity: number;
+  unitPriceCents: string;
+  totalCents: string;
+};
+
+type QuoteEditorState = {
+  quoteId: string;
+  status: string;
+  number: string | null;
+  issuedAt: string;
+  expiresAt: string;
+  note: string;
+  lines: EditableLine[];
+};
+
+type InvoiceEditorState = {
+  invoiceId: string;
+  status: string;
+  number: string | null;
+  issuedAt: string;
+  dueAt: string;
+  note: string;
+  lines: EditableLine[];
+};
+
+type InvoiceDetail = InvoiceItem & {
+  note: string | null;
+  items: InvoiceLineItem[];
+};
+
 const tabs = [
   { key: 'overview', label: 'Vue d’ensemble' },
   { key: 'work', label: 'Travail' },
@@ -80,28 +202,135 @@ function formatDate(value: string | null) {
   }
 }
 
+function toDateInput(value?: string | null) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toISOString().slice(0, 10);
+}
+
+function parseCents(value?: string | null): number | null {
+  if (!value) return null;
+  const num = Number(value);
+  if (!Number.isFinite(num)) return null;
+  return num;
+}
+
+function parseEuroInput(value: string): number | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const normalized = trimmed.replace(',', '.');
+  const num = Number(normalized);
+  if (!Number.isFinite(num)) return null;
+  return Math.round(num * 100);
+}
+
+function formatEuroInput(value?: string | null): string {
+  const cents = parseCents(value);
+  if (cents == null) return '';
+  return (cents / 100).toString();
+}
+
+function toEditableLine(item: {
+  id: string;
+  label: string;
+  description?: string | null;
+  quantity: number;
+  unitPriceCents: string;
+  serviceId?: string | null;
+  productId?: string | null;
+}): EditableLine {
+  return {
+    id: item.id,
+    label: item.label,
+    description: item.description ?? '',
+    quantity: String(item.quantity),
+    unitPrice: formatEuroInput(item.unitPriceCents),
+    serviceId: item.serviceId ?? null,
+    productId: item.productId ?? null,
+  };
+}
+
+function BillingStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl border border-[var(--border)]/60 bg-[var(--surface-2)]/60 px-3 py-2">
+      <p className="text-[11px] uppercase tracking-[0.14em] text-[var(--text-secondary)]">{label}</p>
+      <p className="text-sm font-semibold text-[var(--text-primary)]">{value}</p>
+    </div>
+  );
+}
+
 export function ProjectWorkspace({ businessId, projectId }: { businessId: string; projectId: string }) {
   const searchParams = useSearchParams();
+  const activeCtx = useActiveBusiness({ optional: true });
+  const isAdmin = activeCtx?.isAdmin ?? false;
   const [project, setProject] = useState<ProjectDetail | null>(null);
   const [services, setServices] = useState<ServiceItem[]>([]);
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [members, setMembers] = useState<MemberItem[]>([]);
   const [documents, setDocuments] = useState<ClientDocument[]>([]);
+  const [quotes, setQuotes] = useState<QuoteItem[]>([]);
+  const [invoices, setInvoices] = useState<InvoiceItem[]>([]);
+  const [billingSettings, setBillingSettings] = useState<{
+    defaultDepositPercent: number;
+    vatEnabled: boolean;
+    vatRatePercent: number;
+    paymentTermsDays: number;
+  } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [billingError, setBillingError] = useState<string | null>(null);
+  const [billingInfo, setBillingInfo] = useState<string | null>(null);
+  const [quoteEditor, setQuoteEditor] = useState<QuoteEditorState | null>(null);
+  const [invoiceEditor, setInvoiceEditor] = useState<InvoiceEditorState | null>(null);
+  const [quoteEditError, setQuoteEditError] = useState<string | null>(null);
+  const [invoiceEditError, setInvoiceEditError] = useState<string | null>(null);
+  const [quoteEditing, setQuoteEditing] = useState(false);
+  const [invoiceEditing, setInvoiceEditing] = useState(false);
+  const [stagedInvoiceModal, setStagedInvoiceModal] = useState<{
+    kind: 'DEPOSIT' | 'MID' | 'FINAL';
+    mode: 'PERCENT' | 'AMOUNT';
+    value: string;
+  } | null>(null);
+  const [stagedInvoiceError, setStagedInvoiceError] = useState<string | null>(null);
+  const [stagedInvoiceLoading, setStagedInvoiceLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<'overview' | 'work' | 'team' | 'billing' | 'files'>('overview');
   const [statusFilter, setStatusFilter] = useState<'TODO' | 'IN_PROGRESS' | 'DONE' | 'all'>('all');
   const [activeSetupModal, setActiveSetupModal] = useState<
     null | 'client' | 'deadline' | 'services' | 'tasks' | 'team' | 'documents'
   >(null);
   const [clients, setClients] = useState<ClientLite[]>([]);
-  const [catalogServices, setCatalogServices] = useState<ServiceItem[]>([]);
+  const [catalogServices, setCatalogServices] = useState<CatalogService[]>([]);
+  const [catalogSearchResults, setCatalogSearchResults] = useState<CatalogService[]>([]);
   const [saving, setSaving] = useState(false);
+  const [markingCompleted, setMarkingCompleted] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [modalError, setModalError] = useState<string | null>(null);
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
   const [startDateInput, setStartDateInput] = useState<string>('');
   const [endDateInput, setEndDateInput] = useState<string>('');
   const [serviceSelections, setServiceSelections] = useState<Record<string, number>>({});
+  const [serviceDrafts, setServiceDrafts] = useState<
+    Record<
+      string,
+      {
+        quantity: string;
+        price: string;
+        title: string;
+        description: string;
+        discountType: string;
+        discountValue: string;
+        billingUnit: string;
+        unitLabel: string;
+      }
+    >
+  >({});
+  const [lineSavingId, setLineSavingId] = useState<string | null>(null);
+  const [lineErrors, setLineErrors] = useState<Record<string, string>>({});
+  const [openNotes, setOpenNotes] = useState<Record<string, boolean>>({});
+  const [creatingQuote, setCreatingQuote] = useState(false);
+  const [quoteActionId, setQuoteActionId] = useState<string | null>(null);
+  const [invoiceActionId, setInvoiceActionId] = useState<string | null>(null);
   const [taskAssignments, setTaskAssignments] = useState<Record<string, string>>({});
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState('MEMBER');
@@ -109,6 +338,12 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
   const [documentKind, setDocumentKind] = useState<'Administratif' | 'Projet'>('Administratif');
   const [clientSearch, setClientSearch] = useState('');
   const [serviceSearch, setServiceSearch] = useState('');
+  const [draggingServiceId, setDraggingServiceId] = useState<string | null>(null);
+  const [dragOverServiceId, setDragOverServiceId] = useState<string | null>(null);
+  const [reordering, setReordering] = useState(false);
+  const [prestationsDraft, setPrestationsDraft] = useState('');
+  const [prestationsSaving, setPrestationsSaving] = useState(false);
+  const [prestationsError, setPrestationsError] = useState<string | null>(null);
 
   const closeModal = () => {
     setActiveSetupModal(null);
@@ -146,6 +381,12 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
     return res.data.item.clientId ?? null;
   }, [businessId, projectId]);
 
+  useEffect(() => {
+    if (!project) return;
+    setPrestationsDraft(project.prestationsText ?? '');
+    setPrestationsError(null);
+  }, [project]);
+
   const loadServices = useCallback(async () => {
     const res = await fetchJson<{ items: ServiceItem[] }>(
       `/api/pro/businesses/${businessId}/projects/${projectId}/services`
@@ -177,10 +418,54 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
     if (res.ok && res.data) setDocuments(res.data.uploads);
   }, [businessId, project?.clientId]);
 
-  const refetchAll = useCallback(async () => {
-    const cid = await loadProject();
-    await Promise.all([loadServices(), loadTasks(), loadMembers(), loadDocuments(cid)]);
-  }, [loadProject, loadServices, loadTasks, loadMembers, loadDocuments]);
+  const loadBillingSettings = useCallback(async () => {
+    const res = await fetchJson<{
+      item: {
+        defaultDepositPercent: number;
+        vatEnabled: boolean;
+        vatRatePercent: number;
+        paymentTermsDays: number;
+      };
+    }>(`/api/pro/businesses/${businessId}/settings`, { cache: 'no-store' });
+    if (!res.ok || !res.data) {
+      setBillingSettings(null);
+      return;
+    }
+    setBillingSettings({
+      defaultDepositPercent: res.data.item.defaultDepositPercent,
+      vatEnabled: res.data.item.vatEnabled,
+      vatRatePercent: res.data.item.vatRatePercent,
+      paymentTermsDays: res.data.item.paymentTermsDays,
+    });
+  }, [businessId]);
+
+  const loadQuotes = useCallback(async () => {
+    const res = await fetchJson<{ items: QuoteItem[] }>(
+      `/api/pro/businesses/${businessId}/projects/${projectId}/quotes`,
+      { cache: 'no-store' }
+    );
+    if (!res.ok || !res.data) {
+      setBillingError(res.error ?? 'Devis indisponibles.');
+      setQuotes([]);
+      return;
+    }
+    setBillingError(null);
+    setQuotes(res.data.items ?? []);
+  }, [businessId, projectId]);
+
+  const loadInvoices = useCallback(async () => {
+    const res = await fetchJson<{ items: InvoiceItem[] }>(
+      `/api/pro/businesses/${businessId}/projects/${projectId}/invoices`,
+      { cache: 'no-store' }
+    );
+    if (!res.ok || !res.data) {
+      setBillingError(res.error ?? 'Factures indisponibles.');
+      setInvoices([]);
+      return;
+    }
+    setBillingError(null);
+    setInvoices(res.data.items ?? []);
+  }, [businessId, projectId]);
 
   const loadClients = useCallback(async (q?: string) => {
     const query = q ? `?q=${encodeURIComponent(q)}` : '';
@@ -190,13 +475,47 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
     if (res.ok && res.data) setClients(res.data.items);
   }, [businessId]);
 
-  const loadCatalogServices = useCallback(async (q?: string) => {
-    const query = q ? `?q=${encodeURIComponent(q)}` : '';
-    const res = await fetchJson<{ items: ServiceItem[] }>(
-      `/api/pro/businesses/${businessId}/services${query}`
-    );
-    if (res.ok && res.data) setCatalogServices(res.data.items);
-  }, [businessId]);
+  const loadCatalogServices = useCallback(
+    async (q?: string) => {
+      const query = q ? `?q=${encodeURIComponent(q)}` : '';
+      const res = await fetchJson<{ items: CatalogService[] }>(
+        `/api/pro/businesses/${businessId}/services${query}`
+      );
+      if (res.ok && res.data) {
+        if (q) {
+          setCatalogSearchResults(res.data.items);
+        } else {
+          setCatalogServices(res.data.items);
+          setCatalogSearchResults(res.data.items);
+        }
+      }
+    },
+    [businessId]
+  );
+
+  const refetchAll = useCallback(async () => {
+    const cid = await loadProject();
+    await Promise.all([
+      loadServices(),
+      loadTasks(),
+      loadMembers(),
+      loadDocuments(cid),
+      loadQuotes(),
+      loadInvoices(),
+      loadBillingSettings(),
+      loadCatalogServices(),
+    ]);
+  }, [
+    loadBillingSettings,
+    loadCatalogServices,
+    loadDocuments,
+    loadInvoices,
+    loadMembers,
+    loadProject,
+    loadQuotes,
+    loadServices,
+    loadTasks,
+  ]);
 
   const patchProject = async (body: Record<string, unknown>) => {
     return fetchJson<{ item: ProjectDetail }>(`/api/pro/businesses/${businessId}/projects/${projectId}`, {
@@ -205,6 +524,788 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
       body: JSON.stringify(body),
     });
   };
+
+  const prestationsDirty = useMemo(() => {
+    const current = (project?.prestationsText ?? '').trim();
+    return prestationsDraft.trim() !== current;
+  }, [prestationsDraft, project?.prestationsText]);
+
+  async function handleSavePrestations() {
+    if (!project) return;
+    if (!isAdmin) {
+      setPrestationsError('Réservé aux admins/owners.');
+      return;
+    }
+    if (!prestationsDirty) return;
+    setPrestationsSaving(true);
+    setPrestationsError(null);
+    try {
+      const payload = { prestationsText: prestationsDraft.trim() || null };
+      const res = await patchProject(payload);
+      if (!res.ok) {
+        setPrestationsError(res.error ?? 'Mise à jour impossible.');
+        return;
+      }
+      setBillingInfo('Détail des prestations mis à jour.');
+      await loadProject();
+    } catch (err) {
+      setPrestationsError(getErrorMessage(err));
+    } finally {
+      setPrestationsSaving(false);
+    }
+  }
+
+  const reorderServices = useCallback(
+    (fromId: string, toId: string) => {
+      const fromIndex = services.findIndex((svc) => svc.id === fromId);
+      const toIndex = services.findIndex((svc) => svc.id === toId);
+      if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return services;
+      const next = [...services];
+      const [moved] = next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, moved);
+      return next.map((svc, index) => ({ ...svc, position: index }));
+    },
+    [services]
+  );
+
+  const persistServiceOrder = useCallback(
+    async (nextServices: ServiceItem[]) => {
+      if (!isAdmin) return;
+      setReordering(true);
+      setBillingError(null);
+      try {
+        const res = await fetchJson(
+          `/api/pro/businesses/${businessId}/projects/${projectId}/services/reorder`,
+          {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              items: nextServices.map((svc, index) => ({ id: svc.id, position: index })),
+            }),
+          }
+        );
+        if (!res.ok) {
+          setBillingError(res.error ?? 'Réorganisation impossible.');
+          await loadServices();
+          return;
+        }
+        setBillingInfo('Ordre des services mis à jour.');
+      } catch (err) {
+        setBillingError(getErrorMessage(err));
+        await loadServices();
+      } finally {
+        setReordering(false);
+      }
+    },
+    [businessId, isAdmin, loadServices, projectId]
+  );
+
+  const handleServiceDragStart = (event: DragEvent<HTMLButtonElement>, serviceId: string) => {
+    if (!isAdmin || reordering) return;
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', serviceId);
+    setDraggingServiceId(serviceId);
+    setDragOverServiceId(null);
+  };
+
+  const handleServiceDragOver = (event: DragEvent<HTMLDivElement>, serviceId: string) => {
+    if (!isAdmin || reordering) return;
+    if (!draggingServiceId || draggingServiceId === serviceId) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+    setDragOverServiceId(serviceId);
+  };
+
+  const handleServiceDrop = async (event: DragEvent<HTMLDivElement>, serviceId: string) => {
+    if (!isAdmin || reordering) return;
+    event.preventDefault();
+    const sourceId = draggingServiceId || event.dataTransfer.getData('text/plain');
+    setDragOverServiceId(null);
+    setDraggingServiceId(null);
+    if (!sourceId || sourceId === serviceId) return;
+    const next = reorderServices(sourceId, serviceId);
+    if (next === services) return;
+    setServices(next);
+    await persistServiceOrder(next);
+  };
+
+  const handleServiceDragEnd = () => {
+    setDraggingServiceId(null);
+    setDragOverServiceId(null);
+  };
+
+  async function handleMarkCompleted() {
+    if (!project) return;
+    if (!isAdmin) {
+      setActionError('Réservé aux admins/owners.');
+      return;
+    }
+    const warning = shouldWarnProjectCompletion(project.quoteStatus ?? null, project.depositStatus ?? null);
+    const confirmMessage = warning
+      ? 'Devis non signé ou acompte non validé. Marquer terminé quand même ?'
+      : 'Marquer ce projet comme terminé ?';
+    if (typeof window !== 'undefined' && !window.confirm(confirmMessage)) return;
+
+    const payload: Record<string, unknown> = { status: 'COMPLETED' };
+
+    setMarkingCompleted(true);
+    setActionError(null);
+    try {
+      const res = await patchProject(payload);
+      if (!res.ok) {
+        setActionError(res.error ?? 'Impossible de marquer le projet terminé.');
+        return;
+      }
+      await refetchAll();
+    } catch (err) {
+      setActionError(getErrorMessage(err));
+    } finally {
+      setMarkingCompleted(false);
+    }
+  }
+
+  async function handleUpdateService(serviceId: string) {
+    if (!isAdmin) {
+      setLineErrors((prev) => ({ ...prev, [serviceId]: 'Réservé aux admins/owners.' }));
+      return;
+    }
+    const draft = serviceDrafts[serviceId];
+    const existing = services.find((svc) => svc.id === serviceId);
+    if (!draft || !existing) return;
+
+    const quantityNum = Number(draft.quantity);
+    if (!Number.isFinite(quantityNum) || quantityNum <= 0) {
+      setLineErrors((prev) => ({ ...prev, [serviceId]: 'Quantité invalide.' }));
+      return;
+    }
+
+    const priceCents = draft.price.trim() ? parseEuroInput(draft.price) : null;
+    if (draft.price.trim() && priceCents == null) {
+      setLineErrors((prev) => ({ ...prev, [serviceId]: 'Prix invalide.' }));
+      return;
+    }
+
+    const payload: Record<string, unknown> = {};
+    const quantity = Math.max(1, Math.trunc(quantityNum));
+    if (quantity !== existing.quantity) payload.quantity = quantity;
+
+    const existingPrice = parseCents(existing.priceCents);
+    if (priceCents !== null && priceCents !== existingPrice) {
+      payload.priceCents = priceCents;
+    }
+
+    const description = draft.description ?? '';
+    if ((existing.description ?? existing.notes ?? '') !== description) {
+      payload.description = description;
+    }
+
+    const title = draft.title?.trim() ?? '';
+    if ((existing.titleOverride ?? '') !== title) {
+      payload.titleOverride = title || null;
+    }
+
+    const discountType = draft.discountType ?? 'NONE';
+    const discountValueRaw = draft.discountValue ? Number(draft.discountValue) : null;
+    const discountValue = Number.isFinite(discountValueRaw ?? NaN) ? Math.trunc(discountValueRaw ?? 0) : null;
+    if ((existing.discountType ?? 'NONE') !== discountType || (existing.discountValue ?? null) !== (discountValue ?? null)) {
+      payload.discountType = discountType;
+      payload.discountValue = discountValue ?? null;
+    }
+
+    const billingUnit = draft.billingUnit ?? 'ONE_OFF';
+    if ((existing.billingUnit ?? 'ONE_OFF') !== billingUnit) {
+      payload.billingUnit = billingUnit;
+    }
+
+    let unitLabel = draft.unitLabel?.trim() ?? '';
+    if (billingUnit === 'MONTHLY' && !unitLabel) {
+      unitLabel = '/mois';
+    }
+    if ((existing.unitLabel ?? '') !== unitLabel) {
+      payload.unitLabel = unitLabel || null;
+    }
+
+    if (!Object.keys(payload).length) {
+      setLineErrors((prev) => ({ ...prev, [serviceId]: 'Aucune modification.' }));
+      return;
+    }
+
+    setLineSavingId(serviceId);
+    setLineErrors((prev) => ({ ...prev, [serviceId]: '' }));
+    try {
+      const res = await fetchJson(
+        `/api/pro/businesses/${businessId}/projects/${projectId}/services/${serviceId}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        }
+      );
+      if (!res.ok) {
+        setLineErrors((prev) => ({ ...prev, [serviceId]: res.error ?? 'Mise à jour impossible.' }));
+        return;
+      }
+      setBillingInfo('Service mis à jour.');
+      await refetchAll();
+    } catch (err) {
+      setLineErrors((prev) => ({ ...prev, [serviceId]: getErrorMessage(err) }));
+    } finally {
+      setLineSavingId(null);
+    }
+  }
+
+  async function handleDeleteService(serviceId: string) {
+    if (!isAdmin) {
+      setLineErrors((prev) => ({ ...prev, [serviceId]: 'Réservé aux admins/owners.' }));
+      return;
+    }
+    const existing = services.find((svc) => svc.id === serviceId);
+    if (!existing) return;
+    const label = existing.service?.name ?? 'ce service';
+    const confirmMessage = `Supprimer "${label}" du projet ?`;
+    if (typeof window !== 'undefined' && !window.confirm(confirmMessage)) return;
+
+    setLineSavingId(serviceId);
+    setLineErrors((prev) => ({ ...prev, [serviceId]: '' }));
+    setBillingInfo(null);
+    try {
+      const res = await fetchJson(
+        `/api/pro/businesses/${businessId}/projects/${projectId}/services/${serviceId}`,
+        { method: 'DELETE' }
+      );
+      if (!res.ok) {
+        setLineErrors((prev) => ({ ...prev, [serviceId]: res.error ?? 'Suppression impossible.' }));
+        return;
+      }
+      setBillingInfo('Service supprimé.');
+      setServiceDrafts((prev) => {
+        const next = { ...prev };
+        delete next[serviceId];
+        return next;
+      });
+      setOpenNotes((prev) => {
+        const next = { ...prev };
+        delete next[serviceId];
+        return next;
+      });
+      await refetchAll();
+    } catch (err) {
+      setLineErrors((prev) => ({ ...prev, [serviceId]: getErrorMessage(err) }));
+    } finally {
+      setLineSavingId(null);
+    }
+  }
+
+  async function handleCreateQuote() {
+    if (!isAdmin) {
+      setBillingError('Réservé aux admins/owners.');
+      return;
+    }
+    if (!services.length) {
+      setBillingError('Ajoute au moins un service avant de créer un devis.');
+      return;
+    }
+    if (pricingTotals.missingCount > 0) {
+      setBillingError('Renseigne les tarifs manquants avant de créer un devis.');
+      return;
+    }
+    setCreatingQuote(true);
+    setBillingError(null);
+    setBillingInfo(null);
+    try {
+      const res = await fetchJson<{ quote: { id: string } }>(
+        `/api/pro/businesses/${businessId}/projects/${projectId}/quotes`,
+        { method: 'POST' }
+      );
+      if (!res.ok) {
+        setBillingError(res.error ?? 'Création du devis impossible.');
+        return;
+      }
+      setBillingInfo('Devis créé.');
+      await Promise.all([loadQuotes(), loadInvoices()]);
+    } catch (err) {
+      setBillingError(getErrorMessage(err));
+    } finally {
+      setCreatingQuote(false);
+    }
+  }
+
+  async function handleQuoteStatus(quoteId: string, nextStatus: 'SENT' | 'SIGNED' | 'CANCELLED' | 'EXPIRED') {
+    if (!isAdmin) {
+      setBillingError('Réservé aux admins/owners.');
+      return;
+    }
+    setQuoteActionId(quoteId);
+    setBillingError(null);
+    setBillingInfo(null);
+    try {
+      const res = await fetchJson<{ quote: QuoteItem }>(
+        `/api/pro/businesses/${businessId}/quotes/${quoteId}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: nextStatus }),
+        }
+      );
+      if (!res.ok) {
+        setBillingError(res.error ?? 'Mise à jour du devis impossible.');
+        return;
+      }
+      await loadQuotes();
+    } catch (err) {
+      setBillingError(getErrorMessage(err));
+    } finally {
+      setQuoteActionId(null);
+    }
+  }
+
+  async function handleCreateInvoice(quoteId: string) {
+    if (!isAdmin) {
+      setBillingError('Réservé aux admins/owners.');
+      return;
+    }
+    setInvoiceActionId(quoteId);
+    setBillingError(null);
+    setBillingInfo(null);
+    try {
+      const res = await fetchJson<{ invoice: { id: string } }>(
+        `/api/pro/businesses/${businessId}/quotes/${quoteId}/invoices`,
+        { method: 'POST' }
+      );
+      if (!res.ok) {
+        setBillingError(res.error ?? 'Création de la facture impossible.');
+        return;
+      }
+      setBillingInfo('Facture créée.');
+      await loadInvoices();
+    } catch (err) {
+      setBillingError(getErrorMessage(err));
+    } finally {
+      setInvoiceActionId(null);
+    }
+  }
+
+  function openStagedInvoiceModal(kind: 'DEPOSIT' | 'MID' | 'FINAL') {
+    if (!isAdmin) {
+      setBillingError('Réservé aux admins/owners.');
+      return;
+    }
+    const defaultValue =
+      kind === 'DEPOSIT' && Number.isFinite(summaryTotals.depositPercent)
+        ? String(summaryTotals.depositPercent)
+        : '';
+    setStagedInvoiceModal({ kind, mode: 'PERCENT', value: defaultValue });
+    setStagedInvoiceError(null);
+  }
+
+  function closeStagedInvoiceModal() {
+    setStagedInvoiceModal(null);
+    setStagedInvoiceError(null);
+  }
+
+  async function handleCreateStagedInvoice() {
+    if (!stagedInvoiceModal) return;
+    if (!isAdmin) {
+      setStagedInvoiceError('Réservé aux admins/owners.');
+      return;
+    }
+    if (remainingToInvoiceCents <= 0) {
+      setStagedInvoiceError('Aucun montant restant à facturer.');
+      return;
+    }
+
+    const mode = stagedInvoiceModal.kind === 'FINAL' ? 'FINAL' : stagedInvoiceModal.mode;
+    let value: number | undefined;
+    if (mode === 'PERCENT') {
+      const percent = Number(stagedInvoiceModal.value);
+      if (!Number.isFinite(percent) || percent <= 0 || percent > 100) {
+        setStagedInvoiceError('Pourcentage invalide.');
+        return;
+      }
+      value = percent;
+    } else if (mode === 'AMOUNT') {
+      const cents = parseEuroInput(stagedInvoiceModal.value);
+      if (cents == null || cents <= 0) {
+        setStagedInvoiceError('Montant invalide.');
+        return;
+      }
+      value = cents;
+    }
+
+    const previewAmount =
+      mode === 'FINAL'
+        ? remainingToInvoiceCents
+        : mode === 'PERCENT' && value != null
+          ? Math.round(summaryTotals.totalCents * (value / 100))
+          : value ?? 0;
+
+    if (previewAmount > remainingToInvoiceCents) {
+      setStagedInvoiceError('Le montant dépasse le reste à facturer.');
+      return;
+    }
+
+    setStagedInvoiceLoading(true);
+    setStagedInvoiceError(null);
+    setBillingInfo(null);
+    try {
+      const res = await fetchJson<{ invoice: { id: string } }>(
+        `/api/pro/businesses/${businessId}/projects/${projectId}/invoices/staged`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(mode === 'FINAL' ? { mode } : { mode, value }),
+        }
+      );
+      if (!res.ok) {
+        setStagedInvoiceError(res.error ?? 'Création de la facture impossible.');
+        return;
+      }
+      setBillingInfo('Facture créée.');
+      closeStagedInvoiceModal();
+      await loadInvoices();
+    } catch (err) {
+      setStagedInvoiceError(getErrorMessage(err));
+    } finally {
+      setStagedInvoiceLoading(false);
+    }
+  }
+
+  async function handleInvoiceStatus(invoiceId: string, nextStatus: 'SENT' | 'PAID' | 'CANCELLED') {
+    if (!isAdmin) {
+      setBillingError('Réservé aux admins/owners.');
+      return;
+    }
+    setInvoiceActionId(invoiceId);
+    setBillingError(null);
+    setBillingInfo(null);
+    try {
+      const res = await fetchJson<{ invoice: InvoiceItem }>(
+        `/api/pro/businesses/${businessId}/invoices/${invoiceId}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: nextStatus }),
+        }
+      );
+      if (!res.ok) {
+        setBillingError(res.error ?? 'Mise à jour de la facture impossible.');
+        return;
+      }
+      await loadInvoices();
+    } catch (err) {
+      setBillingError(getErrorMessage(err));
+    } finally {
+      setInvoiceActionId(null);
+    }
+  }
+
+  function openQuoteEditor(quote: QuoteItem) {
+    if (!isAdmin) {
+      setBillingError('Réservé aux admins/owners.');
+      return;
+    }
+    const lines = (quote.items ?? []).map(toEditableLine);
+    setQuoteEditError(null);
+    setQuoteEditor({
+      quoteId: quote.id,
+      status: quote.status,
+      number: quote.number ?? null,
+      issuedAt: toDateInput(quote.issuedAt ?? quote.createdAt),
+      expiresAt: toDateInput(quote.expiresAt),
+      note: quote.note ?? '',
+      lines,
+    });
+  }
+
+  function closeQuoteEditor() {
+    setQuoteEditor(null);
+    setQuoteEditError(null);
+  }
+
+  function addQuoteLine() {
+    if (!quoteEditor) return;
+    const nextLine: EditableLine = {
+      id: `new-${Date.now()}`,
+      label: '',
+      description: '',
+      quantity: '1',
+      unitPrice: '',
+      serviceId: null,
+      productId: null,
+    };
+    setQuoteEditor({ ...quoteEditor, lines: [...quoteEditor.lines, nextLine] });
+  }
+
+  function removeQuoteLine(lineId: string) {
+    if (!quoteEditor) return;
+    setQuoteEditor({ ...quoteEditor, lines: quoteEditor.lines.filter((line) => line.id !== lineId) });
+  }
+
+  async function handleSaveQuoteEdit() {
+    if (!quoteEditor) return;
+    if (!isAdmin) {
+      setQuoteEditError('Réservé aux admins/owners.');
+      return;
+    }
+    if (quoteEditing) return;
+
+    const editableStatus = quoteEditor.status === 'DRAFT' || quoteEditor.status === 'SENT';
+    const canEditLines = quoteEditor.status === 'DRAFT';
+    if (!editableStatus) {
+      setQuoteEditError('Devis signé/annulé: modification interdite.');
+      return;
+    }
+
+    const payload: Record<string, unknown> = {};
+    const issuedAt = quoteEditor.issuedAt ? new Date(quoteEditor.issuedAt).toISOString() : null;
+    const expiresAt = quoteEditor.expiresAt ? new Date(quoteEditor.expiresAt).toISOString() : null;
+    payload.issuedAt = issuedAt;
+    payload.expiresAt = expiresAt;
+    payload.note = quoteEditor.note.trim() || null;
+
+    if (canEditLines) {
+      if (!quoteEditor.lines.length) {
+        setQuoteEditError('Ajoute au moins une ligne.');
+        return;
+      }
+      const items = [];
+      for (const line of quoteEditor.lines) {
+        const label = line.label.trim();
+        if (!label) {
+          setQuoteEditError('Chaque ligne doit avoir un libellé.');
+          return;
+        }
+        const description = line.description.trim();
+        const qty = Number(line.quantity);
+        if (!Number.isFinite(qty) || qty <= 0) {
+          setQuoteEditError('Quantité invalide.');
+          return;
+        }
+        const unitPriceCents = parseEuroInput(line.unitPrice);
+        if (unitPriceCents == null) {
+          setQuoteEditError('Prix unitaire invalide.');
+          return;
+        }
+        items.push({
+          id: line.id,
+          label,
+          description: description || null,
+          quantity: Math.max(1, Math.trunc(qty)),
+          unitPriceCents,
+          serviceId: line.serviceId ?? null,
+        });
+      }
+      payload.items = items;
+    }
+
+    setQuoteEditing(true);
+    setQuoteEditError(null);
+    try {
+      const res = await fetchJson<{ quote: QuoteItem }>(`/api/pro/businesses/${businessId}/quotes/${quoteEditor.quoteId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        setQuoteEditError(res.error ?? 'Mise à jour impossible.');
+        return;
+      }
+      await loadQuotes();
+      setBillingInfo('Devis mis à jour.');
+      closeQuoteEditor();
+    } catch (err) {
+      setQuoteEditError(getErrorMessage(err));
+    } finally {
+      setQuoteEditing(false);
+    }
+  }
+
+  async function handleDeleteQuote(quoteId: string) {
+    if (!isAdmin) {
+      setBillingError('Réservé aux admins/owners.');
+      return;
+    }
+    if (typeof window !== 'undefined' && !window.confirm('Supprimer ce devis ? Cette action est irréversible.')) {
+      return;
+    }
+    setBillingError(null);
+    setBillingInfo(null);
+    setQuoteActionId(quoteId);
+    try {
+      const res = await fetchJson(`/api/pro/businesses/${businessId}/quotes/${quoteId}`, { method: 'DELETE' });
+      if (!res.ok) {
+        setBillingError(res.error ?? 'Suppression impossible.');
+        return;
+      }
+      await loadQuotes();
+      setBillingInfo('Devis supprimé.');
+    } catch (err) {
+      setBillingError(getErrorMessage(err));
+    } finally {
+      setQuoteActionId(null);
+    }
+  }
+
+  async function openInvoiceEditor(invoiceId: string) {
+    if (!isAdmin) {
+      setBillingError('Réservé aux admins/owners.');
+      return;
+    }
+    setInvoiceEditError(null);
+    setInvoiceEditor(null);
+    try {
+      const res = await fetchJson<{ invoice: InvoiceDetail }>(`/api/pro/businesses/${businessId}/invoices/${invoiceId}`, {
+        cache: 'no-store',
+      });
+      if (!res.ok || !res.data) {
+        setInvoiceEditError(res.error ?? 'Facture introuvable.');
+        return;
+      }
+      const invoice = res.data.invoice;
+      setInvoiceEditor({
+        invoiceId: invoice.id,
+        status: invoice.status,
+        number: invoice.number ?? null,
+        issuedAt: toDateInput(invoice.issuedAt ?? invoice.createdAt),
+        dueAt: toDateInput(invoice.dueAt),
+        note: invoice.note ?? '',
+        lines: invoice.items.map(toEditableLine),
+      });
+    } catch (err) {
+      setInvoiceEditError(getErrorMessage(err));
+    }
+  }
+
+  function closeInvoiceEditor() {
+    setInvoiceEditor(null);
+    setInvoiceEditError(null);
+  }
+
+  function addInvoiceLine() {
+    if (!invoiceEditor) return;
+    const nextLine: EditableLine = {
+      id: `new-${Date.now()}`,
+      label: '',
+      description: '',
+      quantity: '1',
+      unitPrice: '',
+      productId: null,
+      serviceId: null,
+    };
+    setInvoiceEditor({ ...invoiceEditor, lines: [...invoiceEditor.lines, nextLine] });
+  }
+
+  function removeInvoiceLine(lineId: string) {
+    if (!invoiceEditor) return;
+    setInvoiceEditor({ ...invoiceEditor, lines: invoiceEditor.lines.filter((line) => line.id !== lineId) });
+  }
+
+  async function handleSaveInvoiceEdit() {
+    if (!invoiceEditor) return;
+    if (!isAdmin) {
+      setInvoiceEditError('Réservé aux admins/owners.');
+      return;
+    }
+    if (invoiceEditing) return;
+
+    const canEditLines = invoiceEditor.status === 'DRAFT';
+    const editableStatus = invoiceEditor.status === 'DRAFT' || invoiceEditor.status === 'SENT';
+    if (!editableStatus) {
+      setInvoiceEditError('Facture payée/annulée: modification interdite.');
+      return;
+    }
+
+    const payload: Record<string, unknown> = {};
+    payload.issuedAt = invoiceEditor.issuedAt ? new Date(invoiceEditor.issuedAt).toISOString() : null;
+    payload.dueAt = invoiceEditor.dueAt ? new Date(invoiceEditor.dueAt).toISOString() : null;
+    payload.note = invoiceEditor.note.trim() || null;
+
+    if (canEditLines) {
+      if (!invoiceEditor.lines.length) {
+        setInvoiceEditError('Ajoute au moins une ligne.');
+        return;
+      }
+      const lineItems = [];
+      for (const line of invoiceEditor.lines) {
+        const label = line.label.trim();
+        if (!label) {
+          setInvoiceEditError('Chaque ligne doit avoir un libellé.');
+          return;
+        }
+        const description = line.description.trim();
+        const qty = Number(line.quantity);
+        if (!Number.isFinite(qty) || qty <= 0) {
+          setInvoiceEditError('Quantité invalide.');
+          return;
+        }
+        const unitPriceCents = parseEuroInput(line.unitPrice);
+        if (unitPriceCents == null) {
+          setInvoiceEditError('Prix unitaire invalide.');
+          return;
+        }
+        lineItems.push({
+          id: line.id,
+          label,
+          description: description || null,
+          quantity: Math.max(1, Math.trunc(qty)),
+          unitPriceCents,
+          productId: line.productId ?? null,
+          serviceId: line.serviceId ?? null,
+        });
+      }
+      payload.lineItems = lineItems;
+    }
+
+    setInvoiceEditing(true);
+    setInvoiceEditError(null);
+    try {
+      const res = await fetchJson<{ invoice: InvoiceItem }>(
+        `/api/pro/businesses/${businessId}/invoices/${invoiceEditor.invoiceId}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        }
+      );
+      if (!res.ok) {
+        setInvoiceEditError(res.error ?? 'Mise à jour impossible.');
+        return;
+      }
+      await loadInvoices();
+      setBillingInfo('Facture mise à jour.');
+      closeInvoiceEditor();
+    } catch (err) {
+      setInvoiceEditError(getErrorMessage(err));
+    } finally {
+      setInvoiceEditing(false);
+    }
+  }
+
+  async function handleDeleteInvoice(invoiceId: string) {
+    if (!isAdmin) {
+      setBillingError('Réservé aux admins/owners.');
+      return;
+    }
+    if (typeof window !== 'undefined' && !window.confirm('Supprimer cette facture ? Cette action est irréversible.')) {
+      return;
+    }
+    setBillingError(null);
+    setBillingInfo(null);
+    setInvoiceActionId(invoiceId);
+    try {
+      const res = await fetchJson(`/api/pro/businesses/${businessId}/invoices/${invoiceId}`, { method: 'DELETE' });
+      if (!res.ok) {
+        setBillingError(res.error ?? 'Suppression impossible.');
+        return;
+      }
+      await loadInvoices();
+      setBillingInfo('Facture supprimée.');
+    } catch (err) {
+      setBillingError(getErrorMessage(err));
+    } finally {
+      setInvoiceActionId(null);
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -225,26 +1326,21 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
     };
   }, [businessId, projectId, refetchAll]);
 
-  const amountCents = useMemo(() => {
-    if (!project?.projectServices?.length) return null;
-    return project.projectServices.reduce((sum, s) => sum + Number(s.priceCents ?? 0), 0);
-  }, [project?.projectServices]);
+  const statusLabel = useMemo(() => {
+    return getProjectStatusLabelFR(project?.status ?? null);
+  }, [project?.status]);
 
-  const progressPct = useMemo(() => {
-    if (project?.tasksSummary) return project.tasksSummary.progressPct ?? 0;
-    if (!tasks.length) return 0;
-    const total = tasks.length;
-    const sum = tasks.reduce((acc, t) => acc + (t.status === 'DONE' ? 100 : t.status === 'IN_PROGRESS' ? t.progress ?? 0 : 0), 0);
-    return Math.round(sum / total);
-  }, [project?.tasksSummary, tasks]);
+  const scopeLabel = useMemo(() => {
+    return getProjectScopeLabelFR(project?.status ?? null, project?.archivedAt ?? null);
+  }, [project?.archivedAt, project?.status]);
 
-  const kpis = useMemo(() => {
-    return [
-      { label: 'Avancement', value: `${Math.min(100, Math.max(0, progressPct))}%` },
-      { label: 'Valeur', value: amountCents !== null ? formatCurrencyEUR(amountCents, { minimumFractionDigits: 0 }) : '—' },
-      { label: 'Échéance', value: formatDate(project?.endDate ?? null) },
-    ];
-  }, [amountCents, progressPct, project?.endDate]);
+  const scopeVariant = useMemo(() => {
+    return getProjectScopeVariant(project?.status ?? null, project?.archivedAt ?? null);
+  }, [project?.archivedAt, project?.status]);
+
+  const isOverdue = useMemo(() => {
+    return isProjectOverdue(project?.endDate ?? null, project?.status ?? null, project?.archivedAt ?? null);
+  }, [project?.archivedAt, project?.endDate, project?.status]);
 
   const checklistItems: ChecklistItem[] = useMemo(() => {
     const hasClient = Boolean(project?.clientId);
@@ -284,6 +1380,224 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
       tasks: tasks.filter((t) => t.projectServiceId === service.id),
     }));
   }, [services, tasks]);
+
+  useEffect(() => {
+    setServiceDrafts((prev) => {
+      const next = { ...prev };
+      const ids = new Set(services.map((svc) => svc.id));
+      for (const svc of services) {
+        if (!next[svc.id]) {
+          next[svc.id] = {
+            quantity: String(svc.quantity ?? 1),
+            price: formatEuroInput(svc.priceCents),
+            title: svc.titleOverride ?? '',
+            description: svc.description ?? svc.notes ?? '',
+            discountType: svc.discountType ?? 'NONE',
+            discountValue: svc.discountValue != null ? String(svc.discountValue) : '',
+            billingUnit: svc.billingUnit ?? 'ONE_OFF',
+            unitLabel: svc.unitLabel ?? '',
+          };
+        }
+      }
+      for (const id of Object.keys(next)) {
+        if (!ids.has(id)) delete next[id];
+      }
+      return next;
+    });
+  }, [services]);
+
+  const catalogById = useMemo(() => {
+    return new Map(catalogServices.map((svc) => [svc.id, svc]));
+  }, [catalogServices]);
+
+  const pricingLines = useMemo(() => {
+    return services.map((svc) => {
+      const draft = serviceDrafts[svc.id];
+      const quantityRaw = draft?.quantity ?? String(svc.quantity ?? 1);
+      const quantityNum = Number(quantityRaw);
+      const quantity =
+        Number.isFinite(quantityNum) && quantityNum > 0 ? Math.max(1, Math.trunc(quantityNum)) : svc.quantity ?? 1;
+      const draftPriceCents = draft?.price ? parseEuroInput(draft.price) : null;
+      const projectPriceCents = draftPriceCents ?? parseCents(svc.priceCents);
+      const catalog = catalogById.get(svc.serviceId);
+      const defaultPriceCents = parseCents(catalog?.defaultPriceCents ?? null);
+      const tjmCents = parseCents(catalog?.tjmCents ?? null);
+      const resolvedUnitCents = projectPriceCents ?? defaultPriceCents ?? tjmCents;
+      const missingPrice = resolvedUnitCents == null;
+      const discountType = draft?.discountType ?? svc.discountType ?? 'NONE';
+      const discountValueRaw = draft?.discountValue ?? (svc.discountValue != null ? String(svc.discountValue) : '');
+      const discountValueNum = discountValueRaw ? Number(discountValueRaw) : null;
+      const discountValue =
+        Number.isFinite(discountValueNum ?? NaN) ? Math.trunc(discountValueNum ?? 0) : null;
+      const applyDiscount = () => {
+        if (resolvedUnitCents == null) return { final: null, original: null };
+        if (discountType === 'PERCENT' && discountValue != null) {
+          const bounded = Math.min(100, Math.max(0, discountValue));
+          const final = Math.round(resolvedUnitCents * ((100 - bounded) / 100));
+          return { final, original: resolvedUnitCents };
+        }
+        if (discountType === 'AMOUNT' && discountValue != null) {
+          const bounded = Math.max(0, discountValue);
+          const final = Math.max(0, resolvedUnitCents - bounded);
+          return { final, original: resolvedUnitCents };
+        }
+        return { final: resolvedUnitCents, original: null };
+      };
+      const discounted = applyDiscount();
+      const unitPriceCents = discounted.final;
+      const totalCents = missingPrice || unitPriceCents == null ? 0 : unitPriceCents * quantity;
+      const billingUnit = draft?.billingUnit ?? svc.billingUnit ?? 'ONE_OFF';
+      let unitLabel = draft?.unitLabel ?? svc.unitLabel ?? '';
+      if (billingUnit === 'MONTHLY' && !unitLabel) unitLabel = '/mois';
+      return {
+        id: svc.id,
+        serviceId: svc.serviceId,
+        quantity,
+        unitPriceCents: unitPriceCents,
+        originalUnitPriceCents: discounted.original,
+        discountType,
+        discountValue: discountValue,
+        billingUnit,
+        unitLabel,
+        totalCents,
+        missingPrice,
+        priceSource: projectPriceCents
+          ? 'project'
+          : defaultPriceCents
+            ? 'default'
+            : tjmCents
+              ? 'tjm'
+              : 'missing',
+      };
+    });
+  }, [catalogById, serviceDrafts, services]);
+
+  const depositPercent = billingSettings?.defaultDepositPercent;
+  const effectiveDepositPercent = Number.isFinite(depositPercent) ? Number(depositPercent) : 0;
+  const vatEnabled = billingSettings?.vatEnabled ?? false;
+  const vatRatePercent = billingSettings?.vatRatePercent ?? 0;
+
+  const pricingTotals = useMemo(() => {
+    const totalCents = pricingLines.reduce((sum, line) => sum + (line.totalCents || 0), 0);
+    const vatCents = vatEnabled ? Math.round(totalCents * (vatRatePercent / 100)) : 0;
+    const totalTtcCents = totalCents + vatCents;
+    const depositCents = Math.round(totalCents * (effectiveDepositPercent / 100));
+    const balanceCents = totalCents - depositCents;
+    const missingCount = pricingLines.filter((line) => line.missingPrice).length;
+    return { totalCents, vatCents, totalTtcCents, depositCents, balanceCents, missingCount };
+  }, [effectiveDepositPercent, pricingLines, vatEnabled, vatRatePercent]);
+
+  const missingPriceNames = useMemo(() => {
+    return pricingLines
+      .filter((line) => line.missingPrice)
+      .map((line) => services.find((svc) => svc.id === line.id)?.service.name ?? 'Service');
+  }, [pricingLines, services]);
+
+  const signedQuote = useMemo(() => {
+    const candidates = quotes.filter((quote) => quote.status === 'SIGNED');
+    const canUseLatest =
+      project?.quoteStatus === 'SIGNED' || project?.quoteStatus === 'ACCEPTED';
+    const pool = candidates.length ? candidates : canUseLatest ? quotes : [];
+    if (!pool.length) return null;
+    return pool.sort((a, b) => {
+      const aDate = a.issuedAt ? new Date(a.issuedAt).getTime() : new Date(a.createdAt).getTime();
+      const bDate = b.issuedAt ? new Date(b.issuedAt).getTime() : new Date(b.createdAt).getTime();
+      return bDate - aDate;
+    })[0];
+  }, [project?.quoteStatus, quotes]);
+
+  const summaryTotals = useMemo(() => {
+    const signedTotal = signedQuote ? Number(signedQuote.totalCents) : null;
+    const totalCents = Number.isFinite(signedTotal ?? NaN) ? (signedTotal as number) : pricingTotals.totalCents;
+    const depositPercentValue = signedQuote?.depositPercent ?? effectiveDepositPercent;
+    const depositCents = signedQuote ? Number(signedQuote.depositCents) : pricingTotals.depositCents;
+    const balanceCents = signedQuote ? Number(signedQuote.balanceCents) : pricingTotals.balanceCents;
+    const vatCents = vatEnabled ? Math.round(totalCents * (vatRatePercent / 100)) : 0;
+    const totalTtcCents = totalCents + vatCents;
+    return {
+      totalCents,
+      vatCents,
+      totalTtcCents,
+      depositPercent: depositPercentValue,
+      depositCents,
+      balanceCents,
+      sourceLabel: signedQuote ? 'Devis signé' : 'Services projet',
+    };
+  }, [effectiveDepositPercent, pricingTotals.balanceCents, pricingTotals.depositCents, pricingTotals.totalCents, signedQuote, vatEnabled, vatRatePercent]);
+
+  const depositPercentLabel = Number.isFinite(summaryTotals.depositPercent) ? `${summaryTotals.depositPercent}%` : '—';
+  const alreadyInvoicedCents = useMemo(() => {
+    return invoices
+      .filter((inv) => inv.status !== 'CANCELLED')
+      .reduce((sum, inv) => sum + Number(inv.totalCents), 0);
+  }, [invoices]);
+  const alreadyPaidCents = useMemo(() => {
+    return invoices
+      .filter((inv) => inv.status === 'PAID')
+      .reduce((sum, inv) => sum + Number(inv.totalCents), 0);
+  }, [invoices]);
+  const remainingToInvoiceCents = Math.max(0, summaryTotals.totalCents - alreadyInvoicedCents);
+
+  const stagedMode = stagedInvoiceModal?.kind === 'FINAL' ? 'FINAL' : stagedInvoiceModal?.mode ?? 'PERCENT';
+  const stagedPercentValue =
+    stagedMode === 'PERCENT' ? Number(stagedInvoiceModal?.value ?? '') : null;
+  const stagedAmountValue =
+    stagedMode === 'AMOUNT' ? parseEuroInput(stagedInvoiceModal?.value ?? '') : null;
+  const stagedPreviewCents =
+    stagedMode === 'FINAL'
+      ? remainingToInvoiceCents
+      : stagedMode === 'PERCENT'
+        ? Number.isFinite(stagedPercentValue ?? NaN)
+          ? Math.round(summaryTotals.totalCents * ((stagedPercentValue ?? 0) / 100))
+          : 0
+        : stagedAmountValue ?? 0;
+  const stagedPreviewTooHigh = stagedPreviewCents > remainingToInvoiceCents;
+
+  const quoteEditStatus = quoteEditor?.status ?? null;
+  const canEditQuoteLines = quoteEditStatus === 'DRAFT';
+  const canEditQuoteMeta = quoteEditStatus === 'DRAFT' || quoteEditStatus === 'SENT';
+  const invoiceEditStatus = invoiceEditor?.status ?? null;
+  const canEditInvoiceLines = invoiceEditStatus === 'DRAFT';
+  const canEditInvoiceMeta = invoiceEditStatus === 'DRAFT' || invoiceEditStatus === 'SENT';
+
+  const invoiceByQuoteId = useMemo(() => {
+    const map = new Map<string, string>();
+    invoices.forEach((inv) => {
+      if (inv.quoteId) map.set(inv.quoteId, inv.id);
+    });
+    return map;
+  }, [invoices]);
+
+  const pricingByServiceId = useMemo(() => {
+    return new Map(pricingLines.map((line) => [line.id, line]));
+  }, [pricingLines]);
+
+  const amountCents = useMemo(() => {
+    if (!services.length) return null;
+    return pricingTotals.totalCents;
+  }, [pricingTotals.totalCents, services.length]);
+
+  const progressPct = useMemo(() => {
+    if (project?.tasksSummary) return project.tasksSummary.progressPct ?? 0;
+    if (!tasks.length) return 0;
+    const total = tasks.length;
+    const sum = tasks.reduce(
+      (acc, t) => acc + (t.status === 'DONE' ? 100 : t.status === 'IN_PROGRESS' ? t.progress ?? 0 : 0),
+      0
+    );
+    return Math.round(sum / total);
+  }, [project?.tasksSummary, tasks]);
+
+  const kpis = useMemo(() => {
+    return [
+      { label: 'Avancement', value: `${Math.min(100, Math.max(0, progressPct))}%` },
+      {
+        label: 'Valeur',
+        value: amountCents !== null ? formatCurrencyEUR(amountCents, { minimumFractionDigits: 0 }) : '—',
+      },
+      { label: 'Échéance', value: formatDate(project?.endDate ?? null) },
+    ];
+  }, [amountCents, progressPct, project?.endDate]);
 
   useEffect(() => {
     if (project) {
@@ -504,10 +1818,61 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
           </div>
         </div>
         <h1 className="text-xl font-semibold text-[var(--text-primary)]">{project.name ?? `Projet #${projectId}`}</h1>
-        <p className="text-sm text-[var(--text-secondary)]">
-          {project.clientName ? `Client: ${project.clientName}` : 'Projet'} · Statut: {project.status ?? '—'} · Dates: {formatDate(project.startDate)} → {formatDate(project.endDate)}
+        <p className="flex flex-wrap items-center gap-2 text-sm text-[var(--text-secondary)]">
+          <span>{project.clientName ? `Client: ${project.clientName}` : 'Projet'}</span>
+          <span aria-hidden>·</span>
+          <span>Statut: {statusLabel}</span>
+          <Badge variant={scopeVariant}>{scopeLabel}</Badge>
+          <span aria-hidden>·</span>
+          <span>
+            Dates: {formatDate(project.startDate)} → {formatDate(project.endDate)}
+          </span>
         </p>
       </div>
+
+      {isOverdue ? (
+        <Card className="rounded-2xl border border-rose-200/70 bg-rose-50/40 p-4 shadow-sm">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="space-y-1">
+              <p className="text-sm font-semibold text-[var(--text-primary)]">Date de fin dépassée</p>
+              <p className="text-xs text-[var(--text-secondary)]">
+                Terminer le projet ou repousser la fin.
+              </p>
+            </div>
+            <Badge variant="performance">En retard</Badge>
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button
+              type="button"
+              size="sm"
+              onClick={handleMarkCompleted}
+              disabled={!isAdmin || markingCompleted}
+            >
+              {markingCompleted ? 'Traitement…' : 'Marquer terminé'}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                if (!isAdmin) {
+                  setActionError('Réservé aux admins/owners.');
+                  return;
+                }
+                setActionError(null);
+                setActiveSetupModal('deadline');
+              }}
+              disabled={!isAdmin || markingCompleted}
+            >
+              Repousser
+            </Button>
+          </div>
+          {!isAdmin ? (
+            <p className="mt-2 text-xs text-[var(--text-secondary)]">Réservé aux admins/owners.</p>
+          ) : null}
+          {actionError ? <p className="mt-2 text-xs text-rose-500">{actionError}</p> : null}
+        </Card>
+      ) : null}
 
       <KpiCirclesBlock items={kpis} />
 
@@ -652,23 +2017,344 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
 
       {activeTab === 'billing' ? (
         <div className="space-y-4">
+          {billingError ? (
+            <Card className="rounded-2xl border border-rose-200/60 bg-rose-50/70 p-4 text-sm text-rose-500">
+              {billingError}
+            </Card>
+          ) : null}
+          {billingInfo ? <p className="text-sm text-emerald-500">{billingInfo}</p> : null}
+          {!isAdmin ? (
+            <p className="text-xs text-[var(--text-secondary)]">Lecture seule : réservée aux admins/owners.</p>
+          ) : null}
+
           <Card className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm space-y-3">
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-semibold text-[var(--text-primary)]">Services du projet</p>
-              <Button asChild size="sm">
-                <Link href={`/app/pro/${businessId}/services`}>Ajouter depuis catalogue</Link>
-              </Button>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <p className="text-sm font-semibold text-[var(--text-primary)]">Résumé facturation</p>
+                <p className="text-xs text-[var(--text-secondary)]">
+                  Acompte de référence : {depositPercentLabel} · Source : {summaryTotals.sourceLabel}
+                </p>
+              </div>
             </div>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+              <BillingStat label="Devis" value={getProjectQuoteStatusLabelFR(project?.quoteStatus ?? null)} />
+              <BillingStat label="Acompte" value={getProjectDepositStatusLabelFR(project?.depositStatus ?? null)} />
+              <BillingStat
+                label="Total HT"
+                value={formatCurrencyEUR(summaryTotals.totalCents, { minimumFractionDigits: 0 })}
+              />
+              <BillingStat
+                label="TVA"
+                value={
+                  vatEnabled
+                    ? formatCurrencyEUR(summaryTotals.vatCents, { minimumFractionDigits: 0 })
+                    : '—'
+                }
+              />
+              <BillingStat
+                label="Total TTC"
+                value={formatCurrencyEUR(summaryTotals.totalTtcCents, { minimumFractionDigits: 0 })}
+              />
+            </div>
+            <p className="text-xs text-[var(--text-secondary)]">
+              Acompte estimé : {formatCurrencyEUR(summaryTotals.depositCents, { minimumFractionDigits: 0 })} · Solde :{' '}
+              {formatCurrencyEUR(summaryTotals.balanceCents, { minimumFractionDigits: 0 })}
+              {` · Déjà facturé : ${formatCurrencyEUR(alreadyInvoicedCents, { minimumFractionDigits: 0 })}`}
+              {` · Déjà payé : ${formatCurrencyEUR(alreadyPaidCents, { minimumFractionDigits: 0 })}`}
+              {` · Reste : ${formatCurrencyEUR(remainingToInvoiceCents, { minimumFractionDigits: 0 })}`}
+              {billingSettings?.paymentTermsDays != null
+                ? ` · Paiement sous ${billingSettings.paymentTermsDays} jours`
+                : ''}
+              .
+            </p>
+          </Card>
+
+          <Card className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm space-y-3">
+            <div>
+              <p className="text-sm font-semibold text-[var(--text-primary)]">Détail des prestations</p>
+              <p className="text-xs text-[var(--text-secondary)]">
+                Texte narratif repris dans les devis (hors lignes tarifées).
+              </p>
+            </div>
+            <textarea
+              className="min-h-[140px] w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)]"
+              placeholder="Décris le périmètre, les livrables, les phases…"
+              value={prestationsDraft}
+              onChange={(e) => setPrestationsDraft(e.target.value)}
+              disabled={!isAdmin || prestationsSaving}
+            />
+            {prestationsError ? <p className="text-xs text-rose-500">{prestationsError}</p> : null}
+            <div className="flex flex-wrap items-center gap-2">
+              <Button size="sm" onClick={handleSavePrestations} disabled={!isAdmin || prestationsSaving || !prestationsDirty}>
+                {prestationsSaving ? 'Enregistrement…' : 'Enregistrer'}
+              </Button>
+              {!isAdmin ? <span className="text-xs text-[var(--text-secondary)]">Réservé aux admins/owners.</span> : null}
+            </div>
+          </Card>
+
+          <Card className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <p className="text-sm font-semibold text-[var(--text-primary)]">Services du projet</p>
+                <p className="text-xs text-[var(--text-secondary)]">
+                  Ajuste les quantités et tarifs avant de générer un devis.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setActiveSetupModal('services')}
+                  disabled={!isAdmin}
+                >
+                  Ajouter au projet
+                </Button>
+                <Button asChild size="sm">
+                  <Link href={`/app/pro/${businessId}/services`}>Catalogue services</Link>
+                </Button>
+              </div>
+            </div>
+
+            {pricingTotals.missingCount > 0 ? (
+              <div className="rounded-xl border border-rose-200/60 bg-rose-50/60 p-3 text-xs text-rose-500">
+                Prix manquant pour {pricingTotals.missingCount} service(s)
+                {missingPriceNames.length ? ` : ${missingPriceNames.join(', ')}.` : '.'}
+              </div>
+            ) : null}
+
             {services.length ? (
-              <div className="space-y-2 text-sm text-[var(--text-secondary)]">
-                {services.map((svc) => (
-                  <div key={svc.id} className="flex items-center justify-between rounded-lg border border-[var(--border)]/60 bg-[var(--surface-2)]/70 px-3 py-2">
-                    <span className="text-[var(--text-primary)]">{svc.service.name}</span>
-                    <span>
-                      x{svc.quantity} · {svc.priceCents ? formatCurrencyEUR(Number(svc.priceCents), { minimumFractionDigits: 0 }) : '—'}
-                    </span>
-                  </div>
-                ))}
+              <div className="space-y-3">
+                {services.map((svc) => {
+                  const draft = serviceDrafts[svc.id] ?? {
+                    quantity: String(svc.quantity ?? 1),
+                    price: formatEuroInput(svc.priceCents),
+                    title: svc.titleOverride ?? '',
+                    description: svc.description ?? svc.notes ?? '',
+                    discountType: svc.discountType ?? 'NONE',
+                    discountValue: svc.discountValue != null ? String(svc.discountValue) : '',
+                    billingUnit: svc.billingUnit ?? 'ONE_OFF',
+                    unitLabel: svc.unitLabel ?? '',
+                  };
+                  const line = pricingByServiceId.get(svc.id);
+                  const lineError = lineErrors[svc.id];
+                  const isLineSaving = lineSavingId === svc.id;
+                  const isDragOver = dragOverServiceId === svc.id && draggingServiceId !== svc.id;
+                  const catalog = catalogById.get(svc.serviceId);
+                  const durationLabel =
+                    catalog?.durationHours != null ? `${catalog.durationHours} h` : null;
+                  const unitSuffix =
+                    line?.unitLabel ?? (line?.billingUnit === 'MONTHLY' ? '/mois' : null);
+                  const priceSourceLabel =
+                    line?.priceSource === 'project'
+                      ? 'Tarif projet'
+                      : line?.priceSource === 'default'
+                        ? 'Catalogue'
+                        : line?.priceSource === 'tjm'
+                          ? 'TJM'
+                          : 'Prix manquant';
+                  return (
+                    <div
+                      key={svc.id}
+                      onDragOver={(event) => handleServiceDragOver(event, svc.id)}
+                      onDrop={(event) => void handleServiceDrop(event, svc.id)}
+                      className={`rounded-2xl border border-[var(--border)]/70 bg-[var(--surface-2)]/60 p-3 ${isDragOver ? 'ring-2 ring-[var(--focus-ring)]' : ''}`}
+                    >
+                      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                        <div className="flex min-w-0 items-start gap-3">
+                          <button
+                            type="button"
+                            className="mt-1 flex h-8 w-8 items-center justify-center rounded-full border border-[var(--border)]/70 text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                            draggable={isAdmin && !reordering}
+                            onDragStart={(event) => handleServiceDragStart(event, svc.id)}
+                            onDragEnd={handleServiceDragEnd}
+                            aria-label="Réordonner le service"
+                          >
+                            <GripVertical size={16} />
+                          </button>
+                          <div className="min-w-0 space-y-1">
+                            <p className="text-sm font-semibold text-[var(--text-primary)]">
+                              {svc.titleOverride?.trim() || svc.service.name}
+                            </p>
+                            <p className="text-xs text-[var(--text-secondary)]">{svc.service.code}</p>
+                            {durationLabel ? (
+                              <p className="text-xs text-[var(--text-secondary)]">Durée : {durationLabel}</p>
+                            ) : null}
+                            <p className="text-[11px] uppercase tracking-[0.12em] text-[var(--text-secondary)]">
+                              {priceSourceLabel}
+                            </p>
+                            {line?.missingPrice ? (
+                              <p className="text-xs text-rose-500">Prix manquant</p>
+                            ) : null}
+                          </div>
+                        </div>
+                        <div className="grid gap-2 sm:grid-cols-3">
+                          <Input
+                            type="number"
+                            min={1}
+                            aria-label="Quantité"
+                            value={draft.quantity}
+                            onChange={(e) =>
+                              setServiceDrafts((prev) => ({
+                                ...prev,
+                                [svc.id]: { ...(prev[svc.id] ?? draft), quantity: e.target.value },
+                              }))
+                            }
+                            onInput={() => setLineErrors((prev) => ({ ...prev, [svc.id]: '' }))}
+                            disabled={!isAdmin || isLineSaving}
+                            className="min-w-[110px]"
+                            placeholder="Qté"
+                          />
+                          <Input
+                            type="number"
+                            min={0}
+                            step="0.01"
+                            aria-label="Prix unitaire"
+                            value={draft.price}
+                            onChange={(e) =>
+                              setServiceDrafts((prev) => ({
+                                ...prev,
+                                [svc.id]: { ...(prev[svc.id] ?? draft), price: e.target.value },
+                              }))
+                            }
+                            onInput={() => setLineErrors((prev) => ({ ...prev, [svc.id]: '' }))}
+                            disabled={!isAdmin || isLineSaving}
+                            className="min-w-[140px]"
+                            placeholder="Prix (€)"
+                          />
+                          <div className="rounded-2xl border border-[var(--border)]/60 bg-[var(--surface)] px-3 py-2">
+                            <p className="text-[11px] uppercase tracking-[0.12em] text-[var(--text-secondary)]">
+                              Total
+                            </p>
+                            <p className="text-sm font-semibold text-[var(--text-primary)]">
+                              {formatCurrencyEUR(line?.totalCents ?? 0, { minimumFractionDigits: 0 })}
+                              {unitSuffix ? ` ${unitSuffix}` : ''}
+                            </p>
+                            {line?.originalUnitPriceCents ? (
+                              <p className="text-[11px] text-[var(--text-secondary)]">
+                                Avant remise: {formatCurrencyEUR(line.originalUnitPriceCents, { minimumFractionDigits: 0 })}
+                              </p>
+                            ) : null}
+                          </div>
+                        </div>
+                        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+                          <Input
+                            label="Libellé (optionnel)"
+                            value={draft.title}
+                            onChange={(e) =>
+                              setServiceDrafts((prev) => ({
+                                ...prev,
+                                [svc.id]: { ...(prev[svc.id] ?? draft), title: e.target.value },
+                              }))
+                            }
+                            disabled={!isAdmin || isLineSaving}
+                          />
+                          <Select
+                            label="Remise"
+                            value={draft.discountType}
+                            onChange={(e) =>
+                              setServiceDrafts((prev) => ({
+                                ...prev,
+                                [svc.id]: { ...(prev[svc.id] ?? draft), discountType: e.target.value },
+                              }))
+                            }
+                            disabled={!isAdmin || isLineSaving}
+                          >
+                            <option value="NONE">Aucune</option>
+                            <option value="PERCENT">%</option>
+                            <option value="AMOUNT">€</option>
+                          </Select>
+                          <Input
+                            label={draft.discountType === 'PERCENT' ? 'Valeur (%)' : 'Valeur (€)'}
+                            type="number"
+                            min={0}
+                            step={draft.discountType === 'PERCENT' ? '1' : '0.01'}
+                            value={draft.discountValue}
+                            onChange={(e) =>
+                              setServiceDrafts((prev) => ({
+                                ...prev,
+                                [svc.id]: { ...(prev[svc.id] ?? draft), discountValue: e.target.value },
+                              }))
+                            }
+                            disabled={!isAdmin || isLineSaving || draft.discountType === 'NONE'}
+                          />
+                          <Select
+                            label="Rythme"
+                            value={draft.billingUnit}
+                            onChange={(e) =>
+                              setServiceDrafts((prev) => ({
+                                ...prev,
+                                [svc.id]: { ...(prev[svc.id] ?? draft), billingUnit: e.target.value },
+                              }))
+                            }
+                            disabled={!isAdmin || isLineSaving}
+                          >
+                            <option value="ONE_OFF">Ponctuel</option>
+                            <option value="MONTHLY">Mensuel</option>
+                          </Select>
+                          <Input
+                            label="Unité"
+                            value={draft.unitLabel}
+                            onChange={(e) =>
+                              setServiceDrafts((prev) => ({
+                                ...prev,
+                                [svc.id]: { ...(prev[svc.id] ?? draft), unitLabel: e.target.value },
+                              }))
+                            }
+                            placeholder="/mois"
+                            disabled={!isAdmin || isLineSaving || draft.billingUnit !== 'MONTHLY'}
+                          />
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() =>
+                              setOpenNotes((prev) => ({ ...prev, [svc.id]: !prev[svc.id] }))
+                            }
+                          >
+                            Notes
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="danger"
+                            onClick={() => handleDeleteService(svc.id)}
+                            disabled={!isAdmin || isLineSaving}
+                          >
+                            Supprimer
+                          </Button>
+                          <Button
+                            size="sm"
+                            onClick={() => handleUpdateService(svc.id)}
+                            disabled={!isAdmin || isLineSaving}
+                          >
+                            {isLineSaving ? 'Enregistrement…' : 'Enregistrer'}
+                          </Button>
+                        </div>
+                      </div>
+
+                      {openNotes[svc.id] ? (
+                        <div className="mt-3 space-y-2">
+                          <label className="text-xs font-medium text-[var(--text-secondary)]">Description</label>
+                          <textarea
+                            className="w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)]"
+                            rows={3}
+                            value={draft.description}
+                            onChange={(e) =>
+                              setServiceDrafts((prev) => ({
+                                ...prev,
+                                [svc.id]: { ...(prev[svc.id] ?? draft), description: e.target.value },
+                              }))
+                            }
+                            onInput={() => setLineErrors((prev) => ({ ...prev, [svc.id]: '' }))}
+                            disabled={!isAdmin || isLineSaving}
+                          />
+                        </div>
+                      ) : null}
+
+                      {lineError ? <p className="mt-2 text-xs text-rose-500">{lineError}</p> : null}
+                    </div>
+                  );
+                })}
               </div>
             ) : (
               <GuidedCtaCard
@@ -678,30 +2364,334 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
             )}
           </Card>
 
-          <Card className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm space-y-2">
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-semibold text-[var(--text-primary)]">Devis</p>
-              <Button size="sm" disabled={!services.length}>
-                Créer un devis
+          <Card className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <p className="text-sm font-semibold text-[var(--text-primary)]">Devis</p>
+                <p className="text-xs text-[var(--text-secondary)]">Crée et gère les devis du projet.</p>
+              </div>
+              <Button
+                size="sm"
+                onClick={handleCreateQuote}
+                disabled={!services.length || pricingTotals.missingCount > 0 || creatingQuote || !isAdmin}
+              >
+                {creatingQuote ? 'Création…' : 'Créer un devis'}
               </Button>
             </div>
-            <p className="text-xs text-[var(--text-secondary)]">Aucun devis existant.</p>
+            {pricingTotals.missingCount > 0 ? (
+              <p className="text-xs text-rose-500">
+                Renseigne les tarifs manquants pour créer un devis.
+              </p>
+            ) : null}
+            {quotes.length ? (
+              <div className="space-y-2">
+                {quotes.map((quote) => {
+                  const statusLabel = getQuoteStatusLabelFR(quote.status);
+                  const dateLabel = formatDate(quote.issuedAt ?? quote.createdAt);
+                  const pdfUrl = `/api/pro/businesses/${businessId}/quotes/${quote.id}/pdf`;
+                  const canSend = quote.status === 'DRAFT';
+                  const canSign = quote.status === 'SENT';
+                  const canCancel = quote.status === 'DRAFT' || quote.status === 'SENT';
+                  const canEdit = quote.status === 'DRAFT' || quote.status === 'SENT';
+                  const canDelete = quote.status === 'DRAFT' || quote.status === 'CANCELLED' || quote.status === 'EXPIRED';
+                  const canInvoice =
+                    (quote.status === 'SENT' || quote.status === 'SIGNED') && !invoiceByQuoteId.has(quote.id);
+                  return (
+                    <div
+                      key={quote.id}
+                      className="flex flex-col gap-2 rounded-2xl border border-[var(--border)]/70 bg-[var(--surface-2)]/60 px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
+                    >
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-[var(--text-primary)]">
+                          {quote.number ?? `Devis #${quote.id}`}
+                        </p>
+                        <p className="text-xs text-[var(--text-secondary)]">
+                          {statusLabel} · {dateLabel}
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-sm font-semibold text-[var(--text-primary)]">
+                          {formatCurrencyEUR(Number(quote.totalCents), { minimumFractionDigits: 0 })}
+                        </span>
+                        <Button asChild size="sm" variant="outline">
+                          <a href={pdfUrl} target="_blank" rel="noreferrer">
+                            PDF
+                          </a>
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => openQuoteEditor(quote)}
+                          disabled={!isAdmin || !canEdit || quoteActionId === quote.id}
+                        >
+                          Modifier
+                        </Button>
+                        {canSend ? (
+                          <Button
+                            size="sm"
+                            onClick={() => handleQuoteStatus(quote.id, 'SENT')}
+                            disabled={!isAdmin || quoteActionId === quote.id}
+                          >
+                            Envoyer
+                          </Button>
+                        ) : null}
+                        {canSign ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleQuoteStatus(quote.id, 'SIGNED')}
+                            disabled={!isAdmin || quoteActionId === quote.id}
+                          >
+                            Signer
+                          </Button>
+                        ) : null}
+                        {canCancel ? (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => handleQuoteStatus(quote.id, 'CANCELLED')}
+                            disabled={!isAdmin || quoteActionId === quote.id}
+                          >
+                            Annuler
+                          </Button>
+                        ) : null}
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => handleCreateInvoice(quote.id)}
+                          disabled={!canInvoice || !isAdmin || invoiceActionId === quote.id}
+                        >
+                          {invoiceByQuoteId.has(quote.id) ? 'Facture créée' : 'Créer facture'}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => handleDeleteQuote(quote.id)}
+                          disabled={!isAdmin || !canDelete || quoteActionId === quote.id}
+                        >
+                          Supprimer
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-xs text-[var(--text-secondary)]">Aucun devis existant.</p>
+            )}
           </Card>
 
-          <Card className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm space-y-2">
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-semibold text-[var(--text-primary)]">Factures</p>
-              <Button size="sm" disabled={!services.length}>
-                Créer une facture
-              </Button>
+          <Card className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <p className="text-sm font-semibold text-[var(--text-primary)]">Factures</p>
+                <p className="text-xs text-[var(--text-secondary)]">
+                  Générées à partir des devis envoyés/signés ou en facturation par étapes.
+                </p>
+              </div>
             </div>
-            <p className="text-xs text-[var(--text-secondary)]">Aucune facture pour le moment.</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => openStagedInvoiceModal('DEPOSIT')}
+                disabled={!isAdmin || summaryTotals.totalCents <= 0}
+              >
+                Facture d’acompte
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => openStagedInvoiceModal('MID')}
+                disabled={!isAdmin || summaryTotals.totalCents <= 0}
+              >
+                Facture intermédiaire
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => openStagedInvoiceModal('FINAL')}
+                disabled={!isAdmin || remainingToInvoiceCents <= 0}
+              >
+                Facture finale
+              </Button>
+              <span className="text-xs text-[var(--text-secondary)]">
+                Reste à facturer : {formatCurrencyEUR(remainingToInvoiceCents, { minimumFractionDigits: 0 })}
+              </span>
+            </div>
+            {invoices.length ? (
+              <div className="space-y-2">
+                {invoices.map((invoice) => {
+                  const statusLabel = getInvoiceStatusLabelFR(invoice.status);
+                  const dateLabel = formatDate(invoice.issuedAt ?? invoice.createdAt);
+                  const pdfUrl = `/api/pro/businesses/${businessId}/invoices/${invoice.id}/pdf`;
+                  const detailUrl = `/app/pro/${businessId}/finances/invoices/${invoice.id}`;
+                  const canSend = invoice.status === 'DRAFT';
+                  const canPay = invoice.status === 'SENT';
+                  const canCancel = invoice.status === 'DRAFT' || invoice.status === 'SENT';
+                  const canEdit = invoice.status === 'DRAFT' || invoice.status === 'SENT';
+                  const canDelete = invoice.status === 'DRAFT' || invoice.status === 'CANCELLED';
+                  return (
+                    <div
+                      key={invoice.id}
+                      className="flex flex-col gap-2 rounded-2xl border border-[var(--border)]/70 bg-[var(--surface-2)]/60 px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
+                    >
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-[var(--text-primary)]">
+                          {invoice.number ?? `Facture #${invoice.id}`}
+                        </p>
+                        <p className="text-xs text-[var(--text-secondary)]">
+                          {statusLabel} · {dateLabel}
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-sm font-semibold text-[var(--text-primary)]">
+                          {formatCurrencyEUR(Number(invoice.totalCents), { minimumFractionDigits: 0 })}
+                        </span>
+                        <Button asChild size="sm" variant="outline">
+                          <a href={pdfUrl} target="_blank" rel="noreferrer">
+                            PDF
+                          </a>
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => openInvoiceEditor(invoice.id)}
+                          disabled={!isAdmin || !canEdit || invoiceActionId === invoice.id}
+                        >
+                          Modifier
+                        </Button>
+                        {canSend ? (
+                          <Button
+                            size="sm"
+                            onClick={() => handleInvoiceStatus(invoice.id, 'SENT')}
+                            disabled={!isAdmin || invoiceActionId === invoice.id}
+                          >
+                            Envoyer
+                          </Button>
+                        ) : null}
+                        {canPay ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleInvoiceStatus(invoice.id, 'PAID')}
+                            disabled={!isAdmin || invoiceActionId === invoice.id}
+                          >
+                            Marquer payée
+                          </Button>
+                        ) : null}
+                        {canCancel ? (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => handleInvoiceStatus(invoice.id, 'CANCELLED')}
+                            disabled={!isAdmin || invoiceActionId === invoice.id}
+                          >
+                            Annuler
+                          </Button>
+                        ) : null}
+                        <Button asChild size="sm" variant="ghost">
+                          <Link href={detailUrl}>Voir</Link>
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => handleDeleteInvoice(invoice.id)}
+                          disabled={!isAdmin || !canDelete || invoiceActionId === invoice.id}
+                        >
+                          Supprimer
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-xs text-[var(--text-secondary)]">Aucune facture pour le moment.</p>
+            )}
           </Card>
         </div>
       ) : null}
 
       {activeTab === 'files' ? (
         <div className="space-y-3">
+          <Card className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm space-y-3">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-semibold text-[var(--text-primary)]">Documents générés</p>
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="space-y-2">
+                <p className="text-[11px] uppercase tracking-[0.14em] text-[var(--text-secondary)]">Devis</p>
+                {quotes.length ? (
+                  quotes.map((quote) => {
+                    const statusLabel = getQuoteStatusLabelFR(quote.status);
+                    const dateLabel = formatDate(quote.issuedAt ?? quote.createdAt);
+                    const pdfUrl = `/api/pro/businesses/${businessId}/quotes/${quote.id}/pdf`;
+                    return (
+                      <div
+                        key={quote.id}
+                        className="flex items-center justify-between gap-2 rounded-2xl border border-[var(--border)]/60 bg-[var(--surface-2)]/60 px-3 py-2"
+                      >
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-[var(--text-primary)]">
+                            {quote.number ?? `Devis #${quote.id}`}
+                          </p>
+                          <p className="text-xs text-[var(--text-secondary)]">{statusLabel} · {dateLabel}</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-semibold text-[var(--text-primary)]">
+                            {formatCurrencyEUR(Number(quote.totalCents), { minimumFractionDigits: 0 })}
+                          </span>
+                          <Button asChild size="sm" variant="outline">
+                            <a href={pdfUrl} target="_blank" rel="noreferrer">
+                              PDF
+                            </a>
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <p className="text-xs text-[var(--text-secondary)]">Aucun devis généré.</p>
+                )}
+              </div>
+              <div className="space-y-2">
+                <p className="text-[11px] uppercase tracking-[0.14em] text-[var(--text-secondary)]">Factures</p>
+                {invoices.length ? (
+                  invoices.map((invoice) => {
+                    const statusLabel = getInvoiceStatusLabelFR(invoice.status);
+                    const dateLabel = formatDate(invoice.issuedAt ?? invoice.createdAt);
+                    const pdfUrl = `/api/pro/businesses/${businessId}/invoices/${invoice.id}/pdf`;
+                    return (
+                      <div
+                        key={invoice.id}
+                        className="flex items-center justify-between gap-2 rounded-2xl border border-[var(--border)]/60 bg-[var(--surface-2)]/60 px-3 py-2"
+                      >
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-[var(--text-primary)]">
+                            {invoice.number ?? `Facture #${invoice.id}`}
+                          </p>
+                          <p className="text-xs text-[var(--text-secondary)]">{statusLabel} · {dateLabel}</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-semibold text-[var(--text-primary)]">
+                            {formatCurrencyEUR(Number(invoice.totalCents), { minimumFractionDigits: 0 })}
+                          </span>
+                          <Button asChild size="sm" variant="outline">
+                            <a href={pdfUrl} target="_blank" rel="noreferrer">
+                              PDF
+                            </a>
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <p className="text-xs text-[var(--text-secondary)]">Aucune facture générée.</p>
+                )}
+              </div>
+            </div>
+          </Card>
           <Card className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm">
             <div className="flex items-center justify-between">
               <p className="text-sm font-semibold text-[var(--text-primary)]">Administratif</p>
@@ -722,6 +2712,389 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
           </Card>
         </div>
       ) : null}
+
+      <Modal
+        open={Boolean(stagedInvoiceModal)}
+        onCloseAction={closeStagedInvoiceModal}
+        title="Créer une facture d’étape"
+        description="Définis le montant à facturer pour cette étape."
+      >
+        <div className="space-y-3">
+          <p className="text-xs text-[var(--text-secondary)]">
+            Total projet : {formatCurrencyEUR(summaryTotals.totalCents, { minimumFractionDigits: 0 })} · Reste :{' '}
+            {formatCurrencyEUR(remainingToInvoiceCents, { minimumFractionDigits: 0 })}
+          </p>
+          {stagedInvoiceModal?.kind === 'FINAL' ? (
+            <p className="text-sm text-[var(--text-secondary)]">
+              Cette facture finalise le projet. Le montant correspond au reste à facturer.
+            </p>
+          ) : (
+            <div className="grid gap-3 md:grid-cols-2">
+              <Select
+                label="Mode de facturation"
+                value={stagedInvoiceModal?.mode ?? 'PERCENT'}
+                onChange={(e) =>
+                  setStagedInvoiceModal((prev) =>
+                    prev ? { ...prev, mode: e.target.value as 'PERCENT' | 'AMOUNT' } : prev
+                  )
+                }
+                disabled={!isAdmin || stagedInvoiceLoading}
+              >
+                <option value="PERCENT">Pourcentage</option>
+                <option value="AMOUNT">Montant fixe</option>
+              </Select>
+              <Input
+                label={stagedInvoiceModal?.mode === 'AMOUNT' ? 'Montant (€)' : 'Pourcentage (%)'}
+                type="number"
+                min={0}
+                step={stagedInvoiceModal?.mode === 'AMOUNT' ? '0.01' : '1'}
+                value={stagedInvoiceModal?.value ?? ''}
+                onChange={(e) =>
+                  setStagedInvoiceModal((prev) => (prev ? { ...prev, value: e.target.value } : prev))
+                }
+                disabled={!isAdmin || stagedInvoiceLoading}
+              />
+            </div>
+          )}
+
+          <div className="rounded-2xl border border-[var(--border)]/60 bg-[var(--surface-2)]/60 px-3 py-2">
+            <p className="text-[11px] uppercase tracking-[0.12em] text-[var(--text-secondary)]">
+              Montant estimé
+            </p>
+            <p className="text-sm font-semibold text-[var(--text-primary)]">
+              {formatCurrencyEUR(stagedPreviewCents, { minimumFractionDigits: 0 })}
+            </p>
+            {stagedPreviewTooHigh ? (
+              <p className="text-xs text-rose-500">Le montant dépasse le reste à facturer.</p>
+            ) : null}
+          </div>
+
+          {stagedInvoiceError ? <p className="text-xs text-rose-500">{stagedInvoiceError}</p> : null}
+
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" variant="outline" onClick={closeStagedInvoiceModal} disabled={stagedInvoiceLoading}>
+              Annuler
+            </Button>
+            <Button
+              type="button"
+              onClick={handleCreateStagedInvoice}
+              disabled={!isAdmin || stagedInvoiceLoading || stagedPreviewTooHigh}
+            >
+              {stagedInvoiceLoading ? 'Création…' : 'Créer la facture'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        open={Boolean(quoteEditor)}
+        onCloseAction={closeQuoteEditor}
+        title="Modifier le devis"
+        description="Mets à jour les dates, notes et lignes du devis."
+      >
+        <div className="space-y-3">
+          {!canEditQuoteMeta ? (
+            <p className="text-xs text-[var(--text-secondary)]">
+              Devis verrouillé (signé/annulé). Les modifications sont désactivées.
+            </p>
+          ) : null}
+          <div className="grid gap-3 md:grid-cols-2">
+            <Input
+              label="Émission"
+              type="date"
+              value={quoteEditor?.issuedAt ?? ''}
+              onChange={(e) =>
+                setQuoteEditor((prev) => (prev ? { ...prev, issuedAt: e.target.value } : prev))
+              }
+              disabled={!isAdmin || !canEditQuoteMeta || quoteEditing}
+            />
+            <Input
+              label="Expiration"
+              type="date"
+              value={quoteEditor?.expiresAt ?? ''}
+              onChange={(e) =>
+                setQuoteEditor((prev) => (prev ? { ...prev, expiresAt: e.target.value } : prev))
+              }
+              disabled={!isAdmin || !canEditQuoteMeta || quoteEditing}
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-sm font-medium text-[var(--text-secondary)]">Note</label>
+            <textarea
+              className="w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)]"
+              rows={3}
+              value={quoteEditor?.note ?? ''}
+              onChange={(e) =>
+                setQuoteEditor((prev) => (prev ? { ...prev, note: e.target.value } : prev))
+              }
+              disabled={!isAdmin || !canEditQuoteMeta || quoteEditing}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-semibold text-[var(--text-primary)]">Lignes</p>
+              <Button size="sm" variant="outline" onClick={addQuoteLine} disabled={!isAdmin || !canEditQuoteLines}>
+                Ajouter une ligne
+              </Button>
+            </div>
+            {quoteEditor?.lines.map((line) => (
+              <div key={line.id} className="rounded-2xl border border-[var(--border)]/70 bg-[var(--surface-2)]/60 p-3">
+                <div className="grid gap-2 md:grid-cols-[1fr_120px_140px_auto] md:items-end">
+                  <Input
+                    label="Libellé"
+                    value={line.label}
+                    onChange={(e) =>
+                      setQuoteEditor((prev) =>
+                        prev
+                          ? {
+                              ...prev,
+                              lines: prev.lines.map((l) => (l.id === line.id ? { ...l, label: e.target.value } : l)),
+                            }
+                          : prev
+                      )
+                    }
+                    disabled={!isAdmin || !canEditQuoteLines || quoteEditing}
+                  />
+                  <Input
+                    label="Qté"
+                    type="number"
+                    min={1}
+                    value={line.quantity}
+                    onChange={(e) =>
+                      setQuoteEditor((prev) =>
+                        prev
+                          ? {
+                              ...prev,
+                              lines: prev.lines.map((l) =>
+                                l.id === line.id ? { ...l, quantity: e.target.value } : l
+                              ),
+                            }
+                          : prev
+                      )
+                    }
+                    disabled={!isAdmin || !canEditQuoteLines || quoteEditing}
+                  />
+                  <Input
+                    label="Prix (€)"
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    value={line.unitPrice}
+                    onChange={(e) =>
+                      setQuoteEditor((prev) =>
+                        prev
+                          ? {
+                              ...prev,
+                              lines: prev.lines.map((l) =>
+                                l.id === line.id ? { ...l, unitPrice: e.target.value } : l
+                              ),
+                            }
+                          : prev
+                      )
+                    }
+                    disabled={!isAdmin || !canEditQuoteLines || quoteEditing}
+                  />
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => removeQuoteLine(line.id)}
+                    disabled={!isAdmin || !canEditQuoteLines || quoteEditing}
+                  >
+                    Supprimer
+                  </Button>
+                </div>
+                <div className="mt-2 space-y-1">
+                  <label className="text-xs text-[var(--text-secondary)]">Description</label>
+                  <textarea
+                    className="w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)]"
+                    rows={2}
+                    value={line.description}
+                    onChange={(e) =>
+                      setQuoteEditor((prev) =>
+                        prev
+                          ? {
+                              ...prev,
+                              lines: prev.lines.map((l) =>
+                                l.id === line.id ? { ...l, description: e.target.value } : l
+                              ),
+                            }
+                          : prev
+                      )
+                    }
+                    disabled={!isAdmin || !canEditQuoteLines || quoteEditing}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {quoteEditError ? <p className="text-sm text-rose-500">{quoteEditError}</p> : null}
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={closeQuoteEditor}>
+              Annuler
+            </Button>
+            <Button onClick={handleSaveQuoteEdit} disabled={!isAdmin || !canEditQuoteMeta || quoteEditing}>
+              {quoteEditing ? 'Enregistrement…' : 'Enregistrer'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        open={Boolean(invoiceEditor)}
+        onCloseAction={closeInvoiceEditor}
+        title="Modifier la facture"
+        description="Mets à jour les dates, notes et lignes de la facture."
+      >
+        <div className="space-y-3">
+          {!canEditInvoiceMeta ? (
+            <p className="text-xs text-[var(--text-secondary)]">
+              Facture verrouillée (payée/annulée). Les modifications sont désactivées.
+            </p>
+          ) : null}
+          <div className="grid gap-3 md:grid-cols-2">
+            <Input
+              label="Émission"
+              type="date"
+              value={invoiceEditor?.issuedAt ?? ''}
+              onChange={(e) =>
+                setInvoiceEditor((prev) => (prev ? { ...prev, issuedAt: e.target.value } : prev))
+              }
+              disabled={!isAdmin || !canEditInvoiceMeta || invoiceEditing}
+            />
+            <Input
+              label="Échéance"
+              type="date"
+              value={invoiceEditor?.dueAt ?? ''}
+              onChange={(e) =>
+                setInvoiceEditor((prev) => (prev ? { ...prev, dueAt: e.target.value } : prev))
+              }
+              disabled={!isAdmin || !canEditInvoiceMeta || invoiceEditing}
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-sm font-medium text-[var(--text-secondary)]">Note</label>
+            <textarea
+              className="w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)]"
+              rows={3}
+              value={invoiceEditor?.note ?? ''}
+              onChange={(e) =>
+                setInvoiceEditor((prev) => (prev ? { ...prev, note: e.target.value } : prev))
+              }
+              disabled={!isAdmin || !canEditInvoiceMeta || invoiceEditing}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-semibold text-[var(--text-primary)]">Lignes</p>
+              <Button size="sm" variant="outline" onClick={addInvoiceLine} disabled={!isAdmin || !canEditInvoiceLines}>
+                Ajouter une ligne
+              </Button>
+            </div>
+            {invoiceEditor?.lines.map((line) => (
+              <div key={line.id} className="rounded-2xl border border-[var(--border)]/70 bg-[var(--surface-2)]/60 p-3">
+                <div className="grid gap-2 md:grid-cols-[1fr_120px_140px_auto] md:items-end">
+                  <Input
+                    label="Libellé"
+                    value={line.label}
+                    onChange={(e) =>
+                      setInvoiceEditor((prev) =>
+                        prev
+                          ? {
+                              ...prev,
+                              lines: prev.lines.map((l) => (l.id === line.id ? { ...l, label: e.target.value } : l)),
+                            }
+                          : prev
+                      )
+                    }
+                    disabled={!isAdmin || !canEditInvoiceLines || invoiceEditing}
+                  />
+                  <Input
+                    label="Qté"
+                    type="number"
+                    min={1}
+                    value={line.quantity}
+                    onChange={(e) =>
+                      setInvoiceEditor((prev) =>
+                        prev
+                          ? {
+                              ...prev,
+                              lines: prev.lines.map((l) =>
+                                l.id === line.id ? { ...l, quantity: e.target.value } : l
+                              ),
+                            }
+                          : prev
+                      )
+                    }
+                    disabled={!isAdmin || !canEditInvoiceLines || invoiceEditing}
+                  />
+                  <Input
+                    label="Prix (€)"
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    value={line.unitPrice}
+                    onChange={(e) =>
+                      setInvoiceEditor((prev) =>
+                        prev
+                          ? {
+                              ...prev,
+                              lines: prev.lines.map((l) =>
+                                l.id === line.id ? { ...l, unitPrice: e.target.value } : l
+                              ),
+                            }
+                          : prev
+                      )
+                    }
+                    disabled={!isAdmin || !canEditInvoiceLines || invoiceEditing}
+                  />
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => removeInvoiceLine(line.id)}
+                    disabled={!isAdmin || !canEditInvoiceLines || invoiceEditing}
+                  >
+                    Supprimer
+                  </Button>
+                </div>
+                <div className="mt-2 space-y-1">
+                  <label className="text-xs text-[var(--text-secondary)]">Description</label>
+                  <textarea
+                    className="w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)]"
+                    rows={2}
+                    value={line.description}
+                    onChange={(e) =>
+                      setInvoiceEditor((prev) =>
+                        prev
+                          ? {
+                              ...prev,
+                              lines: prev.lines.map((l) =>
+                                l.id === line.id ? { ...l, description: e.target.value } : l
+                              ),
+                            }
+                          : prev
+                      )
+                    }
+                    disabled={!isAdmin || !canEditInvoiceLines || invoiceEditing}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {invoiceEditError ? <p className="text-sm text-rose-500">{invoiceEditError}</p> : null}
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={closeInvoiceEditor}>
+              Annuler
+            </Button>
+            <Button onClick={handleSaveInvoiceEdit} disabled={!isAdmin || !canEditInvoiceMeta || invoiceEditing}>
+              {invoiceEditing ? 'Enregistrement…' : 'Enregistrer'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       <Modal
         open={activeSetupModal === 'client'}
@@ -816,14 +3189,14 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
             }}
           />
           <div className="max-h-72 space-y-2 overflow-auto">
-            {catalogServices.map((svc) => (
+            {catalogSearchResults.map((svc) => (
               <div
                 key={svc.id}
                 className="flex items-center justify-between rounded-lg border border-[var(--border)]/70 px-3 py-2"
               >
                 <div className="min-w-0">
-                  <p className="text-sm font-semibold text-[var(--text-primary)]">{svc.service.name}</p>
-                  <p className="text-xs text-[var(--text-secondary)]">{svc.service.code}</p>
+                  <p className="text-sm font-semibold text-[var(--text-primary)]">{svc.name}</p>
+                  <p className="text-xs text-[var(--text-secondary)]">{svc.code}</p>
                 </div>
                 <div className="flex items-center gap-2">
                   <input
@@ -854,7 +3227,9 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
                 </div>
               </div>
             ))}
-            {catalogServices.length === 0 ? <p className="text-sm text-[var(--text-secondary)]">Aucun service trouvé.</p> : null}
+            {catalogSearchResults.length === 0 ? (
+              <p className="text-sm text-[var(--text-secondary)]">Aucun service trouvé.</p>
+            ) : null}
           </div>
           {modalError ? <p className="text-sm text-rose-500">{modalError}</p> : null}
           <div className="flex justify-end gap-2">

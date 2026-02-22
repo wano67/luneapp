@@ -4,7 +4,7 @@
   "private": true,
   "packageManager": "pnpm@10.21.0",
   "engines": {
-    "node": ">=20.19 <25"
+    "node": ">=20.19 <21"
   },
   "scripts": {
     "clean": "node -e \"const dir=process.env.NEXT_DIST_DIR||'.next';const fs=require('fs');fs.rmSync(dir,{recursive:true,force:true});fs.mkdirSync(dir,{recursive:true});\"",
@@ -30,6 +30,7 @@
     "smoke:website": "pnpm tsx scripts/smoke-website.ts",
     "smoke:services-import": "pnpm tsx scripts/smoke-services-import.ts",
     "smoke:planning": "pnpm tsx scripts/smoke-planning.ts",
+    "smoke:projects-mvp": "pnpm tsx scripts/smoke-projects-mvp.ts",
     "smoke:projects-delete-safe": "pnpm tsx scripts/smoke-projects-delete-safe.ts",
     "smoke:finance-advanced": "pnpm tsx scripts/smoke-finance-advanced.ts",
     "smoke:processes": "pnpm tsx scripts/smoke-processes.ts",
@@ -40,6 +41,7 @@
     "smoke:invoice-reservation": "pnpm tsx scripts/smoke-invoice-reservation.ts",
     "smoke:ledger": "pnpm tsx scripts/smoke-ledger.ts",
     "smoke:nav-surface": "pnpm tsx scripts/smoke-nav-surface.ts",
+    "test:project-counts": "pnpm tsx scripts/test-project-counts.ts",
     "test:accounting": "pnpm tsx scripts/test-accounting-outstanding.ts",
     "accounting:smoke": "pnpm tsx scripts/accounting-smoke.ts",
     "postinstall": "node scripts/postinstall-safe.js",

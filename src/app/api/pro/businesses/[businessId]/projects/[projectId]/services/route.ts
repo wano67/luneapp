@@ -7,6 +7,7 @@ import { badRequest, getRequestId, notFound, unauthorized, withRequestId } from 
 import { rateLimit } from '@/server/security/rateLimit';
 import { applyServiceProcessTemplateToProjectService } from '@/server/services/process/applyServiceProcessTemplate';
 import { resolveServiceUnitPriceCents } from '@/server/services/pricing';
+import { BillingUnit, DiscountType } from '@/generated/prisma';
 
 function parseId(param: string | undefined) {
   if (!param || !/^\d+$/.test(param)) return null;
@@ -60,7 +61,7 @@ export async function GET(
   const items = await prisma.projectService.findMany({
     where: { projectId: projectIdBigInt },
     include: { service: true },
-    orderBy: { createdAt: 'desc' },
+    orderBy: [{ position: 'asc' }, { createdAt: 'asc' }],
   });
 
   return withIdNoStore(
@@ -72,6 +73,13 @@ export async function GET(
         quantity: it.quantity,
         priceCents: it.priceCents?.toString() ?? null,
         notes: it.notes,
+        titleOverride: it.titleOverride ?? null,
+        description: it.description ?? null,
+        discountType: it.discountType,
+        discountValue: it.discountValue ?? null,
+        billingUnit: it.billingUnit,
+        unitLabel: it.unitLabel ?? null,
+        position: it.position,
         createdAt: it.createdAt.toISOString(),
         service: {
           id: it.service.id.toString(),
@@ -138,6 +146,46 @@ export async function POST(
   const notes = typeof body.notes === 'string' ? body.notes.trim() : undefined;
   if (notes && notes.length > 2000) return withIdNoStore(badRequest('Notes trop longues.'), requestId);
 
+  const titleOverride =
+    typeof body.titleOverride === 'string' ? body.titleOverride.trim() : undefined;
+  if (titleOverride && titleOverride.length > 200) {
+    return withIdNoStore(badRequest('Libellé trop long (200 max).'), requestId);
+  }
+
+  const description =
+    typeof body.description === 'string' ? body.description.trim() : undefined;
+  if (description && description.length > 2000) {
+    return withIdNoStore(badRequest('Description trop longue (2000 max).'), requestId);
+  }
+
+  const discountType =
+    typeof body.discountType === 'string' && Object.values(DiscountType).includes(body.discountType as DiscountType)
+      ? (body.discountType as DiscountType)
+      : DiscountType.NONE;
+  const discountValueRaw = typeof body.discountValue === 'number' && Number.isFinite(body.discountValue)
+    ? Math.trunc(body.discountValue)
+    : null;
+  const discountValue =
+    discountType === DiscountType.PERCENT
+      ? discountValueRaw == null
+        ? null
+        : Math.min(100, Math.max(0, discountValueRaw))
+      : discountType === DiscountType.AMOUNT
+        ? discountValueRaw == null
+          ? null
+          : Math.max(0, discountValueRaw)
+        : null;
+
+  const billingUnit =
+    typeof body.billingUnit === 'string' && Object.values(BillingUnit).includes(body.billingUnit as BillingUnit)
+      ? (body.billingUnit as BillingUnit)
+      : BillingUnit.ONE_OFF;
+  const unitLabel =
+    typeof body.unitLabel === 'string' ? body.unitLabel.trim() : undefined;
+  if (unitLabel && unitLabel.length > 20) {
+    return withIdNoStore(badRequest('Unité trop longue (20 max).'), requestId);
+  }
+
   const service = await prisma.service.findFirst({
     where: { id: serviceIdBigInt, businessId: businessIdBigInt },
   });
@@ -164,6 +212,13 @@ export async function POST(
     });
   }
 
+  const lastPosition = await prisma.projectService.findFirst({
+    where: { projectId: projectIdBigInt },
+    orderBy: { position: 'desc' },
+    select: { position: true },
+  });
+  const position = (lastPosition?.position ?? -1) + 1;
+
   const created = await prisma.projectService.create({
     data: {
       projectId: projectIdBigInt,
@@ -171,6 +226,13 @@ export async function POST(
       quantity,
       priceCents: resolvedPrice.source === 'missing' ? undefined : resolvedPrice.unitPriceCents,
       notes: notes || undefined,
+      titleOverride: titleOverride || undefined,
+      description: description || undefined,
+      discountType,
+      discountValue: discountValue ?? undefined,
+      billingUnit,
+      unitLabel: unitLabel || undefined,
+      position,
     },
     include: { service: true },
   });
@@ -197,6 +259,13 @@ export async function POST(
         quantity: created.quantity,
         priceCents: created.priceCents?.toString() ?? null,
         notes: created.notes,
+        titleOverride: created.titleOverride ?? null,
+        description: created.description ?? null,
+        discountType: created.discountType,
+        discountValue: created.discountValue ?? null,
+        billingUnit: created.billingUnit,
+        unitLabel: created.unitLabel ?? null,
+        position: created.position,
         createdAt: created.createdAt.toISOString(),
         service: {
           id: created.service.id.toString(),

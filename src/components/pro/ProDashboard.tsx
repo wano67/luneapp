@@ -230,7 +230,7 @@ export default function ProDashboard({ businessId }: { businessId: string }) {
         items={[
           { label: 'Solde', value: formatCurrency(net) },
           { label: 'Revenus', value: formatCurrency(income) },
-          { label: 'Projets', value: String(activeProjects) },
+          { label: 'Projets actifs', value: String(activeProjects) },
           { label: 'Tâches', value: String(openTasks) },
         ]}
       />
@@ -410,7 +410,7 @@ function HeaderMenu({ businessId }: { businessId: string }) {
   const items = [
     { label: 'Projets', href: `/app/pro/${businessId}/projects` },
     { label: 'Clients', href: `/app/pro/${businessId}/clients` },
-    { label: 'Catalogue', href: `/app/pro/${businessId}/catalog` },
+    { label: 'Catalogue services', href: `/app/pro/${businessId}/services` },
     { label: 'Finances', href: `/app/pro/${businessId}/finances` },
     { label: 'Membres', href: `/app/pro/${businessId}/settings/team` },
     { label: 'Paramètres', href: `/app/pro/${businessId}/settings` },

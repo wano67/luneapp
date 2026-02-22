@@ -10,6 +10,14 @@ type BusinessResponse = {
   id: string;
   name: string;
   websiteUrl?: string | null;
+  legalName?: string | null;
+  siret?: string | null;
+  vatNumber?: string | null;
+  addressLine1?: string | null;
+  addressLine2?: string | null;
+  postalCode?: string | null;
+  city?: string | null;
+  countryCode?: string | null;
   role?: string | null;
 };
 
@@ -29,6 +37,14 @@ export function BusinessInfoForm({ businessId }: Props) {
   const [info, setInfo] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [websiteUrl, setWebsiteUrl] = useState('');
+  const [legalName, setLegalName] = useState('');
+  const [siret, setSiret] = useState('');
+  const [vatNumber, setVatNumber] = useState('');
+  const [addressLine1, setAddressLine1] = useState('');
+  const [addressLine2, setAddressLine2] = useState('');
+  const [postalCode, setPostalCode] = useState('');
+  const [city, setCity] = useState('');
+  const [countryCode, setCountryCode] = useState('');
   const [role, setRole] = useState<string | null>(null);
 
   const canEdit = role === 'ADMIN' || role === 'OWNER';
@@ -52,6 +68,14 @@ export function BusinessInfoForm({ businessId }: Props) {
     }
     setName(res.data.name ?? '');
     setWebsiteUrl(res.data.websiteUrl ?? '');
+    setLegalName(res.data.legalName ?? '');
+    setSiret(res.data.siret ?? '');
+    setVatNumber(res.data.vatNumber ?? '');
+    setAddressLine1(res.data.addressLine1 ?? '');
+    setAddressLine2(res.data.addressLine2 ?? '');
+    setPostalCode(res.data.postalCode ?? '');
+    setCity(res.data.city ?? '');
+    setCountryCode(res.data.countryCode ?? '');
     setRole(res.data.role ?? null);
   }
 
@@ -73,6 +97,14 @@ export function BusinessInfoForm({ businessId }: Props) {
     const payload: Record<string, unknown> = {
       name: trimmedName,
       websiteUrl: websiteUrl.trim() || null,
+      legalName: legalName.trim() || null,
+      siret: siret.trim() || null,
+      vatNumber: vatNumber.trim() || null,
+      addressLine1: addressLine1.trim() || null,
+      addressLine2: addressLine2.trim() || null,
+      postalCode: postalCode.trim() || null,
+      city: city.trim() || null,
+      countryCode: countryCode.trim() || null,
     };
 
     const res = await fetchJson<PatchResponse>(`/api/pro/businesses/${businessId}`, {
@@ -92,6 +124,14 @@ export function BusinessInfoForm({ businessId }: Props) {
 
     setName(res.data.item.name ?? '');
     setWebsiteUrl(res.data.item.websiteUrl ?? '');
+    setLegalName(res.data.item.legalName ?? '');
+    setSiret(res.data.item.siret ?? '');
+    setVatNumber(res.data.item.vatNumber ?? '');
+    setAddressLine1(res.data.item.addressLine1 ?? '');
+    setAddressLine2(res.data.item.addressLine2 ?? '');
+    setPostalCode(res.data.item.postalCode ?? '');
+    setCity(res.data.item.city ?? '');
+    setCountryCode(res.data.item.countryCode ?? '');
     setInfo('Informations mises à jour.');
   }
 
@@ -118,11 +158,60 @@ export function BusinessInfoForm({ businessId }: Props) {
           required
         />
         <Input
+          label="Raison sociale"
+          value={legalName}
+          onChange={(e) => setLegalName(e.target.value)}
+          disabled={!canEdit || loading || saving}
+        />
+        <Input
           label="Site web"
           value={websiteUrl}
           onChange={(e) => setWebsiteUrl(e.target.value)}
           placeholder="https://exemple.com"
           disabled={!canEdit || loading || saving}
+        />
+        <Input
+          label="SIRET"
+          value={siret}
+          onChange={(e) => setSiret(e.target.value)}
+          disabled={!canEdit || loading || saving}
+        />
+        <Input
+          label="Numéro TVA"
+          value={vatNumber}
+          onChange={(e) => setVatNumber(e.target.value)}
+          disabled={!canEdit || loading || saving}
+        />
+        <Input
+          label="Adresse"
+          value={addressLine1}
+          onChange={(e) => setAddressLine1(e.target.value)}
+          disabled={!canEdit || loading || saving}
+        />
+        <Input
+          label="Complément d’adresse"
+          value={addressLine2}
+          onChange={(e) => setAddressLine2(e.target.value)}
+          disabled={!canEdit || loading || saving}
+        />
+        <Input
+          label="Code postal"
+          value={postalCode}
+          onChange={(e) => setPostalCode(e.target.value)}
+          disabled={!canEdit || loading || saving}
+        />
+        <Input
+          label="Ville"
+          value={city}
+          onChange={(e) => setCity(e.target.value)}
+          disabled={!canEdit || loading || saving}
+        />
+        <Input
+          label="Pays (ISO)"
+          value={countryCode}
+          onChange={(e) => setCountryCode(e.target.value)}
+          disabled={!canEdit || loading || saving}
+          placeholder="FR"
         />
         <div className="md:col-span-2 flex flex-wrap gap-2">
           <Button type="submit" disabled={!canEdit || saving || loading}>

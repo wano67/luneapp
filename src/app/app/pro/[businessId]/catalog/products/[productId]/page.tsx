@@ -1,8 +1,8 @@
-import { ProductDetailPage } from '@/components/pro/catalog/ProductDetailPage';
+import { redirect } from 'next/navigation';
 
 type Props = { params: Promise<{ businessId: string; productId: string }> };
 
 export default async function ProductDetailRoute({ params }: Props) {
   const { businessId, productId } = await params;
-  return <ProductDetailPage businessId={businessId} productId={productId} />;
+  redirect(`/app/pro/${businessId}/stock/${productId}`);
 }

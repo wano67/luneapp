@@ -47,6 +47,11 @@ function serialize(settings: {
   ledgerSalesAccountCode: string;
   ledgerVatCollectedAccountCode: string;
   ledgerCashAccountCode: string;
+  cgvText?: string | null;
+  paymentTermsText?: string | null;
+  lateFeesText?: string | null;
+  fixedIndemnityText?: string | null;
+  legalMentionsText?: string | null;
   createdAt: Date;
   updatedAt: Date;
 }) {
@@ -71,6 +76,11 @@ function serialize(settings: {
     ledgerSalesAccountCode: settings.ledgerSalesAccountCode,
     ledgerVatCollectedAccountCode: settings.ledgerVatCollectedAccountCode,
     ledgerCashAccountCode: settings.ledgerCashAccountCode,
+    cgvText: settings.cgvText ?? null,
+    paymentTermsText: settings.paymentTermsText ?? null,
+    lateFeesText: settings.lateFeesText ?? null,
+    fixedIndemnityText: settings.fixedIndemnityText ?? null,
+    legalMentionsText: settings.legalMentionsText ?? null,
     createdAt: settings.createdAt.toISOString(),
     updatedAt: settings.updatedAt.toISOString(),
   };
@@ -159,16 +169,12 @@ export async function PATCH(
 
   const invoicePrefix = str((body as Record<string, unknown>).invoicePrefix);
   if (invoicePrefix !== null) {
-    if (!invoicePrefix) return withIdNoStore(badRequest('invoicePrefix requis.'), requestId);
-    if (invoicePrefix.length > 50) return withIdNoStore(badRequest('invoicePrefix trop long (50 max).'), requestId);
-    data.invoicePrefix = invoicePrefix;
+    // Prefixes are fixed (SF-DEV / SF-FAC). Ignore updates to prevent mismatches.
   }
 
   const quotePrefix = str((body as Record<string, unknown>).quotePrefix);
   if (quotePrefix !== null) {
-    if (!quotePrefix) return withIdNoStore(badRequest('quotePrefix requis.'), requestId);
-    if (quotePrefix.length > 50) return withIdNoStore(badRequest('quotePrefix trop long (50 max).'), requestId);
-    data.quotePrefix = quotePrefix;
+    // Prefixes are fixed (SF-DEV / SF-FAC). Ignore updates to prevent mismatches.
   }
 
   const accountInventoryCode = str((body as Record<string, unknown>).accountInventoryCode);
@@ -238,6 +244,41 @@ export async function PATCH(
       return withIdNoStore(badRequest('paymentTermsDays doit être entre 0 et 365.'), requestId);
     }
     data.paymentTermsDays = paymentTermsDays;
+  }
+
+  const readLongText = (value: unknown, label: string) => {
+    if (value == null || value === '') return null;
+    if (typeof value !== 'string') {
+      throw new Error(`${label} invalide.`);
+    }
+    const trimmed = value.trim();
+    if (trimmed.length > 5000) {
+      throw new Error(`${label} trop long (5000 max).`);
+    }
+    return trimmed || null;
+  };
+
+  try {
+    if (Object.prototype.hasOwnProperty.call(body, 'cgvText')) {
+      data.cgvText = readLongText((body as Record<string, unknown>).cgvText, 'cgvText');
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'paymentTermsText')) {
+      data.paymentTermsText = readLongText((body as Record<string, unknown>).paymentTermsText, 'paymentTermsText');
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'lateFeesText')) {
+      data.lateFeesText = readLongText((body as Record<string, unknown>).lateFeesText, 'lateFeesText');
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'fixedIndemnityText')) {
+      data.fixedIndemnityText = readLongText(
+        (body as Record<string, unknown>).fixedIndemnityText,
+        'fixedIndemnityText'
+      );
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'legalMentionsText')) {
+      data.legalMentionsText = readLongText((body as Record<string, unknown>).legalMentionsText, 'legalMentionsText');
+    }
+  } catch (err) {
+    return withIdNoStore(badRequest((err as Error).message), requestId);
   }
 
   if ((body as Record<string, unknown>).enableAutoNumbering !== undefined) {

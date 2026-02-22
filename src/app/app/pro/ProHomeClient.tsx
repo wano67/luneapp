@@ -46,7 +46,8 @@ type BusinessesResponse = {
 };
 
 type ProjectsResponse = {
-  items?: Array<{ id: string; status: string }>;
+  items?: Array<{ id: string; status: string; archivedAt?: string | null }>;
+  counts?: { active: number; planned: number; inactive: number; archived: number; total: number };
 };
 
 type MembersResponse = {
@@ -212,13 +213,18 @@ export default function ProHomeClient() {
           } = {};
           try {
             const res = await fetchJson<ProjectsResponse>(
-              `/api/pro/businesses/${businessId}/projects?archived=false`,
+              `/api/pro/businesses/${businessId}/projects?scope=ALL`,
               {},
               controller.signal
             );
-            if (res.ok && res.data?.items) {
-              next.projectsTotal = res.data.items.length;
-              next.projectsInProgress = res.data.items.filter((p) => p.status === 'IN_PROGRESS').length;
+            if (res.ok && res.data) {
+              if (res.data.counts) {
+                next.projectsTotal = res.data.counts.total;
+                next.projectsInProgress = res.data.counts.active;
+              } else if (res.data.items) {
+                next.projectsTotal = res.data.items.length;
+                next.projectsInProgress = res.data.items.filter((p) => p.status === 'ACTIVE' && !p.archivedAt).length;
+              }
             }
           } catch {
             // ignore
@@ -413,7 +419,7 @@ export default function ProHomeClient() {
     );
     const projectsFallback =
       typeof overview?.totals?.projectsActiveCount === 'number' ? overview.totals.projectsActiveCount : 0;
-    entries.push({ label: 'Projets', value: String(projectsFromStats || projectsFallback) });
+    entries.push({ label: 'Projets actifs', value: String(projectsFromStats || projectsFallback) });
 
     // TODO: connecter au solde réel si/ quand dispo via API finances
     const totalNet =
@@ -516,7 +522,7 @@ export default function ProHomeClient() {
                   <span className="font-semibold text-[var(--text-primary)]">{projectsTotal}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span>En cours</span>
+                  <span>Actifs</span>
                   <span className="font-semibold text-[var(--text-primary)]">{projectsInProgress}</span>
                 </div>
               </div>
