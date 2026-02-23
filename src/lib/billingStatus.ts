@@ -28,6 +28,13 @@ const PROJECT_DEPOSIT_STATUS_LABELS: StatusLabelMap = {
   PAID: 'Payé',
 };
 
+const PAYMENT_STATUS_LABELS: StatusLabelMap = {
+  UNPAID: 'Non payée',
+  PARTIAL: 'Partielle',
+  PARTIALLY_PAID: 'Partiellement payée',
+  PAID: 'Payée',
+};
+
 function toKey(value?: string | null): string | null {
   if (!value) return null;
   return value.toUpperCase();
@@ -55,4 +62,10 @@ export function getProjectDepositStatusLabelFR(status?: string | null): string {
   const key = toKey(status);
   if (!key) return '—';
   return PROJECT_DEPOSIT_STATUS_LABELS[key] ?? status ?? '—';
+}
+
+export function getPaymentStatusLabelFR(status?: string | null): string {
+  const key = toKey(status);
+  if (!key) return '—';
+  return PAYMENT_STATUS_LABELS[key] ?? status ?? '—';
 }

@@ -74,6 +74,8 @@ export function ServiceDetailPage({ businessId, serviceId }: { businessId: strin
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
+  const [templateAutoOpened, setTemplateAutoOpened] = useState(false);
 
   const [editOpen, setEditOpen] = useState(false);
   const [templateOpen, setTemplateOpen] = useState(false);
@@ -130,6 +132,15 @@ export function ServiceDetailPage({ businessId, serviceId }: { businessId: strin
   useEffect(() => {
     void loadService();
   }, [loadService]);
+
+  useEffect(() => {
+    if (templateAutoOpened) return;
+    const shouldOpen = searchParams?.get('openTemplate') === '1';
+    if (!shouldOpen) return;
+    setTemplateOpen(true);
+    setInfo('Service créé. Ajoutez des tâches recommandées.');
+    setTemplateAutoOpened(true);
+  }, [searchParams, templateAutoOpened]);
 
   const handleTabChange = (key: string) => {
     if (!TABS.some((t) => t.key === key)) return;
@@ -353,6 +364,7 @@ export function ServiceDetailPage({ businessId, serviceId }: { businessId: strin
         <Card className="p-4 text-sm text-rose-500">{error}</Card>
       ) : (
         <div className="space-y-4">
+          {info ? <Card className="p-4 text-sm text-emerald-600">{info}</Card> : null}
           {currentTab === 'overview' ? overview : null}
           {currentTab === 'templates' ? templatesSection : null}
           {currentTab === 'settings' ? settingsPlaceholder : null}

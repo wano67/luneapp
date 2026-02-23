@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/server/db/client';
-import { BusinessReferenceType, FinanceType } from '@/generated/prisma';
+import { BusinessReferenceType, FinanceType, PaymentMethod, RecurringUnit } from '@/generated/prisma';
 import { requireAuthPro } from '@/server/auth/requireAuthPro';
 import { requireBusinessRole } from '@/server/auth/businessRole';
 import { assertSameOrigin, jsonNoStore, withNoStore } from '@/server/security/csrf';
@@ -49,6 +49,14 @@ function parseAmountCents(raw: unknown): bigint | null {
   const num = typeof raw === 'string' ? Number(raw) : raw;
   if (!Number.isFinite(num)) return null;
   return BigInt(Math.round(num * 100));
+}
+
+function parseAmountCentsDirect(raw: unknown): bigint | null {
+  if (raw === null || raw === undefined || raw === '') return null;
+  if (typeof raw !== 'number' && typeof raw !== 'string') return null;
+  const num = typeof raw === 'string' ? Number(raw) : raw;
+  if (!Number.isFinite(num)) return null;
+  return BigInt(Math.trunc(num));
 }
 
 function parseDate(value: unknown): Date | null {
@@ -149,8 +157,13 @@ function serializeFinance(finance: {
   type: FinanceType;
   amountCents: bigint;
   category: string;
+  vendor?: string | null;
+  method?: PaymentMethod | null;
+  isRecurring?: boolean;
+  recurringUnit?: RecurringUnit | null;
   date: Date;
   note: string | null;
+  deletedAt?: Date | null;
   createdAt: Date;
   updatedAt: Date;
   project?: { name: string | null } | null;
@@ -179,8 +192,13 @@ function serializeFinance(finance: {
     amountCents: finance.amountCents.toString(),
     amount: Number(finance.amountCents) / 100,
     category: finance.category,
+    vendor: finance.vendor ?? null,
+    method: finance.method ?? null,
+    isRecurring: Boolean(finance.isRecurring),
+    recurringUnit: finance.recurringUnit ?? null,
     date: finance.date.toISOString(),
     note: finance.note,
+    deletedAt: finance.deletedAt ? finance.deletedAt.toISOString() : null,
     createdAt: finance.createdAt.toISOString(),
     updatedAt: finance.updatedAt.toISOString(),
     ...(metadata ? { metadata } : {}),
@@ -249,6 +267,7 @@ export async function GET(
 
   const where = {
     businessId: businessIdBigInt,
+    deletedAt: null,
     ...(typeFilter ? { type: typeFilter } : {}),
     ...(projectIdFilter ? { projectId: projectIdFilter } : {}),
     ...(categoryParam ? { category: categoryParam } : {}),
@@ -350,7 +369,10 @@ export async function POST(
     return withIdNoStore(badRequest('type invalide.'), requestId);
   }
 
-  const amountCents = parseAmountCents((body as { amount?: unknown }).amount);
+  const amountCents =
+    (body as { amountCents?: unknown }).amountCents !== undefined
+      ? parseAmountCentsDirect((body as { amountCents?: unknown }).amountCents)
+      : parseAmountCents((body as { amount?: unknown }).amount);
   if (amountCents === null) {
     return withIdNoStore(badRequest('amount invalide.'), requestId);
   }
@@ -385,6 +407,26 @@ export async function POST(
   const note =
     'note' in body && typeof (body as { note?: unknown }).note === 'string'
       ? (body as { note?: string }).note!.trim() || null
+      : null;
+
+  const vendor =
+    'vendor' in body && typeof (body as { vendor?: unknown }).vendor === 'string'
+      ? (body as { vendor?: string }).vendor!.trim() || null
+      : null;
+
+  const methodRaw = (body as { method?: unknown }).method;
+  const method =
+    typeof methodRaw === 'string' && (Object.values(PaymentMethod) as string[]).includes(methodRaw.toUpperCase())
+      ? (methodRaw.toUpperCase() as PaymentMethod)
+      : null;
+
+  const isRecurring = (body as { isRecurring?: unknown }).isRecurring === true;
+  const recurringUnitRaw = (body as { recurringUnit?: unknown }).recurringUnit;
+  const recurringUnit =
+    isRecurring &&
+    typeof recurringUnitRaw === 'string' &&
+    (Object.values(RecurringUnit) as string[]).includes(recurringUnitRaw.toUpperCase())
+      ? (recurringUnitRaw.toUpperCase() as RecurringUnit)
       : null;
 
   const metadata = sanitizeMetadata((body as { metadata?: unknown }).metadata);
@@ -426,6 +468,10 @@ export async function POST(
       type: typeRaw,
       amountCents,
       category,
+      vendor,
+      method,
+      isRecurring,
+      recurringUnit,
       date: dateParsed,
       note: noteToStore,
       categoryReferenceId: validated.categoryId ?? undefined,

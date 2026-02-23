@@ -71,6 +71,7 @@ export async function GET(
   const finances = await prisma.finance.findMany({
     where: {
       businessId: businessIdBigInt,
+      deletedAt: null,
       date: { gte: start, lte: end },
     },
     select: { date: true, type: true, amountCents: true, category: true },

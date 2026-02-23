@@ -40,11 +40,11 @@ export async function GET(request: NextRequest) {
       where: { businessId: { in: businessIds }, ...buildProjectScopeWhere({ scope: 'ACTIVE' }) },
     }),
     prisma.finance.aggregate({
-      where: { businessId: { in: businessIds }, type: FinanceType.INCOME },
+      where: { businessId: { in: businessIds }, type: FinanceType.INCOME, deletedAt: null },
       _sum: { amountCents: true },
     }),
     prisma.finance.aggregate({
-      where: { businessId: { in: businessIds }, type: FinanceType.EXPENSE },
+      where: { businessId: { in: businessIds }, type: FinanceType.EXPENSE, deletedAt: null },
       _sum: { amountCents: true },
     }),
     prisma.task.findMany({

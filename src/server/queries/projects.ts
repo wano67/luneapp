@@ -1,5 +1,5 @@
 import { prisma } from '@/server/db/client';
-import { Prisma, ProjectStatus } from '@/generated/prisma';
+import { Prisma, ProjectStatus, TaskStatus } from '@/generated/prisma';
 
 export type ProjectScope = 'ACTIVE' | 'PLANNED' | 'INACTIVE' | 'ALL';
 
@@ -59,10 +59,11 @@ export async function getProjectCounts(args: { businessId: string }): Promise<{
   inactive: number;
   archived: number;
   total: number;
+  activeTasks: { total: number; done: number };
 }> {
   const businessId = BigInt(args.businessId);
 
-  const [active, planned, inactive, archived, total] = await Promise.all([
+  const [active, planned, inactive, archived, total, activeTasksTotal, activeTasksDone] = await Promise.all([
     prisma.project.count({
       where: buildProjectWhere({ businessId: args.businessId, scope: 'ACTIVE' }),
     }),
@@ -78,7 +79,18 @@ export async function getProjectCounts(args: { businessId: string }): Promise<{
     prisma.project.count({
       where: buildProjectWhere({ businessId: args.businessId, scope: 'ALL', includeArchived: true }),
     }),
+    prisma.task.count({
+      where: {
+        project: { businessId, status: ProjectStatus.ACTIVE, archivedAt: null },
+      },
+    }),
+    prisma.task.count({
+      where: {
+        project: { businessId, status: ProjectStatus.ACTIVE, archivedAt: null },
+        status: TaskStatus.DONE,
+      },
+    }),
   ]);
 
-  return { active, planned, inactive, archived, total };
+  return { active, planned, inactive, archived, total, activeTasks: { total: activeTasksTotal, done: activeTasksDone } };
 }

@@ -58,7 +58,8 @@ export async function GET(
   const members = await prisma.businessMembership.findMany({
     where: { businessId: businessIdBigInt },
     include: {
-      user: { select: { id: true, email: true } },
+      user: { select: { id: true, email: true, name: true } },
+      organizationUnit: { select: { id: true, name: true } },
       employeeProfile: true,
       permissions: true,
     },
@@ -68,10 +69,15 @@ export async function GET(
   return withIdNoStore(
     jsonNoStore({
       items: members.map((m) => ({
+        membershipId: m.id.toString(),
         userId: m.userId.toString(),
         email: m.user?.email ?? '',
+        name: m.user?.name ?? null,
         role: m.role,
         createdAt: m.createdAt.toISOString(),
+        organizationUnit: m.organizationUnit
+          ? { id: m.organizationUnit.id.toString(), name: m.organizationUnit.name }
+          : null,
         employeeProfile: m.employeeProfile
           ? {
               id: m.employeeProfile.id.toString(),

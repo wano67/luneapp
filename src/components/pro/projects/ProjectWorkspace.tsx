@@ -7,6 +7,7 @@ import { ArrowLeft, GripVertical } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { Alert } from '@/components/ui/alert';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Input } from '@/components/ui/input';
 import Select from '@/components/ui/select';
@@ -16,6 +17,7 @@ import { cn } from '@/lib/cn';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import {
   getInvoiceStatusLabelFR,
+  getPaymentStatusLabelFR,
   getProjectDepositStatusLabelFR,
   getProjectQuoteStatusLabelFR,
   getQuoteStatusLabelFR,
@@ -44,6 +46,7 @@ type ProjectDetail = {
   depositPaidAt?: string | null;
   billingQuoteId?: string | null;
   billingSummary?: BillingSummary | null;
+  valueCents?: string | null;
   archivedAt?: string | null;
   startDate: string | null;
   endDate: string | null;
@@ -87,6 +90,20 @@ type CatalogService = {
   durationHours: number | null;
 };
 
+type WizardLineSource = 'catalog' | 'custom';
+
+type WizardLine = {
+  id: string;
+  source: WizardLineSource;
+  serviceId?: string | null;
+  code?: string | null;
+  title: string;
+  description: string;
+  quantity: number;
+  unitPriceCents: number | null;
+  priceLocked: boolean;
+};
+
 type ServiceTemplate = {
   id: string;
   title: string;
@@ -108,9 +125,43 @@ type TaskItem = {
   progress?: number;
 };
 
-type MemberItem = { userId: string; email: string; role: string };
+type MemberItem = {
+  membershipId: string;
+  userId: string;
+  email: string;
+  name?: string | null;
+  role: string;
+  organizationUnit?: { id: string; name: string } | null;
+};
 type ClientDocument = { id: string; title: string };
 type ClientLite = { id: string; name: string; email: string | null };
+
+type ProjectAccessMember = {
+  membershipId: string;
+  user: { id: string; name: string | null; email: string | null };
+  role: string;
+  organizationUnit: { id: string; name: string } | null;
+  createdAt: string;
+  implicit?: boolean;
+};
+
+type OrganizationUnitItem = {
+  id: string;
+  name: string;
+  order: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type ActivityItem = {
+  type: 'TASK_STATUS_UPDATED';
+  taskId: string;
+  title: string;
+  status: string;
+  serviceName?: string | null;
+  occurredAt: string | null;
+  actor: { id: string; name: string | null; email: string | null } | null;
+};
 
 type BillingSummary = {
   source: 'QUOTE' | 'PRICING';
@@ -122,6 +173,7 @@ type BillingSummary = {
   balanceCents: string;
   alreadyInvoicedCents: string;
   alreadyPaidCents: string;
+  remainingToCollectCents: string;
   remainingCents: string;
 };
 
@@ -163,6 +215,10 @@ type InvoiceItem = {
   issuedAt: string | null;
   dueAt: string | null;
   paidAt: string | null;
+  paidCents?: string;
+  remainingCents?: string;
+  paymentStatus?: string | null;
+  lastPaidAt?: string | null;
   createdAt: string;
   quoteId: string | null;
 };
@@ -186,6 +242,17 @@ type InvoiceLineItem = {
   quantity: number;
   unitPriceCents: string;
   totalCents: string;
+};
+
+type PaymentItem = {
+  id: string;
+  amountCents: string;
+  paidAt: string;
+  method: string;
+  reference: string | null;
+  note: string | null;
+  createdBy?: { id: string; name?: string | null; email?: string | null } | null;
+  createdAt: string;
 };
 
 type QuoteEditorState = {
@@ -230,6 +297,52 @@ function formatDate(value: string | null) {
   }
 }
 
+function formatTaskStatus(status: string) {
+  if (status === 'DONE') return 'Terminée';
+  if (status === 'IN_PROGRESS') return 'En cours';
+  if (status === 'TODO') return 'À faire';
+  return status || '—';
+}
+
+const STATUS_BADGE_STYLES: Record<string, string> = {
+  DONE: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+  IN_PROGRESS: 'border-amber-200 bg-amber-50 text-amber-700',
+  TODO: 'border-slate-200 bg-slate-50 text-slate-700',
+};
+
+function getStatusBadgeClasses(status: string) {
+  return STATUS_BADGE_STYLES[status] ?? 'border-[var(--border)]/60 bg-[var(--surface-2)] text-[var(--text-secondary)]';
+}
+
+function getInitials(name?: string | null, email?: string | null) {
+  const base = name?.trim() || email?.split('@')[0]?.trim() || '';
+  if (!base) return '??';
+  const parts = base.split(/\s+/).filter(Boolean);
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+}
+
+function InitialsAvatar({
+  name,
+  email,
+  size = 28,
+}: {
+  name?: string | null;
+  email?: string | null;
+  size?: number;
+}) {
+  const initials = getInitials(name, email);
+  return (
+    <span
+      className="flex items-center justify-center rounded-full bg-[var(--surface-2)] text-[11px] font-semibold text-[var(--text-secondary)]"
+      style={{ width: size, height: size }}
+      aria-label={name ?? email ?? 'Utilisateur'}
+    >
+      {initials}
+    </span>
+  );
+}
+
 function toDateInput(value?: string | null) {
   if (!value) return '';
   const date = new Date(value);
@@ -257,6 +370,39 @@ function formatEuroInput(value?: string | null): string {
   const cents = parseCents(value);
   if (cents == null) return '';
   return (cents / 100).toString();
+}
+
+function getInvoicePaidCents(invoice: InvoiceItem): number {
+  const paid = invoice.paidCents != null ? Number(invoice.paidCents) : NaN;
+  if (Number.isFinite(paid)) return paid;
+  return invoice.status === 'PAID' ? Number(invoice.totalCents) : 0;
+}
+
+function getInvoiceRemainingCents(invoice: InvoiceItem): number {
+  const remaining = invoice.remainingCents != null ? Number(invoice.remainingCents) : NaN;
+  if (Number.isFinite(remaining)) return Math.max(0, remaining);
+  const paid = getInvoicePaidCents(invoice);
+  return Math.max(0, Number(invoice.totalCents) - paid);
+}
+
+function normalizePaymentStatus(value?: string | null): 'UNPAID' | 'PARTIAL' | 'PAID' | null {
+  if (!value) return null;
+  const upper = value.toUpperCase();
+  if (upper === 'PARTIALLY_PAID') return 'PARTIAL';
+  if (upper === 'PARTIAL') return 'PARTIAL';
+  if (upper === 'PAID') return 'PAID';
+  if (upper === 'UNPAID') return 'UNPAID';
+  return null;
+}
+
+function getInvoicePaymentStatus(invoice: InvoiceItem): 'UNPAID' | 'PARTIAL' | 'PAID' {
+  const normalized = normalizePaymentStatus(invoice.paymentStatus);
+  if (normalized) return normalized;
+  const paid = getInvoicePaidCents(invoice);
+  const total = Number(invoice.totalCents);
+  if (paid <= 0) return 'UNPAID';
+  if (paid >= total) return 'PAID';
+  return 'PARTIAL';
 }
 
 function toEditableLine(item: {
@@ -288,6 +434,19 @@ const UI = {
   label: 'text-[11px] uppercase tracking-[0.14em] text-[var(--text-secondary)]',
   value: 'text-sm font-semibold text-[var(--text-primary)]',
 };
+
+const PAYMENT_METHOD_LABELS: Record<string, string> = {
+  WIRE: 'Virement',
+  CARD: 'Carte',
+  CHECK: 'Chèque',
+  CASH: 'Espèces',
+  OTHER: 'Autre',
+};
+
+const WIZARD_STEPS = ['Prestations', 'Tâches', 'Résumé'] as const;
+const OVERVIEW_PREVIEW_COUNT = 3;
+const OVERVIEW_ACTIVITY_COUNT = 5;
+const OVERVIEW_MEMBERS_COUNT = 6;
 
 function SectionCard({ children, className }: { children: ReactNode; className?: string }) {
   return (
@@ -334,8 +493,12 @@ function StatCard({
         highlight ? 'border-[var(--accent-strong)]/40 bg-[var(--surface)]' : ''
       )}
     >
-      <p className={UI.label}>{label}</p>
-      <p className={cn(UI.value, highlight ? 'text-base' : '')}>{value}</p>
+      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-secondary)]">
+        {label}
+      </p>
+      <p className={cn('text-lg font-semibold text-[var(--text-primary)]', highlight ? 'text-xl' : '')}>
+        {value}
+      </p>
     </div>
   );
 }
@@ -349,7 +512,7 @@ function StatusPill({ label, value }: { label: string; value: string }) {
   );
 }
 
-function MetaItem({ label, value }: { label: string; value: string }) {
+function MetaItem({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div className="flex flex-wrap items-center gap-2 text-sm text-[var(--text-secondary)]">
       <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-secondary)]">
@@ -376,6 +539,9 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
   const [services, setServices] = useState<ServiceItem[]>([]);
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [members, setMembers] = useState<MemberItem[]>([]);
+  const [projectMembers, setProjectMembers] = useState<ProjectAccessMember[]>([]);
+  const [organizationUnits, setOrganizationUnits] = useState<OrganizationUnitItem[]>([]);
+  const [activityItems, setActivityItems] = useState<ActivityItem[]>([]);
   const [documents, setDocuments] = useState<ClientDocument[]>([]);
   const [quotes, setQuotes] = useState<QuoteItem[]>([]);
   const [invoices, setInvoices] = useState<InvoiceItem[]>([]);
@@ -409,6 +575,18 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
   const [stagedInvoiceLoading, setStagedInvoiceLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<'overview' | 'work' | 'team' | 'billing' | 'files'>('overview');
   const [statusFilter, setStatusFilter] = useState<'TODO' | 'IN_PROGRESS' | 'DONE' | 'all'>('all');
+  const [showAllServicesOverview, setShowAllServicesOverview] = useState(false);
+  const [showAllActionsOverview, setShowAllActionsOverview] = useState(false);
+  const [showAllActivity, setShowAllActivity] = useState(false);
+  const [accessModalOpen, setAccessModalOpen] = useState(false);
+  const [unitsModalOpen, setUnitsModalOpen] = useState(false);
+  const [unitDraftName, setUnitDraftName] = useState('');
+  const [unitDraftOrder, setUnitDraftOrder] = useState('0');
+  const [unitErrors, setUnitErrors] = useState<string | null>(null);
+  const [unitDrafts, setUnitDrafts] = useState<Record<string, { name: string; order: string }>>({});
+  const [accessInfo, setAccessInfo] = useState<string | null>(null);
+  const [teamInfo, setTeamInfo] = useState<string | null>(null);
+  const [taskGroupExpanded, setTaskGroupExpanded] = useState<Record<string, boolean>>({});
   const [activeSetupModal, setActiveSetupModal] = useState<
     null | 'client' | 'deadline' | 'services' | 'tasks' | 'team' | 'documents'
   >(null);
@@ -444,6 +622,35 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
   const [creatingQuote, setCreatingQuote] = useState(false);
   const [quoteActionId, setQuoteActionId] = useState<string | null>(null);
   const [invoiceActionId, setInvoiceActionId] = useState<string | null>(null);
+  const [paymentModal, setPaymentModal] = useState<{ invoice: InvoiceItem } | null>(null);
+  const [paymentItems, setPaymentItems] = useState<PaymentItem[]>([]);
+  const [paymentLoading, setPaymentLoading] = useState(false);
+  const [paymentError, setPaymentError] = useState<string | null>(null);
+  const [paymentNotice, setPaymentNotice] = useState<string | null>(null);
+  const [paymentSaving, setPaymentSaving] = useState(false);
+  const [paymentDeletingId, setPaymentDeletingId] = useState<string | null>(null);
+  const [paymentForm, setPaymentForm] = useState({
+    amount: '',
+    paidAt: '',
+    method: 'WIRE',
+    reference: '',
+    note: '',
+  });
+  const [quoteWizardOpen, setQuoteWizardOpen] = useState(false);
+  const [quoteWizardStep, setQuoteWizardStep] = useState(0);
+  const [quoteWizardLines, setQuoteWizardLines] = useState<WizardLine[]>([]);
+  const [quoteWizardSearch, setQuoteWizardSearch] = useState('');
+  const [quoteWizardGenerateTasks, setQuoteWizardGenerateTasks] = useState(true);
+  const [quoteWizardAssigneeId, setQuoteWizardAssigneeId] = useState('');
+  const [quoteWizardDueOffsetDays, setQuoteWizardDueOffsetDays] = useState('');
+  const [quoteWizardError, setQuoteWizardError] = useState<string | null>(null);
+  const [quoteWizardInfo, setQuoteWizardInfo] = useState<string | null>(null);
+  const [quoteWizardSaving, setQuoteWizardSaving] = useState(false);
+  const [quoteWizardResult, setQuoteWizardResult] = useState<{
+    quoteId: string;
+    pdfUrl: string;
+    downloadUrl: string;
+  } | null>(null);
   const [taskAssignments, setTaskAssignments] = useState<Record<string, string>>({});
   const [serviceTemplates, setServiceTemplates] = useState<Record<string, ServiceTemplate[]>>({});
   const [templatesLoading, setTemplatesLoading] = useState<Record<string, boolean>>({});
@@ -491,6 +698,12 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
   const [prestationsSaving, setPrestationsSaving] = useState(false);
   const [prestationsError, setPrestationsError] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (!paymentNotice) return;
+    const timer = setTimeout(() => setPaymentNotice(null), 3000);
+    return () => clearTimeout(timer);
+  }, [paymentNotice]);
+
   const closeModal = () => {
     setActiveSetupModal(null);
     setModalError(null);
@@ -534,6 +747,9 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
         return;
       }
       await loadTasks();
+      if (Object.prototype.hasOwnProperty.call(payload, 'status')) {
+        await loadActivity();
+      }
     } catch (err) {
       setBillingError(getErrorMessage(err));
     } finally {
@@ -581,6 +797,27 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
     const res = await fetchJson<{ items: MemberItem[] }>(`/api/pro/businesses/${businessId}/members`);
     if (res.ok && res.data) setMembers(res.data.items);
   }, [businessId]);
+
+  const loadProjectMembers = useCallback(async () => {
+    const res = await fetchJson<{ items: ProjectAccessMember[] }>(
+      `/api/pro/businesses/${businessId}/projects/${projectId}/members`
+    );
+    if (res.ok && res.data) setProjectMembers(res.data.items);
+  }, [businessId, projectId]);
+
+  const loadOrganizationUnits = useCallback(async () => {
+    const res = await fetchJson<{ items: OrganizationUnitItem[] }>(
+      `/api/pro/businesses/${businessId}/organization/units`
+    );
+    if (res.ok && res.data) setOrganizationUnits(res.data.items);
+  }, [businessId]);
+
+  const loadActivity = useCallback(async () => {
+    const res = await fetchJson<{ items: ActivityItem[] }>(
+      `/api/pro/businesses/${businessId}/projects/${projectId}/activity?limit=20`
+    );
+    if (res.ok && res.data) setActivityItems(res.data.items);
+  }, [businessId, projectId]);
 
   const loadDocuments = useCallback(async (clientIdOverride?: string | null) => {
     const clientId = clientIdOverride ?? project?.clientId;
@@ -643,6 +880,152 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
     setInvoices(res.data.items ?? []);
   }, [businessId, projectId]);
 
+  const loadPayments = useCallback(
+    async (invoiceId: string) => {
+      if (!invoiceId) return;
+      setPaymentLoading(true);
+      setPaymentError(null);
+      try {
+        const res = await fetchJson<{ items: PaymentItem[] }>(
+          `/api/pro/businesses/${businessId}/invoices/${invoiceId}/payments`,
+          { cache: 'no-store' }
+        );
+        if (!res.ok || !res.data) {
+          setPaymentError(res.error ?? 'Paiements indisponibles.');
+          setPaymentItems([]);
+          return;
+        }
+        setPaymentItems(res.data.items ?? []);
+      } catch (err) {
+        setPaymentError(getErrorMessage(err));
+        setPaymentItems([]);
+      } finally {
+        setPaymentLoading(false);
+      }
+    },
+    [businessId]
+  );
+
+  async function openPaymentModal(invoice: InvoiceItem, presetAmountCents?: number) {
+    if (!isAdmin) {
+      setBillingError('Réservé aux admins/owners.');
+      return;
+    }
+    setPaymentError(null);
+    setPaymentNotice(null);
+    setPaymentItems([]);
+    setPaymentModal({ invoice });
+    setPaymentForm({
+      amount: presetAmountCents != null ? formatEuroInput(String(presetAmountCents)) : '',
+      paidAt: new Date().toISOString().slice(0, 10),
+      method: 'WIRE',
+      reference: '',
+      note: '',
+    });
+    await loadPayments(invoice.id);
+  }
+
+  function closePaymentModal() {
+    setPaymentModal(null);
+    setPaymentItems([]);
+    setPaymentError(null);
+    setPaymentNotice(null);
+    setPaymentLoading(false);
+    setPaymentSaving(false);
+    setPaymentDeletingId(null);
+  }
+
+  function resetQuoteWizard() {
+    setQuoteWizardStep(0);
+    setQuoteWizardLines([]);
+    setQuoteWizardSearch('');
+    setQuoteWizardGenerateTasks(true);
+    setQuoteWizardAssigneeId('');
+    setQuoteWizardDueOffsetDays('');
+    setQuoteWizardError(null);
+    setQuoteWizardInfo(null);
+    setQuoteWizardResult(null);
+    setQuoteWizardSaving(false);
+  }
+
+  function openQuoteWizard() {
+    resetQuoteWizard();
+    setQuoteWizardOpen(true);
+    void loadCatalogServices();
+    void loadMembers();
+  }
+
+  function closeQuoteWizard() {
+    setQuoteWizardOpen(false);
+    resetQuoteWizard();
+  }
+
+  function createWizardLineId() {
+    if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+      return crypto.randomUUID();
+    }
+    return `wiz-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+  }
+
+  function addCatalogLine(service: CatalogService) {
+    setQuoteWizardLines((prev) => {
+      const existing = prev.find((line) => line.source === 'catalog' && line.serviceId === service.id);
+      if (existing) {
+        return prev.map((line) =>
+          line.id === existing.id ? { ...line, quantity: Math.max(1, line.quantity + 1) } : line
+        );
+      }
+      const defaultCents = service.defaultPriceCents ?? service.tjmCents;
+      const unitPriceCents = defaultCents != null ? Number(defaultCents) : null;
+      return [
+        ...prev,
+        {
+          id: createWizardLineId(),
+          source: 'catalog',
+          serviceId: service.id,
+          code: service.code,
+          title: service.name,
+          description: '',
+          quantity: 1,
+          unitPriceCents,
+          priceLocked: defaultCents != null,
+        },
+      ];
+    });
+    if (quoteWizardGenerateTasks && !serviceTemplates[service.id] && !templatesLoading[service.id]) {
+      void loadServiceTemplates(service.id);
+    }
+  }
+
+  function addCustomLine() {
+    setQuoteWizardLines((prev) => [
+      ...prev,
+      {
+        id: createWizardLineId(),
+        source: 'custom',
+        title: '',
+        description: '',
+        quantity: 1,
+        unitPriceCents: null,
+        priceLocked: false,
+      },
+    ]);
+  }
+
+  function updateWizardLine(id: string, patch: Partial<WizardLine>) {
+    setQuoteWizardLines((prev) => prev.map((line) => (line.id === id ? { ...line, ...patch } : line)));
+  }
+
+  function removeWizardLine(id: string) {
+    setQuoteWizardLines((prev) => prev.filter((line) => line.id !== id));
+  }
+
+  function buildCustomServiceCode() {
+    const stamp = Date.now().toString(36).toUpperCase();
+    const rand = Math.random().toString(36).slice(2, 6).toUpperCase();
+    return `SER-CUSTOM-${stamp}-${rand}`;
+  }
+
   const loadClients = useCallback(async (q?: string) => {
     const query = q ? `?q=${encodeURIComponent(q)}` : '';
     const res = await fetchJson<{ items: ClientLite[] }>(
@@ -691,6 +1074,9 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
       loadServices(),
       loadTasks(),
       loadMembers(),
+      loadProjectMembers(),
+      loadOrganizationUnits(),
+      loadActivity(),
       loadDocuments(cid),
       loadQuotes(),
       loadInvoices(),
@@ -703,6 +1089,9 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
     loadDocuments,
     loadInvoices,
     loadMembers,
+    loadProjectMembers,
+    loadOrganizationUnits,
+    loadActivity,
     loadProject,
     loadQuotes,
     loadServices,
@@ -1022,6 +1411,104 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
     }
   }
 
+  async function handleWizardGenerateQuote() {
+    if (!isAdmin) {
+      setQuoteWizardError('Réservé aux admins/owners.');
+      return;
+    }
+    if (!wizardCanContinue) {
+      setQuoteWizardError('Ajoute des prestations et un prix valide avant de continuer.');
+      return;
+    }
+    setQuoteWizardSaving(true);
+    setQuoteWizardError(null);
+    setQuoteWizardInfo('Ajout des prestations…');
+    try {
+      const dueOffset = quoteWizardDueOffsetDays.trim()
+        ? Math.max(0, Math.min(365, Number(quoteWizardDueOffsetDays)))
+        : null;
+      const hasDueOffset = Number.isFinite(dueOffset ?? NaN);
+      const createTasks = quoteWizardGenerateTasks;
+
+      for (const line of quoteWizardLines) {
+        let serviceId = line.serviceId ?? null;
+        if (!serviceId || line.source === 'custom') {
+          const code = buildCustomServiceCode();
+          const payload: Record<string, unknown> = {
+            code,
+            name: line.title.trim() || 'Prestation personnalisée',
+            type: 'CUSTOM',
+            description: line.description.trim() || null,
+            defaultPriceCents: line.unitPriceCents ?? 0,
+          };
+          const res = await fetchJson<CatalogService & { id: string }>(
+            `/api/pro/businesses/${businessId}/services`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload),
+            }
+          );
+          if (!res.ok || !res.data?.id) {
+            throw new Error(res.error ?? 'Création du service personnalisé impossible.');
+          }
+          serviceId = res.data.id;
+        }
+
+        const payload: Record<string, unknown> = {
+          serviceId,
+          quantity: Math.max(1, Math.trunc(line.quantity)),
+          titleOverride: line.title.trim() || undefined,
+          description: line.description.trim() || undefined,
+        };
+        if (line.unitPriceCents != null && (!line.priceLocked || line.source === 'custom')) {
+          payload.priceCents = Math.max(0, Math.trunc(line.unitPriceCents));
+        }
+        if (createTasks) {
+          payload.generateTasks = true;
+          if (quoteWizardAssigneeId) payload.taskAssigneeUserId = quoteWizardAssigneeId;
+          if (hasDueOffset) payload.taskDueOffsetDays = Math.trunc(dueOffset as number);
+        } else {
+          payload.generateTasks = false;
+        }
+
+        const addRes = await fetchJson<{ id: string }>(
+          `/api/pro/businesses/${businessId}/projects/${projectId}/services`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          }
+        );
+        if (!addRes.ok) {
+          throw new Error(addRes.error ?? 'Ajout des services au projet impossible.');
+        }
+      }
+
+      setQuoteWizardInfo('Génération du devis…');
+      const quoteRes = await fetchJson<{
+        quote: { id: string };
+        pdfUrl: string;
+        downloadUrl: string;
+      }>(`/api/pro/businesses/${businessId}/projects/${projectId}/quotes`, { method: 'POST' });
+      if (!quoteRes.ok || !quoteRes.data) {
+        throw new Error(quoteRes.error ?? 'Création du devis impossible.');
+      }
+      setQuoteWizardResult({
+        quoteId: quoteRes.data.quote.id,
+        pdfUrl: quoteRes.data.pdfUrl,
+        downloadUrl: quoteRes.data.downloadUrl,
+      });
+      setQuoteWizardInfo('Devis généré');
+      setBillingInfo('Devis généré');
+      await refetchAll();
+    } catch (err) {
+      setQuoteWizardError(getErrorMessage(err));
+    } finally {
+      setQuoteWizardSaving(false);
+    }
+  }
+
   function openCancelQuoteModal(quote: QuoteItem) {
     if (!isAdmin) {
       setBillingError('Réservé aux admins/owners.');
@@ -1237,7 +1724,7 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
     }
   }
 
-  async function handleInvoiceStatus(invoiceId: string, nextStatus: 'SENT' | 'PAID' | 'CANCELLED') {
+  async function handleInvoiceStatus(invoiceId: string, nextStatus: 'SENT' | 'CANCELLED') {
     if (!isAdmin) {
       setBillingError('Réservé aux admins/owners.');
       return;
@@ -1263,6 +1750,83 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
       setBillingError(getErrorMessage(err));
     } finally {
       setInvoiceActionId(null);
+    }
+  }
+
+  async function handleSavePayment() {
+    if (!paymentModal) return;
+    if (!isAdmin) {
+      setPaymentError('Réservé aux admins/owners.');
+      return;
+    }
+    const amountCents = parseEuroInput(paymentForm.amount);
+    if (!amountCents || amountCents <= 0) {
+      setPaymentError('Montant invalide.');
+      return;
+    }
+    setPaymentSaving(true);
+    setPaymentError(null);
+    setPaymentNotice(null);
+    setBillingInfo(null);
+    const invoice = paymentModal.invoice;
+    const remainingBefore = getInvoiceRemainingCents(invoice);
+    try {
+      const res = await fetchJson(
+        `/api/pro/businesses/${businessId}/invoices/${invoice.id}/payments`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            amountCents,
+            paidAt: paymentForm.paidAt || new Date().toISOString(),
+            method: paymentForm.method,
+            reference: paymentForm.reference || null,
+            note: paymentForm.note || null,
+          }),
+        }
+      );
+      if (!res.ok) {
+        setPaymentError(res.error ?? 'Impossible d’ajouter le paiement.');
+        return;
+      }
+      const message = amountCents >= remainingBefore ? 'Facture soldée' : 'Paiement ajouté';
+      setBillingInfo(message);
+      setPaymentNotice(message);
+      setPaymentForm((prev) => ({ ...prev, amount: '', reference: '', note: '' }));
+      await Promise.all([loadInvoices(), loadPayments(invoice.id)]);
+    } catch (err) {
+      setPaymentError(getErrorMessage(err));
+    } finally {
+      setPaymentSaving(false);
+    }
+  }
+
+  async function handleDeletePayment(paymentId: string) {
+    if (!paymentModal) return;
+    if (!isAdmin) {
+      setPaymentError('Réservé aux admins/owners.');
+      return;
+    }
+    if (!window.confirm('Supprimer ce paiement ?')) return;
+    setPaymentDeletingId(paymentId);
+    setPaymentError(null);
+    setPaymentNotice(null);
+    try {
+      const res = await fetchJson(
+        `/api/pro/businesses/${businessId}/invoices/${paymentModal.invoice.id}/payments/${paymentId}`,
+        { method: 'DELETE' }
+      );
+      if (!res.ok) {
+        setPaymentError(res.error ?? 'Suppression du paiement impossible.');
+        return;
+      }
+      setBillingInfo('Paiement supprimé');
+      setPaymentNotice('Paiement supprimé');
+      await Promise.all([loadInvoices(), loadPayments(paymentModal.invoice.id)]);
+    } catch (err) {
+      setPaymentError(getErrorMessage(err));
+    } finally {
+      setPaymentDeletingId(null);
     }
   }
 
@@ -1710,6 +2274,10 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
     return getProjectScopeVariant(project?.status ?? null, project?.archivedAt ?? null);
   }, [project?.archivedAt, project?.status]);
 
+  const showScopeBadge = useMemo(() => {
+    return scopeLabel.toLowerCase() !== statusLabel.toLowerCase();
+  }, [scopeLabel, statusLabel]);
+
   const isOverdue = useMemo(() => {
     return isProjectOverdue(project?.endDate ?? null, project?.status ?? null, project?.archivedAt ?? null);
   }, [project?.archivedAt, project?.endDate, project?.status]);
@@ -1742,8 +2310,11 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
   const upcomingTasks = useMemo(() => {
     return tasks
       .filter((t) => t.status !== 'DONE')
-      .sort((a, b) => (a.dueDate ? new Date(a.dueDate).getTime() : Infinity) - (b.dueDate ? new Date(b.dueDate).getTime() : Infinity))
-      .slice(0, 3);
+      .sort(
+        (a, b) =>
+          (a.dueDate ? new Date(a.dueDate).getTime() : Infinity) -
+          (b.dueDate ? new Date(b.dueDate).getTime() : Infinity)
+      );
   }, [tasks]);
 
   const servicesWithTasks = useMemo(() => {
@@ -1752,6 +2323,101 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
       tasks: tasks.filter((t) => t.projectServiceId === service.id),
     }));
   }, [services, tasks]);
+
+  const servicesOverview = showAllServicesOverview
+    ? servicesWithTasks
+    : servicesWithTasks.slice(0, OVERVIEW_PREVIEW_COUNT);
+  const showServicesToggle = servicesWithTasks.length > OVERVIEW_PREVIEW_COUNT;
+
+  const upcomingTasksOverview = showAllActionsOverview
+    ? upcomingTasks
+    : upcomingTasks.slice(0, OVERVIEW_PREVIEW_COUNT);
+  const showActionsToggle = upcomingTasks.length > OVERVIEW_PREVIEW_COUNT;
+
+  const activityOverview = showAllActivity
+    ? activityItems
+    : activityItems.slice(0, OVERVIEW_ACTIVITY_COUNT);
+  const showActivityToggle = activityItems.length > OVERVIEW_ACTIVITY_COUNT;
+
+  const projectMembersPreview = projectMembers.slice(0, OVERVIEW_MEMBERS_COUNT);
+  const projectMembersOverflow = Math.max(0, projectMembers.length - projectMembersPreview.length);
+  const projectMemberIds = useMemo(
+    () => new Set(projectMembers.map((member) => member.membershipId)),
+    [projectMembers]
+  );
+  const availableMembers = useMemo(
+    () =>
+      members.filter(
+        (member) =>
+          !projectMemberIds.has(member.membershipId) &&
+          member.role !== 'OWNER' &&
+          member.role !== 'ADMIN'
+      ),
+    [members, projectMemberIds]
+  );
+
+  const filteredTasks = useMemo(() => {
+    if (statusFilter === 'all') return tasks;
+    return tasks.filter((task) => task.status === statusFilter);
+  }, [statusFilter, tasks]);
+
+  const tasksByAssignee = useMemo(() => {
+    const groups = new Map<string, { label: string; name?: string | null; email?: string | null; tasks: TaskItem[] }>();
+    for (const task of filteredTasks) {
+      const key = task.assigneeUserId ?? 'unassigned';
+      const existing = groups.get(key);
+      if (!existing) {
+        const label = task.assigneeName || task.assigneeEmail || 'Non assignées';
+        groups.set(key, {
+          label,
+          name: task.assigneeName,
+          email: task.assigneeEmail,
+          tasks: [task],
+        });
+      } else {
+        existing.tasks.push(task);
+      }
+    }
+    const list = Array.from(groups.entries()).map(([key, value]) => ({
+      key,
+      ...value,
+    }));
+    list.sort((a, b) => {
+      if (a.key === 'unassigned') return -1;
+      if (b.key === 'unassigned') return 1;
+      return a.label.localeCompare(b.label);
+    });
+    return list;
+  }, [filteredTasks]);
+
+  const teamMembers = useMemo(() => {
+    if (members.length) return members;
+    return projectMembers.map<MemberItem>((member) => ({
+      membershipId: member.membershipId,
+      userId: member.user.id,
+      email: member.user.email ?? '',
+      name: member.user.name,
+      role: member.role,
+      organizationUnit: member.organizationUnit ?? null,
+    }));
+  }, [members, projectMembers]);
+
+  const membersByUnit = useMemo(() => {
+    const groups = new Map<string, { label: string; order: number; members: MemberItem[] }>();
+    for (const member of teamMembers) {
+      const unitId = member.organizationUnit?.id ?? 'none';
+      const label = member.organizationUnit?.name ?? 'Sans pôle';
+      const order = member.organizationUnit
+        ? organizationUnits.find((unit) => unit.id === member.organizationUnit?.id)?.order ?? 0
+        : Number.MAX_SAFE_INTEGER;
+      const entry = groups.get(unitId) ?? { label, order, members: [] };
+      entry.members.push(member);
+      groups.set(unitId, entry);
+    }
+    const list = Array.from(groups.entries()).map(([key, value]) => ({ key, ...value }));
+    list.sort((a, b) => a.order - b.order || a.label.localeCompare(b.label));
+    return list;
+  }, [organizationUnits, teamMembers]);
 
   const tasksByServiceId = useMemo(() => {
     return new Map(servicesWithTasks.map((entry) => [entry.service.id, entry.tasks]));
@@ -1863,6 +2529,23 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
     return { totalCents, vatCents, totalTtcCents, depositCents, balanceCents, missingCount };
   }, [effectiveDepositPercent, pricingLines, vatEnabled, vatRatePercent]);
 
+  const isBillingEmpty = services.length === 0;
+
+  const wizardLineValidation = useMemo(() => {
+    return quoteWizardLines.map((line) => {
+      const errors: string[] = [];
+      if (!line.title.trim()) errors.push('Titre requis.');
+      if (line.quantity <= 0) errors.push('Qté invalide.');
+      if (line.unitPriceCents === null || Number.isNaN(line.unitPriceCents)) {
+        errors.push('Prix requis.');
+      }
+      return { id: line.id, errors };
+    });
+  }, [quoteWizardLines]);
+
+  const wizardHasErrors = wizardLineValidation.some((entry) => entry.errors.length > 0);
+  const wizardCanContinue = quoteWizardLines.length > 0 && !wizardHasErrors;
+
   const missingPriceNames = useMemo(() => {
     return pricingLines
       .filter((line) => line.missingPrice)
@@ -1944,10 +2627,11 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
   }, [billingSummary, invoices]);
   const alreadyPaidCents = useMemo(() => {
     if (billingSummary) return Number(billingSummary.alreadyPaidCents);
-    return invoices
-      .filter((inv) => inv.status === 'PAID')
-      .reduce((sum, inv) => sum + Number(inv.totalCents), 0);
+    return invoices.reduce((sum, inv) => sum + getInvoicePaidCents(inv), 0);
   }, [billingSummary, invoices]);
+  const remainingToCollectCents = billingSummary
+    ? Number(billingSummary.remainingToCollectCents)
+    : Math.max(0, alreadyInvoicedCents - alreadyPaidCents);
   const remainingToInvoiceCents = billingSummary
     ? Number(billingSummary.remainingCents)
     : Math.max(0, summaryTotals.totalCents - alreadyInvoicedCents);
@@ -1996,6 +2680,18 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
     }
     return null;
   }, [businessId, latestInvoice, latestQuote]);
+
+  const activePaymentInvoice = paymentModal
+    ? invoices.find((inv) => inv.id === paymentModal.invoice.id) ?? paymentModal.invoice
+    : null;
+  const paymentTotalCents = activePaymentInvoice ? Number(activePaymentInvoice.totalCents) : 0;
+  const paymentPaidCents = activePaymentInvoice ? getInvoicePaidCents(activePaymentInvoice) : 0;
+  const paymentRemainingCents = activePaymentInvoice ? getInvoiceRemainingCents(activePaymentInvoice) : 0;
+  const applyPaymentShortcut = (ratio: number) => {
+    if (!Number.isFinite(paymentRemainingCents) || paymentRemainingCents <= 0) return;
+    const cents = Math.max(0, Math.round(paymentRemainingCents * ratio));
+    setPaymentForm((prev) => ({ ...prev, amount: formatEuroInput(String(cents)) }));
+  };
 
   const legalBlocks = useMemo(() => {
     const blocks = [
@@ -2048,10 +2744,15 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
     return Object.keys(serviceSelections).filter((id) => (serviceSelections[id] ?? 0) > 0);
   }, [serviceSelections]);
 
-  const amountCents = useMemo(() => {
-    if (!services.length) return null;
-    return pricingTotals.totalCents;
-  }, [pricingTotals.totalCents, services.length]);
+  const projectValueCents = useMemo(() => {
+    const raw = project?.valueCents ?? project?.billingSummary?.totalCents;
+    if (raw != null) {
+      const parsed = Number(raw);
+      if (Number.isFinite(parsed)) return parsed;
+    }
+    if (services.length) return pricingTotals.totalCents;
+    return null;
+  }, [project?.billingSummary?.totalCents, project?.valueCents, pricingTotals.totalCents, services.length]);
 
   const progressPct = useMemo(() => {
     if (project?.tasksSummary) return project.tasksSummary.progressPct ?? 0;
@@ -2069,11 +2770,11 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
       { label: 'Avancement', value: `${Math.min(100, Math.max(0, progressPct))}%` },
       {
         label: 'Valeur',
-        value: amountCents !== null ? formatCurrencyEUR(amountCents, { minimumFractionDigits: 0 }) : '—',
+        value: projectValueCents !== null ? formatCurrencyEUR(projectValueCents, { minimumFractionDigits: 0 }) : '—',
       },
       { label: 'Échéance', value: formatDate(project?.endDate ?? null) },
     ];
-  }, [amountCents, progressPct, project?.endDate]);
+  }, [projectValueCents, progressPct, project?.endDate]);
 
   useEffect(() => {
     if (project) {
@@ -2107,6 +2808,30 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
   }, [activeSetupModal, loadClients, loadCatalogServices, loadMembers, loadTasks, loadDocuments, project?.clientId]);
 
   useEffect(() => {
+    if (!accessModalOpen) return;
+    setAccessInfo(null);
+    void loadMembers();
+    void loadProjectMembers();
+  }, [accessModalOpen, loadMembers, loadProjectMembers]);
+
+  useEffect(() => {
+    if (!unitsModalOpen) return;
+    setUnitErrors(null);
+    void loadOrganizationUnits();
+    void loadMembers();
+  }, [unitsModalOpen, loadOrganizationUnits, loadMembers]);
+
+  useEffect(() => {
+    if (!unitsModalOpen) return;
+    setUnitDrafts(
+      organizationUnits.reduce<Record<string, { name: string; order: string }>>((acc, unit) => {
+        acc[unit.id] = { name: unit.name, order: String(unit.order ?? 0) };
+        return acc;
+      }, {})
+    );
+  }, [organizationUnits, unitsModalOpen]);
+
+  useEffect(() => {
     if (!generateTasksOnAdd) return;
     const selectedIds = Object.keys(serviceSelections);
     selectedIds.forEach((serviceId) => {
@@ -2115,6 +2840,18 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
       }
     });
   }, [generateTasksOnAdd, serviceSelections, serviceTemplates, templatesLoading, loadServiceTemplates]);
+
+  useEffect(() => {
+    if (!quoteWizardOpen || !quoteWizardGenerateTasks) return;
+    const selectedIds = quoteWizardLines
+      .map((line) => line.serviceId)
+      .filter((id): id is string => Boolean(id));
+    selectedIds.forEach((serviceId) => {
+      if (!serviceTemplates[serviceId] && !templatesLoading[serviceId]) {
+        void loadServiceTemplates(serviceId);
+      }
+    });
+  }, [quoteWizardOpen, quoteWizardGenerateTasks, quoteWizardLines, serviceTemplates, templatesLoading, loadServiceTemplates]);
 
   async function handleAttachClient() {
     if (!selectedClientId) {
@@ -2293,9 +3030,162 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
       setModalError(res.error ?? 'Invitation impossible.');
       return;
     }
-    setMembers((prev) => [...prev, { userId: `invite-${inviteEmail}`, email: inviteEmail, role: inviteRole }]);
+    const inviteId = `invite-${inviteEmail}`;
+    setMembers((prev) => [
+      ...prev,
+      { membershipId: inviteId, userId: inviteId, email: inviteEmail, role: inviteRole, name: null, organizationUnit: null },
+    ]);
     await refetchAll();
     closeModal();
+  }
+
+  async function handleAddProjectMember(membershipId: string) {
+    if (!isAdmin) {
+      setAccessInfo('Réservé aux admins/owners.');
+      return;
+    }
+    setAccessInfo(null);
+    const res = await fetchJson(
+      `/api/pro/businesses/${businessId}/projects/${projectId}/members`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ membershipId }),
+      }
+    );
+    if (!res.ok) {
+      setAccessInfo(res.error ?? 'Impossible d’ajouter l’accès.');
+      return;
+    }
+    await loadProjectMembers();
+    setAccessInfo('Accès mis à jour.');
+  }
+
+  async function handleRemoveProjectMember(membershipId: string) {
+    if (!isAdmin) {
+      setAccessInfo('Réservé aux admins/owners.');
+      return;
+    }
+    setAccessInfo(null);
+    const res = await fetchJson(
+      `/api/pro/businesses/${businessId}/projects/${projectId}/members/${membershipId}`,
+      { method: 'DELETE' }
+    );
+    if (!res.ok) {
+      setAccessInfo(res.error ?? 'Impossible de retirer l’accès.');
+      return;
+    }
+    await loadProjectMembers();
+    setAccessInfo('Accès mis à jour.');
+  }
+
+  async function handleCreateUnit() {
+    if (!isAdmin) {
+      setUnitErrors('Réservé aux admins/owners.');
+      return;
+    }
+    const name = unitDraftName.trim();
+    if (!name) {
+      setUnitErrors('Nom requis.');
+      return;
+    }
+    const order = unitDraftOrder.trim() === '' ? 0 : Number(unitDraftOrder);
+    if (!Number.isFinite(order)) {
+      setUnitErrors('Ordre invalide.');
+      return;
+    }
+    setUnitErrors(null);
+    const res = await fetchJson(
+      `/api/pro/businesses/${businessId}/organization/units`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, order: Math.trunc(order) }),
+      }
+    );
+    if (!res.ok) {
+      setUnitErrors(res.error ?? 'Création impossible.');
+      return;
+    }
+    setUnitDraftName('');
+    setUnitDraftOrder('0');
+    await loadOrganizationUnits();
+    setTeamInfo('Pôle créé.');
+  }
+
+  async function handleUpdateUnit(unitId: string) {
+    if (!isAdmin) {
+      setUnitErrors('Réservé aux admins/owners.');
+      return;
+    }
+    const draft = unitDrafts[unitId];
+    if (!draft) return;
+    const name = draft.name.trim();
+    if (!name) {
+      setUnitErrors('Nom requis.');
+      return;
+    }
+    const order = draft.order.trim() === '' ? 0 : Number(draft.order);
+    if (!Number.isFinite(order)) {
+      setUnitErrors('Ordre invalide.');
+      return;
+    }
+    setUnitErrors(null);
+    const res = await fetchJson(
+      `/api/pro/businesses/${businessId}/organization/units/${unitId}`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, order: Math.trunc(order) }),
+      }
+    );
+    if (!res.ok) {
+      setUnitErrors(res.error ?? 'Mise à jour impossible.');
+      return;
+    }
+    await loadOrganizationUnits();
+    setTeamInfo('Pôle mis à jour.');
+  }
+
+  async function handleDeleteUnit(unitId: string) {
+    if (!isAdmin) {
+      setUnitErrors('Réservé aux admins/owners.');
+      return;
+    }
+    setUnitErrors(null);
+    const res = await fetchJson(
+      `/api/pro/businesses/${businessId}/organization/units/${unitId}`,
+      { method: 'DELETE' }
+    );
+    if (!res.ok) {
+      setUnitErrors(res.error ?? 'Suppression impossible.');
+      return;
+    }
+    await loadOrganizationUnits();
+    setTeamInfo('Pôle supprimé.');
+  }
+
+  async function handleAssignMemberToUnit(membershipId: string, unitId: string | null) {
+    if (!isAdmin) {
+      setUnitErrors('Réservé aux admins/owners.');
+      return;
+    }
+    setUnitErrors(null);
+    const res = await fetchJson(
+      `/api/pro/businesses/${businessId}/memberships/${membershipId}`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ organizationUnitId: unitId }),
+      }
+    );
+    if (!res.ok) {
+      setUnitErrors(res.error ?? 'Assignation impossible.');
+      return;
+    }
+    await loadMembers();
+    await loadProjectMembers();
+    setTeamInfo('Membre mis à jour.');
   }
 
   async function handleUploadDocument() {
@@ -2384,13 +3274,24 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
                   {project.name ?? `Projet #${projectId}`}
                 </h1>
                 <Badge variant="neutral">{statusLabel}</Badge>
-                <Badge variant={scopeVariant}>{scopeLabel}</Badge>
+                {showScopeBadge ? <Badge variant={scopeVariant}>{scopeLabel}</Badge> : null}
                 {project.archivedAt ? <Badge variant="performance">Archivé</Badge> : null}
               </div>
               <div className="flex flex-wrap gap-4">
                 <MetaItem
                   label="Client"
-                  value={project.clientName ? project.clientName : 'Non renseigné'}
+                  value={
+                    project.clientName && project.clientId ? (
+                      <Link
+                        href={`/app/pro/${businessId}/clients/${project.clientId}`}
+                        className="font-medium text-[var(--text-primary)] hover:underline"
+                      >
+                        {project.clientName}
+                      </Link>
+                    ) : (
+                      project.clientName ?? 'Non renseigné'
+                    )
+                  }
                 />
                 <MetaItem
                   label="Dates"
@@ -2472,13 +3373,25 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
           <SectionCard className="space-y-3">
             <div className="flex items-center justify-between">
               <p className="text-sm font-semibold text-[var(--text-primary)]">Services inclus</p>
-              <Button asChild size="sm" variant="outline">
-                <Link href={`/app/pro/${businessId}/projects/${projectId}?tab=work`}>Ouvrir Travail</Link>
-              </Button>
+              <div className="flex flex-wrap items-center gap-2">
+                {showServicesToggle ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setShowAllServicesOverview((prev) => !prev)}
+                  >
+                    {showAllServicesOverview ? 'Voir moins' : 'Voir +'}
+                  </Button>
+                ) : null}
+                <Button asChild size="sm" variant="outline">
+                  <Link href={`/app/pro/${businessId}/projects/${projectId}?tab=work`}>Ouvrir Travail</Link>
+                </Button>
+              </div>
             </div>
             {servicesWithTasks.length ? (
               <div className="space-y-3">
-                {servicesWithTasks.map(({ service, tasks: svcTasks }) => (
+                {servicesOverview.map(({ service, tasks: svcTasks }) => (
                   <ServiceProgressRow
                     key={service.id}
                     service={{ id: service.id, name: service.service.name }}
@@ -2500,22 +3413,45 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
           <SectionCard className="space-y-3">
             <div className="flex items-center justify-between">
               <p className="text-sm font-semibold text-[var(--text-primary)]">Prochaines actions</p>
-              <Button asChild size="sm" variant="outline">
-                <Link href={`/app/pro/${businessId}/projects/${projectId}?tab=work`}>Gérer les tâches</Link>
-              </Button>
+              {showActionsToggle ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setShowAllActionsOverview((prev) => !prev)}
+                >
+                  {showAllActionsOverview ? 'Voir moins' : 'Voir +'}
+                </Button>
+              ) : null}
             </div>
             {upcomingTasks.length ? (
               <div className="space-y-2 text-sm text-[var(--text-secondary)]">
-                {upcomingTasks.map((task) => (
-                  <div key={task.id} className="flex items-start justify-between gap-3 rounded-lg border border-[var(--border)]/60 bg-[var(--surface-2)]/70 px-3 py-2">
-                    <div className="min-w-0">
-                      <p className="truncate text-[var(--text-primary)]">{task.title}</p>
-                      <p className="text-[11px]">
-                        {task.assigneeName || task.assigneeEmail || 'Non assigné'} · {task.status}
-                      </p>
+                {upcomingTasksOverview.map((task) => (
+                  <Link
+                    key={task.id}
+                    href={`/app/pro/${businessId}/tasks/${task.id}`}
+                    className="block rounded-lg border border-[var(--border)]/60 bg-[var(--surface-2)]/70 px-3 py-2 transition hover:border-[var(--border)] hover:bg-[var(--surface)]"
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-[var(--text-primary)]">{task.title}</p>
+                        <p className="text-[11px] text-[var(--text-secondary)]">
+                          {task.assigneeName || task.assigneeEmail || 'Non assigné'}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 text-[11px] text-[var(--text-secondary)]">
+                        <span
+                          className={cn(
+                            'inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide',
+                            getStatusBadgeClasses(task.status)
+                          )}
+                        >
+                          {formatTaskStatus(task.status)}
+                        </span>
+                        <span>{formatDate(task.dueDate)}</span>
+                      </div>
                     </div>
-                    <p className="text-[11px] text-[var(--text-secondary)]">{formatDate(task.dueDate)}</p>
-                  </div>
+                  </Link>
                 ))}
               </div>
             ) : (
@@ -2528,16 +3464,76 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
           </SectionCard>
 
           <div className="grid gap-4 md:grid-cols-2">
-            <GuidedCtaCard
-              title="Équipe"
-              description="Ajoute un membre pour suivre les responsabilités."
-              primary={{ label: 'Ajouter un membre', href: `/app/pro/${businessId}/projects/${projectId}?tab=team` }}
-            />
-            <GuidedCtaCard
-              title="Activité récente"
-              description="Aucune mise à jour récente."
-              primary={{ label: 'Envoyer une mise à jour client', href: `/app/pro/${businessId}/clients` }}
-            />
+            <SectionCard className="space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-semibold text-[var(--text-primary)]">Équipe (accès au projet)</p>
+                {isAdmin ? (
+                  <Button size="sm" variant="outline" onClick={() => setAccessModalOpen(true)}>
+                    Gérer l’accès
+                  </Button>
+                ) : null}
+              </div>
+              {projectMembersPreview.length ? (
+                <div className="flex flex-wrap items-center gap-3">
+                  {projectMembersPreview.map((member) => (
+                    <div key={member.membershipId} className="flex items-center gap-2 rounded-full border border-[var(--border)]/60 bg-[var(--surface-2)]/70 px-3 py-1.5 text-xs text-[var(--text-secondary)]">
+                      <InitialsAvatar name={member.user.name} email={member.user.email} size={24} />
+                      <span className="max-w-[140px] truncate text-[var(--text-primary)]">
+                        {member.user.name ?? member.user.email ?? '—'}
+                      </span>
+                    </div>
+                  ))}
+                  {projectMembersOverflow > 0 ? (
+                    <span className="rounded-full border border-[var(--border)]/60 bg-[var(--surface-2)]/70 px-3 py-1.5 text-xs text-[var(--text-secondary)]">
+                      +{projectMembersOverflow}
+                    </span>
+                  ) : null}
+                </div>
+              ) : (
+                <p className="text-xs text-[var(--text-secondary)]">
+                  Aucun accès configuré pour ce projet.
+                </p>
+              )}
+              {accessInfo ? <p className="text-xs text-emerald-600">{accessInfo}</p> : null}
+            </SectionCard>
+
+            <SectionCard className="space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-semibold text-[var(--text-primary)]">Activité récente</p>
+                {showActivityToggle ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setShowAllActivity((prev) => !prev)}
+                  >
+                    {showAllActivity ? 'Voir moins' : 'Voir +'}
+                  </Button>
+                ) : null}
+              </div>
+              {activityOverview.length ? (
+                <div className="space-y-2 text-sm text-[var(--text-secondary)]">
+                  {activityOverview.map((item) => (
+                    <div
+                      key={`${item.taskId}-${item.occurredAt ?? ''}`}
+                      className="flex items-start gap-3 rounded-lg border border-[var(--border)]/60 bg-[var(--surface-2)]/70 px-3 py-2"
+                    >
+                      <InitialsAvatar name={item.actor?.name} email={item.actor?.email} size={26} />
+                      <div className="min-w-0">
+                        <p className="truncate text-[var(--text-primary)]">
+                          {item.actor?.name ?? item.actor?.email ?? 'Quelqu’un'} a marqué “{item.title}” comme {formatTaskStatus(item.status)}
+                        </p>
+                        <p className="text-[11px] text-[var(--text-secondary)]">
+                          {item.serviceName ? `${item.serviceName} · ` : ''}{formatDate(item.occurredAt)}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-[var(--text-secondary)]">Aucune activité récente.</p>
+              )}
+            </SectionCard>
           </div>
         </div>
       ) : null}
@@ -2555,19 +3551,68 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
             onChange={(key) => setStatusFilter(key as typeof statusFilter)}
             ariaLabel="Filtrer tâches"
           />
-          {servicesWithTasks.length ? (
+          {tasksByAssignee.length ? (
             <div className="space-y-3">
-              {servicesWithTasks.map(({ service, tasks: svcTasks }) => {
-                const filteredTasks =
-                  statusFilter === 'all' ? svcTasks : svcTasks.filter((t) => t.status === statusFilter);
+              {tasksByAssignee.map((group) => {
+                const total = group.tasks.length;
+                const done = group.tasks.filter((t) => t.status === 'DONE').length;
+                const inProgress = group.tasks.filter((t) => t.status === 'IN_PROGRESS').length;
+                const remaining = total - done;
+                const expanded = taskGroupExpanded[group.key] ?? false;
+                const previewTasks = expanded ? group.tasks : group.tasks.slice(0, 5);
+                const showToggle = group.tasks.length > 5;
                 return (
-                  <ServiceProgressRow
-                    key={service.id}
-                    service={{ id: service.id, name: service.service.name }}
-                    tasks={filteredTasks}
-                    businessId={businessId}
-                    projectId={projectId}
-                  />
+                  <Card key={group.key} className="rounded-2xl border border-[var(--border)]/70 bg-[var(--surface)]/80 p-4 shadow-sm">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <InitialsAvatar name={group.name} email={group.email} size={30} />
+                        <div>
+                          <p className="text-sm font-semibold text-[var(--text-primary)]">{group.label}</p>
+                          <p className="text-xs text-[var(--text-secondary)]">
+                            {done}/{total} terminées · {inProgress} en cours · {remaining} restantes
+                          </p>
+                        </div>
+                      </div>
+                      {showToggle ? (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() =>
+                            setTaskGroupExpanded((prev) => ({ ...prev, [group.key]: !expanded }))
+                          }
+                        >
+                          {expanded ? 'Voir moins' : 'Voir +'}
+                        </Button>
+                      ) : null}
+                    </div>
+                    <div className="mt-3 space-y-2">
+                      {previewTasks.map((task) => (
+                        <Link
+                          key={task.id}
+                          href={`/app/pro/${businessId}/tasks/${task.id}`}
+                          className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--border)]/60 bg-[var(--surface-2)]/70 px-3 py-2 text-sm transition hover:border-[var(--border)] hover:bg-[var(--surface)]"
+                        >
+                          <div className="flex min-w-0 items-center gap-2">
+                            <InitialsAvatar name={task.assigneeName} email={task.assigneeEmail} size={22} />
+                            <div className="min-w-0">
+                              <p className="truncate text-[var(--text-primary)]">{task.title}</p>
+                              <span
+                                className={cn(
+                                  'inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide',
+                                  getStatusBadgeClasses(task.status)
+                                )}
+                              >
+                                {formatTaskStatus(task.status)}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="text-[11px] text-[var(--text-secondary)]">
+                            {task.dueDate ? formatDate(task.dueDate) : '—'}
+                          </div>
+                        </Link>
+                      ))}
+                    </div>
+                  </Card>
                 );
               })}
             </div>
@@ -2583,12 +3628,54 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
       ) : null}
 
       {activeTab === 'team' ? (
-        <GuidedCtaCard
-          title="Aucun membre assigné."
-          description="Ajoute un membre pour suivre les responsabilités."
-          primary={{ label: 'Ajouter un membre', href: `/app/pro/${businessId}/settings/team` }}
-          secondary={{ label: 'Définir responsables par service', href: `/app/pro/${businessId}/projects/${projectId}?tab=work` }}
-        />
+        <div className="space-y-4">
+          <SectionCard>
+            <SectionHeader
+              title="Équipe"
+              subtitle="Membres par pôle/secteur."
+              actions={
+                isAdmin ? (
+                  <Button size="sm" variant="outline" onClick={() => setUnitsModalOpen(true)}>
+                    Gérer les pôles
+                  </Button>
+                ) : null
+              }
+            />
+            {teamInfo ? <p className="mt-2 text-sm text-emerald-600">{teamInfo}</p> : null}
+          </SectionCard>
+
+          {membersByUnit.length ? (
+            <div className="space-y-3">
+              {membersByUnit.map((group) => (
+                <Card key={group.key} className="rounded-2xl border border-[var(--border)]/70 bg-[var(--surface)]/80 p-4 shadow-sm">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-semibold text-[var(--text-primary)]">{group.label}</p>
+                      <p className="text-xs text-[var(--text-secondary)]">{group.members.length} membres</p>
+                    </div>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {group.members.map((member) => (
+                      <div key={member.membershipId} className="flex items-center gap-2 rounded-full border border-[var(--border)]/60 bg-[var(--surface-2)]/70 px-3 py-1.5 text-xs text-[var(--text-secondary)]">
+                        <InitialsAvatar name={member.name} email={member.email} size={22} />
+                        <span className="max-w-[160px] truncate text-[var(--text-primary)]">
+                          {member.name ?? member.email}
+                        </span>
+                        <span className="text-[11px] text-[var(--text-secondary)]">{member.role}</span>
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+              ))}
+            </div>
+          ) : (
+            <GuidedCtaCard
+              title="Aucun membre disponible."
+              description="Invitez un membre pour commencer."
+              primary={{ label: 'Ajouter un membre', href: `/app/pro/${businessId}/settings/team` }}
+            />
+          )}
+        </div>
       ) : null}
 
       {activeTab === 'billing' ? (
@@ -2610,23 +3697,25 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
               title="Résumé & situation"
               subtitle={`Acompte de référence : ${depositPercentLabel} · Source : ${summaryTotals.sourceLabel}`}
               actions={
-                <>
-                  <Button
-                    size="sm"
-                    onClick={handleCreateQuote}
-                    disabled={!services.length || pricingTotals.missingCount > 0 || creatingQuote || !isAdmin}
-                  >
-                    {creatingQuote ? 'Création…' : 'Créer un devis'}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => openStagedInvoiceModal('DEPOSIT')}
-                    disabled={!isAdmin || summaryTotals.totalCents <= 0}
-                  >
-                    Facture d’acompte
-                  </Button>
-                </>
+                isBillingEmpty ? null : (
+                  <>
+                    <Button
+                      size="sm"
+                      onClick={handleCreateQuote}
+                      disabled={!services.length || pricingTotals.missingCount > 0 || creatingQuote || !isAdmin}
+                    >
+                      {creatingQuote ? 'Création…' : 'Créer un devis'}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => openStagedInvoiceModal('DEPOSIT')}
+                      disabled={!isAdmin || summaryTotals.totalCents <= 0}
+                    >
+                      Facture d’acompte
+                    </Button>
+                  </>
+                )
               }
             />
             <div className="mt-4 flex flex-wrap gap-2">
@@ -2665,6 +3754,12 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
               <StatCard
                 label="Déjà payé"
                 value={formatCurrencyEUR(alreadyPaidCents, { minimumFractionDigits: 0 })}
+                align="right"
+              />
+              <StatCard
+                label="Reste à encaisser"
+                value={formatCurrencyEUR(remainingToCollectCents, { minimumFractionDigits: 0 })}
+                highlight
                 align="right"
               />
               <StatCard
@@ -2733,19 +3828,21 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
               title="Prestations facturables"
               subtitle="Ajuste les quantités, tarifs et remises avant de générer un devis."
               actions={
-                <>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setActiveSetupModal('services')}
-                    disabled={!isAdmin}
-                  >
-                    Ajouter au projet
-                  </Button>
-                  <Button asChild size="sm">
-                    <Link href={`/app/pro/${businessId}/services`}>Catalogue services</Link>
-                  </Button>
-                </>
+                isBillingEmpty ? null : (
+                  <>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setActiveSetupModal('services')}
+                      disabled={!isAdmin}
+                    >
+                      Ajouter au projet
+                    </Button>
+                    <Button asChild size="sm">
+                      <Link href={`/app/pro/${businessId}/services`}>Catalogue services</Link>
+                    </Button>
+                  </>
+                )
               }
             />
 
@@ -3081,10 +4178,23 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
                 })}
               </div>
             ) : (
-              <GuidedCtaCard
-                title="Ajoute des services pour générer un devis/facture."
-                primary={{ label: 'Ajouter un service', href: `/app/pro/${businessId}/services` }}
-              />
+              <div className="mt-6 rounded-3xl border border-[var(--border)]/70 bg-[var(--surface-2)]/60 p-6 text-center">
+                <p className="text-base font-semibold text-[var(--text-primary)]">Créer un devis</p>
+                <p className="mt-2 text-sm text-[var(--text-secondary)]">
+                  Ajoutez vos prestations, générez les tâches, puis créez le devis.
+                </p>
+                <div className="mt-4 flex flex-col items-center justify-center gap-2 sm:flex-row">
+                  <Button onClick={openQuoteWizard} disabled={!isAdmin}>
+                    Créer un devis
+                  </Button>
+                  <Button asChild variant="ghost">
+                    <Link href={`/app/pro/${businessId}/services`}>Créer un service dans le catalogue</Link>
+                  </Button>
+                </div>
+                {!isAdmin ? (
+                  <p className="mt-2 text-xs text-[var(--text-secondary)]">Réservé aux admins/owners.</p>
+                ) : null}
+              </div>
             )}
           </SectionCard>
 
@@ -3093,14 +4203,16 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
               title="Devis"
               subtitle="Crée et gère les devis du projet."
               actions={
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={handleCreateQuote}
-                  disabled={!services.length || pricingTotals.missingCount > 0 || creatingQuote || !isAdmin}
-                >
-                  {creatingQuote ? 'Création…' : 'Nouveau devis'}
-                </Button>
+                isBillingEmpty ? null : (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={handleCreateQuote}
+                    disabled={!services.length || pricingTotals.missingCount > 0 || creatingQuote || !isAdmin}
+                  >
+                    {creatingQuote ? 'Création…' : 'Nouveau devis'}
+                  </Button>
+                )
               }
             />
             {pricingTotals.missingCount > 0 ? (
@@ -3250,32 +4362,34 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
               title="Factures"
               subtitle="Générées à partir des devis envoyés/signés ou en facturation par étapes."
               actions={
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => openStagedInvoiceModal('DEPOSIT')}
-                    disabled={!isAdmin || summaryTotals.totalCents <= 0}
-                  >
-                    Facture d’acompte
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => openStagedInvoiceModal('MID')}
-                    disabled={!isAdmin || summaryTotals.totalCents <= 0}
-                  >
-                    Facture intermédiaire
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => openStagedInvoiceModal('FINAL')}
-                    disabled={!isAdmin || remainingToInvoiceCents <= 0}
-                  >
-                    Facture finale
-                  </Button>
-                </div>
+                isBillingEmpty ? null : (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => openStagedInvoiceModal('DEPOSIT')}
+                      disabled={!isAdmin || summaryTotals.totalCents <= 0}
+                    >
+                      Facture d’acompte
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => openStagedInvoiceModal('MID')}
+                      disabled={!isAdmin || summaryTotals.totalCents <= 0}
+                    >
+                      Facture intermédiaire
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => openStagedInvoiceModal('FINAL')}
+                      disabled={!isAdmin || remainingToInvoiceCents <= 0}
+                    >
+                      Facture finale
+                    </Button>
+                  </div>
+                )
               }
             />
             <p className="mt-2 text-xs text-[var(--text-secondary)]">
@@ -3291,15 +4405,19 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
                 </div>
                 {invoices.map((invoice) => {
                   const statusLabel = getInvoiceStatusLabelFR(invoice.status);
+                  const paymentStatusLabel = getPaymentStatusLabelFR(getInvoicePaymentStatus(invoice));
                   const dateLabel = formatDate(invoice.issuedAt ?? invoice.createdAt);
                   const pdfUrl = `/api/pro/businesses/${businessId}/invoices/${invoice.id}/pdf`;
                   const detailUrl = `/app/pro/${businessId}/finances/invoices/${invoice.id}`;
+                  const paidCents = getInvoicePaidCents(invoice);
+                  const remainingCents = getInvoiceRemainingCents(invoice);
                   const canSend = invoice.status === 'DRAFT';
-                  const canPay = invoice.status === 'SENT';
                   const canCancel = invoice.status === 'DRAFT' || invoice.status === 'SENT';
                   const canEdit = invoice.status === 'DRAFT' || invoice.status === 'SENT';
                   const canEditPaidDate = invoice.status === 'PAID';
                   const canDelete = invoice.status === 'DRAFT' || invoice.status === 'CANCELLED';
+                  const canManagePayments = invoice.status === 'SENT' || invoice.status === 'PAID';
+                  const canMarkPaid = canManagePayments && remainingCents > 0;
                   return (
                     <div
                       key={invoice.id}
@@ -3312,10 +4430,17 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
                         <p className="text-xs text-[var(--text-secondary)]">{dateLabel}</p>
                       </div>
                       <div className="text-xs text-[var(--text-secondary)] md:text-sm">
-                        {statusLabel}
+                        <span>{statusLabel}</span>
+                        <span className="mt-1 block text-[11px] text-[var(--text-secondary)]">
+                          {paymentStatusLabel}
+                        </span>
                       </div>
                       <div className="text-right text-sm font-semibold text-[var(--text-primary)]">
                         {formatCurrencyEUR(Number(invoice.totalCents), { minimumFractionDigits: 0 })}
+                        <div className="mt-1 text-[11px] font-normal text-[var(--text-secondary)]">
+                          Payé {formatCurrencyEUR(paidCents, { minimumFractionDigits: 0 })} · Reste{' '}
+                          {formatCurrencyEUR(remainingCents, { minimumFractionDigits: 0 })}
+                        </div>
                       </div>
                       <div className="flex flex-wrap items-center gap-2 md:justify-end">
                         <Button asChild size="sm" variant="outline">
@@ -3323,6 +4448,16 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
                             PDF
                           </a>
                         </Button>
+                        {canManagePayments ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => openPaymentModal(invoice)}
+                            disabled={!isAdmin}
+                          >
+                            Paiements
+                          </Button>
+                        ) : null}
                         <Button
                           size="sm"
                           variant="outline"
@@ -3348,14 +4483,14 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
                             Envoyer
                           </Button>
                         ) : null}
-                        {canPay ? (
+                        {canMarkPaid ? (
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => handleInvoiceStatus(invoice.id, 'PAID')}
+                            onClick={() => openPaymentModal(invoice, remainingCents)}
                             disabled={!isAdmin || invoiceActionId === invoice.id}
                           >
-                            Marquer payée
+                            Solder la facture
                           </Button>
                         ) : null}
                         {canCancel ? (
@@ -3995,6 +5130,512 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
       </Modal>
 
       <Modal
+        open={quoteWizardOpen}
+        onCloseAction={closeQuoteWizard}
+        title="Créer un devis"
+        description="Ajoutez vos prestations, générez les tâches, puis créez le devis."
+      >
+        <div className="space-y-4">
+          {quoteWizardResult ? (
+            <div className="space-y-4">
+              <Alert variant="success" title="Devis généré" />
+              <div className="rounded-2xl border border-[var(--border)]/70 bg-[var(--surface-2)]/60 p-4 text-sm text-[var(--text-secondary)]">
+                {quoteWizardGenerateTasks
+                  ? 'Les prestations et les tâches recommandées ont été ajoutées au projet.'
+                  : 'Les prestations ont été ajoutées au projet. Les tâches peuvent être créées plus tard.'}
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button asChild size="sm">
+                  <a href={quoteWizardResult.pdfUrl} target="_blank" rel="noreferrer">
+                    Télécharger le PDF
+                  </a>
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    closeQuoteWizard();
+                    setActiveTab('billing');
+                  }}
+                >
+                  Voir le devis
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    closeQuoteWizard();
+                    openStagedInvoiceModal('DEPOSIT');
+                  }}
+                >
+                  Facture d’acompte
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--text-secondary)]">
+                {WIZARD_STEPS.map((label, idx) => (
+                  <div key={label} className="flex items-center gap-2">
+                    <span
+                      className={cn(
+                        'flex h-6 w-6 items-center justify-center rounded-full border text-[11px]',
+                        idx === quoteWizardStep
+                          ? 'border-[var(--text-primary)] text-[var(--text-primary)]'
+                          : 'border-[var(--border)] text-[var(--text-secondary)]'
+                      )}
+                    >
+                      {idx + 1}
+                    </span>
+                    <span className={idx === quoteWizardStep ? 'text-[var(--text-primary)]' : ''}>{label}</span>
+                    {idx < WIZARD_STEPS.length - 1 ? <span className="text-[var(--text-faint)]">→</span> : null}
+                  </div>
+                ))}
+              </div>
+
+              {quoteWizardStep === 0 ? (
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Input
+                      placeholder="Rechercher un service"
+                      value={quoteWizardSearch}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        setQuoteWizardSearch(value);
+                        void loadCatalogServices(value);
+                      }}
+                    />
+                    <div className="max-h-52 space-y-2 overflow-auto rounded-2xl border border-[var(--border)]/60 p-2">
+                      {catalogSearchResults.map((svc) => {
+                        const priceHint = svc.defaultPriceCents ?? svc.tjmCents;
+                        return (
+                          <div
+                            key={svc.id}
+                            className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[var(--border)]/60 bg-[var(--surface)] px-3 py-2"
+                          >
+                            <div className="min-w-0">
+                              <p className="text-sm font-semibold text-[var(--text-primary)]">{svc.name}</p>
+                              <p className="text-xs text-[var(--text-secondary)]">{svc.code}</p>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <span className="text-xs text-[var(--text-secondary)]">
+                                {priceHint
+                                  ? formatCurrencyEUR(Number(priceHint), { minimumFractionDigits: 0 })
+                                  : 'Prix manquant'}
+                              </span>
+                              <Button size="sm" variant="outline" onClick={() => addCatalogLine(svc)}>
+                                Ajouter
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                      {catalogSearchResults.length === 0 ? (
+                        <p className="px-2 text-sm text-[var(--text-secondary)]">Aucun service trouvé.</p>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-sm font-semibold text-[var(--text-primary)]">Prestations sélectionnées</p>
+                    <Button size="sm" variant="ghost" onClick={addCustomLine}>
+                      Ligne personnalisée
+                    </Button>
+                  </div>
+
+                  {quoteWizardLines.length ? (
+                    <div className="space-y-3">
+                      {quoteWizardLines.map((line) => {
+                        const errors = wizardLineValidation.find((entry) => entry.id === line.id)?.errors ?? [];
+                        const priceInput = line.unitPriceCents != null ? formatEuroInput(String(line.unitPriceCents)) : '';
+                        return (
+                          <div
+                            key={line.id}
+                            className={cn(
+                              'rounded-2xl border border-[var(--border)]/70 bg-[var(--surface-2)]/60 p-4',
+                              errors.length ? 'border-rose-200/70' : ''
+                            )}
+                          >
+                            <div className="flex flex-wrap items-start justify-between gap-3">
+                              <div className="min-w-0 space-y-1">
+                                <p className="text-xs uppercase tracking-[0.14em] text-[var(--text-secondary)]">
+                                  {line.source === 'custom'
+                                    ? 'Ligne personnalisée'
+                                    : line.code
+                                      ? `Service · ${line.code}`
+                                      : 'Service'}
+                                </p>
+                                <Input
+                                  label="Titre"
+                                  value={line.title}
+                                  onChange={(e) => updateWizardLine(line.id, { title: e.target.value })}
+                                />
+                              </div>
+                              <Button size="sm" variant="ghost" onClick={() => removeWizardLine(line.id)}>
+                                Supprimer
+                              </Button>
+                            </div>
+
+                            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                              <Input
+                                label="Qté"
+                                type="number"
+                                min={1}
+                                value={line.quantity}
+                                onChange={(e) =>
+                                  updateWizardLine(line.id, {
+                                    quantity: Math.max(1, Math.trunc(Number(e.target.value) || 1)),
+                                  })
+                                }
+                              />
+                              {line.priceLocked ? (
+                                <div className="rounded-2xl border border-[var(--border)]/60 bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-secondary)]">
+                                  <p className="text-[11px] uppercase tracking-[0.12em] text-[var(--text-secondary)]">
+                                    Prix catalogue
+                                  </p>
+                                  <p className="text-sm font-semibold text-[var(--text-primary)]">
+                                    {line.unitPriceCents != null
+                                      ? formatCurrencyEUR(line.unitPriceCents, { minimumFractionDigits: 0 })
+                                      : '—'}
+                                  </p>
+                                </div>
+                              ) : (
+                                <Input
+                                  label="Prix unitaire (€)"
+                                  type="number"
+                                  min={0}
+                                  step="0.01"
+                                  value={priceInput}
+                                  onChange={(e) =>
+                                    updateWizardLine(line.id, { unitPriceCents: parseEuroInput(e.target.value) })
+                                  }
+                                />
+                              )}
+                            </div>
+
+                            <div className="mt-3">
+                              <label className="text-xs font-medium text-[var(--text-secondary)]">Description</label>
+                              <textarea
+                                className="mt-1 min-h-[90px] w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)]"
+                                value={line.description}
+                                onChange={(e) => updateWizardLine(line.id, { description: e.target.value })}
+                                placeholder="Optionnel"
+                              />
+                            </div>
+
+                            {errors.length ? (
+                              <p className="mt-2 text-xs text-rose-500">{errors.join(' ')}</p>
+                            ) : null}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className={cn(UI.sectionSoft, 'text-sm text-[var(--text-secondary)]')}>
+                      Aucune prestation sélectionnée.
+                    </div>
+                  )}
+
+                  <p className="text-xs text-[var(--text-secondary)]">
+                    Les lignes personnalisées seront ajoutées au catalogue pour réutilisation.
+                  </p>
+                </div>
+              ) : null}
+
+              {quoteWizardStep === 1 ? (
+                <div className="space-y-4">
+                  <label className="flex items-center gap-2 text-sm text-[var(--text-primary)]">
+                    <input
+                      type="checkbox"
+                      checked={quoteWizardGenerateTasks}
+                      onChange={(e) => setQuoteWizardGenerateTasks(e.target.checked)}
+                      disabled={!isAdmin}
+                    />
+                    Créer les tâches recommandées
+                  </label>
+
+                  {quoteWizardGenerateTasks ? (
+                    <div className="space-y-3">
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <Select
+                          label="Assigner à"
+                          value={quoteWizardAssigneeId}
+                          onChange={(e) => setQuoteWizardAssigneeId(e.target.value)}
+                          disabled={!isAdmin}
+                        >
+                          <option value="">Non assigné</option>
+                          {members.map((m) => (
+                            <option key={m.userId} value={m.userId}>
+                              {m.email}
+                            </option>
+                          ))}
+                        </Select>
+                        <Input
+                          label="Échéance dans (jours)"
+                          type="number"
+                          min={0}
+                          max={365}
+                          value={quoteWizardDueOffsetDays}
+                          onChange={(e) => setQuoteWizardDueOffsetDays(e.target.value)}
+                          disabled={!isAdmin}
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <p className="text-xs font-semibold text-[var(--text-primary)]">Aperçu des tâches</p>
+                        {quoteWizardLines.length === 0 ? (
+                          <p className="text-xs text-[var(--text-secondary)]">Ajoute des prestations d’abord.</p>
+                        ) : (
+                          <div className="space-y-2">
+                            {quoteWizardLines.map((line) => {
+                              const templates = line.serviceId ? serviceTemplates[line.serviceId] ?? [] : [];
+                              const loading = line.serviceId ? templatesLoading[line.serviceId] : false;
+                              return (
+                                <div
+                                  key={line.id}
+                                  className="rounded-xl border border-[var(--border)]/60 bg-[var(--surface)] p-3"
+                                >
+                                  <p className="text-xs font-semibold text-[var(--text-primary)]">
+                                    {line.title.trim() || 'Prestation'}
+                                  </p>
+                                  {line.source === 'custom' ? (
+                                    <p className="text-[11px] text-[var(--text-secondary)]">
+                                      Aucune tâche recommandée pour une ligne personnalisée.
+                                    </p>
+                                  ) : loading ? (
+                                    <p className="text-[11px] text-[var(--text-secondary)]">Chargement des templates…</p>
+                                  ) : templates.length ? (
+                                    <ul className="mt-1 space-y-1 text-[11px] text-[var(--text-secondary)]">
+                                      {templates.map((tpl) => (
+                                        <li key={tpl.id}>• {tpl.title}</li>
+                                      ))}
+                                    </ul>
+                                  ) : (
+                                    <p className="text-[11px] text-[var(--text-secondary)]">Aucun template disponible.</p>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-[var(--text-secondary)]">
+                      Vous pourrez créer les tâches plus tard depuis chaque prestation.
+                    </p>
+                  )}
+                </div>
+              ) : null}
+
+              {quoteWizardStep === 2 ? (
+                <div className="space-y-4">
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <div className={cn(UI.sectionSoft, 'text-right')}>
+                      <p className={UI.label}>Prestations</p>
+                      <p className={UI.value}>{quoteWizardLines.length}</p>
+                    </div>
+                    <div className={cn(UI.sectionSoft, 'text-right')}>
+                      <p className={UI.label}>Tâches</p>
+                      <p className={UI.value}>{quoteWizardGenerateTasks ? 'Activées' : 'Non'}</p>
+                    </div>
+                    <div className={cn(UI.sectionSoft, 'text-right')}>
+                      <p className={UI.label}>Total</p>
+                      <p className={UI.value}>Calculé dans le devis</p>
+                    </div>
+                  </div>
+                  <p className="text-sm text-[var(--text-secondary)]">
+                    Le devis calculera automatiquement le total à partir des prestations ajoutées.
+                  </p>
+                </div>
+              ) : null}
+
+              {quoteWizardError ? <p className="text-sm text-rose-500">{quoteWizardError}</p> : null}
+              {quoteWizardInfo ? <p className="text-sm text-emerald-600">{quoteWizardInfo}</p> : null}
+
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <Button variant="outline" onClick={closeQuoteWizard}>
+                  Annuler
+                </Button>
+                <div className="flex flex-wrap items-center gap-2">
+                  {quoteWizardStep > 0 ? (
+                    <Button
+                      variant="outline"
+                      onClick={() => setQuoteWizardStep((prev) => Math.max(0, prev - 1))}
+                    >
+                      Retour
+                    </Button>
+                  ) : null}
+                  {quoteWizardStep < 2 ? (
+                    <Button
+                      onClick={() => setQuoteWizardStep((prev) => Math.min(2, prev + 1))}
+                      disabled={quoteWizardStep === 0 && !wizardCanContinue}
+                    >
+                      Continuer
+                    </Button>
+                  ) : (
+                    <Button onClick={handleWizardGenerateQuote} disabled={quoteWizardSaving || !wizardCanContinue}>
+                      {quoteWizardSaving ? 'Génération…' : 'Générer le devis'}
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      </Modal>
+
+      <Modal
+        open={Boolean(paymentModal)}
+        onCloseAction={closePaymentModal}
+        title="Paiements"
+        description="Ajoute un règlement et consulte l’historique."
+      >
+        <div className="space-y-3">
+          <p className="text-xs text-[var(--text-secondary)]">
+            {activePaymentInvoice
+              ? `${activePaymentInvoice.number ?? `Facture #${activePaymentInvoice.id}`} · Total ${formatCurrencyEUR(
+                  paymentTotalCents,
+                  { minimumFractionDigits: 0 }
+                )}`
+              : 'Facture sélectionnée'}
+          </p>
+          <div className="grid gap-2 sm:grid-cols-3">
+            <div className={cn(UI.sectionSoft, 'text-right')}>
+              <p className={UI.label}>Total</p>
+              <p className={UI.value}>{formatCurrencyEUR(paymentTotalCents, { minimumFractionDigits: 0 })}</p>
+            </div>
+            <div className={cn(UI.sectionSoft, 'text-right')}>
+              <p className={UI.label}>Payé</p>
+              <p className={UI.value}>{formatCurrencyEUR(paymentPaidCents, { minimumFractionDigits: 0 })}</p>
+            </div>
+            <div className={cn(UI.sectionSoft, 'text-right')}>
+              <p className={UI.label}>Reste</p>
+              <p className={UI.value}>{formatCurrencyEUR(paymentRemainingCents, { minimumFractionDigits: 0 })}</p>
+            </div>
+          </div>
+          {paymentNotice ? <Alert variant="success" title={paymentNotice} /> : null}
+
+          <div className="space-y-2">
+            <p className={UI.label}>Historique</p>
+            {paymentLoading ? (
+              <div className={cn(UI.sectionSoft, 'text-xs text-[var(--text-secondary)]')}>Chargement…</div>
+            ) : paymentItems.length ? (
+              <div className="space-y-2">
+                {paymentItems.map((item) => (
+                  <div
+                    key={item.id}
+                    className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-[var(--border)]/60 bg-[var(--surface-2)]/60 px-3 py-2"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-[var(--text-primary)]">
+                        {formatCurrencyEUR(Number(item.amountCents), { minimumFractionDigits: 0 })}
+                      </p>
+                      <p className="text-xs text-[var(--text-secondary)]">
+                        {formatDate(item.paidAt)} · {PAYMENT_METHOD_LABELS[item.method] ?? item.method}
+                        {item.reference ? ` · ${item.reference}` : ''}
+                      </p>
+                      {item.note || item.createdBy?.name || item.createdBy?.email ? (
+                        <p className="text-[11px] text-[var(--text-secondary)]">
+                          {item.note ? item.note : ''}
+                          {item.note && (item.createdBy?.name || item.createdBy?.email) ? ' · ' : ''}
+                          {item.createdBy?.name || item.createdBy?.email
+                            ? `par ${item.createdBy?.name ?? item.createdBy?.email}`
+                            : ''}
+                        </p>
+                      ) : null}
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => handleDeletePayment(item.id)}
+                      disabled={!isAdmin || paymentDeletingId === item.id || activePaymentInvoice?.status === 'CANCELLED'}
+                    >
+                      Supprimer
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className={cn(UI.sectionSoft, 'text-xs text-[var(--text-secondary)]')}>
+                Aucun paiement enregistré.
+              </div>
+            )}
+          </div>
+
+          <div className="grid gap-2 md:grid-cols-2">
+            <Input
+              label="Montant (€)"
+              type="number"
+              min={0}
+              step="0.01"
+              value={paymentForm.amount}
+              onChange={(e) => setPaymentForm((prev) => ({ ...prev, amount: e.target.value }))}
+              disabled={!isAdmin || paymentSaving}
+            />
+            <Input
+              label="Date de paiement"
+              type="date"
+              value={paymentForm.paidAt}
+              onChange={(e) => setPaymentForm((prev) => ({ ...prev, paidAt: e.target.value }))}
+              disabled={!isAdmin || paymentSaving}
+            />
+            <Select
+              label="Mode"
+              value={paymentForm.method}
+              onChange={(e) => setPaymentForm((prev) => ({ ...prev, method: e.target.value }))}
+              disabled={!isAdmin || paymentSaving}
+            >
+              {Object.entries(PAYMENT_METHOD_LABELS).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </Select>
+            <Input
+              label="Référence"
+              value={paymentForm.reference}
+              onChange={(e) => setPaymentForm((prev) => ({ ...prev, reference: e.target.value }))}
+              disabled={!isAdmin || paymentSaving}
+            />
+            <Input
+              label="Note"
+              value={paymentForm.note}
+              onChange={(e) => setPaymentForm((prev) => ({ ...prev, note: e.target.value }))}
+              disabled={!isAdmin || paymentSaving}
+            />
+          </div>
+          {paymentRemainingCents > 0 ? (
+            <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--text-secondary)]">
+              <span className={UI.label}>Raccourcis</span>
+              {[0.25, 0.5, 1].map((ratio) => (
+                <Button
+                  key={ratio}
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => applyPaymentShortcut(ratio)}
+                  disabled={!isAdmin || paymentSaving}
+                >
+                  {Math.round(ratio * 100)}%
+                </Button>
+              ))}
+            </div>
+          ) : null}
+
+          {paymentError ? <p className="text-sm text-rose-500">{paymentError}</p> : null}
+
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={closePaymentModal}>
+              Annuler
+            </Button>
+            <Button onClick={handleSavePayment} disabled={!isAdmin || paymentSaving || paymentRemainingCents <= 0}>
+              {paymentSaving ? 'Enregistrement…' : 'Enregistrer le paiement'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
         open={depositDateEditorOpen}
         onCloseAction={() => setDepositDateEditorOpen(false)}
         title="Date acompte"
@@ -4356,6 +5997,208 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
             </Button>
             <Button onClick={handleUploadDocument} disabled={saving || !project?.clientId}>
               {saving ? 'Upload…' : 'Uploader'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        open={accessModalOpen}
+        onCloseAction={() => {
+          setAccessModalOpen(false);
+          setAccessInfo(null);
+        }}
+        title="Accès au projet"
+        description="Ajoute ou retire les membres autorisés à voir ce projet."
+      >
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <p className="text-xs font-semibold text-[var(--text-primary)]">Accès actuel</p>
+            {projectMembers.length ? (
+              <div className="space-y-2">
+                {projectMembers.map((member) => {
+                  const implicit = member.implicit || member.role === 'OWNER' || member.role === 'ADMIN';
+                  return (
+                    <div
+                      key={member.membershipId}
+                      className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--border)]/60 bg-[var(--surface-2)]/70 px-3 py-2"
+                    >
+                      <div className="flex items-center gap-2 text-sm text-[var(--text-secondary)]">
+                        <InitialsAvatar name={member.user.name} email={member.user.email} size={24} />
+                        <div className="min-w-0">
+                          <p className="truncate text-[var(--text-primary)]">
+                            {member.user.name ?? member.user.email}
+                          </p>
+                          <p className="text-[11px] text-[var(--text-secondary)]">{member.role}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {implicit ? <Badge variant="neutral">Accès implicite</Badge> : null}
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleRemoveProjectMember(member.membershipId)}
+                          disabled={!isAdmin || implicit}
+                        >
+                          Retirer
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-sm text-[var(--text-secondary)]">Aucun membre associé.</p>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <p className="text-xs font-semibold text-[var(--text-primary)]">Ajouter un collaborateur</p>
+            {availableMembers.length ? (
+              <div className="space-y-2">
+                {availableMembers.map((member) => (
+                  <div
+                    key={member.membershipId}
+                    className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--border)]/60 bg-[var(--surface-2)]/70 px-3 py-2"
+                  >
+                    <div className="flex items-center gap-2 text-sm text-[var(--text-secondary)]">
+                      <InitialsAvatar name={member.name} email={member.email} size={24} />
+                      <div className="min-w-0">
+                        <p className="truncate text-[var(--text-primary)]">
+                          {member.name ?? member.email}
+                        </p>
+                        <p className="text-[11px] text-[var(--text-secondary)]">{member.role}</p>
+                      </div>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="primary"
+                      onClick={() => handleAddProjectMember(member.membershipId)}
+                      disabled={!isAdmin}
+                    >
+                      Ajouter
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-[var(--text-secondary)]">Tous les membres sont déjà associés.</p>
+            )}
+          </div>
+          {accessInfo ? <p className="text-sm text-emerald-600">{accessInfo}</p> : null}
+          <div className="flex justify-end">
+            <Button variant="outline" onClick={() => setAccessModalOpen(false)}>
+              Fermer
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        open={unitsModalOpen}
+        onCloseAction={() => {
+          setUnitsModalOpen(false);
+          setUnitErrors(null);
+        }}
+        title="Gérer les pôles"
+        description="Créez des pôles et assignez les membres."
+      >
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <p className="text-xs font-semibold text-[var(--text-primary)]">Nouveau pôle</p>
+            <div className="grid gap-2 sm:grid-cols-[2fr_1fr]">
+              <Input
+                placeholder="Nom du pôle"
+                value={unitDraftName}
+                onChange={(e) => setUnitDraftName(e.target.value)}
+              />
+              <Input
+                placeholder="Ordre"
+                type="number"
+                value={unitDraftOrder}
+                onChange={(e) => setUnitDraftOrder(e.target.value)}
+              />
+            </div>
+            <Button size="sm" onClick={handleCreateUnit} disabled={!isAdmin}>
+              Ajouter
+            </Button>
+          </div>
+
+          <div className="space-y-2">
+            <p className="text-xs font-semibold text-[var(--text-primary)]">Pôles existants</p>
+            {organizationUnits.length ? (
+              <div className="space-y-2">
+                {organizationUnits.map((unit) => (
+                  <div key={unit.id} className="rounded-lg border border-[var(--border)]/60 bg-[var(--surface-2)]/70 p-3">
+                    <div className="grid gap-2 sm:grid-cols-[2fr_1fr_auto_auto] sm:items-center">
+                      <Input
+                        value={unitDrafts[unit.id]?.name ?? unit.name}
+                        onChange={(e) =>
+                          setUnitDrafts((prev) => ({
+                            ...prev,
+                            [unit.id]: { name: e.target.value, order: prev[unit.id]?.order ?? String(unit.order) },
+                          }))
+                        }
+                      />
+                      <Input
+                        type="number"
+                        value={unitDrafts[unit.id]?.order ?? String(unit.order)}
+                        onChange={(e) =>
+                          setUnitDrafts((prev) => ({
+                            ...prev,
+                            [unit.id]: { name: prev[unit.id]?.name ?? unit.name, order: e.target.value },
+                          }))
+                        }
+                      />
+                      <Button size="sm" variant="outline" onClick={() => handleUpdateUnit(unit.id)} disabled={!isAdmin}>
+                        Enregistrer
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => handleDeleteUnit(unit.id)} disabled={!isAdmin}>
+                        Supprimer
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-[var(--text-secondary)]">Aucun pôle configuré.</p>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <p className="text-xs font-semibold text-[var(--text-primary)]">Assignation des membres</p>
+            <div className="space-y-2">
+              {members.map((member) => (
+                <div key={member.membershipId} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--border)]/60 bg-[var(--surface-2)]/70 px-3 py-2">
+                  <div className="flex items-center gap-2 text-sm text-[var(--text-secondary)]">
+                    <InitialsAvatar name={member.name} email={member.email} size={24} />
+                    <div className="min-w-0">
+                      <p className="truncate text-[var(--text-primary)]">{member.name ?? member.email}</p>
+                      <p className="text-[11px] text-[var(--text-secondary)]">{member.role}</p>
+                    </div>
+                  </div>
+                  <Select
+                    value={member.organizationUnit?.id ?? ''}
+                    onChange={(e) => handleAssignMemberToUnit(member.membershipId, e.target.value || null)}
+                    disabled={!isAdmin}
+                  >
+                    <option value="">Sans pôle</option>
+                    {organizationUnits.map((unit) => (
+                      <option key={unit.id} value={unit.id}>
+                        {unit.name}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {unitErrors ? <p className="text-sm text-rose-500">{unitErrors}</p> : null}
+          {teamInfo ? <p className="text-sm text-emerald-600">{teamInfo}</p> : null}
+          <div className="flex justify-end">
+            <Button variant="outline" onClick={() => setUnitsModalOpen(false)}>
+              Fermer
             </Button>
           </div>
         </div>

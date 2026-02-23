@@ -72,14 +72,19 @@ export async function GET(
     OR: [{ issuedAt: { gte: twelveMonthsAgo } }, { issuedAt: null, createdAt: { gte: twelveMonthsAgo } }],
   };
 
-  const [agg, paidAgg, invoices, paidInvoices] = await Promise.all([
+  const [agg, paidAgg, invoices, payments] = await Promise.all([
     prisma.invoice.aggregate({
       where: baseWhere,
       _sum: { totalCents: true },
     }),
-    prisma.invoice.aggregate({
-      where: { ...baseWhere, status: InvoiceStatus.PAID },
-      _sum: { totalCents: true },
+    prisma.payment.aggregate({
+      where: {
+        businessId: businessIdBigInt,
+        clientId: clientIdBigInt,
+        deletedAt: null,
+        paidAt: { gte: twelveMonthsAgo },
+      },
+      _sum: { amountCents: true },
     }),
     prisma.invoice.findMany({
       where: baseWhere,
@@ -87,15 +92,21 @@ export async function GET(
       take: 10,
       include: { project: { select: { name: true } } },
     }),
-    prisma.invoice.findMany({
-      where: { ...baseWhere, status: InvoiceStatus.PAID, paidAt: { not: null } },
-      orderBy: [{ paidAt: 'desc' }, { updatedAt: 'desc' }],
+    prisma.payment.findMany({
+      where: {
+        businessId: businessIdBigInt,
+        clientId: clientIdBigInt,
+        deletedAt: null,
+        paidAt: { gte: twelveMonthsAgo },
+      },
+      orderBy: [{ paidAt: 'desc' }, { createdAt: 'desc' }],
       take: 10,
+      include: { invoice: { select: { number: true, currency: true } } },
     }),
   ]);
 
   const invoicedCents = toNumber(agg._sum?.totalCents);
-  const paidCents = toNumber(paidAgg._sum?.totalCents);
+  const paidCents = toNumber(paidAgg._sum?.amountCents);
   const outstandingCents = computeOutstanding(invoicedCents, paidCents);
 
   return withIdNoStore(
@@ -111,12 +122,12 @@ export async function GET(
         dueAt: inv.dueAt ? inv.dueAt.toISOString() : null,
         projectName: (inv as typeof inv & { project?: { name: string | null } | null }).project?.name ?? null,
       })),
-      payments: paidInvoices.map((inv) => ({
-        id: inv.id.toString(),
-        amountCents: Number(inv.totalCents),
-        currency: inv.currency,
-        paidAt: inv.paidAt ? inv.paidAt.toISOString() : null,
-        reference: inv.number ?? `INV-${inv.id}`,
+      payments: payments.map((p) => ({
+        id: p.id.toString(),
+        amountCents: Number(p.amountCents),
+        currency: p.invoice?.currency ?? 'EUR',
+        paidAt: p.paidAt.toISOString(),
+        reference: p.reference ?? p.invoice?.number ?? `PAY-${p.id}`,
       })),
     }),
     requestId,

@@ -4,6 +4,13 @@ import { requireAuthPro } from '@/server/auth/requireAuthPro';
 import { requireBusinessRole } from '@/server/auth/businessRole';
 import { badRequest, forbidden, getRequestId, notFound, unauthorized, withRequestId } from '@/server/http/apiUtils';
 import { jsonNoStore, withNoStore } from '@/server/security/csrf';
+import { deriveInvoicePaymentSummary, type InvoicePaymentSummary } from '@/server/billing/payments';
+
+type PaymentAggregate = {
+  paidCents: bigint;
+  count: number;
+  lastPaidAt: Date | null;
+};
 
 function parseId(param: string | undefined) {
   if (!param || !/^\d+$/.test(param)) return null;
@@ -18,7 +25,10 @@ function withIdNoStore(res: NextResponse, requestId: string) {
   return withNoStore(withRequestId(res, requestId));
 }
 
-function serialize(invoice: Awaited<ReturnType<typeof prisma.invoice.findFirst>>) {
+function serialize(
+  invoice: Awaited<ReturnType<typeof prisma.invoice.findFirst>>,
+  paymentSummary?: InvoicePaymentSummary
+) {
   if (!invoice) return null;
   return {
     id: invoice.id.toString(),
@@ -35,6 +45,10 @@ function serialize(invoice: Awaited<ReturnType<typeof prisma.invoice.findFirst>>
     issuedAt: invoice.issuedAt ? invoice.issuedAt.toISOString() : null,
     dueAt: invoice.dueAt ? invoice.dueAt.toISOString() : null,
     paidAt: invoice.paidAt ? invoice.paidAt.toISOString() : null,
+    paidCents: paymentSummary ? paymentSummary.paidCents.toString() : '0',
+    remainingCents: paymentSummary ? paymentSummary.remainingCents.toString() : invoice.totalCents.toString(),
+    paymentStatus: paymentSummary ? paymentSummary.status : 'UNPAID',
+    lastPaidAt: paymentSummary?.lastPaidAt ? paymentSummary.lastPaidAt.toISOString() : null,
     createdAt: invoice.createdAt.toISOString(),
     updatedAt: invoice.updatedAt.toISOString(),
   };
@@ -75,5 +89,50 @@ export async function GET(
     orderBy: { createdAt: 'desc' },
   });
 
-  return withIdNoStore(jsonNoStore({ items: invoices.map(serialize) }), requestId);
+  const invoiceIds = invoices.map((inv) => inv.id);
+  const paymentGroups = invoiceIds.length
+    ? await prisma.payment.groupBy({
+        by: ['invoiceId'],
+        where: {
+          businessId: businessIdBigInt,
+          projectId: projectIdBigInt,
+          deletedAt: null,
+          invoiceId: { in: invoiceIds },
+        },
+        _sum: { amountCents: true },
+        _count: { _all: true },
+        _max: { paidAt: true },
+      })
+    : [];
+
+  const paidByInvoice = new Map<bigint, PaymentAggregate>();
+  paymentGroups.forEach((row) => {
+    paidByInvoice.set(row.invoiceId, {
+      paidCents: row._sum.amountCents ?? BigInt(0),
+      count: row._count._all ?? 0,
+      lastPaidAt: row._max.paidAt ?? null,
+    });
+  });
+
+  return withIdNoStore(
+    jsonNoStore({
+      items: invoices.map((inv) => {
+        const summary = deriveInvoicePaymentSummary(
+          {
+            id: inv.id,
+            businessId: inv.businessId,
+            projectId: inv.projectId,
+            clientId: inv.clientId,
+            createdByUserId: inv.createdByUserId,
+            status: inv.status,
+            totalCents: inv.totalCents,
+            paidAt: inv.paidAt,
+          },
+          paidByInvoice.get(inv.id)
+        );
+        return serialize(inv, summary);
+      }),
+    }),
+    requestId
+  );
 }

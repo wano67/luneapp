@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/server/db/client';
-import { BusinessReferenceType, FinanceType } from '@/generated/prisma';
+import { BusinessReferenceType, FinanceType, PaymentMethod, RecurringUnit } from '@/generated/prisma';
 import { requireAuthPro } from '@/server/auth/requireAuthPro';
 import { requireBusinessRole } from '@/server/auth/businessRole';
 import { assertSameOrigin, jsonNoStore, withNoStore } from '@/server/security/csrf';
@@ -50,6 +50,14 @@ function parseAmountCents(raw: unknown): bigint | null {
   const num = typeof raw === 'string' ? Number(raw) : raw;
   if (!Number.isFinite(num)) return null;
   return BigInt(Math.round(num * 100));
+}
+
+function parseAmountCentsDirect(raw: unknown): bigint | null {
+  if (raw === null || raw === undefined || raw === '') return null;
+  if (typeof raw !== 'number' && typeof raw !== 'string') return null;
+  const num = typeof raw === 'string' ? Number(raw) : raw;
+  if (!Number.isFinite(num)) return null;
+  return BigInt(Math.trunc(num));
 }
 
 function parseDate(value: unknown): Date | null {
@@ -151,8 +159,13 @@ function serializeFinance(finance: {
   type: FinanceType;
   amountCents: bigint;
   category: string;
+  vendor?: string | null;
+  method?: PaymentMethod | null;
+  isRecurring?: boolean;
+  recurringUnit?: RecurringUnit | null;
   date: Date;
   note: string | null;
+  deletedAt?: Date | null;
   createdAt: Date;
   updatedAt: Date;
   project?: { name: string | null } | null;
@@ -181,8 +194,13 @@ function serializeFinance(finance: {
     amountCents: finance.amountCents.toString(),
     amount: Number(finance.amountCents) / 100,
     category: finance.category,
+    vendor: finance.vendor ?? null,
+    method: finance.method ?? null,
+    isRecurring: Boolean(finance.isRecurring),
+    recurringUnit: finance.recurringUnit ?? null,
     date: finance.date.toISOString(),
     note: finance.note,
+    deletedAt: finance.deletedAt ? finance.deletedAt.toISOString() : null,
     createdAt: finance.createdAt.toISOString(),
     updatedAt: finance.updatedAt.toISOString(),
     ...(metadata ? { metadata } : {}),
@@ -217,7 +235,7 @@ export async function GET(
   if (!membership) return withIdNoStore(forbidden(), requestId);
 
   const finance = await prisma.finance.findFirst({
-    where: { id: financeIdBigInt, businessId: businessIdBigInt },
+    where: { id: financeIdBigInt, businessId: businessIdBigInt, deletedAt: null },
     include: {
       project: { select: { name: true } },
       categoryReference: { select: { id: true, name: true } },
@@ -266,7 +284,7 @@ export async function PATCH(
   if (limited) return withIdNoStore(limited, requestId);
 
   const existing = await prisma.finance.findFirst({
-    where: { id: financeIdBigInt, businessId: businessIdBigInt },
+    where: { id: financeIdBigInt, businessId: businessIdBigInt, deletedAt: null },
     include: {
       project: { select: { name: true } },
       categoryReference: { select: { id: true, name: true } },
@@ -289,8 +307,11 @@ export async function PATCH(
     data.type = (body as { type: FinanceType }).type;
   }
 
-  if ('amount' in body) {
-    const amountCents = parseAmountCents((body as { amount?: unknown }).amount);
+  if ('amount' in body || 'amountCents' in body) {
+    const amountCents =
+      'amountCents' in body
+        ? parseAmountCentsDirect((body as { amountCents?: unknown }).amountCents)
+        : parseAmountCents((body as { amount?: unknown }).amount);
     if (amountCents === null) return withIdNoStore(badRequest('amount invalide.'), requestId);
     data.amountCents = amountCents;
   }
@@ -314,6 +335,52 @@ export async function PATCH(
     if (noteRaw === null || noteRaw === undefined || noteRaw === '') data.note = null;
     else if (typeof noteRaw === 'string') data.note = noteRaw.trim();
     else return withIdNoStore(badRequest('note invalide.'), requestId);
+  }
+
+  if ('vendor' in body) {
+    const vendorRaw = (body as { vendor?: unknown }).vendor;
+    if (vendorRaw === null || vendorRaw === undefined || vendorRaw === '') data.vendor = null;
+    else if (typeof vendorRaw === 'string') data.vendor = vendorRaw.trim();
+    else return withIdNoStore(badRequest('vendor invalide.'), requestId);
+  }
+
+  if ('method' in body) {
+    const methodRaw = (body as { method?: unknown }).method;
+    if (methodRaw === null || methodRaw === undefined || methodRaw === '') {
+      data.method = null;
+    } else if (
+      typeof methodRaw === 'string' &&
+      (Object.values(PaymentMethod) as string[]).includes(methodRaw.toUpperCase())
+    ) {
+      data.method = methodRaw.toUpperCase() as PaymentMethod;
+    } else {
+      return withIdNoStore(badRequest('method invalide.'), requestId);
+    }
+  }
+
+  if ('isRecurring' in body) {
+    const recurringRaw = (body as { isRecurring?: unknown }).isRecurring;
+    if (recurringRaw === null || recurringRaw === undefined || recurringRaw === '') {
+      data.isRecurring = false;
+    } else if (recurringRaw === true || recurringRaw === false) {
+      data.isRecurring = recurringRaw;
+    } else {
+      return withIdNoStore(badRequest('isRecurring invalide.'), requestId);
+    }
+  }
+
+  if ('recurringUnit' in body) {
+    const recurringUnitRaw = (body as { recurringUnit?: unknown }).recurringUnit;
+    if (recurringUnitRaw === null || recurringUnitRaw === undefined || recurringUnitRaw === '') {
+      data.recurringUnit = null;
+    } else if (
+      typeof recurringUnitRaw === 'string' &&
+      (Object.values(RecurringUnit) as string[]).includes(recurringUnitRaw.toUpperCase())
+    ) {
+      data.recurringUnit = recurringUnitRaw.toUpperCase() as RecurringUnit;
+    } else {
+      return withIdNoStore(badRequest('recurringUnit invalide.'), requestId);
+    }
   }
 
   const metadata = sanitizeMetadata((body as { metadata?: unknown }).metadata);
@@ -446,11 +513,15 @@ export async function DELETE(
 
   const finance = await prisma.finance.findFirst({
     where: { id: financeIdBigInt, businessId: businessIdBigInt },
-    select: { id: true },
+    select: { id: true, deletedAt: true },
   });
   if (!finance) return withIdNoStore(notFound('Opération introuvable.'), requestId);
-
-  await prisma.finance.delete({ where: { id: financeIdBigInt } });
+  if (!finance.deletedAt) {
+    await prisma.finance.update({
+      where: { id: financeIdBigInt },
+      data: { deletedAt: new Date() },
+    });
+  }
 
   return withIdNoStore(new NextResponse(null, { status: 204 }), requestId);
 }

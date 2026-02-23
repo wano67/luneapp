@@ -8,7 +8,7 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
-import { getInvoiceStatusLabelFR } from '@/lib/billingStatus';
+import { getInvoiceStatusLabelFR, getPaymentStatusLabelFR } from '@/lib/billingStatus';
 import { useActiveBusiness } from '../../../../ActiveBusinessProvider';
 
 type InvoiceStatus = 'DRAFT' | 'SENT' | 'PAID' | 'CANCELLED';
@@ -32,6 +32,10 @@ type InvoiceDetail = {
   clientId: string | null;
   quoteId: string | null;
   status: InvoiceStatus;
+  paymentStatus?: string | null;
+  paidCents?: string | null;
+  remainingCents?: string | null;
+  lastPaidAt?: string | null;
   reservationStatus?: 'ACTIVE' | 'RELEASED' | 'CONSUMED' | null;
   depositPercent: number;
   currency: string;
@@ -161,6 +165,32 @@ export default function InvoiceDetailPage() {
     setUpdating(false);
   }
 
+  async function markPaid() {
+    if (!isAdmin) {
+      setActionError(readOnlyMessage);
+      return;
+    }
+    if (!invoice) return;
+    setUpdating(true);
+    setActionError(null);
+    setInfo(null);
+    const res = await fetchJson(`/api/pro/businesses/${businessId}/invoices/${invoice.id}/mark-paid`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ paidAt: new Date().toISOString() }),
+    });
+    setRequestId(res.requestId);
+    if (!res.ok) {
+      const msg = res.error ?? 'Paiement impossible.';
+      setActionError(res.requestId ? `${msg} (Ref: ${res.requestId})` : msg);
+      setUpdating(false);
+      return;
+    }
+    await load();
+    setInfo('Facture soldée.');
+    setUpdating(false);
+  }
+
   const requestHint = requestId ? `Ref: ${requestId}` : null;
   const pdfUrl = `/api/pro/businesses/${businessId}/invoices/${invoiceId}/pdf`;
 
@@ -200,6 +230,11 @@ export default function InvoiceDetailPage() {
               <div className="space-y-1">
                 <p className="text-sm font-semibold text-[var(--text-primary)]">
                   Statut: {getInvoiceStatusLabelFR(invoice.status)}
+                </p>
+                <p className="text-xs text-[var(--text-secondary)]">
+                  Paiement: {getPaymentStatusLabelFR(invoice.paymentStatus ?? null)} · Payé{' '}
+                  {formatCents(invoice.paidCents ?? '0', invoice.currency)} · Reste{' '}
+                  {formatCents(invoice.remainingCents ?? invoice.totalCents, invoice.currency)}
                 </p>
                 <p className="text-[11px] text-[var(--text-secondary)]">
                   Réservation stock: {invoice.reservationStatus ?? '—'}
@@ -266,8 +301,8 @@ export default function InvoiceDetailPage() {
                     </Button>
                   ) : null}
                   {invoice.status === 'SENT' ? (
-                    <Button onClick={() => updateStatus('PAID')} disabled={updating}>
-                      {updating ? 'Mise à jour…' : 'Marquer payée'}
+                    <Button onClick={markPaid} disabled={updating || Number(invoice.remainingCents ?? 0) <= 0}>
+                      {updating ? 'Mise à jour…' : 'Solder la facture'}
                     </Button>
                   ) : null}
                 </>

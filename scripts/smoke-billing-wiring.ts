@@ -167,6 +167,15 @@ async function main() {
   if (!prestationsUpdate.res.ok) {
     throw new Error(`Update prestations failed (${prestationsUpdate.res.status}) ref=${getLastRequestId()}`);
   }
+
+  console.log('Quote guardrail (no services)…');
+  const noServiceQuote = await request(`/api/pro/businesses/${businessId}/projects/${projectId}/quotes`, {
+    method: 'POST',
+    allowError: true,
+  });
+  if (noServiceQuote.res.status !== 400) {
+    throw new Error(`Expected 400 for quote without services, got ${noServiceQuote.res.status}`);
+  }
   const { res: attachRes, json: attachJson } = await request(
     `/api/pro/businesses/${businessId}/projects/${projectId}/services`,
     { method: 'POST', body: { serviceId, quantity: 1, priceCents: 10000, generateTasks: true } }
@@ -181,6 +190,105 @@ async function main() {
   );
   if (!attachResB.ok)
     throw new Error(`Attach service B failed (${attachResB.status}) ref=${getLastRequestId()} json=${JSON.stringify(attachJsonB)}`);
+
+  console.log('Fetch members (for project access + units)…');
+  const { res: membersRes, json: membersJson } = await request(`/api/pro/businesses/${businessId}/members`);
+  if (!membersRes.ok) throw new Error(`Members failed (${membersRes.status}) ref=${getLastRequestId()}`);
+  const membershipId =
+    (membersJson as { items?: Array<{ membershipId?: string }> })?.items?.[0]?.membershipId ?? null;
+  if (!membershipId) throw new Error('MembershipId missing.');
+
+  console.log('Create organization unit…');
+  const { res: unitRes, json: unitJson } = await request(
+    `/api/pro/businesses/${businessId}/organization/units`,
+    { method: 'POST', body: { name: `Pôle Smoke ${Date.now()}`, order: 1 } }
+  );
+  if (!unitRes.ok) throw new Error(`Unit create failed (${unitRes.status}) ref=${getLastRequestId()}`);
+  const unitId = (unitJson as { item?: { id?: string } })?.item?.id;
+  if (!unitId) throw new Error('Unit id missing.');
+
+  console.log('Assign member to unit…');
+  const assignUnitRes = await request(
+    `/api/pro/businesses/${businessId}/memberships/${membershipId}`,
+    { method: 'PATCH', body: { organizationUnitId: unitId } }
+  );
+  if (!assignUnitRes.res.ok) {
+    throw new Error(`Assign unit failed (${assignUnitRes.res.status}) ref=${getLastRequestId()}`);
+  }
+
+  console.log('Add project access member…');
+  const accessRes = await request(
+    `/api/pro/businesses/${businessId}/projects/${projectId}/members`,
+    { method: 'POST', body: { membershipId } }
+  );
+  if (!accessRes.res.ok) {
+    throw new Error(`Project access add failed (${accessRes.res.status}) ref=${getLastRequestId()}`);
+  }
+  const accessListRes = await request(
+    `/api/pro/businesses/${businessId}/projects/${projectId}/members`
+  );
+  if (!accessListRes.res.ok) {
+    throw new Error(`Project access list failed (${accessListRes.res.status}) ref=${getLastRequestId()}`);
+  }
+
+  console.log('Update task status for activity feed…');
+  const { res: tasksRes, json: tasksJson } = await request(
+    `/api/pro/businesses/${businessId}/tasks?projectId=${projectId}`
+  );
+  if (!tasksRes.ok) throw new Error(`Tasks fetch failed (${tasksRes.status}) ref=${getLastRequestId()}`);
+  const taskId = (tasksJson as { items?: Array<{ id?: string; status?: string }> })?.items?.[0]?.id;
+  if (!taskId) throw new Error('No task found for activity.');
+  const taskUpdate = await request(`/api/pro/businesses/${businessId}/tasks/${taskId}`, {
+    method: 'PATCH',
+    body: { status: 'DONE' },
+  });
+  if (!taskUpdate.res.ok) {
+    throw new Error(`Task update failed (${taskUpdate.res.status}) ref=${getLastRequestId()}`);
+  }
+  const activityRes = await request(
+    `/api/pro/businesses/${businessId}/projects/${projectId}/activity?limit=5`
+  );
+  if (!activityRes.res.ok) {
+    throw new Error(`Activity fetch failed (${activityRes.res.status}) ref=${getLastRequestId()}`);
+  }
+
+  console.log('Create custom service line (wizard-like)…');
+  const customCode = `SER-CUSTOM-${Date.now()}`;
+  const { res: customSvcRes, json: customSvcJson } = await request(
+    `/api/pro/businesses/${businessId}/services`,
+    {
+      method: 'POST',
+      body: {
+        code: customCode,
+        name: `Prestation personnalisée ${Date.now()}`,
+        description: 'Créée via wizard',
+        defaultPriceCents: 5000,
+        type: 'CUSTOM',
+      },
+    }
+  );
+  if (!customSvcRes.ok) {
+    throw new Error(`Create custom service failed (${customSvcRes.status}) ref=${getLastRequestId()}`);
+  }
+  const customServiceId = (customSvcJson as { id?: string })?.id;
+  if (!customServiceId) throw new Error('Custom service id missing.');
+  const { res: attachCustomRes } = await request(
+    `/api/pro/businesses/${businessId}/projects/${projectId}/services`,
+    {
+      method: 'POST',
+      body: {
+        serviceId: customServiceId,
+        quantity: 1,
+        priceCents: 5000,
+        titleOverride: 'Ligne personnalisée',
+        description: 'Créée via wizard',
+        generateTasks: false,
+      },
+    }
+  );
+  if (!attachCustomRes.ok) {
+    throw new Error(`Attach custom service failed (${attachCustomRes.status}) ref=${getLastRequestId()}`);
+  }
 
   console.log('Validate tasks linked to project service…');
   const { res: tasksRes, json: tasksJson } = await request(`/api/pro/businesses/${businessId}/tasks?projectId=${projectId}`);
@@ -470,7 +578,7 @@ async function main() {
   if (!invPdfRes.ok) throw new Error(`Invoice PDF failed (${invPdfRes.status}) ref=${getLastRequestId()}`);
   if (invPdfBuf.byteLength < 1000) throw new Error('Invoice PDF too small.');
 
-  console.log('Mark invoice SENT then PAID…');
+  console.log('Mark invoice SENT then add payments…');
   const invSent = await request(
     `/api/pro/businesses/${businessId}/invoices/${invoice.id}`,
     { method: 'PATCH', body: { status: 'SENT' } }
@@ -489,21 +597,85 @@ async function main() {
   if (!invoiceNumber || !numberRegex.test(invoiceNumber)) {
     throw new Error(`Invoice number format invalid (${invoiceNumber}) ref=${getLastRequestId()}`);
   }
-  const invPaid = await request(
-    `/api/pro/businesses/${businessId}/invoices/${invoice.id}`,
-    { method: 'PATCH', body: { status: 'PAID' } }
+
+  const partialAmount = invoiceTotal / BigInt(2);
+  const partialPay = await request(
+    `/api/pro/businesses/${businessId}/invoices/${invoice.id}/payments`,
+    {
+      method: 'POST',
+      body: { amountCents: Number(partialAmount), paidAt: new Date().toISOString(), method: 'WIRE' },
+    }
   );
-  if (!invPaid.res.ok) throw new Error(`Invoice PAID failed (${invPaid.res.status}) ref=${getLastRequestId()}`);
+  if (!partialPay.res.ok) {
+    throw new Error(`Partial payment failed (${partialPay.res.status}) ref=${getLastRequestId()}`);
+  }
+  const invAfterPartial = await request(`/api/pro/businesses/${businessId}/invoices/${invoice.id}`);
+  if (!invAfterPartial.res.ok) {
+    throw new Error(`Invoice fetch after partial failed (${invAfterPartial.res.status}) ref=${getLastRequestId()}`);
+  }
+  const partialStatus =
+    (invAfterPartial.json as { invoice?: { paymentStatus?: string } })?.invoice?.paymentStatus ?? null;
+  if (partialStatus !== 'PARTIAL') {
+    throw new Error(`Expected PARTIAL, got ${partialStatus ?? 'null'}`);
+  }
+
+  const remainingAmount = invoiceTotal - partialAmount;
+  const overpayAttempt = await request(
+    `/api/pro/businesses/${businessId}/invoices/${invoice.id}/payments`,
+    {
+      method: 'POST',
+      body: { amountCents: Number(remainingAmount + BigInt(100)), paidAt: new Date().toISOString(), method: 'WIRE' },
+      allowError: true,
+    }
+  );
+  if (overpayAttempt.res.status !== 400) {
+    throw new Error(`Expected 400 for overpay, got ${overpayAttempt.res.status}`);
+  }
+  const settle = await request(
+    `/api/pro/businesses/${businessId}/invoices/${invoice.id}/mark-paid`,
+    { method: 'POST', body: { paidAt: new Date().toISOString(), method: 'WIRE' } }
+  );
+  if (!settle.res.ok) {
+    throw new Error(`Mark paid failed (${settle.res.status}) ref=${getLastRequestId()}`);
+  }
+  const invAfterFinal = await request(`/api/pro/businesses/${businessId}/invoices/${invoice.id}`);
+  if (!invAfterFinal.res.ok) {
+    throw new Error(`Invoice fetch after final failed (${invAfterFinal.res.status}) ref=${getLastRequestId()}`);
+  }
+  const finalInvoice = (invAfterFinal.json as { invoice?: { status?: string; paymentStatus?: string; paidAt?: string | null } })?.invoice;
+  if (finalInvoice?.status !== 'PAID' || finalInvoice.paymentStatus !== 'PAID') {
+    throw new Error(`Expected PAID invoice, got ${finalInvoice?.status} / ${finalInvoice?.paymentStatus}`);
+  }
   const paidAt = new Date().toISOString();
   const paidAtRes = await request(`/api/pro/businesses/${businessId}/invoices/${invoice.id}`, {
     method: 'PATCH',
     body: { paidAt },
   });
   if (!paidAtRes.res.ok) throw new Error(`PaidAt update failed (${paidAtRes.res.status}) ref=${getLastRequestId()}`);
-  const paidNumber =
-    (invPaid.json as { invoice?: { number?: string | null } })?.invoice?.number ?? null;
-  if (paidNumber !== invoiceNumber) {
-    throw new Error(`Invoice number changed after PAID (${invoiceNumber} -> ${paidNumber}) ref=${getLastRequestId()}`);
+
+  const { res: payListRes, json: payListJson } = await request(
+    `/api/pro/businesses/${businessId}/invoices/${invoice.id}/payments`
+  );
+  if (!payListRes.ok) throw new Error(`Payments list failed (${payListRes.status}) ref=${getLastRequestId()}`);
+  const paymentList =
+    (payListJson as { items?: Array<{ id?: string }> })?.items ?? [];
+  const deletePaymentId = paymentList[0]?.id;
+  if (!deletePaymentId) throw new Error('Payment id missing for delete test.');
+  const deletePay = await request(
+    `/api/pro/businesses/${businessId}/invoices/${invoice.id}/payments/${deletePaymentId}`,
+    { method: 'DELETE' }
+  );
+  if (!deletePay.res.ok) {
+    throw new Error(`Delete payment failed (${deletePay.res.status}) ref=${getLastRequestId()}`);
+  }
+  const invAfterDelete = await request(`/api/pro/businesses/${businessId}/invoices/${invoice.id}`);
+  if (!invAfterDelete.res.ok) {
+    throw new Error(`Invoice fetch after delete failed (${invAfterDelete.res.status}) ref=${getLastRequestId()}`);
+  }
+  const deleteStatus =
+    (invAfterDelete.json as { invoice?: { paymentStatus?: string } })?.invoice?.paymentStatus ?? null;
+  if (deleteStatus !== 'PARTIAL' && deleteStatus !== 'UNPAID') {
+    throw new Error(`Expected PARTIAL or UNPAID after delete, got ${deleteStatus ?? 'null'}`);
   }
 
   console.log('Payments aggregation…');
@@ -516,6 +688,40 @@ async function main() {
   const paymentMatch = paymentItems.some((item) => item.invoiceId === invoice.id);
   if (!paymentMatch) {
     throw new Error('Paid invoice missing from payments list.');
+  }
+
+  console.log('Create + delete expense…');
+  const expenseLabel = `Charge smoke ${Date.now()}`;
+  const { res: expenseRes, json: expenseJson } = await request(
+    `/api/pro/businesses/${businessId}/finances`,
+    {
+      method: 'POST',
+      body: {
+        type: 'EXPENSE',
+        amount: 42.5,
+        category: expenseLabel,
+        date: new Date().toISOString().slice(0, 10),
+        vendor: 'Smoke vendor',
+        method: 'CARD',
+        isRecurring: false,
+      },
+    }
+  );
+  if (!expenseRes.ok) throw new Error(`Expense create failed (${expenseRes.status}) ref=${getLastRequestId()}`);
+  const expenseId = (expenseJson as { item?: { id?: string } })?.item?.id;
+  if (!expenseId) throw new Error('Expense id missing.');
+  const expenseDel = await request(`/api/pro/businesses/${businessId}/finances/${expenseId}`, { method: 'DELETE' });
+  if (!expenseDel.res.ok)
+    throw new Error(`Expense delete failed (${expenseDel.res.status}) ref=${getLastRequestId()}`);
+  const { res: financeListRes, json: financeList } = await request(
+    `/api/pro/businesses/${businessId}/finances`
+  );
+  if (!financeListRes.ok) {
+    throw new Error(`Finance list failed (${financeListRes.status}) ref=${getLastRequestId()}`);
+  }
+  const financeItems = (financeList as { items?: Array<{ id?: string }> })?.items ?? [];
+  if (financeItems.some((item) => item.id === expenseId)) {
+    throw new Error('Deleted expense still present in finances list.');
   }
 
   console.log('Dashboard (after)…');

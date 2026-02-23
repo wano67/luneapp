@@ -62,6 +62,7 @@ export async function GET(
   const finances = await prisma.finance.findMany({
     where: {
       businessId: businessIdBigInt,
+      deletedAt: null,
       date: { gte: start, lte: end },
       category: { in: ['VAT_COLLECTED', 'VAT_PAID'] },
     },

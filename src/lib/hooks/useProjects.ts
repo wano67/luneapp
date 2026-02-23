@@ -39,6 +39,7 @@ export type ProjectCounts = {
   inactive: number;
   archived: number;
   total: number;
+  activeTasks?: { total: number; done: number };
 };
 
 type HookState = {

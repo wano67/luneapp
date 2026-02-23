@@ -136,8 +136,10 @@ model User {
   // Entreprises auxquelles il appartient (via membership)
   businessMemberships BusinessMembership[]
   assignedTasks       Task[]
+  statusUpdatedTasks  Task[] @relation("TaskStatusUpdatedBy")
   quotesCreated       Quote[]   @relation("QuoteCreatedBy")
   invoicesCreated     Invoice[] @relation("InvoiceCreatedBy")
+  paymentsCreated     Payment[] @relation("PaymentCreatedBy")
 
   // Wallet (perso)
   personalAccounts     PersonalAccount[]
@@ -177,12 +179,14 @@ model Business {
   owner   User   @relation("BusinessOwner", fields: [ownerId], references: [id])
 
   memberships BusinessMembership[]
+  organizationUnits OrganizationUnit[]
   invites     BusinessInvite[]
   prospects   Prospect[]
   clients     Client[]
   projects    Project[]
   tasks       Task[]
   finances    Finance[]
+  payments    Payment[]
   services    Service[]
   serviceProcessTemplates ServiceProcessTemplate[]
   interactions Interaction[]
@@ -211,15 +215,34 @@ model BusinessMembership {
   businessId BigInt
   userId     BigInt
   role       BusinessRole
+  organizationUnitId BigInt?
 
   business Business @relation(fields: [businessId], references: [id])
   user     User     @relation(fields: [userId], references: [id])
+  organizationUnit OrganizationUnit? @relation(fields: [organizationUnitId], references: [id], onDelete: SetNull)
   employeeProfile EmployeeProfile?
   permissions     BusinessMemberPermission[]
+  projectMembers  ProjectMember[]
 
   createdAt DateTime @default(now())
 
   @@unique([businessId, userId])
+}
+
+model OrganizationUnit {
+  id         BigInt @id @default(autoincrement())
+  businessId BigInt
+  name       String
+  order      Int    @default(0)
+
+  business    Business           @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  memberships BusinessMembership[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([businessId, name])
+  @@index([businessId, order])
 }
 
 model EmployeeProfile {
@@ -415,6 +438,7 @@ model Client {
   interactions Interaction[]
   quotes    Quote[]
   invoices  Invoice[]
+  payments  Payment[]
   documents BusinessDocument[]
 
   createdAt DateTime @default(now())
@@ -449,11 +473,13 @@ model Project {
   billingQuote Quote? @relation("ProjectBillingQuote", fields: [billingQuoteId], references: [id], onDelete: SetNull)
   tasks    Task[]
   finances Finance[]
+  payments Payment[]
   projectServices ProjectService[]
   interactions Interaction[]
   tags     ProjectTag[]
   quotes    Quote[]
   invoices  Invoice[]
+  projectMembers ProjectMember[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -463,6 +489,21 @@ model Project {
   @@index([billingQuoteId])
 }
 
+model ProjectMember {
+  id           BigInt @id @default(autoincrement())
+  projectId    BigInt
+  membershipId BigInt
+
+  project    Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  membership BusinessMembership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([projectId, membershipId])
+  @@index([projectId])
+  @@index([membershipId])
+}
+
 model Task {
   id             BigInt      @id @default(autoincrement())
   businessId     BigInt
@@ -470,6 +511,8 @@ model Task {
   projectServiceId BigInt?
   projectServiceStepId BigInt?
   assigneeUserId BigInt?
+  statusUpdatedAt DateTime?
+  statusUpdatedByUserId BigInt?
   categoryReferenceId BigInt?
   title          String
   status         TaskStatus  @default(TODO)
@@ -484,6 +527,7 @@ model Task {
   projectService ProjectService? @relation(fields: [projectServiceId], references: [id], onDelete: SetNull)
   projectServiceStep ProjectServiceStep? @relation(fields: [projectServiceStepId], references: [id], onDelete: SetNull)
   assignee User?    @relation(fields: [assigneeUserId], references: [id], onDelete: SetNull)
+  statusUpdatedByUser User? @relation("TaskStatusUpdatedBy", fields: [statusUpdatedByUserId], references: [id], onDelete: SetNull)
   categoryReference BusinessReference? @relation("TaskCategoryReference", fields: [categoryReferenceId], references: [id], onDelete: SetNull)
   tags     TaskTag[]
 
@@ -496,6 +540,7 @@ model Task {
   @@index([projectServiceStepId])
   @@index([projectId, projectServiceId])
   @@index([businessId, categoryReferenceId])
+  @@index([projectId, statusUpdatedAt])
 }
 
 model Process {
@@ -540,8 +585,13 @@ model Finance {
   type       FinanceType
   amountCents BigInt
   category   String
+  vendor     String?
+  method     PaymentMethod?
+  isRecurring Boolean @default(false)
+  recurringUnit RecurringUnit?
   date       DateTime
   note       String?
+  deletedAt  DateTime?
 
   business Business @relation(fields: [businessId], references: [id])
   project  Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
@@ -557,6 +607,7 @@ model Finance {
   @@index([businessId, type])
   @@index([businessId, categoryReferenceId])
   @@index([businessId, inventoryProductId])
+  @@index([businessId, deletedAt])
 }
 
 /**
@@ -1014,6 +1065,19 @@ enum BillingUnit {
   MONTHLY
 }
 
+enum PaymentMethod {
+  WIRE
+  CARD
+  CASH
+  CHECK
+  OTHER
+}
+
+enum RecurringUnit {
+  MONTHLY
+  YEARLY
+}
+
 enum NumberSequenceKind {
   QUOTE
   INVOICE
@@ -1122,8 +1186,40 @@ model Invoice {
   createdBy User    @relation("InvoiceCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
   items    InvoiceItem[]
   reservation InventoryReservation?
+  payments Payment[]
 
   @@unique([businessId, number])
+}
+
+model Payment {
+  id         BigInt        @id @default(autoincrement())
+  businessId BigInt
+  invoiceId  BigInt
+  projectId  BigInt?
+  clientId   BigInt?
+  createdByUserId BigInt?
+  amountCents BigInt
+  paidAt     DateTime
+  method     PaymentMethod @default(WIRE)
+  reference  String?
+  note       String?
+  deletedAt  DateTime?
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  invoice  Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  project  Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  client   Client?  @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  createdBy User?   @relation("PaymentCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([businessId, paidAt])
+  @@index([invoiceId])
+  @@index([projectId])
+  @@index([clientId])
+  @@index([businessId, deletedAt])
+  @@index([createdByUserId])
 }
 
 model InvoiceItem {

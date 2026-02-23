@@ -18,10 +18,11 @@ export default function ProjectsPage({ businessId }: Props) {
 
   const kpis = useMemo(() => {
     const snapshot = counts ?? { active: 0, planned: 0, inactive: 0 };
+    const taskSnapshot = counts?.activeTasks ?? { total: 0, done: 0 };
     return [
       { label: 'Actifs', value: snapshot.active },
       { label: 'En attente', value: snapshot.planned },
-      { label: 'Inactifs', value: snapshot.inactive },
+      { label: 'Tâches (projets en cours)', value: `${taskSnapshot.done} / ${taskSnapshot.total}` },
     ];
   }, [counts]);
 

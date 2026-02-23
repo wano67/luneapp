@@ -66,6 +66,7 @@ export function ProjectCard({ businessId, project, onMutate }: Props) {
   const scopeLabel = getProjectScopeLabelFR(project.status, project.archivedAt);
   const scopeVariant = getProjectScopeVariant(project.status, project.archivedAt);
   const isOverdue = isProjectOverdue(project.endDate, project.status, project.archivedAt);
+  const showScopeBadge = scopeLabel.toLowerCase() !== statusLabel.toLowerCase();
 
   const activeCtx = useActiveBusiness({ optional: true });
   const isAdmin = activeCtx?.isAdmin ?? false;
@@ -228,7 +229,7 @@ export function ProjectCard({ businessId, project, onMutate }: Props) {
           </p>
           <div className="flex flex-wrap items-center gap-2 text-[11px]">
             <Badge variant="neutral">{statusLabel}</Badge>
-            <Badge variant={scopeVariant}>{scopeLabel}</Badge>
+            {showScopeBadge ? <Badge variant={scopeVariant}>{scopeLabel}</Badge> : null}
             {isOverdue ? <Badge variant="performance">En retard</Badge> : null}
           </div>
         </div>

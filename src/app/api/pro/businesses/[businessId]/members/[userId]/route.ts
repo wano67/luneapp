@@ -59,16 +59,26 @@ function actorCanRemove(actorRole: BusinessRole, targetRole: BusinessRole) {
 }
 
 type MembershipWithProfile = Prisma.BusinessMembershipGetPayload<{
-  include: { user: { select: { email: true } }; employeeProfile: true; permissions: true };
+  include: {
+    user: { select: { email: true, name: true } };
+    employeeProfile: true;
+    permissions: true;
+    organizationUnit: { select: { id: true; name: true } };
+  };
 }>;
 
 function serializeMember(membership: MembershipWithProfile | null) {
   if (!membership) return null;
   return {
+    membershipId: membership.id.toString(),
     userId: membership.userId.toString(),
     email: membership.user?.email ?? '',
+    name: membership.user?.name ?? null,
     role: membership.role,
     createdAt: membership.createdAt.toISOString(),
+    organizationUnit: membership.organizationUnit
+      ? { id: membership.organizationUnit.id.toString(), name: membership.organizationUnit.name }
+      : null,
     employeeProfile: membership.employeeProfile
       ? {
           id: membership.employeeProfile.id.toString(),
@@ -118,7 +128,12 @@ export async function GET(
 
   const targetMembership = (await prisma.businessMembership.findUnique({
     where: { businessId_userId: { businessId: businessIdBigInt, userId: targetUserId } },
-    include: { user: { select: { email: true } }, employeeProfile: true, permissions: true },
+    include: {
+      user: { select: { email: true, name: true } },
+      employeeProfile: true,
+      permissions: true,
+      organizationUnit: { select: { id: true, name: true } },
+    },
   })) as MembershipWithProfile | null;
 
   if (!targetMembership) return withIdNoStore(notFound('Membre introuvable.'), requestId);
@@ -161,7 +176,12 @@ export async function PATCH(
 
   const targetMembership = (await prisma.businessMembership.findUnique({
     where: { businessId_userId: { businessId: businessIdBigInt, userId: targetUserId } },
-    include: { user: { select: { email: true } }, employeeProfile: true, permissions: true },
+    include: {
+      user: { select: { email: true, name: true } },
+      employeeProfile: true,
+      permissions: true,
+      organizationUnit: { select: { id: true, name: true } },
+    },
   })) as MembershipWithProfile | null;
   if (!targetMembership) {
     return withIdNoStore(notFound('Membre introuvable.'), requestId);
@@ -323,7 +343,12 @@ export async function PATCH(
 
     return tx.businessMembership.findUnique({
       where: { businessId_userId: { businessId: businessIdBigInt, userId: targetUserId } },
-      include: { user: { select: { email: true } }, employeeProfile: true, permissions: true },
+      include: {
+        user: { select: { email: true, name: true } },
+        employeeProfile: true,
+        permissions: true,
+        organizationUnit: { select: { id: true, name: true } },
+      },
     });
   });
 

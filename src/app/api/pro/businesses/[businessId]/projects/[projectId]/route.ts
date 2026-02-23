@@ -53,6 +53,7 @@ function serializeBillingSummary(summary: BillingSummary | null) {
     balanceCents: summary.balanceCents.toString(),
     alreadyInvoicedCents: summary.alreadyInvoicedCents.toString(),
     alreadyPaidCents: summary.alreadyPaidCents.toString(),
+    remainingToCollectCents: summary.remainingToCollectCents.toString(),
     remainingCents: summary.remainingCents.toString(),
   };
 }
@@ -92,7 +93,7 @@ function serializeProject(
   }[];
     tasksSummary?: { total: number; open: number; done: number; progressPct: number };
   },
-  opts?: { billingSummary?: BillingSummary | null }
+  opts?: { billingSummary?: BillingSummary | null; valueCents?: bigint | null }
 ) {
   return {
     id: project.id.toString(),
@@ -120,6 +121,7 @@ function serializeProject(
     endDate: project.endDate ? project.endDate.toISOString() : null,
     prestationsText: project.prestationsText ?? null,
     billingSummary: opts?.billingSummary ? serializeBillingSummary(opts.billingSummary) : null,
+    valueCents: opts?.valueCents != null ? opts.valueCents.toString() : null,
     counts: project._count
       ? {
           tasks: project._count.tasks,
@@ -263,7 +265,12 @@ export async function GET(
 
   const billingSummary = await computeProjectBillingSummary(businessIdBigInt, projectIdBigInt);
   return withIdNoStore(
-    jsonNoStore({ item: serializeProject({ ...project, tasksSummary: summary }, { billingSummary }) }),
+    jsonNoStore({
+      item: serializeProject(
+        { ...project, tasksSummary: summary },
+        { billingSummary, valueCents: billingSummary?.totalCents ?? null }
+      ),
+    }),
     requestId
   );
 }

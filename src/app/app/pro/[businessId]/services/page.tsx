@@ -2,7 +2,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ChangeEvent } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import Papa from 'papaparse';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -172,6 +172,7 @@ function phaseLabel(phase: TaskPhase) {
 export default function ServicesPage() {
   const params = useParams();
   const businessId = (params?.businessId ?? '') as string;
+  const router = useRouter();
   const activeCtx = useActiveBusiness({ optional: true });
   const role = activeCtx?.activeBusiness?.role ?? null;
   const isAdmin = role === 'OWNER' || role === 'ADMIN';
@@ -665,12 +666,17 @@ export default function ServicesPage() {
       return;
     }
 
+    const createdId = (res.data as { id?: string } | null)?.id ?? null;
     setInfo(isEdit ? 'Service mis à jour.' : 'Service créé.');
     setModalOpen(false);
     setEditing(null);
     setForm(emptyForm);
     setSaving(false);
     await loadServices();
+    if (!isEdit && createdId) {
+      router.push(`/app/pro/${businessId}/services/${createdId}?tab=templates&openTemplate=1`);
+      return;
+    }
   }
 
   function openCreate() {

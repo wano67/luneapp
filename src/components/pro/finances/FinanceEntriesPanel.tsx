@@ -17,6 +17,8 @@ import { useRowSelection } from '@/app/app/components/selection/useRowSelection'
 import { BulkActionBar } from '@/app/app/components/selection/BulkActionBar';
 
 type FinanceType = 'INCOME' | 'EXPENSE';
+type PaymentMethod = 'WIRE' | 'CARD' | 'CHECK' | 'CASH' | 'OTHER';
+type RecurringUnit = 'MONTHLY' | 'YEARLY';
 
 type Finance = {
   id: string;
@@ -30,6 +32,10 @@ type Finance = {
   amountCents: string;
   amount: number;
   category: string;
+  vendor: string | null;
+  method: PaymentMethod | null;
+  isRecurring: boolean;
+  recurringUnit: RecurringUnit | null;
   date: string;
   note: string | null;
   createdAt: string;
@@ -42,6 +48,19 @@ type FinanceDetailResponse = { item: Finance };
 const TYPE_OPTIONS: { value: FinanceType; label: string }[] = [
   { value: 'INCOME', label: 'Revenu' },
   { value: 'EXPENSE', label: 'Dépense' },
+];
+
+const METHOD_OPTIONS: { value: PaymentMethod; label: string }[] = [
+  { value: 'WIRE', label: 'Virement' },
+  { value: 'CARD', label: 'Carte' },
+  { value: 'CHECK', label: 'Chèque' },
+  { value: 'CASH', label: 'Espèces' },
+  { value: 'OTHER', label: 'Autre' },
+];
+
+const RECURRING_OPTIONS: { value: RecurringUnit; label: string }[] = [
+  { value: 'MONTHLY', label: 'Mensuel' },
+  { value: 'YEARLY', label: 'Annuel' },
 ];
 
 function formatDate(value: string | null | undefined) {
@@ -86,10 +105,14 @@ export function FinanceEntriesPanel({ businessId }: Props) {
   const [form, setForm] = useState({
     type: 'EXPENSE' as FinanceType,
     amount: '',
-    category: '',
+    category: 'Autre',
     date: '',
     projectId: '',
     note: '',
+    vendor: '',
+    method: 'WIRE' as PaymentMethod,
+    isRecurring: false,
+    recurringUnit: 'MONTHLY' as RecurringUnit,
     categoryReferenceId: '',
     tagReferenceIds: [] as string[],
   });
@@ -127,13 +150,18 @@ export function FinanceEntriesPanel({ businessId }: Props) {
 
   function openCreate() {
     setEditing(null);
+    setInfo(null);
     setForm({
       type: 'EXPENSE',
       amount: '',
-      category: '',
+      category: 'Autre',
       date: '',
       projectId: '',
       note: '',
+      vendor: '',
+      method: 'WIRE',
+      isRecurring: false,
+      recurringUnit: 'MONTHLY',
       categoryReferenceId: '',
       tagReferenceIds: [],
     });
@@ -143,6 +171,7 @@ export function FinanceEntriesPanel({ businessId }: Props) {
 
   function openEdit(item: Finance) {
     setEditing(item);
+    setInfo(null);
     setForm({
       type: item.type,
       amount: (item.amount ?? 0).toString(),
@@ -150,6 +179,10 @@ export function FinanceEntriesPanel({ businessId }: Props) {
       date: item.date.slice(0, 10),
       projectId: item.projectId ?? '',
       note: item.note ?? '',
+      vendor: item.vendor ?? '',
+      method: item.method ?? 'WIRE',
+      isRecurring: Boolean(item.isRecurring),
+      recurringUnit: item.recurringUnit ?? 'MONTHLY',
       categoryReferenceId: item.categoryReferenceId ?? '',
       tagReferenceIds: item.tagReferences?.map((t) => t.id) ?? [],
     });
@@ -244,8 +277,10 @@ export function FinanceEntriesPanel({ businessId }: Props) {
   }, [businessId]);
 
   function onFieldChange(e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) {
-    const { name, value } = e.target;
-    setForm((prev) => ({ ...prev, [name]: value }));
+    const target = e.target as HTMLInputElement;
+    const { name, value } = target;
+    const nextValue = target.type === 'checkbox' ? target.checked : value;
+    setForm((prev) => ({ ...prev, [name]: nextValue }));
   }
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
@@ -259,11 +294,15 @@ export function FinanceEntriesPanel({ businessId }: Props) {
     setCreating(true);
     const payload: Record<string, unknown> = {
       type: form.type,
-      amountCents: Math.round(Number(form.amount || 0) * 100).toString(),
+      amount: Number(form.amount || 0),
       category: form.category,
       date: form.date,
       projectId: form.projectId || null,
       note: form.note || null,
+      vendor: form.vendor || null,
+      method: form.method || null,
+      isRecurring: form.isRecurring,
+      recurringUnit: form.isRecurring ? form.recurringUnit : null,
       categoryReferenceId: form.categoryReferenceId || null,
       tagReferenceIds: form.tagReferenceIds,
     };
@@ -282,6 +321,8 @@ export function FinanceEntriesPanel({ businessId }: Props) {
     }
     setModalOpen(false);
     setSelectedId(res.data.item.id);
+    const isExpense = res.data.item.type === 'EXPENSE';
+    setInfo(editing ? (isExpense ? 'Charge mise à jour.' : 'Écriture mise à jour.') : isExpense ? 'Charge ajoutée.' : 'Écriture ajoutée.');
     await loadFinances();
   }
 
@@ -308,6 +349,7 @@ export function FinanceEntriesPanel({ businessId }: Props) {
     }
     setDeleteModal(null);
     setSelectedId(null);
+    setInfo(finance.type === 'EXPENSE' ? 'Charge supprimée.' : 'Écriture supprimée.');
     await loadFinances();
   }
 
@@ -321,6 +363,7 @@ export function FinanceEntriesPanel({ businessId }: Props) {
         )
       );
       clear();
+      setInfo('Écritures supprimées.');
       await loadFinances();
     } catch (err) {
       setBulkError(getErrorMessage(err));
@@ -334,14 +377,16 @@ export function FinanceEntriesPanel({ businessId }: Props) {
       <PageHeader
         backHref={`/app/pro/${businessId}`}
         backLabel="Dashboard"
-        title="Finances"
-        subtitle="Saisissez vos écritures, filtrez par type et exportez."
+        title="Écritures"
+        subtitle="Charges et revenus pour piloter votre activité."
         primaryAction={{
-          label: 'Nouvelle écriture',
+          label: 'Ajouter une charge',
           onClick: openCreate,
           icon: <Plus size={14} />,
         }}
       />
+
+      {info ? <p className="text-sm text-emerald-500">{info}</p> : null}
 
       <Card className="p-4 space-y-3">
         <div className="grid gap-2 md:grid-cols-4">
@@ -421,7 +466,7 @@ export function FinanceEntriesPanel({ businessId }: Props) {
                 />
               </TableHead>
               <TableHead>Type</TableHead>
-              <TableHead>Catégorie</TableHead>
+              <TableHead>Libellé</TableHead>
               <TableHead>Projet</TableHead>
               <TableHead>Montant</TableHead>
               <TableHead>Date</TableHead>
@@ -431,6 +476,15 @@ export function FinanceEntriesPanel({ businessId }: Props) {
           <TableBody>
             {filtered.map((item) => {
               const selectedRow = isSelected(item.id);
+              const methodLabel = item.method
+                ? METHOD_OPTIONS.find((opt) => opt.value === item.method)?.label ?? item.method
+                : null;
+              const recurringLabel = item.isRecurring
+                ? `Récurrent ${item.recurringUnit === 'YEARLY' ? 'annuel' : 'mensuel'}`
+                : null;
+              const metaLine = [item.categoryReferenceName, item.vendor, methodLabel, recurringLabel]
+                .filter(Boolean)
+                .join(' · ');
               return (
                 <TableRow key={item.id} data-selected={selectedRow} className={selectedRow ? 'bg-[var(--surface-hover)]' : ''}>
                   <TableCell>
@@ -449,8 +503,8 @@ export function FinanceEntriesPanel({ businessId }: Props) {
                   <TableCell className="min-w-0">
                     <div className="flex flex-col">
                       <span className="text-sm font-semibold text-[var(--text-primary)]">{item.category}</span>
-                      {item.categoryReferenceName ? (
-                        <span className="text-[11px] text-[var(--text-secondary)]">{item.categoryReferenceName}</span>
+                      {metaLine ? (
+                        <span className="text-[11px] text-[var(--text-secondary)]">{metaLine}</span>
                       ) : null}
                     </div>
                   </TableCell>
@@ -501,6 +555,19 @@ export function FinanceEntriesPanel({ businessId }: Props) {
             </Button>
           </div>
           {info ? <p className="text-xs text-[var(--text-secondary)]">{info}</p> : null}
+          {(selected.vendor || selected.method || selected.isRecurring) ? (
+            <div className="text-xs text-[var(--text-secondary)]">
+              {selected.vendor ? <p>Fournisseur : {selected.vendor}</p> : null}
+              {selected.method ? (
+                <p>
+                  Mode : {METHOD_OPTIONS.find((opt) => opt.value === selected.method)?.label ?? selected.method}
+                </p>
+              ) : null}
+              {selected.isRecurring ? (
+                <p>Récurrence : {selected.recurringUnit === 'YEARLY' ? 'Annuelle' : 'Mensuelle'}</p>
+              ) : null}
+            </div>
+          ) : null}
           {selected.tagReferences?.length ? (
             <div className="flex flex-wrap gap-2">
               {selected.tagReferences.map((tag) => (
@@ -516,8 +583,8 @@ export function FinanceEntriesPanel({ businessId }: Props) {
       <Modal
         open={modalOpen}
         onCloseAction={() => setModalOpen(false)}
-        title={editing ? 'Modifier écriture' : 'Nouvelle écriture'}
-        description="Montant en euros, catégorie et date sont requis."
+        title={editing ? 'Modifier écriture' : 'Nouvelle charge'}
+        description="Montant, libellé et date sont requis."
       >
         <form className="space-y-3" onSubmit={handleSubmit}>
           <div className="grid gap-2 md:grid-cols-2">
@@ -536,7 +603,7 @@ export function FinanceEntriesPanel({ businessId }: Props) {
               <Input name="amount" type="number" value={form.amount} onChange={onFieldChange} required />
             </label>
             <label className="text-sm text-[var(--text-primary)]">
-              <span className="text-xs text-[var(--text-secondary)]">Catégorie</span>
+              <span className="text-xs text-[var(--text-secondary)]">Libellé</span>
               <Input name="category" value={form.category} onChange={onFieldChange} required />
             </label>
             <label className="text-sm text-[var(--text-primary)]">
@@ -547,12 +614,57 @@ export function FinanceEntriesPanel({ businessId }: Props) {
               <span className="text-xs text-[var(--text-secondary)]">Projet (optionnel)</span>
               <Input name="projectId" value={form.projectId} onChange={onFieldChange} />
             </label>
-            <label className="text-sm text-[var(--text-primary)]">
-              <span className="text-xs text-[var(--text-secondary)]">Note</span>
-              <Input name="note" value={form.note} onChange={onFieldChange} />
-            </label>
-            <div className="md:col-span-2 space-y-2">
+          </div>
+
+          <details className="rounded-2xl border border-[var(--border)]/60 bg-[var(--surface)]/40 px-3 py-2">
+            <summary className="cursor-pointer text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
+              Options avancées
+            </summary>
+            <div className="mt-3 grid gap-2 md:grid-cols-2">
               <label className="text-sm text-[var(--text-primary)]">
+                <span className="text-xs text-[var(--text-secondary)]">Fournisseur</span>
+                <Input name="vendor" value={form.vendor} onChange={onFieldChange} />
+              </label>
+              <label className="text-sm text-[var(--text-primary)]">
+                <span className="text-xs text-[var(--text-secondary)]">Mode de paiement</span>
+                <Select name="method" value={form.method} onChange={onFieldChange}>
+                  {METHOD_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </Select>
+              </label>
+              <label className="flex items-center gap-2 text-sm text-[var(--text-primary)]">
+                <input
+                  type="checkbox"
+                  name="isRecurring"
+                  checked={form.isRecurring}
+                  onChange={onFieldChange}
+                  className="h-4 w-4 rounded border border-[var(--border)]"
+                />
+                <span>Récurrent</span>
+              </label>
+              <label className="text-sm text-[var(--text-primary)]">
+                <span className="text-xs text-[var(--text-secondary)]">Fréquence</span>
+                <Select
+                  name="recurringUnit"
+                  value={form.recurringUnit}
+                  onChange={onFieldChange}
+                  disabled={!form.isRecurring}
+                >
+                  {RECURRING_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </Select>
+              </label>
+              <label className="text-sm text-[var(--text-primary)] md:col-span-2">
+                <span className="text-xs text-[var(--text-secondary)]">Note</span>
+                <Input name="note" value={form.note} onChange={onFieldChange} />
+              </label>
+              <label className="text-sm text-[var(--text-primary)] md:col-span-2">
                 <span className="text-xs text-[var(--text-secondary)]">Catégorie de référence</span>
                 <Select
                   value={form.categoryReferenceId}
@@ -566,7 +678,7 @@ export function FinanceEntriesPanel({ businessId }: Props) {
                   ))}
                 </Select>
               </label>
-              <label className="text-sm text-[var(--text-primary)]">
+              <label className="text-sm text-[var(--text-primary)] md:col-span-2">
                 <span className="text-xs text-[var(--text-secondary)]">Tags</span>
                 <Select
                   multiple
@@ -586,9 +698,8 @@ export function FinanceEntriesPanel({ businessId }: Props) {
                 </Select>
               </label>
             </div>
-          </div>
+          </details>
           {actionError ? <p className="text-xs text-rose-500">{actionError}</p> : null}
-          {info ? <p className="text-xs text-[var(--text-secondary)]">{info}</p> : null}
 
           <div className="flex justify-end gap-2">
             <Button type="button" variant="outline" onClick={() => setModalOpen(false)}>

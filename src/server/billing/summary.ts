@@ -1,6 +1,7 @@
 import { prisma } from '@/server/db/client';
 import { InvoiceStatus, QuoteStatus } from '@/generated/prisma';
 import { computeProjectPricing } from '@/server/services/pricing';
+import { deriveInvoicePaymentSummary } from '@/server/billing/payments';
 
 export type BillingSummary = {
   projectId: bigint;
@@ -15,6 +16,7 @@ export type BillingSummary = {
   balanceCents: bigint;
   alreadyInvoicedCents: bigint;
   alreadyPaidCents: bigint;
+  remainingToCollectCents: bigint;
   remainingCents: bigint;
 };
 
@@ -100,28 +102,72 @@ export async function computeProjectBillingSummary(
   const currency = referenceQuote?.currency ?? pricing!.currency;
   const clientId = referenceQuote?.clientId ?? pricing!.clientId ?? project.clientId ?? null;
 
-  const [invoicedAgg, paidAgg] = await Promise.all([
-    prisma.invoice.aggregate({
-      where: {
-        businessId,
-        projectId,
-        status: { not: InvoiceStatus.CANCELLED },
-      },
-      _sum: { totalCents: true },
-    }),
-    prisma.invoice.aggregate({
-      where: {
-        businessId,
-        projectId,
-        status: InvoiceStatus.PAID,
-      },
-      _sum: { totalCents: true },
-    }),
-  ]);
+  const invoices = await prisma.invoice.findMany({
+    where: {
+      businessId,
+      projectId,
+      status: { not: InvoiceStatus.CANCELLED },
+    },
+    select: {
+      id: true,
+      businessId: true,
+      projectId: true,
+      clientId: true,
+      createdByUserId: true,
+      totalCents: true,
+      status: true,
+      paidAt: true,
+    },
+  });
 
-  const alreadyInvoicedCents = invoicedAgg._sum.totalCents ?? BigInt(0);
-  const alreadyPaidCents = paidAgg._sum.totalCents ?? BigInt(0);
+  const invoiceIds = invoices.map((inv) => inv.id);
+  const paymentGroups = invoiceIds.length
+    ? await prisma.payment.groupBy({
+        by: ['invoiceId'],
+        where: {
+          businessId,
+          projectId,
+          deletedAt: null,
+          invoiceId: { in: invoiceIds },
+        },
+        _sum: { amountCents: true },
+        _count: { _all: true },
+        _max: { paidAt: true },
+      })
+    : [];
+
+  const paidByInvoice = new Map<
+    bigint,
+    { paidCents: bigint; count: number; lastPaidAt: Date | null }
+  >();
+  paymentGroups.forEach((row) => {
+    paidByInvoice.set(row.invoiceId, {
+      paidCents: row._sum.amountCents ?? BigInt(0),
+      count: row._count._all ?? 0,
+      lastPaidAt: row._max.paidAt ?? null,
+    });
+  });
+
+  const alreadyInvoicedCents = invoices.reduce((sum, inv) => sum + inv.totalCents, BigInt(0));
+  const alreadyPaidCents = invoices.reduce((sum, inv) => {
+    const summary = deriveInvoicePaymentSummary(
+      {
+        id: inv.id,
+        businessId: inv.businessId,
+        projectId: inv.projectId,
+        clientId: inv.clientId,
+        createdByUserId: inv.createdByUserId,
+        status: inv.status,
+        totalCents: inv.totalCents,
+        paidAt: inv.paidAt,
+      },
+      paidByInvoice.get(inv.id)
+    );
+    return sum + summary.paidCents;
+  }, BigInt(0));
   const remainingCents = totalCents > alreadyInvoicedCents ? totalCents - alreadyInvoicedCents : BigInt(0);
+  const remainingToCollectCents =
+    alreadyInvoicedCents > alreadyPaidCents ? alreadyInvoicedCents - alreadyPaidCents : BigInt(0);
 
   return {
     projectId,
@@ -136,6 +182,7 @@ export async function computeProjectBillingSummary(
     balanceCents,
     alreadyInvoicedCents,
     alreadyPaidCents,
+    remainingToCollectCents,
     remainingCents,
   };
 }

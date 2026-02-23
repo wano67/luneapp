@@ -445,6 +445,10 @@ export async function PATCH(
     } else if (existing.status === TaskStatus.DONE) {
       data.completedAt = null;
     }
+    if (newStatus !== existing.status) {
+      data.statusUpdatedAt = new Date();
+      data.statusUpdatedByUserId = BigInt(userId);
+    }
   }
 
   const updated = await prisma.task.update({

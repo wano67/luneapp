@@ -126,7 +126,7 @@ export async function GET(
       },
     }),
     prisma.finance.findMany({
-      where: { businessId: businessIdBigInt, date: { gte: seriesStart } },
+      where: { businessId: businessIdBigInt, deletedAt: null, date: { gte: seriesStart } },
       select: { date: true, type: true, amountCents: true },
     }),
   ]);

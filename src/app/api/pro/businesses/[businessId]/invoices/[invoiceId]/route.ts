@@ -22,6 +22,7 @@ import {
 } from '@/server/http/apiUtils';
 import { assignDocumentNumber } from '@/server/services/numbering';
 import { buildClientSnapshot, buildIssuerSnapshot } from '@/server/billing/snapshots';
+import { computeInvoicePaymentSummary, ensureLegacyPaymentForPaidInvoice } from '@/server/billing/payments';
 import {
   consumeReservation,
   releaseReservation,
@@ -80,7 +81,11 @@ type InvoiceWithItems = NonNullable<
 
 function serializeInvoice(
   invoice: InvoiceWithItems,
-  opts?: { consumptionLedgerEntryId?: bigint | null; cashSaleLedgerEntryId?: bigint | null }
+  opts?: {
+    consumptionLedgerEntryId?: bigint | null;
+    cashSaleLedgerEntryId?: bigint | null;
+    paymentSummary?: { paidCents: bigint; remainingCents: bigint; status: string; lastPaidAt: Date | null };
+  }
 ) {
   if (!invoice) return null;
   return {
@@ -100,6 +105,10 @@ function serializeInvoice(
     issuedAt: invoice.issuedAt ? invoice.issuedAt.toISOString() : null,
     dueAt: invoice.dueAt ? invoice.dueAt.toISOString() : null,
     paidAt: invoice.paidAt ? invoice.paidAt.toISOString() : null,
+    paidCents: opts?.paymentSummary ? opts.paymentSummary.paidCents.toString() : '0',
+    remainingCents: opts?.paymentSummary ? opts.paymentSummary.remainingCents.toString() : invoice.totalCents.toString(),
+    paymentStatus: opts?.paymentSummary ? opts.paymentSummary.status : 'UNPAID',
+    lastPaidAt: opts?.paymentSummary?.lastPaidAt ? opts.paymentSummary.lastPaidAt.toISOString() : null,
     createdAt: invoice.createdAt.toISOString(),
     updatedAt: invoice.updatedAt.toISOString(),
     items: invoice.items.map((item) => ({
@@ -176,11 +185,13 @@ export async function GET(
   });
   if (!invoice) return withIdNoStore(notFound('Facture introuvable.'), requestId);
 
+  await ensureLegacyPaymentForPaidInvoice(prisma, invoice);
+  const paymentSummary = await computeInvoicePaymentSummary(prisma, invoice);
   const ledgerIds = await loadInvoiceLedgerIds(businessIdBigInt, invoiceIdBigInt);
 
   return withIdNoStore(
     jsonNoStore({
-      invoice: serializeInvoice(invoice as InvoiceWithItems, ledgerIds),
+      invoice: serializeInvoice(invoice as InvoiceWithItems, { ...ledgerIds, paymentSummary }),
     }),
     requestId
   );
@@ -287,6 +298,16 @@ export async function PATCH(
     return withIdNoStore(badRequest('paidAt requiert status=PAID.'), requestId);
   }
 
+  if (effectiveNextStatus === InvoiceStatus.PAID || (wantsPaidAt && paidAtRaw !== null)) {
+    const paymentSummary = await computeInvoicePaymentSummary(prisma, existing);
+    if (paymentSummary.remainingCents > BigInt(0)) {
+      return withIdNoStore(
+        badRequest('Impossible de marquer payée: un solde reste à régler.'),
+        requestId
+      );
+    }
+  }
+
   if (itemUpdates.length) {
     const itemIds = itemUpdates.map((i) => i.id);
     const invoiceItems = await prisma.invoiceItem.findMany({
@@ -315,8 +336,13 @@ export async function PATCH(
       return withIdNoStore(badRequest('Facture payée: modification interdite.'), requestId);
     }
     if (!wantsPaidAt) {
+      await ensureLegacyPaymentForPaidInvoice(prisma, existing);
+      const paymentSummary = await computeInvoicePaymentSummary(prisma, existing);
       const ledgerIds = await loadInvoiceLedgerIds(businessIdBigInt, invoiceIdBigInt);
-      return withIdNoStore(jsonNoStore({ invoice: serializeInvoice(existing as InvoiceWithItems, ledgerIds) }), requestId);
+      return withIdNoStore(
+        jsonNoStore({ invoice: serializeInvoice(existing as InvoiceWithItems, { ...ledgerIds, paymentSummary }) }),
+        requestId
+      );
     }
   }
 
@@ -332,8 +358,13 @@ export async function PATCH(
   };
 
   if (existing.status === effectiveNextStatus && itemUpdates.length === 0 && !hasLineUpdates && !hasMetaUpdates) {
+    await ensureLegacyPaymentForPaidInvoice(prisma, existing);
+    const paymentSummary = await computeInvoicePaymentSummary(prisma, existing);
     const ledgerIds = await loadInvoiceLedgerIds(businessIdBigInt, invoiceIdBigInt);
-    return withIdNoStore(jsonNoStore({ invoice: serializeInvoice(existing as InvoiceWithItems, ledgerIds) }), requestId);
+    return withIdNoStore(
+      jsonNoStore({ invoice: serializeInvoice(existing as InvoiceWithItems, { ...ledgerIds, paymentSummary }) }),
+      requestId
+    );
   }
 
   const allowed = transitions[existing.status] ?? [];
@@ -717,11 +748,13 @@ export async function PATCH(
     return withIdNoStore(badRequest('Lignes invalides.'), requestId);
   }
 
+  await ensureLegacyPaymentForPaidInvoice(prisma, updated as InvoiceWithItems);
+  const paymentSummary = await computeInvoicePaymentSummary(prisma, updated as InvoiceWithItems);
   const ledgerIds = await loadInvoiceLedgerIds(businessIdBigInt, invoiceIdBigInt);
 
   return withIdNoStore(
     jsonNoStore({
-      invoice: serializeInvoice(updated as InvoiceWithItems, ledgerIds),
+      invoice: serializeInvoice(updated as InvoiceWithItems, { ...ledgerIds, paymentSummary }),
     }),
     requestId
   );

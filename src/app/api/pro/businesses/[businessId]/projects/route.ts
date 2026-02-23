@@ -14,6 +14,7 @@ import {
   mapProjectStatusToScope,
   type ProjectScope,
 } from '@/server/queries/projects';
+import { resolveServiceUnitPriceCents } from '@/server/services/pricing';
 import { requireBusinessRole } from '@/server/auth/businessRole';
 import { assertSameOrigin, jsonNoStore, withNoStore } from '@/server/security/csrf';
 import { rateLimit } from '@/server/security/rateLimit';
@@ -45,6 +46,25 @@ function parseScope(value: string | null): ProjectScope | null {
     return upper as ProjectScope;
   }
   return null;
+}
+
+function applyDiscount(params: {
+  unitPriceCents: bigint;
+  discountType?: string | null;
+  discountValue?: number | null;
+}) {
+  const discountType = params.discountType ?? 'NONE';
+  const discountValue = params.discountValue ?? null;
+  if (discountType === 'PERCENT' && discountValue != null && Number.isFinite(discountValue)) {
+    const bounded = Math.min(100, Math.max(0, Math.trunc(discountValue)));
+    return (params.unitPriceCents * BigInt(100 - bounded)) / BigInt(100);
+  }
+  if (discountType === 'AMOUNT' && discountValue != null && Number.isFinite(discountValue)) {
+    const bounded = Math.max(0, Math.trunc(discountValue));
+    const final = params.unitPriceCents - BigInt(bounded);
+    return final > BigInt(0) ? final : BigInt(0);
+  }
+  return params.unitPriceCents;
 }
 
 function withIdNoStore(res: NextResponse, requestId: string) {
@@ -177,6 +197,70 @@ export async function GET(
     getProjectCounts({ businessId: businessIdBigInt.toString() }),
   ]);
 
+  const projectIds = projects.map((p) => p.id);
+  const billingQuoteIds = projects
+    .map((p) => p.billingQuoteId)
+    .filter((id): id is bigint => Boolean(id));
+
+  const [billingQuotes, signedQuotes] = await Promise.all([
+    billingQuoteIds.length
+      ? prisma.quote.findMany({
+          where: { id: { in: billingQuoteIds }, businessId: businessIdBigInt, status: 'SIGNED' },
+          select: { id: true, projectId: true, totalCents: true },
+        })
+      : Promise.resolve([]),
+    projectIds.length
+      ? prisma.quote.findMany({
+          where: { projectId: { in: projectIds }, businessId: businessIdBigInt, status: 'SIGNED' },
+          orderBy: [{ issuedAt: 'desc' }, { createdAt: 'desc' }],
+          select: { id: true, projectId: true, totalCents: true, issuedAt: true },
+        })
+      : Promise.resolve([]),
+  ]);
+
+  const billingQuoteById = new Map<bigint, { totalCents: bigint }>();
+  billingQuotes.forEach((quote) => billingQuoteById.set(quote.id, { totalCents: quote.totalCents }));
+
+  const latestSignedByProject = new Map<bigint, { totalCents: bigint }>();
+  for (const quote of signedQuotes) {
+    if (!latestSignedByProject.has(quote.projectId)) {
+      latestSignedByProject.set(quote.projectId, { totalCents: quote.totalCents });
+    }
+  }
+  const serviceRows = projectIds.length
+    ? await prisma.projectService.findMany({
+        where: { projectId: { in: projectIds } },
+        select: {
+          projectId: true,
+          quantity: true,
+          priceCents: true,
+          discountType: true,
+          discountValue: true,
+          service: { select: { defaultPriceCents: true, tjmCents: true } },
+        },
+      })
+    : [];
+
+  const totalsByProject = new Map<bigint, { total: bigint; count: number }>();
+  for (const row of serviceRows) {
+    const resolved = resolveServiceUnitPriceCents({
+      projectPriceCents: row.priceCents ?? null,
+      defaultPriceCents: row.service?.defaultPriceCents ?? null,
+      tjmCents: row.service?.tjmCents ?? null,
+    });
+    const quantity = row.quantity && row.quantity > 0 ? row.quantity : 1;
+    const finalUnit = applyDiscount({
+      unitPriceCents: resolved.unitPriceCents,
+      discountType: row.discountType,
+      discountValue: row.discountValue,
+    });
+    const lineTotal = finalUnit * BigInt(quantity);
+    const entry = totalsByProject.get(row.projectId) ?? { total: BigInt(0), count: 0 };
+    entry.total += lineTotal;
+    entry.count += 1;
+    totalsByProject.set(row.projectId, entry);
+  }
+
   const progressByProject = new Map<
     bigint,
     { total: number; done: number; open: number; progressPct: number }
@@ -229,6 +313,16 @@ export async function GET(
         endDate: p.endDate ? p.endDate.toISOString() : null,
         createdAt: p.createdAt.toISOString(),
         updatedAt: p.updatedAt.toISOString(),
+        amountCents: (() => {
+          const billingQuote = p.billingQuoteId ? billingQuoteById.get(p.billingQuoteId) : null;
+          const latestSigned = latestSignedByProject.get(p.id);
+          const serviceTotal = totalsByProject.get(p.id);
+          const value =
+            billingQuote?.totalCents ??
+            latestSigned?.totalCents ??
+            (serviceTotal?.count ? serviceTotal.total : null);
+          return value != null ? value.toString() : null;
+        })(),
         progress: progressByProject.get(p.id)?.progressPct ?? 0,
         tasksSummary: progressByProject.get(p.id)
           ? {

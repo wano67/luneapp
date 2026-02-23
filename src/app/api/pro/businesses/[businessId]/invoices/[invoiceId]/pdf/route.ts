@@ -7,6 +7,8 @@ import { getRequestId, badRequest, unauthorized, forbidden, notFound, withReques
 import { buildInvoicePdf } from '@/server/pdf/invoicePdf';
 import { computeProjectPricing } from '@/server/services/pricing';
 import { InvoiceStatus, QuoteStatus } from '@/generated/prisma';
+import { computeProjectBillingSummary } from '@/server/billing/summary';
+import { computeInvoicePaymentSummary } from '@/server/billing/payments';
 import {
   buildClientSnapshot,
   buildIssuerSnapshot,
@@ -113,7 +115,9 @@ export async function GET(
   });
   if (!invoice) return withIdNoStore(notFound('Facture introuvable.'), requestId);
 
-  const [projectTotal, invoiceSums, paidSums] = await Promise.all([
+  const [summary, paymentSummary, fallbackProjectTotal] = await Promise.all([
+    computeProjectBillingSummary(businessIdBigInt, invoice.projectId),
+    computeInvoicePaymentSummary(prisma, invoice),
     (async () => {
       if (invoice.quoteId) {
         const quote = await prisma.quote.findUnique({
@@ -139,28 +143,19 @@ export async function GET(
       const pricing = await computeProjectPricing(businessIdBigInt, invoice.projectId);
       return pricing?.totalCents ?? null;
     })(),
-    prisma.invoice.aggregate({
-      _sum: { totalCents: true },
-      where: {
-        businessId: businessIdBigInt,
-        projectId: invoice.projectId,
-        status: { not: InvoiceStatus.CANCELLED },
-        id: { not: invoice.id },
-      },
-    }),
-    prisma.invoice.aggregate({
-      _sum: { totalCents: true },
-      where: {
-        businessId: businessIdBigInt,
-        projectId: invoice.projectId,
-        status: InvoiceStatus.PAID,
-        id: { not: invoice.id },
-      },
-    }),
   ]);
 
-  const alreadyInvoicedCents = invoiceSums._sum.totalCents ?? null;
-  const alreadyPaidCents = paidSums._sum.totalCents ?? null;
+  const projectTotal = summary?.totalCents ?? fallbackProjectTotal;
+  const invoicedTotal = summary?.alreadyInvoicedCents ?? null;
+  const paidTotal = summary?.alreadyPaidCents ?? null;
+
+  const alreadyInvoicedCents =
+    invoicedTotal != null
+      ? invoicedTotal - (invoice.status === InvoiceStatus.CANCELLED ? BigInt(0) : invoice.totalCents)
+      : null;
+  const alreadyPaidCents =
+    paidTotal != null ? (paidTotal - paymentSummary.paidCents >= BigInt(0) ? paidTotal - paymentSummary.paidCents : BigInt(0)) : null;
+
   const remainingCents =
     projectTotal != null && alreadyInvoicedCents != null
       ? projectTotal - alreadyInvoicedCents - invoice.totalCents

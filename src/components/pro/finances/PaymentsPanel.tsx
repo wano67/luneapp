@@ -29,10 +29,11 @@ const STATUS_LABELS: Record<PaymentStatus, string> = {
 };
 
 const METHOD_LABELS: Record<PaymentMethod, string> = {
-  VIREMENT: 'Virement',
-  CARTE: 'Carte',
-  CHEQUE: 'Chèque',
-  ESPECES: 'Espèces',
+  WIRE: 'Virement',
+  CARD: 'Carte',
+  CHECK: 'Chèque',
+  CASH: 'Espèces',
+  OTHER: 'Autre',
 };
 
 function buildPaymentDate(p: PaymentRow) {
@@ -46,6 +47,7 @@ type FinanceApiItem = {
   amountCents: number;
   currency: string;
   paidAt: string;
+  method?: PaymentMethod;
   reference: string | null;
 };
 
@@ -80,7 +82,7 @@ export function PaymentsPanel({ businessId }: { businessId: string }) {
     clientName: '',
     project: '',
     amount: '',
-    method: 'VIREMENT',
+    method: 'WIRE',
     receivedAt: '',
     expectedAt: '',
     status: 'PAID',
@@ -92,7 +94,7 @@ export function PaymentsPanel({ businessId }: { businessId: string }) {
     const receivedAt = item.paidAt;
     const expectedAt = item.paidAt;
     const status: PaymentStatus = 'PAID';
-    const method: PaymentMethod = 'VIREMENT';
+    const method: PaymentMethod = item.method ?? 'WIRE';
     const clientName = item.clientId ? clientNames[item.clientId] ?? 'Client' : 'Client';
 
     return {

@@ -63,7 +63,7 @@ export async function GET(
   const historyStart = startOfMonth(addMonths(now, -5)); // 6 months history
 
   const rows = await prisma.finance.findMany({
-    where: { businessId: businessIdBigInt, date: { gte: historyStart, lte: now } },
+    where: { businessId: businessIdBigInt, deletedAt: null, date: { gte: historyStart, lte: now } },
     select: { date: true, type: true, amountCents: true },
   });
 

@@ -40,7 +40,7 @@ export type PermissionRow = {
 } & AuditInfo;
 
 export type PaymentStatus = 'PAID' | 'PENDING' | 'LATE';
-export type PaymentMethod = 'VIREMENT' | 'CARTE' | 'CHEQUE' | 'ESPECES';
+export type PaymentMethod = 'WIRE' | 'CARD' | 'CHECK' | 'CASH' | 'OTHER';
 
 export type PaymentRow = {
   id: string;
@@ -241,7 +241,7 @@ const basePayments: PaymentRow[] = [
     currency: 'EUR',
     receivedAt: new Date(now.getFullYear(), now.getMonth(), 2).toISOString(),
     expectedAt: new Date(now.getFullYear(), now.getMonth(), -2).toISOString(),
-    method: 'VIREMENT',
+    method: 'WIRE',
     status: 'PAID',
     note: 'Payé en avance',
   },
@@ -255,7 +255,7 @@ const basePayments: PaymentRow[] = [
     currency: 'EUR',
     receivedAt: new Date(now.getFullYear(), now.getMonth(), 9).toISOString(),
     expectedAt: new Date(now.getFullYear(), now.getMonth(), 5).toISOString(),
-    method: 'VIREMENT',
+    method: 'WIRE',
     status: 'PAID',
   },
   {
@@ -268,7 +268,7 @@ const basePayments: PaymentRow[] = [
     currency: 'EUR',
     receivedAt: new Date(now.getFullYear(), now.getMonth(), -1).toISOString(),
     expectedAt: new Date(now.getFullYear(), now.getMonth(), -5).toISOString(),
-    method: 'CARTE',
+    method: 'CARD',
     status: 'LATE',
     note: 'Relance envoyée',
   },
@@ -282,7 +282,7 @@ const basePayments: PaymentRow[] = [
     currency: 'EUR',
     receivedAt: '',
     expectedAt: new Date(now.getFullYear(), now.getMonth(), 21).toISOString(),
-    method: 'VIREMENT',
+    method: 'WIRE',
     status: 'PENDING',
     note: 'Échéance fin de mois',
   },
@@ -296,7 +296,7 @@ const basePayments: PaymentRow[] = [
     currency: 'EUR',
     receivedAt: new Date(now.getFullYear(), now.getMonth() - 1, 27).toISOString(),
     expectedAt: new Date(now.getFullYear(), now.getMonth() - 1, 15).toISOString(),
-    method: 'CHEQUE',
+    method: 'CHECK',
     status: 'PAID',
   },
   {
@@ -309,7 +309,7 @@ const basePayments: PaymentRow[] = [
     currency: 'EUR',
     receivedAt: '',
     expectedAt: new Date(now.getFullYear(), now.getMonth(), 12).toISOString(),
-    method: 'VIREMENT',
+    method: 'WIRE',
     status: 'LATE',
     note: '2 relances envoyées',
   },
@@ -323,7 +323,7 @@ const basePayments: PaymentRow[] = [
     currency: 'EUR',
     receivedAt: new Date(now.getFullYear(), now.getMonth(), 4).toISOString(),
     expectedAt: new Date(now.getFullYear(), now.getMonth(), 2).toISOString(),
-    method: 'CARTE',
+    method: 'CARD',
     status: 'PAID',
   },
   {
@@ -336,7 +336,7 @@ const basePayments: PaymentRow[] = [
     currency: 'EUR',
     receivedAt: '',
     expectedAt: new Date(now.getFullYear(), now.getMonth() + 1, 3).toISOString(),
-    method: 'VIREMENT',
+    method: 'WIRE',
     status: 'PENDING',
   },
 ];
