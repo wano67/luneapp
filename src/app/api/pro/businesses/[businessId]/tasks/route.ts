@@ -46,6 +46,7 @@ function serializeTask(task: {
   projectId: bigint | null;
   projectServiceId?: bigint | null;
   projectServiceStepId?: bigint | null;
+  parentTaskId?: bigint | null;
   assigneeUserId: bigint | null;
   title: string;
   phase: TaskPhase | null;
@@ -63,7 +64,12 @@ function serializeTask(task: {
   categoryReferenceId?: bigint | null;
   categoryReference?: { id: bigint; name: string | null } | null;
   tags?: Array<{ referenceId: bigint; reference: { id: bigint; name: string } }>;
+  _count?: { subtasks: number; checklistItems: number };
+  checklistItems?: Array<{ isCompleted: boolean }>;
 }) {
+  const checklistDone = task.checklistItems
+    ? task.checklistItems.filter((item) => item.isCompleted).length
+    : undefined;
   return {
     id: task.id.toString(),
     businessId: task.businessId.toString(),
@@ -75,6 +81,7 @@ function serializeTask(task: {
     projectServiceStepName: task.projectServiceStep?.name ?? null,
     projectServiceStepPhaseName: task.projectServiceStep?.phaseName ?? null,
     projectServiceStepIsBillableMilestone: task.projectServiceStep?.isBillableMilestone ?? false,
+    parentTaskId: task.parentTaskId ? task.parentTaskId.toString() : null,
     assigneeUserId: task.assigneeUserId ? task.assigneeUserId.toString() : null,
     assigneeEmail: task.assignee?.email ?? null,
     assigneeName: task.assignee?.name ?? null,
@@ -95,6 +102,9 @@ function serializeTask(task: {
     notes: task.notes,
     createdAt: task.createdAt.toISOString(),
     updatedAt: task.updatedAt.toISOString(),
+    subtasksCount: typeof task._count?.subtasks === 'number' ? task._count.subtasks : undefined,
+    checklistCount: typeof task._count?.checklistItems === 'number' ? task._count.checklistItems : undefined,
+    checklistDoneCount: typeof checklistDone === 'number' ? checklistDone : undefined,
   };
 }
 
@@ -215,6 +225,8 @@ export async function GET(
       assignee: { select: { id: true, email: true, name: true } },
       categoryReference: { select: { id: true, name: true } },
       tags: { include: { reference: { select: { id: true, name: true } } } },
+      _count: { select: { subtasks: true, checklistItems: true } },
+      checklistItems: { select: { isCompleted: true } },
     },
   });
 
@@ -282,6 +294,23 @@ export async function POST(
     status = (body as { status: TaskStatus }).status;
   }
 
+  let parentTaskId: bigint | undefined;
+  let parentTask: { projectId: bigint | null; projectServiceId: bigint | null } | null = null;
+  if ('parentTaskId' in body && (body as { parentTaskId?: unknown }).parentTaskId) {
+    const raw = (body as { parentTaskId?: unknown }).parentTaskId;
+    if (typeof raw !== 'string' || !/^\d+$/.test(raw)) {
+      return withIdNoStore(badRequest('parentTaskId invalide.'), requestId);
+    }
+    parentTaskId = BigInt(raw);
+    parentTask = await prisma.task.findFirst({
+      where: { id: parentTaskId, businessId: businessIdBigInt },
+      select: { projectId: true, projectServiceId: true },
+    });
+    if (!parentTask) {
+      return withIdNoStore(badRequest('parentTaskId doit appartenir au business.'), requestId);
+    }
+  }
+
   let projectId: bigint | undefined;
   if ('projectId' in body && (body as { projectId?: unknown }).projectId) {
     const raw = (body as { projectId?: unknown }).projectId;
@@ -296,6 +325,12 @@ export async function POST(
     if (!project) {
       return withIdNoStore(badRequest('projectId doit appartenir au business.'), requestId);
     }
+  }
+  if (parentTask?.projectId) {
+    if (projectId && projectId !== parentTask.projectId) {
+      return withIdNoStore(badRequest('parentTaskId doit appartenir au même projet.'), requestId);
+    }
+    projectId = parentTask.projectId;
   }
 
   let projectServiceId: bigint | undefined;
@@ -318,6 +353,12 @@ export async function POST(
     if (!projectId) {
       projectId = projectService.projectId;
     }
+  }
+  if (parentTask?.projectServiceId) {
+    if (projectServiceId && projectServiceId !== parentTask.projectServiceId) {
+      return withIdNoStore(badRequest('parentTaskId doit appartenir au même service projet.'), requestId);
+    }
+    projectServiceId = projectServiceId ?? parentTask.projectServiceId;
   }
 
   let assigneeUserId: bigint | undefined;
@@ -382,6 +423,7 @@ export async function POST(
       businessId: businessIdBigInt,
       projectId,
       projectServiceId,
+      parentTaskId,
       assigneeUserId,
       title,
       status,

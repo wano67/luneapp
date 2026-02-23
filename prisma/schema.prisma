@@ -137,6 +137,7 @@ model User {
   businessMemberships BusinessMembership[]
   assignedTasks       Task[]
   statusUpdatedTasks  Task[] @relation("TaskStatusUpdatedBy")
+  completedChecklistItems TaskChecklistItem[] @relation("ChecklistCompletedBy")
   quotesCreated       Quote[]   @relation("QuoteCreatedBy")
   invoicesCreated     Invoice[] @relation("InvoiceCreatedBy")
   paymentsCreated     Payment[] @relation("PaymentCreatedBy")
@@ -510,6 +511,7 @@ model Task {
   projectId      BigInt?
   projectServiceId BigInt?
   projectServiceStepId BigInt?
+  parentTaskId BigInt?
   assigneeUserId BigInt?
   statusUpdatedAt DateTime?
   statusUpdatedByUserId BigInt?
@@ -526,10 +528,13 @@ model Task {
   project  Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
   projectService ProjectService? @relation(fields: [projectServiceId], references: [id], onDelete: SetNull)
   projectServiceStep ProjectServiceStep? @relation(fields: [projectServiceStepId], references: [id], onDelete: SetNull)
+  parentTask Task? @relation("TaskHierarchy", fields: [parentTaskId], references: [id], onDelete: SetNull)
+  subtasks Task[] @relation("TaskHierarchy")
   assignee User?    @relation(fields: [assigneeUserId], references: [id], onDelete: SetNull)
   statusUpdatedByUser User? @relation("TaskStatusUpdatedBy", fields: [statusUpdatedByUserId], references: [id], onDelete: SetNull)
   categoryReference BusinessReference? @relation("TaskCategoryReference", fields: [categoryReferenceId], references: [id], onDelete: SetNull)
   tags     TaskTag[]
+  checklistItems TaskChecklistItem[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -541,6 +546,7 @@ model Task {
   @@index([projectId, projectServiceId])
   @@index([businessId, categoryReferenceId])
   @@index([projectId, statusUpdatedAt])
+  @@index([parentTaskId])
 }
 
 model Process {
@@ -966,6 +972,23 @@ model TaskTag {
 
   @@unique([taskId, referenceId])
   @@index([referenceId])
+}
+
+model TaskChecklistItem {
+  id               BigInt   @id @default(autoincrement())
+  taskId           BigInt
+  title            String
+  position         Int      @default(0)
+  isCompleted      Boolean  @default(false)
+  completedAt      DateTime?
+  completedByUserId BigInt?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  task        Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  completedBy User? @relation("ChecklistCompletedBy", fields: [completedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([taskId, position])
 }
 
 model FinanceTag {

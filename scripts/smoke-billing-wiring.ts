@@ -252,6 +252,32 @@ async function main() {
     throw new Error(`Activity fetch failed (${activityRes.res.status}) ref=${getLastRequestId()}`);
   }
 
+  console.log('Hybrid tasks: create subtask + checklist…');
+  const subtaskRes = await request(`/api/pro/businesses/${businessId}/tasks`, {
+    method: 'POST',
+    body: { title: `Sous-tâche smoke ${Date.now()}`, parentTaskId: taskId },
+  });
+  if (!subtaskRes.res.ok) {
+    throw new Error(`Subtask create failed (${subtaskRes.res.status}) ref=${getLastRequestId()}`);
+  }
+  const checklistCreateRes = await request(
+    `/api/pro/businesses/${businessId}/tasks/${taskId}/checklist`,
+    { method: 'POST', body: { title: `Checklist smoke ${Date.now()}` } }
+  );
+  if (!checklistCreateRes.res.ok) {
+    throw new Error(`Checklist create failed (${checklistCreateRes.res.status}) ref=${getLastRequestId()}`);
+  }
+  const checklistItemId =
+    (checklistCreateRes.json as { item?: { id?: string } })?.item?.id ?? null;
+  if (!checklistItemId) throw new Error('Checklist item id missing.');
+  const checklistToggleRes = await request(
+    `/api/pro/businesses/${businessId}/tasks/${taskId}/checklist/${checklistItemId}`,
+    { method: 'PATCH', body: { isCompleted: true } }
+  );
+  if (!checklistToggleRes.res.ok) {
+    throw new Error(`Checklist toggle failed (${checklistToggleRes.res.status}) ref=${getLastRequestId()}`);
+  }
+
   console.log('Create custom service line (wizard-like)…');
   const customCode = `SER-CUSTOM-${Date.now()}`;
   const { res: customSvcRes, json: customSvcJson } = await request(

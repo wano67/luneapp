@@ -88,6 +88,7 @@ function serializeTask(task: {
   projectId: bigint | null;
   projectServiceId?: bigint | null;
   projectServiceStepId?: bigint | null;
+  parentTaskId?: bigint | null;
   assigneeUserId: bigint | null;
   title: string;
   phase: TaskPhase | null;
@@ -105,6 +106,7 @@ function serializeTask(task: {
   categoryReferenceId?: bigint | null;
   categoryReference?: { id: bigint; name: string | null } | null;
   tags?: Array<{ referenceId: bigint; reference: { id: bigint; name: string } }>;
+  _count?: { subtasks: number; checklistItems: number };
 }) {
   return {
     id: task.id.toString(),
@@ -117,6 +119,7 @@ function serializeTask(task: {
     projectServiceStepName: task.projectServiceStep?.name ?? null,
     projectServiceStepPhaseName: task.projectServiceStep?.phaseName ?? null,
     projectServiceStepIsBillableMilestone: task.projectServiceStep?.isBillableMilestone ?? false,
+    parentTaskId: task.parentTaskId ? task.parentTaskId.toString() : null,
     assigneeUserId: task.assigneeUserId ? task.assigneeUserId.toString() : null,
     assigneeEmail: task.assignee?.email ?? null,
     assigneeName: task.assignee?.name ?? null,
@@ -137,6 +140,8 @@ function serializeTask(task: {
     notes: task.notes,
     createdAt: task.createdAt.toISOString(),
     updatedAt: task.updatedAt.toISOString(),
+    subtasksCount: typeof task._count?.subtasks === 'number' ? task._count.subtasks : undefined,
+    checklistCount: typeof task._count?.checklistItems === 'number' ? task._count.checklistItems : undefined,
   };
 }
 
@@ -178,12 +183,33 @@ export async function GET(
       assignee: { select: { id: true, email: true, name: true } },
       categoryReference: { select: { id: true, name: true } },
       tags: { include: { reference: { select: { id: true, name: true } } } },
+      _count: { select: { subtasks: true, checklistItems: true } },
+      subtasks: {
+        include: {
+          project: { select: { name: true } },
+          projectService: { select: { id: true, service: { select: { name: true } } } },
+          projectServiceStep: {
+            select: { id: true, name: true, phaseName: true, isBillableMilestone: true },
+          },
+          assignee: { select: { id: true, email: true, name: true } },
+          categoryReference: { select: { id: true, name: true } },
+          tags: { include: { reference: { select: { id: true, name: true } } } },
+          _count: { select: { subtasks: true, checklistItems: true } },
+        },
+        orderBy: [{ dueDate: 'asc' }, { createdAt: 'asc' }],
+      },
     },
   });
 
   if (!task) return withIdNoStore(notFound('Tâche introuvable.'), requestId);
 
-  return withIdNoStore(jsonNoStore({ item: serializeTask(task) }), requestId);
+  return withIdNoStore(
+    jsonNoStore({
+      item: serializeTask(task),
+      subtasks: task.subtasks?.map(serializeTask) ?? [],
+    }),
+    requestId
+  );
 }
 
 // PATCH /api/pro/businesses/{businessId}/tasks/{taskId}

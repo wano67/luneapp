@@ -117,12 +117,16 @@ type TaskItem = {
   title: string;
   status: string;
   dueDate: string | null;
+  parentTaskId: string | null;
   assigneeName: string | null;
   assigneeEmail: string | null;
   assigneeUserId: string | null;
   projectServiceId: string | null;
   projectId: string | null;
   progress?: number;
+  subtasksCount?: number;
+  checklistCount?: number;
+  checklistDoneCount?: number;
 };
 
 type MemberItem = {
@@ -587,6 +591,7 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
   const [accessInfo, setAccessInfo] = useState<string | null>(null);
   const [teamInfo, setTeamInfo] = useState<string | null>(null);
   const [taskGroupExpanded, setTaskGroupExpanded] = useState<Record<string, boolean>>({});
+  const [taskRowExpanded, setTaskRowExpanded] = useState<Record<string, boolean>>({});
   const [activeSetupModal, setActiveSetupModal] = useState<
     null | 'client' | 'deadline' | 'services' | 'tasks' | 'team' | 'documents'
   >(null);
@@ -2309,7 +2314,7 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
   const showSetup = (searchParams?.get('setup') ?? '') === '1';
   const upcomingTasks = useMemo(() => {
     return tasks
-      .filter((t) => t.status !== 'DONE')
+      .filter((t) => t.status !== 'DONE' && (t.subtasksCount ?? 0) === 0)
       .sort(
         (a, b) =>
           (a.dueDate ? new Date(a.dueDate).getTime() : Infinity) -
@@ -2360,6 +2365,17 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
     if (statusFilter === 'all') return tasks;
     return tasks.filter((task) => task.status === statusFilter);
   }, [statusFilter, tasks]);
+
+  const subtasksByParentId = useMemo(() => {
+    const map = new Map<string, TaskItem[]>();
+    tasks.forEach((task) => {
+      if (!task.parentTaskId) return;
+      const bucket = map.get(task.parentTaskId) ?? [];
+      bucket.push(task);
+      map.set(task.parentTaskId, bucket);
+    });
+    return map;
+  }, [tasks]);
 
   const tasksByAssignee = useMemo(() => {
     const groups = new Map<string, { label: string; name?: string | null; email?: string | null; tasks: TaskItem[] }>();
@@ -3586,31 +3602,91 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
                       ) : null}
                     </div>
                     <div className="mt-3 space-y-2">
-                      {previewTasks.map((task) => (
-                        <Link
-                          key={task.id}
-                          href={`/app/pro/${businessId}/tasks/${task.id}`}
-                          className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--border)]/60 bg-[var(--surface-2)]/70 px-3 py-2 text-sm transition hover:border-[var(--border)] hover:bg-[var(--surface)]"
-                        >
-                          <div className="flex min-w-0 items-center gap-2">
-                            <InitialsAvatar name={task.assigneeName} email={task.assigneeEmail} size={22} />
-                            <div className="min-w-0">
-                              <p className="truncate text-[var(--text-primary)]">{task.title}</p>
-                              <span
-                                className={cn(
-                                  'inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide',
-                                  getStatusBadgeClasses(task.status)
-                                )}
-                              >
-                                {formatTaskStatus(task.status)}
-                              </span>
-                            </div>
+                      {previewTasks.map((task) => {
+                        const childTasks = subtasksByParentId.get(task.id) ?? [];
+                        const childDone = childTasks.filter((t) => t.status === 'DONE').length;
+                        const checklistTotal = task.checklistCount ?? 0;
+                        const checklistDone = task.checklistDoneCount ?? 0;
+                        const indicator =
+                          childTasks.length > 0
+                            ? `Sous-tâches ${childDone}/${childTasks.length}`
+                            : checklistTotal > 0
+                              ? `Checklist ${checklistDone}/${checklistTotal}`
+                              : null;
+                        const hasChildren = childTasks.length > 0;
+                        const rowExpanded = taskRowExpanded[task.id] ?? false;
+                        return (
+                          <div key={task.id} className="space-y-2">
+                            <Link
+                              href={`/app/pro/${businessId}/tasks/${task.id}`}
+                              className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--border)]/60 bg-[var(--surface-2)]/70 px-3 py-2 text-sm transition hover:border-[var(--border)] hover:bg-[var(--surface)]"
+                            >
+                              <div className="flex min-w-0 items-center gap-2">
+                                <InitialsAvatar name={task.assigneeName} email={task.assigneeEmail} size={22} />
+                                <div className="min-w-0">
+                                  <p className="truncate text-[var(--text-primary)]">{task.title}</p>
+                                  <span
+                                    className={cn(
+                                      'inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide',
+                                      getStatusBadgeClasses(task.status)
+                                    )}
+                                  >
+                                    {formatTaskStatus(task.status)}
+                                  </span>
+                                  {indicator ? (
+                                    <p className="text-[11px] text-[var(--text-secondary)]">{indicator}</p>
+                                  ) : null}
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2 text-[11px] text-[var(--text-secondary)]">
+                                {hasChildren ? (
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={(event) => {
+                                      event.preventDefault();
+                                      event.stopPropagation();
+                                      setTaskRowExpanded((prev) => ({
+                                        ...prev,
+                                        [task.id]: !rowExpanded,
+                                      }));
+                                    }}
+                                  >
+                                    {rowExpanded ? 'Réduire' : 'Sous-tâches'}
+                                  </Button>
+                                ) : null}
+                                <span>{task.dueDate ? formatDate(task.dueDate) : '—'}</span>
+                              </div>
+                            </Link>
+                            {hasChildren && rowExpanded ? (
+                              <div className="ml-6 space-y-2 border-l border-[var(--border)]/60 pl-4">
+                                {childTasks.map((child) => (
+                                  <Link
+                                    key={child.id}
+                                    href={`/app/pro/${businessId}/tasks/${child.id}`}
+                                    className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--border)]/50 bg-[var(--surface-2)]/60 px-3 py-2 text-sm transition hover:border-[var(--border)] hover:bg-[var(--surface)]"
+                                  >
+                                    <div className="min-w-0">
+                                      <p className="truncate text-[var(--text-primary)]">{child.title}</p>
+                                      <span
+                                        className={cn(
+                                          'inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide',
+                                          getStatusBadgeClasses(child.status)
+                                        )}
+                                      >
+                                        {formatTaskStatus(child.status)}
+                                      </span>
+                                    </div>
+                                    <span className="text-[11px] text-[var(--text-secondary)]">
+                                      {child.dueDate ? formatDate(child.dueDate) : '—'}
+                                    </span>
+                                  </Link>
+                                ))}
+                              </div>
+                            ) : null}
                           </div>
-                          <div className="text-[11px] text-[var(--text-secondary)]">
-                            {task.dueDate ? formatDate(task.dueDate) : '—'}
-                          </div>
-                        </Link>
-                      ))}
+                        );
+                      })}
                     </div>
                   </Card>
                 );
