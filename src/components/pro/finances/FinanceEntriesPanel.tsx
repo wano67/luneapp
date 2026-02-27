@@ -15,6 +15,7 @@ import { PageHeader } from '@/app/app/components/PageHeader';
 import { Plus } from 'lucide-react';
 import { useRowSelection } from '@/app/app/components/selection/useRowSelection';
 import { BulkActionBar } from '@/app/app/components/selection/BulkActionBar';
+import { formatCentsToEuroInput, parseEuroToCents, sanitizeEuroInput } from '@/lib/money';
 
 type FinanceType = 'INCOME' | 'EXPENSE';
 type PaymentMethod = 'WIRE' | 'CARD' | 'CHECK' | 'CASH' | 'OTHER';
@@ -36,6 +37,9 @@ type Finance = {
   method: PaymentMethod | null;
   isRecurring: boolean;
   recurringUnit: RecurringUnit | null;
+  recurringRuleId: string | null;
+  isRuleOverride: boolean;
+  lockedFromRule: boolean;
   date: string;
   note: string | null;
   createdAt: string;
@@ -44,6 +48,24 @@ type Finance = {
 
 type FinanceListResponse = { items: Finance[] };
 type FinanceDetailResponse = { item: Finance };
+
+type RecurringRule = {
+  id: string;
+  businessId: string;
+  projectId: string | null;
+  categoryReferenceId: string | null;
+  type: FinanceType;
+  amountCents: string;
+  category: string;
+  vendor: string | null;
+  method: PaymentMethod | null;
+  note: string | null;
+  startDate: string;
+  endDate: string | null;
+  dayOfMonth: number;
+  frequency: RecurringUnit;
+  isActive: boolean;
+};
 
 const TYPE_OPTIONS: { value: FinanceType; label: string }[] = [
   { value: 'INCOME', label: 'Revenu' },
@@ -113,6 +135,10 @@ export function FinanceEntriesPanel({ businessId }: Props) {
     method: 'WIRE' as PaymentMethod,
     isRecurring: false,
     recurringUnit: 'MONTHLY' as RecurringUnit,
+    recurringMonths: '12',
+    recurringRetroactive: true,
+    recurringEndDate: '',
+    recurringDayOfMonth: '',
     categoryReferenceId: '',
     tagReferenceIds: [] as string[],
   });
@@ -124,6 +150,25 @@ export function FinanceEntriesPanel({ businessId }: Props) {
   const [bulkError, setBulkError] = useState<string | null>(null);
   const [bulkLoading, setBulkLoading] = useState(false);
   const { selectedArray, selectedCount, toggle, toggleAll, clear, isSelected } = useRowSelection();
+
+  const [recurringModalOpen, setRecurringModalOpen] = useState(false);
+  const [recurringRule, setRecurringRule] = useState<RecurringRule | null>(null);
+  const [recurringOccurrences, setRecurringOccurrences] = useState<Finance[]>([]);
+  const [recurringRuleForm, setRecurringRuleForm] = useState({
+    amount: '',
+    category: '',
+    vendor: '',
+    method: 'WIRE' as PaymentMethod,
+    startDate: '',
+    endDate: '',
+    dayOfMonth: '',
+    isActive: true,
+  });
+  const [recurringApplyFuture, setRecurringApplyFuture] = useState(true);
+  const [recurringRecalculate, setRecurringRecalculate] = useState(false);
+  const [recurringHorizonMonths, setRecurringHorizonMonths] = useState('12');
+  const [recurringRuleLoading, setRecurringRuleLoading] = useState(false);
+  const [recurringRuleError, setRecurringRuleError] = useState<string | null>(null);
 
   const controllerRef = useRef<AbortController | null>(null);
 
@@ -145,6 +190,19 @@ export function FinanceEntriesPanel({ businessId }: Props) {
     });
   }, [fromDate, items, toDate, typeFilter, categoryFilter, tagFilter]);
 
+  const recurringPreview = useMemo(() => {
+    if (!form.isRecurring || form.recurringUnit !== 'MONTHLY' || !form.date) return null;
+    const start = new Date(form.date);
+    if (Number.isNaN(start.getTime())) return null;
+    const now = new Date();
+    const startIndex = start.getFullYear() * 12 + start.getMonth();
+    const currentIndex = now.getFullYear() * 12 + now.getMonth();
+    const pastCount =
+      form.recurringRetroactive && startIndex < currentIndex ? currentIndex - startIndex : 0;
+    const futureCount = Number.parseInt(form.recurringMonths, 10) || 12;
+    return { pastCount, futureCount };
+  }, [form.date, form.isRecurring, form.recurringMonths, form.recurringRetroactive, form.recurringUnit]);
+
   const displaySelectedId = selectedId ?? filtered[0]?.id ?? null;
   const selected = filtered.find((f) => f.id === displaySelectedId) ?? null;
 
@@ -162,6 +220,10 @@ export function FinanceEntriesPanel({ businessId }: Props) {
       method: 'WIRE',
       isRecurring: false,
       recurringUnit: 'MONTHLY',
+      recurringMonths: '12',
+      recurringRetroactive: true,
+      recurringEndDate: '',
+      recurringDayOfMonth: '',
       categoryReferenceId: '',
       tagReferenceIds: [],
     });
@@ -174,7 +236,7 @@ export function FinanceEntriesPanel({ businessId }: Props) {
     setInfo(null);
     setForm({
       type: item.type,
-      amount: (item.amount ?? 0).toString(),
+      amount: formatCentsToEuroInput(item.amountCents),
       category: item.category,
       date: item.date.slice(0, 10),
       projectId: item.projectId ?? '',
@@ -183,11 +245,50 @@ export function FinanceEntriesPanel({ businessId }: Props) {
       method: item.method ?? 'WIRE',
       isRecurring: Boolean(item.isRecurring),
       recurringUnit: item.recurringUnit ?? 'MONTHLY',
+      recurringMonths: '12',
+      recurringRetroactive: true,
+      recurringEndDate: '',
+      recurringDayOfMonth: '',
       categoryReferenceId: item.categoryReferenceId ?? '',
       tagReferenceIds: item.tagReferences?.map((t) => t.id) ?? [],
     });
     setActionError(null);
     setModalOpen(true);
+  }
+
+  async function openRecurringRule(ruleId: string) {
+    setRecurringRuleError(null);
+    setRecurringRuleLoading(true);
+    setRecurringModalOpen(true);
+    try {
+      const res = await fetchJson<{ item: RecurringRule; occurrences: Finance[] }>(
+        `/api/pro/businesses/${businessId}/finances/recurring/${ruleId}`
+      );
+      if (!res.ok || !res.data) {
+        setRecurringRuleError(res.error ?? 'Impossible de charger la récurrence.');
+        setRecurringRule(null);
+        setRecurringOccurrences([]);
+        return;
+      }
+      setRecurringRule(res.data.item);
+      setRecurringOccurrences(res.data.occurrences ?? []);
+      setRecurringRuleForm({
+        amount: formatCentsToEuroInput(res.data.item.amountCents),
+        category: res.data.item.category,
+        vendor: res.data.item.vendor ?? '',
+        method: res.data.item.method ?? 'WIRE',
+        startDate: res.data.item.startDate.slice(0, 10),
+        endDate: res.data.item.endDate ? res.data.item.endDate.slice(0, 10) : '',
+        dayOfMonth: String(res.data.item.dayOfMonth ?? ''),
+        isActive: res.data.item.isActive,
+      });
+    } catch (err) {
+      setRecurringRuleError(getErrorMessage(err));
+      setRecurringRule(null);
+      setRecurringOccurrences([]);
+    } finally {
+      setRecurringRuleLoading(false);
+    }
   }
 
   async function loadFinances(signal?: AbortSignal) {
@@ -244,6 +345,57 @@ export function FinanceEntriesPanel({ businessId }: Props) {
     }
   }
 
+  async function handleSaveRecurringRule() {
+    if (!recurringRule) return;
+    setRecurringRuleError(null);
+    setRecurringRuleLoading(true);
+    try {
+      const amountCents = parseEuroToCents(recurringRuleForm.amount);
+      if (!Number.isFinite(amountCents) || amountCents <= 0) {
+        setRecurringRuleError('Montant invalide.');
+        return;
+      }
+      const dayOfMonth = recurringRuleForm.dayOfMonth
+        ? Math.min(31, Math.max(1, Number.parseInt(recurringRuleForm.dayOfMonth, 10)))
+        : recurringRule.dayOfMonth;
+      if (!Number.isFinite(dayOfMonth) || dayOfMonth <= 0) {
+        setRecurringRuleError('Jour de facturation invalide.');
+        return;
+      }
+      const res = await fetchJson<{ item: RecurringRule }>(
+        `/api/pro/businesses/${businessId}/finances/recurring/${recurringRule.id}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            amountCents,
+            category: recurringRuleForm.category,
+            vendor: recurringRuleForm.vendor || null,
+            method: recurringRuleForm.method,
+            startDate: recurringRuleForm.startDate,
+            endDate: recurringRuleForm.endDate || null,
+            dayOfMonth,
+            isActive: recurringRuleForm.isActive,
+            applyToFuture: recurringApplyFuture,
+            recalculateFuture: recurringRecalculate,
+            horizonMonths: Number.parseInt(recurringHorizonMonths, 10) || 12,
+          }),
+        }
+      );
+      if (!res.ok || !res.data) {
+        setRecurringRuleError(res.error ?? 'Mise à jour impossible.');
+        return;
+      }
+      setRecurringRule(res.data.item);
+      await loadFinances();
+      await openRecurringRule(recurringRule.id);
+    } catch (err) {
+      setRecurringRuleError(getErrorMessage(err));
+    } finally {
+      setRecurringRuleLoading(false);
+    }
+  }
+
   useEffect(() => {
     void loadFinances();
     return () => controllerRef.current?.abort();
@@ -279,7 +431,12 @@ export function FinanceEntriesPanel({ businessId }: Props) {
   function onFieldChange(e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) {
     const target = e.target as HTMLInputElement;
     const { name, value } = target;
-    const nextValue = target.type === 'checkbox' ? target.checked : value;
+    const nextValue =
+      target.type === 'checkbox'
+        ? target.checked
+        : name === 'amount'
+          ? sanitizeEuroInput(value)
+          : value;
     setForm((prev) => ({ ...prev, [name]: nextValue }));
   }
 
@@ -292,9 +449,15 @@ export function FinanceEntriesPanel({ businessId }: Props) {
     setActionError(null);
     setInfo(null);
     setCreating(true);
+    const amountCents = parseEuroToCents(form.amount);
+    if (!Number.isFinite(amountCents)) {
+      setActionError('Montant invalide.');
+      setCreating(false);
+      return;
+    }
     const payload: Record<string, unknown> = {
       type: form.type,
-      amount: Number(form.amount || 0),
+      amountCents,
       category: form.category,
       date: form.date,
       projectId: form.projectId || null,
@@ -303,6 +466,20 @@ export function FinanceEntriesPanel({ businessId }: Props) {
       method: form.method || null,
       isRecurring: form.isRecurring,
       recurringUnit: form.isRecurring ? form.recurringUnit : null,
+      recurringMonths:
+        form.isRecurring && form.recurringUnit === 'MONTHLY'
+          ? Number.parseInt(form.recurringMonths, 10) || 12
+          : null,
+      recurringRetroactive:
+        form.isRecurring && form.recurringUnit === 'MONTHLY' ? Boolean(form.recurringRetroactive) : null,
+      recurringEndDate:
+        form.isRecurring && form.recurringUnit === 'MONTHLY' && form.recurringEndDate
+          ? form.recurringEndDate
+          : null,
+      recurringDayOfMonth:
+        form.isRecurring && form.recurringUnit === 'MONTHLY' && form.recurringDayOfMonth
+          ? Number.parseInt(form.recurringDayOfMonth, 10) || null
+          : null,
       categoryReferenceId: form.categoryReferenceId || null,
       tagReferenceIds: form.tagReferenceIds,
     };
@@ -519,6 +696,15 @@ export function FinanceEntriesPanel({ businessId }: Props) {
                       <Button size="sm" variant="outline" onClick={() => openEdit(item)}>
                         Modifier
                       </Button>
+                      {item.recurringRuleId ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => openRecurringRule(item.recurringRuleId as string)}
+                        >
+                          Récurrence
+                        </Button>
+                      ) : null}
                       <Button size="sm" variant="ghost" onClick={() => setDeleteModal(item)}>
                         Supprimer
                       </Button>
@@ -550,9 +736,20 @@ export function FinanceEntriesPanel({ businessId }: Props) {
                 {selected.type === 'INCOME' ? 'Revenu' : 'Dépense'} · {formatDate(selected.date)}
               </p>
             </div>
-            <Button size="sm" variant="outline" onClick={() => void loadDetail(selected.id)}>
-              Charger détails
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" variant="outline" onClick={() => void loadDetail(selected.id)}>
+                Charger détails
+              </Button>
+              {selected.recurringRuleId ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => openRecurringRule(selected.recurringRuleId as string)}
+                >
+                  Gérer la récurrence
+                </Button>
+              ) : null}
+            </div>
           </div>
           {info ? <p className="text-xs text-[var(--text-secondary)]">{info}</p> : null}
           {(selected.vendor || selected.method || selected.isRecurring) ? (
@@ -566,6 +763,7 @@ export function FinanceEntriesPanel({ businessId }: Props) {
               {selected.isRecurring ? (
                 <p>Récurrence : {selected.recurringUnit === 'YEARLY' ? 'Annuelle' : 'Mensuelle'}</p>
               ) : null}
+              {selected.isRuleOverride ? <p className="text-amber-600">Occurrence modifiée manuellement.</p> : null}
             </div>
           ) : null}
           {selected.tagReferences?.length ? (
@@ -600,7 +798,14 @@ export function FinanceEntriesPanel({ businessId }: Props) {
             </label>
             <label className="text-sm text-[var(--text-primary)]">
               <span className="text-xs text-[var(--text-secondary)]">Montant (€)</span>
-              <Input name="amount" type="number" value={form.amount} onChange={onFieldChange} required />
+              <Input
+                name="amount"
+                type="text"
+                inputMode="decimal"
+                value={form.amount}
+                onChange={onFieldChange}
+                required
+              />
             </label>
             <label className="text-sm text-[var(--text-primary)]">
               <span className="text-xs text-[var(--text-secondary)]">Libellé</span>
@@ -660,6 +865,57 @@ export function FinanceEntriesPanel({ businessId }: Props) {
                   ))}
                 </Select>
               </label>
+              {form.isRecurring && form.recurringUnit === 'MONTHLY' ? (
+                <>
+                  <label className="text-sm text-[var(--text-primary)]">
+                    <span className="text-xs text-[var(--text-secondary)]">Créer sur (mois)</span>
+                    <Input
+                      name="recurringMonths"
+                      value={form.recurringMonths}
+                      onChange={onFieldChange}
+                      type="number"
+                      min={1}
+                      max={36}
+                    />
+                  </label>
+                  <label className="text-sm text-[var(--text-primary)]">
+                    <span className="text-xs text-[var(--text-secondary)]">Jour de facturation</span>
+                    <Input
+                      name="recurringDayOfMonth"
+                      value={form.recurringDayOfMonth}
+                      onChange={onFieldChange}
+                      type="number"
+                      min={1}
+                      max={31}
+                      placeholder="Auto"
+                    />
+                  </label>
+                  <label className="text-sm text-[var(--text-primary)]">
+                    <span className="text-xs text-[var(--text-secondary)]">Fin de récurrence</span>
+                    <Input
+                      name="recurringEndDate"
+                      type="date"
+                      value={form.recurringEndDate}
+                      onChange={onFieldChange}
+                    />
+                  </label>
+                  <label className="flex items-center gap-2 text-sm text-[var(--text-primary)]">
+                    <input
+                      type="checkbox"
+                      name="recurringRetroactive"
+                      checked={form.recurringRetroactive}
+                      onChange={onFieldChange}
+                      className="h-4 w-4 rounded border border-[var(--border)]"
+                    />
+                    <span>Créer rétroactivement depuis la date de début</span>
+                  </label>
+                  {recurringPreview ? (
+                    <div className="text-xs text-[var(--text-secondary)] md:col-span-2">
+                      +{recurringPreview.pastCount} occurrences passées · +{recurringPreview.futureCount} occurrences futures
+                    </div>
+                  ) : null}
+                </>
+              ) : null}
               <label className="text-sm text-[var(--text-primary)] md:col-span-2">
                 <span className="text-xs text-[var(--text-secondary)]">Note</span>
                 <Input name="note" value={form.note} onChange={onFieldChange} />
@@ -732,6 +988,181 @@ export function FinanceEntriesPanel({ businessId }: Props) {
               Supprimer
             </Button>
           </div>
+        </div>
+      </Modal>
+
+      <Modal
+        open={recurringModalOpen}
+        onCloseAction={() => setRecurringModalOpen(false)}
+        title="Règle de récurrence"
+        description="Modifie la règle et les occurrences futures."
+      >
+        <div className="space-y-4">
+          {recurringRuleLoading ? <p className="text-xs text-[var(--text-secondary)]">Chargement…</p> : null}
+          {recurringRuleError ? <p className="text-xs text-rose-500">{recurringRuleError}</p> : null}
+          {recurringRule ? (
+            <>
+              <div className="grid gap-2 md:grid-cols-2">
+                <label className="text-sm text-[var(--text-primary)]">
+                  <span className="text-xs text-[var(--text-secondary)]">Montant (€)</span>
+                  <Input
+                    value={recurringRuleForm.amount}
+                    onChange={(e) =>
+                      setRecurringRuleForm((prev) => ({ ...prev, amount: sanitizeEuroInput(e.target.value) }))
+                    }
+                  />
+                </label>
+                <label className="text-sm text-[var(--text-primary)]">
+                  <span className="text-xs text-[var(--text-secondary)]">Libellé</span>
+                  <Input
+                    value={recurringRuleForm.category}
+                    onChange={(e) => setRecurringRuleForm((prev) => ({ ...prev, category: e.target.value }))}
+                  />
+                </label>
+                <label className="text-sm text-[var(--text-primary)]">
+                  <span className="text-xs text-[var(--text-secondary)]">Fournisseur</span>
+                  <Input
+                    value={recurringRuleForm.vendor}
+                    onChange={(e) => setRecurringRuleForm((prev) => ({ ...prev, vendor: e.target.value }))}
+                  />
+                </label>
+                <label className="text-sm text-[var(--text-primary)]">
+                  <span className="text-xs text-[var(--text-secondary)]">Mode</span>
+                  <Select
+                    value={recurringRuleForm.method}
+                    onChange={(e) => setRecurringRuleForm((prev) => ({ ...prev, method: e.target.value as PaymentMethod }))}
+                  >
+                    {METHOD_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </Select>
+                </label>
+                <label className="text-sm text-[var(--text-primary)]">
+                  <span className="text-xs text-[var(--text-secondary)]">Date de début</span>
+                  <Input
+                    type="date"
+                    value={recurringRuleForm.startDate}
+                    onChange={(e) => setRecurringRuleForm((prev) => ({ ...prev, startDate: e.target.value }))}
+                  />
+                </label>
+                <label className="text-sm text-[var(--text-primary)]">
+                  <span className="text-xs text-[var(--text-secondary)]">Date de fin</span>
+                  <Input
+                    type="date"
+                    value={recurringRuleForm.endDate}
+                    onChange={(e) => setRecurringRuleForm((prev) => ({ ...prev, endDate: e.target.value }))}
+                  />
+                </label>
+                <label className="text-sm text-[var(--text-primary)]">
+                  <span className="text-xs text-[var(--text-secondary)]">Jour de facturation</span>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={31}
+                    value={recurringRuleForm.dayOfMonth}
+                    onChange={(e) => setRecurringRuleForm((prev) => ({ ...prev, dayOfMonth: e.target.value }))}
+                  />
+                </label>
+                <label className="flex items-center gap-2 text-sm text-[var(--text-primary)]">
+                  <input
+                    type="checkbox"
+                    checked={recurringRuleForm.isActive}
+                    onChange={(e) => setRecurringRuleForm((prev) => ({ ...prev, isActive: e.target.checked }))}
+                    className="h-4 w-4 rounded border border-[var(--border)]"
+                  />
+                  <span>Règle active</span>
+                </label>
+              </div>
+
+              <div className="rounded-2xl border border-[var(--border)]/60 bg-[var(--surface)]/40 p-3 text-xs text-[var(--text-secondary)]">
+                <div className="flex flex-wrap items-center gap-3">
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={recurringApplyFuture}
+                      onChange={(e) => setRecurringApplyFuture(e.target.checked)}
+                      className="h-4 w-4 rounded border border-[var(--border)]"
+                    />
+                    <span>Appliquer aux occurrences futures</span>
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={recurringRecalculate}
+                      onChange={(e) => setRecurringRecalculate(e.target.checked)}
+                      className="h-4 w-4 rounded border border-[var(--border)]"
+                    />
+                    <span>Recalculer (re-générer)</span>
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <span>Horizon</span>
+                    <Input
+                      className="w-20"
+                      value={recurringHorizonMonths}
+                      onChange={(e) => setRecurringHorizonMonths(e.target.value)}
+                      type="number"
+                      min={1}
+                      max={36}
+                    />
+                  </label>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setRecurringModalOpen(false)}
+                >
+                  Fermer
+                </Button>
+                <Button size="sm" onClick={handleSaveRecurringRule} disabled={recurringRuleLoading}>
+                  {recurringRuleLoading ? 'Enregistrement…' : 'Enregistrer'}
+                </Button>
+              </div>
+
+              <div className="rounded-2xl border border-[var(--border)]/60 bg-[var(--surface)]/40 p-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
+                  Occurrences
+                </p>
+                <div className="mt-2 max-h-64 space-y-2 overflow-auto">
+                  {recurringOccurrences.length ? (
+                    recurringOccurrences.map((occ) => (
+                      <div
+                        key={occ.id}
+                        className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[var(--border)]/60 bg-[var(--surface)] px-3 py-2 text-xs"
+                      >
+                        <div>
+                          <p className="text-[var(--text-primary)]">
+                            {formatDate(occ.date)} · {formatCurrency(Number(occ.amountCents) / 100)}
+                          </p>
+                          <p className="text-[11px] text-[var(--text-secondary)]">
+                            {occ.isRuleOverride ? 'Modifiée' : 'Automatique'}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              setRecurringModalOpen(false);
+                              openEdit(occ);
+                            }}
+                          >
+                            Modifier
+                          </Button>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-xs text-[var(--text-secondary)]">Aucune occurrence.</p>
+                  )}
+                </div>
+              </div>
+            </>
+          ) : null}
         </div>
       </Modal>
     </div>

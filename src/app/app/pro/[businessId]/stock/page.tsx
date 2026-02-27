@@ -10,6 +10,7 @@ import { Modal } from '@/components/ui/modal';
 import { Select } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
+import { parseEuroToCents, sanitizeEuroInput } from '@/lib/money';
 import { useActiveBusiness } from '../../ActiveBusinessProvider';
 import { useRowSelection } from '../../../components/selection/useRowSelection';
 import { BulkActionBar } from '../../../components/selection/BulkActionBar';
@@ -105,15 +106,26 @@ export default function StockListPage() {
     setSaving(true);
     setActionError(null);
     try {
-      const res = await fetchJson<{ product: Product }>(`/api/pro/businesses/${businessId}/products`, {
+      const salePriceCents = draft.salePriceCents.trim() ? parseEuroToCents(draft.salePriceCents) : null;
+      const purchasePriceCents = draft.purchasePriceCents.trim()
+        ? parseEuroToCents(draft.purchasePriceCents)
+        : null;
+      if (
+        (draft.salePriceCents.trim() && !Number.isFinite(salePriceCents)) ||
+        (draft.purchasePriceCents.trim() && !Number.isFinite(purchasePriceCents))
+      ) {
+        setActionError('Prix invalide.');
+        return;
+      }
+      const res = await fetchJson<{ item: Product }>(`/api/pro/businesses/${businessId}/products`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           sku: draft.sku,
           name: draft.name,
           unit: draft.unit,
-          salePriceCents: draft.salePriceCents ? Number(draft.salePriceCents) : undefined,
-          purchasePriceCents: draft.purchasePriceCents ? Number(draft.purchasePriceCents) : undefined,
+          salePriceCents: Number.isFinite(salePriceCents ?? NaN) ? (salePriceCents as number) : undefined,
+          purchasePriceCents: Number.isFinite(purchasePriceCents ?? NaN) ? (purchasePriceCents as number) : undefined,
         }),
       });
       if (!res.ok || !res.data) {
@@ -312,19 +324,25 @@ export default function StockListPage() {
           </label>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             <label className="text-sm text-[var(--text-primary)]">
-              <span className="block text-xs text-[var(--text-secondary)]">Prix de vente (cents)</span>
+              <span className="block text-xs text-[var(--text-secondary)]">Prix de vente (€)</span>
               <Input
-                type="number"
+                type="text"
+                inputMode="decimal"
                 value={draft.salePriceCents}
-                onChange={(e) => setDraft((prev) => ({ ...prev, salePriceCents: e.target.value }))}
+                onChange={(e) =>
+                  setDraft((prev) => ({ ...prev, salePriceCents: sanitizeEuroInput(e.target.value) }))
+                }
               />
             </label>
             <label className="text-sm text-[var(--text-primary)]">
-              <span className="block text-xs text-[var(--text-secondary)]">Prix d&apos;achat (cents)</span>
+              <span className="block text-xs text-[var(--text-secondary)]">Prix d&apos;achat (€)</span>
               <Input
-                type="number"
+                type="text"
+                inputMode="decimal"
                 value={draft.purchasePriceCents}
-                onChange={(e) => setDraft((prev) => ({ ...prev, purchasePriceCents: e.target.value }))}
+                onChange={(e) =>
+                  setDraft((prev) => ({ ...prev, purchasePriceCents: sanitizeEuroInput(e.target.value) }))
+                }
               />
             </label>
           </div>

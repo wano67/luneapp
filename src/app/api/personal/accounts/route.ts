@@ -5,6 +5,7 @@ import { requireAuthAsync } from '@/server/auth/requireAuth';
 import { assertSameOrigin, jsonNoStore, withNoStore } from '@/server/security/csrf';
 import { rateLimit } from '@/server/security/rateLimit';
 import { getRequestId, withRequestId, badRequest, unauthorized } from '@/server/http/apiUtils';
+import { parseCentsInput } from '@/lib/money';
 
 function toStrId(v: bigint) {
   return v.toString();
@@ -163,11 +164,11 @@ export async function POST(req: NextRequest) {
       return withIdNoStore(badRequest('iban too long'), requestId);
     }
 
-    const initialCents = BigInt(
-      typeof initialCentsRaw === 'number'
-        ? Math.trunc(initialCentsRaw)
-        : (initialCentsRaw ?? '0').toString().trim() || '0'
-    );
+    const initialParsed = parseCentsInput(initialCentsRaw);
+    if (initialParsed == null || !Number.isFinite(initialParsed)) {
+      return withIdNoStore(badRequest('Invalid initialCents'), requestId);
+    }
+    const initialCents = BigInt(initialParsed);
 
     const created = await prisma.personalAccount.create({
       data: {

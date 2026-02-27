@@ -13,6 +13,7 @@ import { KpiCirclesBlock } from '@/components/pro/KpiCirclesBlock';
 import { ProPageShell } from '@/components/pro/ProPageShell';
 import { fetchJson } from '@/lib/apiClient';
 import { formatCurrencyEUR } from '@/lib/formatCurrency';
+import { formatCentsToEuroInput, parseEuroToCents, sanitizeEuroInput } from '@/lib/money';
 
 type Service = {
   id: string;
@@ -195,7 +196,7 @@ export function CatalogPage({
       code: svc.code,
       name: svc.name,
       description: svc.description ?? '',
-      price: svc.defaultPriceCents ? String(Number(svc.defaultPriceCents)) : '',
+      price: formatCentsToEuroInput(svc.defaultPriceCents),
       vatRate: svc.vatRate ? String(svc.vatRate) : '',
       type: svc.type ?? '',
       billingType: svc.billingType ?? 'ONE_OFF',
@@ -212,7 +213,7 @@ export function CatalogPage({
       sku: p.sku,
       name: p.name,
       description: p.description ?? '',
-      price: p.salePriceCents ? String(Number(p.salePriceCents)) : '',
+      price: formatCentsToEuroInput(p.salePriceCents),
       unit: p.unit ?? 'PIECE',
     });
     setTab('products');
@@ -227,11 +228,17 @@ export function CatalogPage({
     }
     setSaving(true);
     setModalError(null);
+    const priceCents = serviceForm.price.trim() ? parseEuroToCents(serviceForm.price) : null;
+    if (serviceForm.price.trim() && !Number.isFinite(priceCents)) {
+      setModalError('Prix invalide.');
+      setSaving(false);
+      return;
+    }
     const body = {
       code: serviceForm.code.trim(),
       name: serviceForm.name.trim(),
       description: serviceForm.description.trim() || null,
-      defaultPriceCents: serviceForm.price ? Number(serviceForm.price) : null,
+      defaultPriceCents: Number.isFinite(priceCents ?? NaN) ? (priceCents as number) : null,
       vatRate: serviceForm.vatRate ? Number(serviceForm.vatRate) : null,
       type: serviceForm.type.trim() || null,
     };
@@ -260,11 +267,17 @@ export function CatalogPage({
     }
     setSaving(true);
     setModalError(null);
+    const priceCents = productForm.price.trim() ? parseEuroToCents(productForm.price) : null;
+    if (productForm.price.trim() && !Number.isFinite(priceCents)) {
+      setModalError('Prix invalide.');
+      setSaving(false);
+      return;
+    }
     const body = {
       sku: productForm.sku.trim(),
       name: productForm.name.trim(),
       description: productForm.description.trim() || null,
-      salePriceCents: productForm.price ? Number(productForm.price) : null,
+      salePriceCents: Number.isFinite(priceCents ?? NaN) ? (priceCents as number) : null,
       unit: productForm.unit || 'PIECE',
     };
     const url = productForm.id
@@ -463,10 +476,13 @@ export function CatalogPage({
                 onChange={(e) => setServiceForm((prev) => ({ ...prev, description: e.target.value }))}
               />
               <Input
-                label="Prix (cents)"
-                type="number"
+                label="Prix (€)"
+                type="text"
+                inputMode="decimal"
                 value={serviceForm.price}
-                onChange={(e) => setServiceForm((prev) => ({ ...prev, price: e.target.value }))}
+                onChange={(e) =>
+                  setServiceForm((prev) => ({ ...prev, price: sanitizeEuroInput(e.target.value) }))
+                }
               />
               <Input
                 label="TVA (%)"
@@ -537,10 +553,13 @@ export function CatalogPage({
                 onChange={(e) => setProductForm((prev) => ({ ...prev, description: e.target.value }))}
               />
               <Input
-                label="Prix de vente (cents)"
-                type="number"
+                label="Prix de vente (€)"
+                type="text"
+                inputMode="decimal"
                 value={productForm.price}
-                onChange={(e) => setProductForm((prev) => ({ ...prev, price: e.target.value }))}
+                onChange={(e) =>
+                  setProductForm((prev) => ({ ...prev, price: sanitizeEuroInput(e.target.value) }))
+                }
               />
               <Input
                 label="Unité"

@@ -1,4 +1,3 @@
-import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/server/db/client';
 import {
   BusinessReferenceType,
@@ -6,30 +5,10 @@ import {
   ProjectQuoteStatus,
   ProjectStatus,
 } from '@/generated/prisma';
-import { requireBusinessRole } from '@/server/auth/businessRole';
-import { requireAuthPro } from '@/server/auth/requireAuthPro';
-import { assertSameOrigin, jsonNoStore, withNoStore } from '@/server/security/csrf';
-import { rateLimit } from '@/server/security/rateLimit';
-import {
-  badRequest,
-  forbidden,
-  getRequestId,
-  notFound,
-  unauthorized,
-  withRequestId,
-} from '@/server/http/apiUtils';
+import { withBusinessRoute } from '@/server/http/routeHandler';
+import { jsonb, jsonbNoContent } from '@/server/http/json';
+import { badRequest, notFound } from '@/server/http/apiUtils';
 import { computeProjectBillingSummary } from '@/server/billing/summary';
-
-function parseId(param: string | undefined) {
-  if (!param || !/^\d+$/.test(param)) {
-    return null;
-  }
-  try {
-    return BigInt(param);
-  } catch {
-    return null;
-  }
-}
 
 function parseIsoDate(value: unknown): Date | null {
   if (value === null || value === undefined) return null;
@@ -47,6 +26,7 @@ function serializeBillingSummary(summary: BillingSummary | null) {
     source: summary.source,
     referenceQuoteId: summary.referenceQuoteId ? summary.referenceQuoteId.toString() : null,
     currency: summary.currency,
+    plannedValueCents: summary.plannedValueCents.toString(),
     totalCents: summary.totalCents.toString(),
     depositPercent: summary.depositPercent,
     depositCents: summary.depositCents.toString(),
@@ -54,6 +34,7 @@ function serializeBillingSummary(summary: BillingSummary | null) {
     alreadyInvoicedCents: summary.alreadyInvoicedCents.toString(),
     alreadyPaidCents: summary.alreadyPaidCents.toString(),
     remainingToCollectCents: summary.remainingToCollectCents.toString(),
+    remainingToInvoiceCents: summary.remainingToInvoiceCents.toString(),
     remainingCents: summary.remainingCents.toString(),
   };
 }
@@ -74,23 +55,23 @@ function serializeProject(
     startDate: Date | null;
     endDate: Date | null;
     prestationsText?: string | null;
-  createdAt: Date;
-  updatedAt: Date;
-  categoryReferenceId?: bigint | null;
-  categoryReference?: { id: bigint; name: string | null } | null;
-  tags?: Array<{ referenceId: bigint; reference: { id: bigint; name: string } }>;
-  client?: { id: bigint; name: string | null } | null;
-  _count?: { tasks: number; projectServices: number; interactions: number };
-  projectServices?: {
-    id: bigint;
-    projectId: bigint;
-    serviceId: bigint;
-    quantity: number;
-    priceCents: bigint | null;
-    notes: string | null;
     createdAt: Date;
-    service: { id: bigint; code: string; name: string; type: string | null; defaultPriceCents: bigint | null };
-  }[];
+    updatedAt: Date;
+    categoryReferenceId?: bigint | null;
+    categoryReference?: { id: bigint; name: string | null } | null;
+    tags?: Array<{ referenceId: bigint; reference: { id: bigint; name: string } }>;
+    client?: { id: bigint; name: string | null } | null;
+    _count?: { tasks: number; projectServices: number; interactions: number };
+    projectServices?: {
+      id: bigint;
+      projectId: bigint;
+      serviceId: bigint;
+      quantity: number;
+      priceCents: bigint | null;
+      notes: string | null;
+      createdAt: Date;
+      service: { id: bigint; code: string; name: string; type: string | null; defaultPriceCents: bigint | null };
+    }[];
     tasksSummary?: { total: number; open: number; done: number; progressPct: number };
   },
   opts?: { billingSummary?: BillingSummary | null; valueCents?: bigint | null }
@@ -153,10 +134,6 @@ function serializeProject(
   };
 }
 
-function withIdNoStore(res: NextResponse, requestId: string) {
-  return withNoStore(withRequestId(res, requestId));
-}
-
 async function validateCategoryAndTags(
   businessId: bigint,
   categoryReferenceId: bigint | null,
@@ -200,386 +177,344 @@ function isValidStatus(status: unknown): status is ProjectStatus {
 }
 
 // GET /api/pro/businesses/{businessId}/projects/{projectId}
-export async function GET(
-  request: NextRequest,
-  context: { params: Promise<{ businessId: string; projectId: string }> }
-) {
-  const requestId = getRequestId(request);
-  const { businessId, projectId } = await context.params;
+export const GET = withBusinessRoute<{ businessId: string; projectId: string }>(
+  { minRole: 'VIEWER' },
+  async (ctx, _req, params) => {
+    const { requestId, businessId: businessIdBigInt } = ctx;
+    const projectId = params?.projectId;
+    if (!projectId || !/^\d+$/.test(projectId)) return badRequest('projectId invalide.');
+    const projectIdBigInt = BigInt(projectId);
 
-  let userId: string;
-  try {
-    ({ userId } = await requireAuthPro(request));
-  } catch {
-    return withIdNoStore(unauthorized(), requestId);
+    const [project, taskRows] = await Promise.all([
+      prisma.project.findFirst({
+        where: { id: projectIdBigInt, businessId: businessIdBigInt },
+        include: {
+          client: { select: { id: true, name: true } },
+          categoryReference: { select: { id: true, name: true } },
+          tags: { include: { reference: { select: { id: true, name: true } } } },
+          _count: { select: { tasks: true, projectServices: true, interactions: true } },
+          projectServices: {
+            include: { service: { select: { id: true, code: true, name: true, type: true, defaultPriceCents: true } } },
+            orderBy: { createdAt: 'desc' },
+          },
+        },
+      }),
+      prisma.task.findMany({
+        where: { projectId: projectIdBigInt, businessId: businessIdBigInt },
+        select: { status: true, progress: true },
+      }),
+    ]);
+
+    if (!project) return notFound('Projet introuvable.');
+
+    const summary = (() => {
+      if (!taskRows.length) return { total: 0, open: 0, done: 0, progressPct: 0 };
+      let total = 0;
+      let done = 0;
+      let open = 0;
+      let sum = 0;
+      for (const t of taskRows) {
+        total += 1;
+        const pct = t.status === 'DONE' ? 100 : t.status === 'IN_PROGRESS' ? t.progress ?? 0 : 0;
+        sum += pct;
+        if (t.status === 'DONE') done += 1;
+        else open += 1;
+      }
+      return { total, done, open, progressPct: Math.round(sum / total) };
+    })();
+
+    const billingSummary = await computeProjectBillingSummary(businessIdBigInt, projectIdBigInt);
+
+    return jsonb(
+      {
+        item: serializeProject(
+          { ...project, tasksSummary: summary },
+          { billingSummary, valueCents: billingSummary?.totalCents ?? null }
+        ),
+      },
+      requestId
+    );
   }
+);
 
-  const businessIdBigInt = parseId(businessId);
-  const projectIdBigInt = parseId(projectId);
-  if (!businessIdBigInt || !projectIdBigInt) {
-    return withIdNoStore(badRequest('businessId ou projectId invalide.'), requestId);
-  }
+// PATCH /api/pro/businesses/{businessId}/projects/{projectId}
+export const PATCH = withBusinessRoute<{ businessId: string; projectId: string }>(
+  {
+    minRole: 'ADMIN',
+    rateLimit: {
+      key: (ctx) => `pro:projects:update:${ctx.businessId}:${ctx.userId}`,
+      limit: 120,
+      windowMs: 60 * 60 * 1000,
+    },
+  },
+  async (ctx, req, params) => {
+    const { requestId, businessId: businessIdBigInt } = ctx;
+    const projectId = params?.projectId;
+    if (!projectId || !/^\d+$/.test(projectId)) return badRequest('projectId invalide.');
+    const projectIdBigInt = BigInt(projectId);
 
-  const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'VIEWER');
-  if (!membership) return withIdNoStore(forbidden(), requestId);
-
-  const [project, taskRows] = await Promise.all([
-    prisma.project.findFirst({
+    const project = await prisma.project.findFirst({
       where: { id: projectIdBigInt, businessId: businessIdBigInt },
       include: {
         client: { select: { id: true, name: true } },
         categoryReference: { select: { id: true, name: true } },
         tags: { include: { reference: { select: { id: true, name: true } } } },
-        _count: { select: { tasks: true, projectServices: true, interactions: true } },
-        projectServices: {
-          include: { service: { select: { id: true, code: true, name: true, type: true, defaultPriceCents: true } } },
-          orderBy: { createdAt: 'desc' },
-        },
       },
-    }),
-    prisma.task.findMany({
-      where: { projectId: projectIdBigInt, businessId: businessIdBigInt },
-      select: { status: true, progress: true },
-    }),
-  ]);
+    });
+    if (!project) return notFound('Projet introuvable.');
 
-  if (!project) {
-    return withIdNoStore(notFound('Projet introuvable.'), requestId);
-  }
-
-  const summary = (() => {
-    if (!taskRows.length) return { total: 0, open: 0, done: 0, progressPct: 0 };
-    let total = 0;
-    let done = 0;
-    let open = 0;
-    let sum = 0;
-    for (const t of taskRows) {
-      total += 1;
-      const pct = t.status === 'DONE' ? 100 : t.status === 'IN_PROGRESS' ? t.progress ?? 0 : 0;
-      sum += pct;
-      if (t.status === 'DONE') done += 1;
-      else open += 1;
+    const body = await req.json().catch(() => null);
+    if (!body || typeof body !== 'object') {
+      return badRequest('Payload invalide.');
     }
-    return { total, done, open, progressPct: Math.round(sum / total) };
-  })();
 
-  const billingSummary = await computeProjectBillingSummary(businessIdBigInt, projectIdBigInt);
-  return withIdNoStore(
-    jsonNoStore({
-      item: serializeProject(
-        { ...project, tasksSummary: summary },
-        { billingSummary, valueCents: billingSummary?.totalCents ?? null }
-      ),
-    }),
-    requestId
-  );
-}
+    const data: Record<string, unknown> = {};
+    const depositPaidAtRaw = (body as { depositPaidAt?: unknown }).depositPaidAt;
+    const wantsDepositPaidAt = depositPaidAtRaw !== undefined;
+    const billingQuoteIdRaw = (body as { billingQuoteId?: unknown }).billingQuoteId;
+    const wantsBillingQuoteId = billingQuoteIdRaw !== undefined;
 
-// PATCH /api/pro/businesses/{businessId}/projects/{projectId}
-export async function PATCH(
-  request: NextRequest,
-  context: { params: Promise<{ businessId: string; projectId: string }> }
-) {
-  const requestId = getRequestId(request);
-  const csrf = assertSameOrigin(request);
-  if (csrf) return withIdNoStore(csrf, requestId);
-
-  const { businessId, projectId } = await context.params;
-  const businessIdBigInt = parseId(businessId);
-  const projectIdBigInt = parseId(projectId);
-  if (!businessIdBigInt || !projectIdBigInt) {
-    return withIdNoStore(badRequest('businessId ou projectId invalide.'), requestId);
-  }
-
-  let userId: string;
-  try {
-    ({ userId } = await requireAuthPro(request));
-  } catch {
-    return withIdNoStore(unauthorized(), requestId);
-  }
-
-  const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'ADMIN');
-  if (!membership) return withIdNoStore(forbidden(), requestId);
-
-  const limited = rateLimit(request, {
-    key: `pro:projects:update:${businessIdBigInt}:${userId}`,
-    limit: 120,
-    windowMs: 60 * 60 * 1000,
-  });
-  if (limited) return withIdNoStore(limited, requestId);
-
-  const project = await prisma.project.findFirst({
-    where: { id: projectIdBigInt, businessId: businessIdBigInt },
-    include: {
-      client: { select: { id: true, name: true } },
-      categoryReference: { select: { id: true, name: true } },
-      tags: { include: { reference: { select: { id: true, name: true } } } },
-    },
-  });
-  if (!project) {
-    return withIdNoStore(notFound('Projet introuvable.'), requestId);
-  }
-
-  const body = await request.json().catch(() => null);
-  if (!body || typeof body !== 'object') {
-    return withIdNoStore(badRequest('Payload invalide.'), requestId);
-  }
-
-  const data: Record<string, unknown> = {};
-  const depositPaidAtRaw = (body as { depositPaidAt?: unknown }).depositPaidAt;
-  const wantsDepositPaidAt = depositPaidAtRaw !== undefined;
-  const billingQuoteIdRaw = (body as { billingQuoteId?: unknown }).billingQuoteId;
-  const wantsBillingQuoteId = billingQuoteIdRaw !== undefined;
-
-  if ('startedAt' in body || 'archivedAt' in body) {
-    return withIdNoStore(badRequest('startedAt/archivedAt ne peuvent pas être modifiés ici.'), requestId);
-  }
-
-  if ('name' in body) {
-    if (typeof body.name !== 'string') return withIdNoStore(badRequest('Nom invalide.'), requestId);
-    const trimmed = body.name.trim();
-    if (!trimmed) return withIdNoStore(badRequest('Le nom ne peut pas être vide.'), requestId);
-    data.name = trimmed;
-  }
-
-  if ('status' in body) {
-    if (!isValidStatus(body.status)) {
-      return withIdNoStore(badRequest('Statut invalide.'), requestId);
+    if ('startedAt' in body || 'archivedAt' in body) {
+      return badRequest('startedAt/archivedAt ne peuvent pas être modifiés ici.');
     }
-    data.status = body.status as ProjectStatus;
-  }
 
-  if ('quoteStatus' in body) {
-    const quoteStatus = (body as { quoteStatus?: unknown }).quoteStatus;
-    if (
-      typeof quoteStatus !== 'string' ||
-      !Object.values(ProjectQuoteStatus).includes(quoteStatus as ProjectQuoteStatus)
-    ) {
-      return withIdNoStore(badRequest('quoteStatus invalide.'), requestId);
+    if ('name' in body) {
+      if (typeof (body as { name?: unknown }).name !== 'string') return badRequest('Nom invalide.');
+      const trimmed = (body as { name: string }).name.trim();
+      if (!trimmed) return badRequest('Le nom ne peut pas être vide.');
+      data.name = trimmed;
     }
-    data.quoteStatus = quoteStatus as ProjectQuoteStatus;
-  }
 
-  if ('depositStatus' in body) {
-    const depositStatus = (body as { depositStatus?: unknown }).depositStatus;
-    if (
-      typeof depositStatus !== 'string' ||
-      !Object.values(ProjectDepositStatus).includes(depositStatus as ProjectDepositStatus)
-    ) {
-      return withIdNoStore(badRequest('depositStatus invalide.'), requestId);
-    }
-    data.depositStatus = depositStatus as ProjectDepositStatus;
-  }
-
-  if (wantsDepositPaidAt) {
-    if (depositPaidAtRaw === null) {
-      data.depositPaidAt = null;
-    } else {
-      const depositPaidAt = parseIsoDate(depositPaidAtRaw);
-      if (!depositPaidAt) {
-        return withIdNoStore(badRequest('depositPaidAt invalide.'), requestId);
+    if ('status' in body) {
+      if (!isValidStatus((body as { status?: unknown }).status)) {
+        return badRequest('Statut invalide.');
       }
-      data.depositPaidAt = depositPaidAt;
+      data.status = (body as { status: ProjectStatus }).status;
     }
-  }
 
-  if (wantsBillingQuoteId) {
-    if (billingQuoteIdRaw === null || billingQuoteIdRaw === '') {
-      data.billingQuoteId = null;
-    } else if (typeof billingQuoteIdRaw === 'string' && /^\d+$/.test(billingQuoteIdRaw)) {
-      const quoteIdBigInt = BigInt(billingQuoteIdRaw);
-      const quote = await prisma.quote.findFirst({
-        where: {
-          id: quoteIdBigInt,
-          businessId: businessIdBigInt,
-          projectId: projectIdBigInt,
-          status: 'SIGNED',
-        },
-        select: { id: true },
-      });
-      if (!quote) {
-        return withIdNoStore(badRequest('billingQuoteId doit référencer un devis signé du projet.'), requestId);
+    if ('quoteStatus' in body) {
+      const quoteStatus = (body as { quoteStatus?: unknown }).quoteStatus;
+      if (
+        typeof quoteStatus !== 'string' ||
+        !Object.values(ProjectQuoteStatus).includes(quoteStatus as ProjectQuoteStatus)
+      ) {
+        return badRequest('quoteStatus invalide.');
       }
-      data.billingQuoteId = quoteIdBigInt;
-      data.quoteStatus = ProjectQuoteStatus.SIGNED;
-    } else {
-      return withIdNoStore(badRequest('billingQuoteId invalide.'), requestId);
+      data.quoteStatus = quoteStatus as ProjectQuoteStatus;
     }
-  }
 
-  if ('clientId' in body) {
-    if (body.clientId === null || body.clientId === undefined || body.clientId === '') {
-      data.clientId = null;
-    } else if (typeof body.clientId === 'string' && /^\d+$/.test(body.clientId)) {
-      const clientIdBigInt = BigInt(body.clientId);
-      const client = await prisma.client.findFirst({
-        where: { id: clientIdBigInt, businessId: businessIdBigInt },
-        select: { id: true },
-      });
-      if (!client) return withIdNoStore(badRequest('clientId invalide pour ce business.'), requestId);
-      data.clientId = clientIdBigInt;
-    } else {
-      return withIdNoStore(badRequest('clientId invalide.'), requestId);
-    }
-  }
-
-  if ('startDate' in body) {
-    if (body.startDate === null || body.startDate === undefined || body.startDate === '') {
-      data.startDate = null;
-    } else if (typeof body.startDate === 'string') {
-      const start = new Date(body.startDate);
-      if (Number.isNaN(start.getTime())) return withIdNoStore(badRequest('startDate invalide.'), requestId);
-      data.startDate = start;
-    } else {
-      return withIdNoStore(badRequest('startDate invalide.'), requestId);
-    }
-  }
-
-  if ('endDate' in body) {
-    if (body.endDate === null || body.endDate === undefined || body.endDate === '') {
-      data.endDate = null;
-    } else if (typeof body.endDate === 'string') {
-      const end = new Date(body.endDate);
-      if (Number.isNaN(end.getTime())) return withIdNoStore(badRequest('endDate invalide.'), requestId);
-      data.endDate = end;
-    } else {
-      return withIdNoStore(badRequest('endDate invalide.'), requestId);
-    }
-  }
-
-  const nextDepositStatus =
-    (data.depositStatus as ProjectDepositStatus | undefined) ?? project.depositStatus;
-  if (wantsDepositPaidAt && depositPaidAtRaw !== null && nextDepositStatus !== ProjectDepositStatus.PAID) {
-    return withIdNoStore(badRequest('depositPaidAt requiert depositStatus=PAID.'), requestId);
-  }
-  if (!wantsDepositPaidAt && data.depositStatus !== undefined && data.depositStatus !== project.depositStatus) {
-    if (nextDepositStatus === ProjectDepositStatus.PAID && !project.depositPaidAt) {
-      data.depositPaidAt = new Date();
-    }
-    if (nextDepositStatus !== ProjectDepositStatus.PAID && project.depositPaidAt) {
-      data.depositPaidAt = null;
-    }
-  }
-
-  if ('prestationsText' in body) {
-    if (body.prestationsText === null || body.prestationsText === undefined || body.prestationsText === '') {
-      data.prestationsText = null;
-    } else if (typeof body.prestationsText === 'string') {
-      const text = body.prestationsText.trim();
-      if (text.length > 20000) {
-        return withIdNoStore(badRequest('prestationsText trop long (20000 max).'), requestId);
+    if ('depositStatus' in body) {
+      const depositStatus = (body as { depositStatus?: unknown }).depositStatus;
+      if (
+        typeof depositStatus !== 'string' ||
+        !Object.values(ProjectDepositStatus).includes(depositStatus as ProjectDepositStatus)
+      ) {
+        return badRequest('depositStatus invalide.');
       }
-      data.prestationsText = text || null;
-    } else {
-      return withIdNoStore(badRequest('prestationsText invalide.'), requestId);
+      data.depositStatus = depositStatus as ProjectDepositStatus;
     }
-  }
 
-  const categoryProvided = Object.prototype.hasOwnProperty.call(body, 'categoryReferenceId');
-  const categoryReferenceId =
-    categoryProvided && typeof body.categoryReferenceId === 'string' && /^\d+$/.test(body.categoryReferenceId)
-      ? BigInt(body.categoryReferenceId)
-      : categoryProvided
-        ? null
-        : undefined;
+    if (wantsDepositPaidAt) {
+      if (depositPaidAtRaw === null) {
+        data.depositPaidAt = null;
+      } else {
+        const depositPaidAt = parseIsoDate(depositPaidAtRaw);
+        if (!depositPaidAt) {
+          return badRequest('depositPaidAt invalide.');
+        }
+        data.depositPaidAt = depositPaidAt;
+      }
+    }
 
-  const tagProvided = Object.prototype.hasOwnProperty.call(body, 'tagReferenceIds');
-  const tagReferenceIds: bigint[] | undefined = tagProvided
-    ? Array.from(
-        new Set(
-          ((Array.isArray(body.tagReferenceIds) ? body.tagReferenceIds : []) as unknown[])
-            .filter((id): id is string => typeof id === 'string' && /^\d+$/.test(id))
-            .map((id) => BigInt(id))
+    if (wantsBillingQuoteId) {
+      if (billingQuoteIdRaw === null || billingQuoteIdRaw === '') {
+        data.billingQuoteId = null;
+      } else if (typeof billingQuoteIdRaw === 'string' && /^\d+$/.test(billingQuoteIdRaw)) {
+        const quoteIdBigInt = BigInt(billingQuoteIdRaw);
+        const quote = await prisma.quote.findFirst({
+          where: {
+            id: quoteIdBigInt,
+            businessId: businessIdBigInt,
+            projectId: projectIdBigInt,
+            status: 'SIGNED',
+          },
+          select: { id: true },
+        });
+        if (!quote) {
+          return badRequest('billingQuoteId doit référencer un devis signé du projet.');
+        }
+        data.billingQuoteId = quoteIdBigInt;
+        data.quoteStatus = ProjectQuoteStatus.SIGNED;
+      } else {
+        return badRequest('billingQuoteId invalide.');
+      }
+    }
+
+    if ('clientId' in body) {
+      const clientIdRaw = (body as { clientId?: unknown }).clientId;
+      if (clientIdRaw === null || clientIdRaw === undefined || clientIdRaw === '') {
+        data.clientId = null;
+      } else if (typeof clientIdRaw === 'string' && /^\d+$/.test(clientIdRaw)) {
+        const clientIdBigInt = BigInt(clientIdRaw);
+        const client = await prisma.client.findFirst({
+          where: { id: clientIdBigInt, businessId: businessIdBigInt },
+          select: { id: true },
+        });
+        if (!client) return badRequest('clientId invalide pour ce business.');
+        data.clientId = clientIdBigInt;
+      } else {
+        return badRequest('clientId invalide.');
+      }
+    }
+
+    if ('startDate' in body) {
+      const startDateRaw = (body as { startDate?: unknown }).startDate;
+      if (startDateRaw === null || startDateRaw === undefined || startDateRaw === '') {
+        data.startDate = null;
+      } else if (typeof startDateRaw === 'string') {
+        const start = new Date(startDateRaw);
+        if (Number.isNaN(start.getTime())) return badRequest('startDate invalide.');
+        data.startDate = start;
+      } else {
+        return badRequest('startDate invalide.');
+      }
+    }
+
+    if ('endDate' in body) {
+      const endDateRaw = (body as { endDate?: unknown }).endDate;
+      if (endDateRaw === null || endDateRaw === undefined || endDateRaw === '') {
+        data.endDate = null;
+      } else if (typeof endDateRaw === 'string') {
+        const end = new Date(endDateRaw);
+        if (Number.isNaN(end.getTime())) return badRequest('endDate invalide.');
+        data.endDate = end;
+      } else {
+        return badRequest('endDate invalide.');
+      }
+    }
+
+    const nextDepositStatus =
+      (data.depositStatus as ProjectDepositStatus | undefined) ?? project.depositStatus;
+    if (wantsDepositPaidAt && depositPaidAtRaw !== null && nextDepositStatus !== ProjectDepositStatus.PAID) {
+      return badRequest('depositPaidAt requiert depositStatus=PAID.');
+    }
+    if (!wantsDepositPaidAt && data.depositStatus !== undefined && data.depositStatus !== project.depositStatus) {
+      if (nextDepositStatus === ProjectDepositStatus.PAID && !project.depositPaidAt) {
+        data.depositPaidAt = new Date();
+      }
+      if (nextDepositStatus !== ProjectDepositStatus.PAID && project.depositPaidAt) {
+        data.depositPaidAt = null;
+      }
+    }
+
+    if ('prestationsText' in body) {
+      const prestationsTextRaw = (body as { prestationsText?: unknown }).prestationsText;
+      if (prestationsTextRaw === null || prestationsTextRaw === undefined || prestationsTextRaw === '') {
+        data.prestationsText = null;
+      } else if (typeof prestationsTextRaw === 'string') {
+        const text = prestationsTextRaw.trim();
+        if (text.length > 20000) {
+          return badRequest('prestationsText trop long (20000 max).');
+        }
+        data.prestationsText = text || null;
+      } else {
+        return badRequest('prestationsText invalide.');
+      }
+    }
+
+    const categoryProvided = Object.prototype.hasOwnProperty.call(body, 'categoryReferenceId');
+    const categoryReferenceId =
+      categoryProvided &&
+      typeof (body as { categoryReferenceId?: unknown }).categoryReferenceId === 'string' &&
+      /^\d+$/.test((body as { categoryReferenceId: string }).categoryReferenceId)
+        ? BigInt((body as { categoryReferenceId: string }).categoryReferenceId)
+        : categoryProvided
+          ? null
+          : undefined;
+
+    const tagProvided = Object.prototype.hasOwnProperty.call(body, 'tagReferenceIds');
+    const tagReferenceIds: bigint[] | undefined = tagProvided
+      ? Array.from(
+          new Set(
+            ((Array.isArray((body as { tagReferenceIds?: unknown }).tagReferenceIds)
+              ? (body as { tagReferenceIds: unknown[] }).tagReferenceIds
+              : []) as unknown[])
+              .filter((id): id is string => typeof id === 'string' && /^\d+$/.test(id))
+              .map((id) => BigInt(id))
+          )
         )
-      )
-    : undefined;
+      : undefined;
 
-  let tagsInstruction: { deleteMany: { projectId: bigint }; create: Array<{ referenceId: bigint }> } | undefined;
+    let tagsInstruction: { deleteMany: { projectId: bigint }; create: Array<{ referenceId: bigint }> } | undefined;
 
-  if (categoryProvided || tagProvided) {
-    const validated = await validateCategoryAndTags(
-      businessIdBigInt,
-      categoryProvided ? categoryReferenceId ?? null : project.categoryReferenceId ?? null,
-      tagProvided ? tagReferenceIds : project.tags.map((t) => t.referenceId)
-    );
-    if ('error' in validated) {
-      return withIdNoStore(badRequest(validated.error), requestId);
+    if (categoryProvided || tagProvided) {
+      const validated = await validateCategoryAndTags(
+        businessIdBigInt,
+        categoryProvided ? categoryReferenceId ?? null : project.categoryReferenceId ?? null,
+        tagProvided ? tagReferenceIds : project.tags.map((t) => t.referenceId)
+      );
+      if ('error' in validated) {
+        return badRequest(validated.error);
+      }
+      if (categoryProvided) {
+        data.categoryReferenceId = validated.categoryId;
+      }
+      if (tagProvided) {
+        tagsInstruction = {
+          deleteMany: { projectId: projectIdBigInt },
+          create: validated.tagIds.map((id) => ({ referenceId: id })),
+        };
+      }
     }
-    if (categoryProvided) {
-      data.categoryReferenceId = validated.categoryId;
+
+    if (!tagsInstruction && Object.keys(data).length === 0) {
+      return badRequest('Aucune modification.');
     }
-    if (tagProvided) {
-      tagsInstruction = {
-        deleteMany: { projectId: projectIdBigInt },
-        create: validated.tagIds.map((id) => ({ referenceId: id })),
-      };
-    }
+
+    const updated = await prisma.project.update({
+      where: { id: projectIdBigInt },
+      data: {
+        ...data,
+        ...(tagsInstruction ? { tags: tagsInstruction } : {}),
+      },
+      include: {
+        client: { select: { id: true, name: true } },
+        categoryReference: { select: { id: true, name: true } },
+        tags: { include: { reference: { select: { id: true, name: true } } } },
+        _count: { select: { tasks: true, projectServices: true, interactions: true } },
+      },
+    });
+
+    const billingSummary = await computeProjectBillingSummary(businessIdBigInt, projectIdBigInt);
+
+    return jsonb({ item: serializeProject(updated, { billingSummary }) }, requestId);
   }
-
-  if (!tagsInstruction && Object.keys(data).length === 0) {
-    return withIdNoStore(badRequest('Aucune modification.'), requestId);
-  }
-
-  const updated = await prisma.project.update({
-    where: { id: projectIdBigInt },
-    data: {
-      ...data,
-      ...(tagsInstruction ? { tags: tagsInstruction } : {}),
-    },
-    include: {
-      client: { select: { id: true, name: true } },
-      categoryReference: { select: { id: true, name: true } },
-      tags: { include: { reference: { select: { id: true, name: true } } } },
-      _count: { select: { tasks: true, projectServices: true, interactions: true } },
-    },
-  });
-
-  const billingSummary = await computeProjectBillingSummary(businessIdBigInt, projectIdBigInt);
-  return withIdNoStore(jsonNoStore({ item: serializeProject(updated, { billingSummary }) }), requestId);
-}
+);
 
 // DELETE /api/pro/businesses/{businessId}/projects/{projectId}
-export async function DELETE(
-  request: NextRequest,
-  context: { params: Promise<{ businessId: string; projectId: string }> }
-) {
-  const requestId = getRequestId(request);
-  const csrf = assertSameOrigin(request);
-  if (csrf) return withIdNoStore(csrf, requestId);
+export const DELETE = withBusinessRoute<{ businessId: string; projectId: string }>(
+  {
+    minRole: 'ADMIN',
+    rateLimit: {
+      key: (ctx) => `pro:projects:delete:${ctx.businessId}:${ctx.userId}`,
+      limit: 60,
+      windowMs: 60 * 60 * 1000,
+    },
+  },
+  async (ctx, _req, params) => {
+    const { requestId, businessId: businessIdBigInt } = ctx;
+    const projectId = params?.projectId;
+    if (!projectId || !/^\d+$/.test(projectId)) return badRequest('projectId invalide.');
+    const projectIdBigInt = BigInt(projectId);
 
-  const { businessId, projectId } = await context.params;
-  const businessIdBigInt = parseId(businessId);
-  const projectIdBigInt = parseId(projectId);
-  if (!businessIdBigInt || !projectIdBigInt) {
-    return withIdNoStore(badRequest('businessId ou projectId invalide.'), requestId);
+    const project = await prisma.project.findFirst({
+      where: { id: projectIdBigInt, businessId: businessIdBigInt },
+      select: { id: true },
+    });
+    if (!project) return notFound('Projet introuvable.');
+
+    await prisma.project.delete({ where: { id: projectIdBigInt } });
+
+    return jsonbNoContent(requestId);
   }
-
-  let userId: string;
-  try {
-    ({ userId } = await requireAuthPro(request));
-  } catch {
-    return withIdNoStore(unauthorized(), requestId);
-  }
-
-  const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'ADMIN');
-  if (!membership) return withIdNoStore(forbidden(), requestId);
-
-  const limited = rateLimit(request, {
-    key: `pro:projects:delete:${businessIdBigInt}:${userId}`,
-    limit: 60,
-    windowMs: 60 * 60 * 1000,
-  });
-  if (limited) return withIdNoStore(limited, requestId);
-
-  const project = await prisma.project.findFirst({
-    where: { id: projectIdBigInt, businessId: businessIdBigInt },
-    select: { id: true },
-  });
-  if (!project) {
-    return withIdNoStore(notFound('Projet introuvable.'), requestId);
-  }
-
-  await prisma.project.delete({ where: { id: projectIdBigInt } });
-
-  return withIdNoStore(new NextResponse(null, { status: 204 }), requestId);
-}
+);

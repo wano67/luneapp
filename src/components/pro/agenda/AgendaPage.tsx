@@ -37,7 +37,7 @@ type ProjectRow = {
   archivedAt?: string | null;
 };
 type ProjectsResponse = { items?: ProjectRow[] };
-type ProjectCreateResponse = { id: string };
+type ProjectCreateResponse = { item: { id: string } };
 type ConvertResponse = { clientId: string; projectId: string };
 type ActionResult = { projectId: string; clientId?: string };
 type DashboardTask = {
@@ -379,12 +379,12 @@ export default function AgendaPage({ businessId, view = 'agenda' }: Props) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name, clientId: actionTarget.id }),
         });
-        if (!res.ok || !res.data) {
+        if (!res.ok || !res.data?.item?.id) {
           const msg = res.error ?? 'Création impossible';
           setActionError(res.requestId ? `${msg} (Ref: ${res.requestId})` : msg);
           return;
         }
-        setActionResult({ projectId: res.data.id });
+        setActionResult({ projectId: res.data.item.id });
       } else {
         const payload = actionName.trim() ? { projectName: actionName.trim() } : {};
         const res = await fetchJson<ConvertResponse>(

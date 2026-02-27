@@ -1,0 +1,1 @@
+-- Migration applied directly to database on 2025-12-29. Stub created to reconcile Prisma migration history.

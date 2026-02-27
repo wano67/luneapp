@@ -19,6 +19,7 @@ import {
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import { KpiCard } from '@/components/ui/kpi-card';
 import { PageHeader } from '@/app/app/components/PageHeader';
+import { sanitizeEuroInput } from '@/lib/money';
 
 type SortKey = 'date' | 'amount' | 'status';
 
@@ -349,7 +350,13 @@ export function PaymentsPanel({ businessId }: { businessId: string }) {
         <form className="space-y-3" onSubmit={onCreate}>
           <Input label="Client" value={form.clientName} onChange={(e) => setForm((prev) => ({ ...prev, clientName: e.target.value }))} />
           <Input label="Projet" value={form.project} onChange={(e) => setForm((prev) => ({ ...prev, project: e.target.value }))} />
-          <Input label="Montant" type="number" value={form.amount} onChange={(e) => setForm((prev) => ({ ...prev, amount: e.target.value }))} />
+          <Input
+            label="Montant"
+            type="text"
+            inputMode="decimal"
+            value={form.amount}
+            onChange={(e) => setForm((prev) => ({ ...prev, amount: sanitizeEuroInput(e.target.value) }))}
+          />
           <Select value={form.method} onChange={(e) => setForm((prev) => ({ ...prev, method: e.target.value as PaymentMethod }))}>
             {Object.entries(METHOD_LABELS).map(([key, label]) => (
               <option key={key} value={key}>

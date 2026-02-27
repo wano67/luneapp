@@ -1,88 +1,45 @@
-import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/server/db/client';
-import { requireAuthPro } from '@/server/auth/requireAuthPro';
-import { requireBusinessRole } from '@/server/auth/businessRole';
-import { assertSameOrigin, jsonNoStore, withNoStore } from '@/server/security/csrf';
-import { rateLimit } from '@/server/security/rateLimit';
-import {
-  badRequest,
-  forbidden,
-  getErrorMessage,
-  getRequestId,
-  unauthorized,
-  withRequestId,
-} from '@/server/http/apiUtils';
+import { withBusinessRoute } from '@/server/http/routeHandler';
+import { jsonb } from '@/server/http/json';
+import { badRequest } from '@/server/http/apiUtils';
+import { withIdNoStore } from '@/server/http/apiUtils';
 
-function parseId(param: string | undefined) {
-  if (!param || !/^\d+$/.test(param)) return null;
-  try {
-    return BigInt(param);
-  } catch {
-    return null;
-  }
-}
+// ---------------------------------------------------------------------------
+// Serialisation (BigInt → string, Date → ISO)
+// Les champs sont explicites pour éviter les fuites de données sensibles.
+// ---------------------------------------------------------------------------
 
-function withIdNoStore(res: NextResponse, requestId: string) {
-  return withNoStore(withRequestId(res, requestId));
-}
+type SettingsRecord = Awaited<ReturnType<typeof getOrCreateSettings>>;
 
-function serialize(settings: {
-  id: bigint;
-  businessId: bigint;
-  invoicePrefix: string;
-  quotePrefix: string;
-  defaultDepositPercent: number;
-  paymentTermsDays: number;
-  enableAutoNumbering: boolean;
-  vatRatePercent: number;
-  vatEnabled: boolean;
-  allowMembersInvite: boolean;
-  allowViewerExport: boolean;
-  integrationStripeEnabled: boolean;
-  integrationStripePublicKey: string | null;
-  accountInventoryCode: string;
-  accountCogsCode: string;
-  accountCashCode: string;
-  accountRevenueCode: string;
-  ledgerSalesAccountCode: string;
-  ledgerVatCollectedAccountCode: string;
-  ledgerCashAccountCode: string;
-  cgvText?: string | null;
-  paymentTermsText?: string | null;
-  lateFeesText?: string | null;
-  fixedIndemnityText?: string | null;
-  legalMentionsText?: string | null;
-  createdAt: Date;
-  updatedAt: Date;
-}) {
+function serialize(s: SettingsRecord) {
   return {
-    id: settings.id.toString(),
-    businessId: settings.businessId.toString(),
-    invoicePrefix: settings.invoicePrefix,
-    quotePrefix: settings.quotePrefix,
-    defaultDepositPercent: settings.defaultDepositPercent,
-    paymentTermsDays: settings.paymentTermsDays,
-    enableAutoNumbering: settings.enableAutoNumbering,
-    vatRatePercent: settings.vatRatePercent,
-    vatEnabled: settings.vatEnabled,
-    allowMembersInvite: settings.allowMembersInvite,
-    allowViewerExport: settings.allowViewerExport,
-    integrationStripeEnabled: settings.integrationStripeEnabled,
-    integrationStripePublicKey: settings.integrationStripePublicKey,
-    accountInventoryCode: settings.accountInventoryCode,
-    accountCogsCode: settings.accountCogsCode,
-    accountCashCode: settings.accountCashCode,
-    accountRevenueCode: settings.accountRevenueCode,
-    ledgerSalesAccountCode: settings.ledgerSalesAccountCode,
-    ledgerVatCollectedAccountCode: settings.ledgerVatCollectedAccountCode,
-    ledgerCashAccountCode: settings.ledgerCashAccountCode,
-    cgvText: settings.cgvText ?? null,
-    paymentTermsText: settings.paymentTermsText ?? null,
-    lateFeesText: settings.lateFeesText ?? null,
-    fixedIndemnityText: settings.fixedIndemnityText ?? null,
-    legalMentionsText: settings.legalMentionsText ?? null,
-    createdAt: settings.createdAt.toISOString(),
-    updatedAt: settings.updatedAt.toISOString(),
+    id: s.id.toString(),
+    businessId: s.businessId.toString(),
+    invoicePrefix: s.invoicePrefix,
+    quotePrefix: s.quotePrefix,
+    defaultDepositPercent: s.defaultDepositPercent,
+    paymentTermsDays: s.paymentTermsDays,
+    enableAutoNumbering: s.enableAutoNumbering,
+    vatRatePercent: s.vatRatePercent,
+    vatEnabled: s.vatEnabled,
+    allowMembersInvite: s.allowMembersInvite,
+    allowViewerExport: s.allowViewerExport,
+    integrationStripeEnabled: s.integrationStripeEnabled,
+    integrationStripePublicKey: s.integrationStripePublicKey,
+    accountInventoryCode: s.accountInventoryCode,
+    accountCogsCode: s.accountCogsCode,
+    accountCashCode: s.accountCashCode,
+    accountRevenueCode: s.accountRevenueCode,
+    ledgerSalesAccountCode: s.ledgerSalesAccountCode,
+    ledgerVatCollectedAccountCode: s.ledgerVatCollectedAccountCode,
+    ledgerCashAccountCode: s.ledgerCashAccountCode,
+    cgvText: s.cgvText ?? null,
+    paymentTermsText: s.paymentTermsText ?? null,
+    lateFeesText: s.lateFeesText ?? null,
+    fixedIndemnityText: s.fixedIndemnityText ?? null,
+    legalMentionsText: s.legalMentionsText ?? null,
+    createdAt: s.createdAt.toISOString(),
+    updatedAt: s.updatedAt.toISOString(),
   };
 }
 
@@ -94,249 +51,182 @@ async function getOrCreateSettings(businessId: bigint) {
   });
 }
 
+// ---------------------------------------------------------------------------
 // GET /api/pro/businesses/{businessId}/settings
-export async function GET(
-  request: NextRequest,
-  context: { params: Promise<{ businessId: string }> }
-) {
-  const requestId = getRequestId(request);
-  let userId: string;
-  try {
-    ({ userId } = await requireAuthPro(request));
-  } catch {
-    return withIdNoStore(unauthorized(), requestId);
-  }
-  const { businessId } = await context.params;
-  const businessIdBigInt = parseId(businessId);
-  if (!businessIdBigInt) return withIdNoStore(badRequest('businessId invalide.'), requestId);
+// ---------------------------------------------------------------------------
 
-  const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'VIEWER');
-  if (!membership) return withIdNoStore(forbidden(), requestId);
+export const GET = withBusinessRoute({ minRole: 'VIEWER' }, async (ctx) => {
+  const settings = await getOrCreateSettings(ctx.businessId);
+  return jsonb({ item: serialize(settings) }, ctx.requestId);
+});
 
-  try {
-    const settings = await getOrCreateSettings(businessIdBigInt);
-    return withIdNoStore(jsonNoStore({ item: serialize(settings) }), requestId);
-  } catch (error) {
-    console.error({ requestId, route: 'GET /api/pro/businesses/[businessId]/settings', error });
-    return withIdNoStore(
-      NextResponse.json({ error: 'Impossible de charger les paramètres.' }, { status: 500 }),
-      requestId
-    );
-  }
-}
-
+// ---------------------------------------------------------------------------
 // PATCH /api/pro/businesses/{businessId}/settings
-export async function PATCH(
-  request: NextRequest,
-  context: { params: Promise<{ businessId: string }> }
-) {
-  const requestId = getRequestId(request);
-  const csrf = assertSameOrigin(request);
-  if (csrf) return withIdNoStore(csrf, requestId);
+// ---------------------------------------------------------------------------
 
-  let userId: string;
-  try {
-    ({ userId } = await requireAuthPro(request));
-  } catch {
-    return withIdNoStore(unauthorized(), requestId);
-  }
+export const PATCH = withBusinessRoute(
+  {
+    minRole: 'ADMIN',
+    rateLimit: {
+      key: (ctx) => `pro:settings:update:${ctx.businessId}:${ctx.userId}`,
+      limit: 120,
+      windowMs: 60 * 60 * 1000,
+    },
+  },
+  async (ctx, req) => {
+    const body = await req.json().catch(() => null);
+    if (!body || typeof body !== 'object') {
+      return withIdNoStore(badRequest('Payload invalide.'), ctx.requestId);
+    }
 
-  const { businessId } = await context.params;
-  const businessIdBigInt = parseId(businessId);
-  if (!businessIdBigInt) return withIdNoStore(badRequest('businessId invalide.'), requestId);
+    const data: Record<string, unknown> = {};
+    const b = body as Record<string, unknown>;
 
-  const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'ADMIN');
-  if (!membership) return withIdNoStore(forbidden(), requestId);
+    const str = (v: unknown) => (typeof v === 'string' ? v.trim() : null);
+    const num = (v: unknown) =>
+      typeof v === 'number' && Number.isFinite(v)
+        ? Math.trunc(v)
+        : typeof v === 'string' && v.trim()
+          ? Number(v)
+          : null;
+    const bool = (v: unknown) => v === true || v === 'true';
 
-  const limited = rateLimit(request, {
-    key: `pro:settings:update:${businessIdBigInt}:${userId}`,
-    limit: 120,
-    windowMs: 60 * 60 * 1000,
-  });
-  if (limited) return withIdNoStore(limited, requestId);
-
-  const body = await request.json().catch(() => null);
-  if (!body || typeof body !== 'object') {
-    return withIdNoStore(badRequest('Payload invalide.'), requestId);
-  }
-
-  const data: Record<string, unknown> = {};
-
-  const str = (v: unknown) => (typeof v === 'string' ? v.trim() : null);
-  const num = (v: unknown) =>
-    typeof v === 'number' && Number.isFinite(v) ? Math.trunc(v) : typeof v === 'string' && v.trim() ? Number(v) : null;
-  const bool = (v: unknown) => (v === true || v === 'true');
-
-  const invoicePrefix = str((body as Record<string, unknown>).invoicePrefix);
-  if (invoicePrefix !== null) {
     // Prefixes are fixed (SF-DEV / SF-FAC). Ignore updates to prevent mismatches.
-  }
+    // const invoicePrefix = str(b.invoicePrefix);
+    // const quotePrefix   = str(b.quotePrefix);
 
-  const quotePrefix = str((body as Record<string, unknown>).quotePrefix);
-  if (quotePrefix !== null) {
-    // Prefixes are fixed (SF-DEV / SF-FAC). Ignore updates to prevent mismatches.
-  }
+    const accountInventoryCode = str(b.accountInventoryCode);
+    if (accountInventoryCode !== null) {
+      if (!accountInventoryCode)
+        return withIdNoStore(badRequest('accountInventoryCode requis.'), ctx.requestId);
+      if (accountInventoryCode.length > 50)
+        return withIdNoStore(badRequest('accountInventoryCode trop long (50 max).'), ctx.requestId);
+      data.accountInventoryCode = accountInventoryCode;
+    }
 
-  const accountInventoryCode = str((body as Record<string, unknown>).accountInventoryCode);
-  if (accountInventoryCode !== null) {
-    if (!accountInventoryCode) return withIdNoStore(badRequest('accountInventoryCode requis.'), requestId);
-    if (accountInventoryCode.length > 50) {
-      return withIdNoStore(badRequest('accountInventoryCode trop long (50 max).'), requestId);
+    const accountCogsCode = str(b.accountCogsCode);
+    if (accountCogsCode !== null) {
+      if (!accountCogsCode)
+        return withIdNoStore(badRequest('accountCogsCode requis.'), ctx.requestId);
+      if (accountCogsCode.length > 50)
+        return withIdNoStore(badRequest('accountCogsCode trop long (50 max).'), ctx.requestId);
+      data.accountCogsCode = accountCogsCode;
     }
-    data.accountInventoryCode = accountInventoryCode;
-  }
-  const accountCogsCode = str((body as Record<string, unknown>).accountCogsCode);
-  if (accountCogsCode !== null) {
-    if (!accountCogsCode) return withIdNoStore(badRequest('accountCogsCode requis.'), requestId);
-    if (accountCogsCode.length > 50) return withIdNoStore(badRequest('accountCogsCode trop long (50 max).'), requestId);
-    data.accountCogsCode = accountCogsCode;
-  }
-  const accountCashCode = str((body as Record<string, unknown>).accountCashCode);
-  if (accountCashCode !== null) {
-    if (!accountCashCode) return withIdNoStore(badRequest('accountCashCode requis.'), requestId);
-    if (accountCashCode.length > 50) return withIdNoStore(badRequest('accountCashCode trop long (50 max).'), requestId);
-    data.accountCashCode = accountCashCode;
-  }
-  const accountRevenueCode = str((body as Record<string, unknown>).accountRevenueCode);
-  if (accountRevenueCode !== null) {
-    if (!accountRevenueCode) return withIdNoStore(badRequest('accountRevenueCode requis.'), requestId);
-    if (accountRevenueCode.length > 50) return withIdNoStore(badRequest('accountRevenueCode trop long (50 max).'), requestId);
-    data.accountRevenueCode = accountRevenueCode;
-  }
-  const ledgerSalesAccountCode = str((body as Record<string, unknown>).ledgerSalesAccountCode);
-  if (ledgerSalesAccountCode !== null) {
-    if (!ledgerSalesAccountCode) return withIdNoStore(badRequest('ledgerSalesAccountCode requis.'), requestId);
-    if (ledgerSalesAccountCode.length > 50) {
-      return withIdNoStore(badRequest('ledgerSalesAccountCode trop long (50 max).'), requestId);
-    }
-    data.ledgerSalesAccountCode = ledgerSalesAccountCode;
-  }
-  const ledgerVatCollectedAccountCode = str((body as Record<string, unknown>).ledgerVatCollectedAccountCode);
-  if (ledgerVatCollectedAccountCode !== null) {
-    if (!ledgerVatCollectedAccountCode) {
-      return withIdNoStore(badRequest('ledgerVatCollectedAccountCode requis.'), requestId);
-    }
-    if (ledgerVatCollectedAccountCode.length > 50) {
-      return withIdNoStore(badRequest('ledgerVatCollectedAccountCode trop long (50 max).'), requestId);
-    }
-    data.ledgerVatCollectedAccountCode = ledgerVatCollectedAccountCode;
-  }
-  const ledgerCashAccountCode = str((body as Record<string, unknown>).ledgerCashAccountCode);
-  if (ledgerCashAccountCode !== null) {
-    if (!ledgerCashAccountCode) return withIdNoStore(badRequest('ledgerCashAccountCode requis.'), requestId);
-    if (ledgerCashAccountCode.length > 50) {
-      return withIdNoStore(badRequest('ledgerCashAccountCode trop long (50 max).'), requestId);
-    }
-    data.ledgerCashAccountCode = ledgerCashAccountCode;
-  }
 
-  const defaultDepositPercent = num((body as Record<string, unknown>).defaultDepositPercent);
-  if (defaultDepositPercent !== null) {
-    if (Number.isNaN(defaultDepositPercent) || defaultDepositPercent < 0 || defaultDepositPercent > 100) {
-      return withIdNoStore(badRequest('defaultDepositPercent doit être entre 0 et 100.'), requestId);
+    const accountCashCode = str(b.accountCashCode);
+    if (accountCashCode !== null) {
+      if (!accountCashCode)
+        return withIdNoStore(badRequest('accountCashCode requis.'), ctx.requestId);
+      if (accountCashCode.length > 50)
+        return withIdNoStore(badRequest('accountCashCode trop long (50 max).'), ctx.requestId);
+      data.accountCashCode = accountCashCode;
     }
-    data.defaultDepositPercent = defaultDepositPercent;
-  }
 
-  const paymentTermsDays = num((body as Record<string, unknown>).paymentTermsDays);
-  if (paymentTermsDays !== null) {
-    if (Number.isNaN(paymentTermsDays) || paymentTermsDays < 0 || paymentTermsDays > 365) {
-      return withIdNoStore(badRequest('paymentTermsDays doit être entre 0 et 365.'), requestId);
+    const accountRevenueCode = str(b.accountRevenueCode);
+    if (accountRevenueCode !== null) {
+      if (!accountRevenueCode)
+        return withIdNoStore(badRequest('accountRevenueCode requis.'), ctx.requestId);
+      if (accountRevenueCode.length > 50)
+        return withIdNoStore(badRequest('accountRevenueCode trop long (50 max).'), ctx.requestId);
+      data.accountRevenueCode = accountRevenueCode;
     }
-    data.paymentTermsDays = paymentTermsDays;
-  }
 
-  const readLongText = (value: unknown, label: string) => {
-    if (value == null || value === '') return null;
-    if (typeof value !== 'string') {
-      throw new Error(`${label} invalide.`);
+    const ledgerSalesAccountCode = str(b.ledgerSalesAccountCode);
+    if (ledgerSalesAccountCode !== null) {
+      if (!ledgerSalesAccountCode)
+        return withIdNoStore(badRequest('ledgerSalesAccountCode requis.'), ctx.requestId);
+      if (ledgerSalesAccountCode.length > 50)
+        return withIdNoStore(badRequest('ledgerSalesAccountCode trop long (50 max).'), ctx.requestId);
+      data.ledgerSalesAccountCode = ledgerSalesAccountCode;
     }
-    const trimmed = value.trim();
-    if (trimmed.length > 5000) {
-      throw new Error(`${label} trop long (5000 max).`);
+
+    const ledgerVatCollectedAccountCode = str(b.ledgerVatCollectedAccountCode);
+    if (ledgerVatCollectedAccountCode !== null) {
+      if (!ledgerVatCollectedAccountCode)
+        return withIdNoStore(badRequest('ledgerVatCollectedAccountCode requis.'), ctx.requestId);
+      if (ledgerVatCollectedAccountCode.length > 50)
+        return withIdNoStore(badRequest('ledgerVatCollectedAccountCode trop long (50 max).'), ctx.requestId);
+      data.ledgerVatCollectedAccountCode = ledgerVatCollectedAccountCode;
     }
-    return trimmed || null;
-  };
 
-  try {
-    if (Object.prototype.hasOwnProperty.call(body, 'cgvText')) {
-      data.cgvText = readLongText((body as Record<string, unknown>).cgvText, 'cgvText');
+    const ledgerCashAccountCode = str(b.ledgerCashAccountCode);
+    if (ledgerCashAccountCode !== null) {
+      if (!ledgerCashAccountCode)
+        return withIdNoStore(badRequest('ledgerCashAccountCode requis.'), ctx.requestId);
+      if (ledgerCashAccountCode.length > 50)
+        return withIdNoStore(badRequest('ledgerCashAccountCode trop long (50 max).'), ctx.requestId);
+      data.ledgerCashAccountCode = ledgerCashAccountCode;
     }
-    if (Object.prototype.hasOwnProperty.call(body, 'paymentTermsText')) {
-      data.paymentTermsText = readLongText((body as Record<string, unknown>).paymentTermsText, 'paymentTermsText');
+
+    const defaultDepositPercent = num(b.defaultDepositPercent);
+    if (defaultDepositPercent !== null) {
+      if (isNaN(defaultDepositPercent) || defaultDepositPercent < 0 || defaultDepositPercent > 100)
+        return withIdNoStore(badRequest('defaultDepositPercent doit être entre 0 et 100.'), ctx.requestId);
+      data.defaultDepositPercent = defaultDepositPercent;
     }
-    if (Object.prototype.hasOwnProperty.call(body, 'lateFeesText')) {
-      data.lateFeesText = readLongText((body as Record<string, unknown>).lateFeesText, 'lateFeesText');
+
+    const paymentTermsDays = num(b.paymentTermsDays);
+    if (paymentTermsDays !== null) {
+      if (isNaN(paymentTermsDays) || paymentTermsDays < 0 || paymentTermsDays > 365)
+        return withIdNoStore(badRequest('paymentTermsDays doit être entre 0 et 365.'), ctx.requestId);
+      data.paymentTermsDays = paymentTermsDays;
     }
-    if (Object.prototype.hasOwnProperty.call(body, 'fixedIndemnityText')) {
-      data.fixedIndemnityText = readLongText(
-        (body as Record<string, unknown>).fixedIndemnityText,
-        'fixedIndemnityText'
-      );
+
+    const readLongText = (value: unknown, label: string): string | null => {
+      if (value == null || value === '') return null;
+      if (typeof value !== 'string') throw new Error(`${label} invalide.`);
+      const trimmed = value.trim();
+      if (trimmed.length > 5000) throw new Error(`${label} trop long (5000 max).`);
+      return trimmed || null;
+    };
+
+    try {
+      if (Object.prototype.hasOwnProperty.call(b, 'cgvText'))
+        data.cgvText = readLongText(b.cgvText, 'cgvText');
+      if (Object.prototype.hasOwnProperty.call(b, 'paymentTermsText'))
+        data.paymentTermsText = readLongText(b.paymentTermsText, 'paymentTermsText');
+      if (Object.prototype.hasOwnProperty.call(b, 'lateFeesText'))
+        data.lateFeesText = readLongText(b.lateFeesText, 'lateFeesText');
+      if (Object.prototype.hasOwnProperty.call(b, 'fixedIndemnityText'))
+        data.fixedIndemnityText = readLongText(b.fixedIndemnityText, 'fixedIndemnityText');
+      if (Object.prototype.hasOwnProperty.call(b, 'legalMentionsText'))
+        data.legalMentionsText = readLongText(b.legalMentionsText, 'legalMentionsText');
+    } catch (err) {
+      return withIdNoStore(badRequest((err as Error).message), ctx.requestId);
     }
-    if (Object.prototype.hasOwnProperty.call(body, 'legalMentionsText')) {
-      data.legalMentionsText = readLongText((body as Record<string, unknown>).legalMentionsText, 'legalMentionsText');
+
+    if (b.enableAutoNumbering !== undefined) data.enableAutoNumbering = bool(b.enableAutoNumbering);
+
+    const vatRatePercent = num(b.vatRatePercent);
+    if (vatRatePercent !== null) {
+      if (isNaN(vatRatePercent) || vatRatePercent < 0 || vatRatePercent > 100)
+        return withIdNoStore(badRequest('vatRatePercent doit être entre 0 et 100.'), ctx.requestId);
+      data.vatRatePercent = vatRatePercent;
     }
-  } catch (err) {
-    return withIdNoStore(badRequest((err as Error).message), requestId);
-  }
 
-  if ((body as Record<string, unknown>).enableAutoNumbering !== undefined) {
-    data.enableAutoNumbering = bool((body as Record<string, unknown>).enableAutoNumbering);
-  }
+    if (b.vatEnabled !== undefined) data.vatEnabled = bool(b.vatEnabled);
+    if (b.allowMembersInvite !== undefined) data.allowMembersInvite = bool(b.allowMembersInvite);
+    if (b.allowViewerExport !== undefined) data.allowViewerExport = bool(b.allowViewerExport);
+    if (b.integrationStripeEnabled !== undefined)
+      data.integrationStripeEnabled = bool(b.integrationStripeEnabled);
 
-  const vatRatePercent = num((body as Record<string, unknown>).vatRatePercent);
-  if (vatRatePercent !== null) {
-    if (Number.isNaN(vatRatePercent) || vatRatePercent < 0 || vatRatePercent > 100) {
-      return withIdNoStore(badRequest('vatRatePercent doit être entre 0 et 100.'), requestId);
+    const stripeKey = str(b.integrationStripePublicKey);
+    if (stripeKey !== null) {
+      if (stripeKey.length > 200)
+        return withIdNoStore(badRequest('integrationStripePublicKey trop long (200 max).'), ctx.requestId);
+      data.integrationStripePublicKey = stripeKey || null;
     }
-    data.vatRatePercent = vatRatePercent;
-  }
 
-  if ((body as Record<string, unknown>).vatEnabled !== undefined) {
-    data.vatEnabled = bool((body as Record<string, unknown>).vatEnabled);
-  }
-
-  if ((body as Record<string, unknown>).allowMembersInvite !== undefined) {
-    data.allowMembersInvite = bool((body as Record<string, unknown>).allowMembersInvite);
-  }
-
-  if ((body as Record<string, unknown>).allowViewerExport !== undefined) {
-    data.allowViewerExport = bool((body as Record<string, unknown>).allowViewerExport);
-  }
-
-  if ((body as Record<string, unknown>).integrationStripeEnabled !== undefined) {
-    data.integrationStripeEnabled = bool((body as Record<string, unknown>).integrationStripeEnabled);
-  }
-
-  const stripeKey = str((body as Record<string, unknown>).integrationStripePublicKey);
-  if (stripeKey !== null) {
-    if (stripeKey.length > 200) {
-      return withIdNoStore(badRequest('integrationStripePublicKey trop long (200 max).'), requestId);
+    if (Object.keys(data).length === 0) {
+      return withIdNoStore(badRequest('Aucun champ valide à mettre à jour.'), ctx.requestId);
     }
-    data.integrationStripePublicKey = stripeKey || null;
-  }
 
-  if (Object.keys(data).length === 0) {
-    return withIdNoStore(badRequest('Aucun champ valide à mettre à jour.'), requestId);
-  }
-
-  try {
-    await getOrCreateSettings(businessIdBigInt);
+    await getOrCreateSettings(ctx.businessId);
     const updated = await prisma.businessSettings.update({
-      where: { businessId: businessIdBigInt },
+      where: { businessId: ctx.businessId },
       data,
     });
-    return withIdNoStore(jsonNoStore({ item: serialize(updated) }), requestId);
-  } catch (error) {
-    console.error({
-      requestId,
-      route: 'PATCH /api/pro/businesses/[businessId]/settings',
-      error: getErrorMessage(error),
-    });
-    return withIdNoStore(
-      NextResponse.json({ error: 'Impossible de mettre à jour les paramètres.' }, { status: 500 }),
-      requestId
-    );
+
+    return jsonb({ item: serialize(updated) }, ctx.requestId);
   }
-}
+);

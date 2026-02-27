@@ -1,31 +1,15 @@
-import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/server/db/client';
-import { requireAuthPro } from '@/server/auth/requireAuthPro';
-import { requireBusinessRole } from '@/server/auth/businessRole';
-import {
-  badRequest,
-  forbidden,
-  getRequestId,
-  notFound,
-  unauthorized,
-  withRequestId,
-} from '@/server/http/apiUtils';
-import { assertSameOrigin, jsonNoStore, withNoStore } from '@/server/security/csrf';
-import { rateLimit } from '@/server/security/rateLimit';
+import { withBusinessRoute } from '@/server/http/routeHandler';
+import { jsonb } from '@/server/http/json';
+import { badRequest, notFound, withIdNoStore } from '@/server/http/apiUtils';
 import { InvoiceStatus, PaymentMethod } from '@/generated/prisma';
 import { upsertCashSaleLedgerForInvoicePaid } from '@/server/services/ledger';
+import { parseCentsInput, parseEuroToCents } from '@/lib/money';
 
-function parseId(param: string | undefined) {
+// Null-returning ID parser pour les query params (comportement "soft" intentionnel)
+function parseId(param: string | undefined | null): bigint | null {
   if (!param || !/^\d+$/.test(param)) return null;
-  try {
-    return BigInt(param);
-  } catch {
-    return null;
-  }
-}
-
-function withIdNoStore(res: NextResponse, requestId: string) {
-  return withNoStore(withRequestId(res, requestId));
+  try { return BigInt(param); } catch { return null; }
 }
 
 function parsePaymentMethod(value: unknown): PaymentMethod {
@@ -44,24 +28,8 @@ function parseDate(value: unknown): Date | null {
 }
 
 // GET /api/pro/businesses/{businessId}/payments?clientId=...
-export async function GET(
-  request: NextRequest,
-  context: { params: Promise<{ businessId: string }> },
-) {
-  const requestId = getRequestId(request);
-  const { businessId } = await context.params;
-  const businessIdBigInt = parseId(businessId);
-  if (!businessIdBigInt) return withIdNoStore(badRequest('businessId invalide.'), requestId);
-
-  let userId: string;
-  try {
-    ({ userId } = await requireAuthPro(request));
-  } catch {
-    return withIdNoStore(unauthorized(), requestId);
-  }
-
-  const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'VIEWER');
-  if (!membership) return withIdNoStore(forbidden(), requestId);
+export const GET = withBusinessRoute({ minRole: 'VIEWER' }, async (ctx, request) => {
+  const { requestId, businessId: businessIdBigInt } = ctx;
 
   const clientIdParam = request.nextUrl.searchParams.get('clientId');
   const clientId = parseId(clientIdParam ?? undefined);
@@ -76,59 +44,32 @@ export async function GET(
     },
   });
 
-  return withIdNoStore(
-    jsonNoStore({
-      items: payments.map((payment) => ({
-        id: payment.id.toString(),
-        invoiceId: payment.invoiceId.toString(),
-        clientId: payment.clientId ? payment.clientId.toString() : payment.invoice.clientId?.toString() ?? null,
-        amountCents: Number(payment.amountCents),
-        currency: payment.invoice.currency,
-        paidAt: payment.paidAt.toISOString(),
-        method: payment.method,
-        reference: payment.reference ?? payment.invoice.number ?? `INV-${payment.invoiceId}`,
-        createdBy: payment.createdBy
-          ? {
-              id: payment.createdBy.id.toString(),
-              name: payment.createdBy.name ?? null,
-              email: payment.createdBy.email ?? null,
-            }
-          : null,
-      })),
-    }),
-    requestId,
-  );
-}
+  return jsonb({
+    items: payments.map((payment) => ({
+      id: payment.id.toString(),
+      invoiceId: payment.invoiceId.toString(),
+      clientId: payment.clientId ? payment.clientId.toString() : payment.invoice.clientId?.toString() ?? null,
+      amountCents: Number(payment.amountCents),
+      currency: payment.invoice.currency,
+      paidAt: payment.paidAt.toISOString(),
+      method: payment.method,
+      reference: payment.reference ?? payment.invoice.number ?? `INV-${payment.invoiceId}`,
+      createdBy: payment.createdBy
+        ? {
+            id: payment.createdBy.id.toString(),
+            name: payment.createdBy.name ?? null,
+            email: payment.createdBy.email ?? null,
+          }
+        : null,
+    })),
+  }, requestId);
+});
 
 // POST /api/pro/businesses/{businessId}/payments
-export async function POST(
-  request: NextRequest,
-  context: { params: Promise<{ businessId: string }> },
-) {
-  const requestId = getRequestId(request);
-  const csrf = assertSameOrigin(request);
-  if (csrf) return withIdNoStore(csrf, requestId);
-
-  const { businessId } = await context.params;
-  const businessIdBigInt = parseId(businessId);
-  if (!businessIdBigInt) return withIdNoStore(badRequest('businessId invalide.'), requestId);
-
-  let userId: string;
-  try {
-    ({ userId } = await requireAuthPro(request));
-  } catch {
-    return withIdNoStore(unauthorized(), requestId);
-  }
-
-  const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'ADMIN');
-  if (!membership) return withIdNoStore(forbidden(), requestId);
-
-  const limited = rateLimit(request, {
-    key: `pro:payments:create:${businessIdBigInt}:${userId}`,
-    limit: 120,
-    windowMs: 60 * 60 * 1000,
-  });
-  if (limited) return withIdNoStore(limited, requestId);
+export const POST = withBusinessRoute(
+  { minRole: 'ADMIN', rateLimit: { key: (ctx) => `pro:payments:create:${ctx.businessId}:${ctx.userId}`, limit: 120, windowMs: 60 * 60 * 1000 } },
+  async (ctx, request) => {
+  const { requestId, businessId: businessIdBigInt, userId } = ctx;
 
   const body = await request.json().catch(() => null);
   if (!body || typeof body !== 'object') return withIdNoStore(badRequest('Payload invalide.'), requestId);
@@ -139,17 +80,20 @@ export async function POST(
   const amountCentsRaw = (body as { amountCents?: unknown }).amountCents;
   let amountCents: bigint | null = null;
   if (amountCentsRaw !== undefined) {
-    if (typeof amountCentsRaw === 'number' && Number.isFinite(amountCentsRaw)) {
-      amountCents = BigInt(Math.trunc(amountCentsRaw));
-    } else {
+    const parsed = parseCentsInput(amountCentsRaw);
+    if (parsed == null) {
       return withIdNoStore(badRequest('Montant invalide.'), requestId);
     }
+    amountCents = BigInt(parsed);
   } else if (amountRaw !== undefined) {
-    if (typeof amountRaw === 'number' && Number.isFinite(amountRaw)) {
-      amountCents = BigInt(Math.round(amountRaw * 100));
-    } else {
+    if (typeof amountRaw !== 'number' && typeof amountRaw !== 'string') {
       return withIdNoStore(badRequest('Montant invalide.'), requestId);
     }
+    const parsed = parseEuroToCents(amountRaw);
+    if (!Number.isFinite(parsed)) {
+      return withIdNoStore(badRequest('Montant invalide.'), requestId);
+    }
+    amountCents = BigInt(parsed);
   }
   const dateStr = typeof (body as { date?: string }).date === 'string' ? (body as { date?: string }).date : null;
   const paidAtRaw = (body as { paidAt?: string }).paidAt;
@@ -192,7 +136,7 @@ export async function POST(
           invoiceId,
           projectId: invoice.projectId,
           clientId: invoice.clientId ?? undefined,
-          createdByUserId: BigInt(userId),
+          createdByUserId: userId,
           amountCents: amountCents!,
           paidAt: paymentDate,
           method,
@@ -215,7 +159,7 @@ export async function POST(
             paidAt: paymentDate,
             number: invoice.number,
           },
-          createdByUserId: BigInt(userId),
+          createdByUserId: userId,
         });
       }
     });
@@ -226,8 +170,6 @@ export async function POST(
     throw err;
   }
 
-  return withIdNoStore(
-    NextResponse.json({ ok: true }, { status: 201 }),
-    requestId,
-  );
-}
+  return jsonb({ ok: true }, requestId, { status: 201 });
+  }
+);

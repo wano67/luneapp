@@ -1,30 +1,20 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { prisma } from '@/server/db/client';
 import { BusinessReferenceType, FinanceType, PaymentMethod, RecurringUnit } from '@/generated/prisma';
-import { requireAuthPro } from '@/server/auth/requireAuthPro';
-import { requireBusinessRole } from '@/server/auth/businessRole';
-import { assertSameOrigin, jsonNoStore, withNoStore } from '@/server/security/csrf';
-import { rateLimit } from '@/server/security/rateLimit';
-import {
-  badRequest,
-  forbidden,
-  getRequestId,
-  notFound,
-  unauthorized,
-  withRequestId,
-} from '@/server/http/apiUtils';
+import { withBusinessRoute } from '@/server/http/routeHandler';
+import { jsonb } from '@/server/http/json';
+import { badRequest, withIdNoStore } from '@/server/http/apiUtils';
+import { parseCentsInput, parseEuroToCents } from '@/lib/money';
+import { addMonths, enumerateMonthlyDates } from '@/server/finances/recurring';
 
-function parseId(param: string | undefined) {
+// Null-returning ID parser pour les query params (comportement "soft" intentionnel)
+function parseId(param: string | undefined | null): bigint | null {
   if (!param || !/^\d+$/.test(param)) return null;
   try {
     return BigInt(param);
   } catch {
     return null;
   }
-}
-
-function withIdNoStore(res: NextResponse, requestId: string) {
-  return withNoStore(withRequestId(res, requestId));
 }
 
 function ensureFinanceDelegate(requestId: string) {
@@ -46,17 +36,16 @@ function isValidType(value: unknown): value is FinanceType {
 
 function parseAmountCents(raw: unknown): bigint | null {
   if (typeof raw !== 'number' && typeof raw !== 'string') return null;
-  const num = typeof raw === 'string' ? Number(raw) : raw;
+  const num = parseEuroToCents(raw);
   if (!Number.isFinite(num)) return null;
-  return BigInt(Math.round(num * 100));
+  return BigInt(num);
 }
 
 function parseAmountCentsDirect(raw: unknown): bigint | null {
   if (raw === null || raw === undefined || raw === '') return null;
-  if (typeof raw !== 'number' && typeof raw !== 'string') return null;
-  const num = typeof raw === 'string' ? Number(raw) : raw;
-  if (!Number.isFinite(num)) return null;
-  return BigInt(Math.trunc(num));
+  const parsed = parseCentsInput(raw);
+  if (parsed == null) return null;
+  return BigInt(parsed);
 }
 
 function parseDate(value: unknown): Date | null {
@@ -64,6 +53,74 @@ function parseDate(value: unknown): Date | null {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return null;
   return date;
+}
+
+async function ensureRecurringFinanceHorizon(params: {
+  businessId: bigint;
+  monthsAhead?: number;
+}) {
+  const monthsAhead = params.monthsAhead ?? 12;
+  if (monthsAhead <= 0) return;
+  const rules = await prisma.financeRecurringRule.findMany({
+    where: { businessId: params.businessId, isActive: true, frequency: RecurringUnit.MONTHLY },
+  });
+  if (!rules.length) return;
+
+  const now = new Date();
+  const baseMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  const endMonth = new Date(now.getFullYear(), now.getMonth() + monthsAhead, 1);
+  const entries: Array<{
+    businessId: bigint;
+    projectId: bigint | null;
+    categoryReferenceId: bigint | null;
+    recurringRuleId: bigint;
+    type: FinanceType;
+    amountCents: bigint;
+    category: string;
+    vendor: string | null;
+    method: PaymentMethod | null;
+    isRecurring: boolean;
+    recurringUnit: RecurringUnit;
+    date: Date;
+    note: string | null;
+    isRuleOverride: boolean;
+    lockedFromRule: boolean;
+  }> = [];
+
+  for (const rule of rules) {
+    const dates = enumerateMonthlyDates({
+      startDate: rule.startDate,
+      endDate: rule.endDate ?? null,
+      dayOfMonth: rule.dayOfMonth,
+      from: baseMonth,
+      to: endMonth,
+    });
+    for (const target of dates) {
+      entries.push({
+        businessId: rule.businessId,
+        projectId: rule.projectId ?? null,
+        categoryReferenceId: rule.categoryReferenceId ?? null,
+        recurringRuleId: rule.id,
+        type: rule.type,
+        amountCents: rule.amountCents,
+        category: rule.category,
+        vendor: rule.vendor ?? null,
+        method: rule.method ?? null,
+        isRecurring: true,
+        recurringUnit: rule.frequency,
+        date: target,
+        note: rule.note ?? null,
+        isRuleOverride: false,
+        lockedFromRule: false,
+      });
+    }
+  }
+
+  if (!entries.length) return;
+  await prisma.finance.createMany({
+    data: entries,
+    skipDuplicates: true,
+  });
 }
 
 async function validateCategoryAndTags(
@@ -161,6 +218,9 @@ function serializeFinance(finance: {
   method?: PaymentMethod | null;
   isRecurring?: boolean;
   recurringUnit?: RecurringUnit | null;
+  recurringRuleId?: bigint | null;
+  isRuleOverride?: boolean;
+  lockedFromRule?: boolean;
   date: Date;
   note: string | null;
   deletedAt?: Date | null;
@@ -196,6 +256,9 @@ function serializeFinance(finance: {
     method: finance.method ?? null,
     isRecurring: Boolean(finance.isRecurring),
     recurringUnit: finance.recurringUnit ?? null,
+    recurringRuleId: finance.recurringRuleId ? finance.recurringRuleId.toString() : null,
+    isRuleOverride: Boolean(finance.isRuleOverride),
+    lockedFromRule: Boolean(finance.lockedFromRule),
     date: finance.date.toISOString(),
     note: finance.note,
     deletedAt: finance.deletedAt ? finance.deletedAt.toISOString() : null,
@@ -206,33 +269,13 @@ function serializeFinance(finance: {
 }
 
 // GET /api/pro/businesses/{businessId}/finances
-export async function GET(
-  request: NextRequest,
-  context: { params: Promise<{ businessId: string }> }
-) {
-  const requestId = getRequestId(request);
-  const { businessId } = await context.params;
-
-  let userId: string;
-  try {
-    ({ userId } = await requireAuthPro(request));
-  } catch {
-    return withIdNoStore(unauthorized(), requestId);
-  }
+export const GET = withBusinessRoute({ minRole: 'VIEWER' }, async (ctx, request) => {
+  const { requestId, businessId: businessIdBigInt } = ctx;
 
   const delegateError = ensureFinanceDelegate(requestId);
   if (delegateError) return delegateError;
 
-  const businessIdBigInt = parseId(businessId);
-  if (!businessIdBigInt) {
-    return withIdNoStore(badRequest('businessId invalide.'), requestId);
-  }
-
-  const business = await prisma.business.findUnique({ where: { id: businessIdBigInt } });
-  if (!business) return withIdNoStore(notFound('Entreprise introuvable.'), requestId);
-
-  const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'VIEWER');
-  if (!membership) return withIdNoStore(forbidden(), requestId);
+  await ensureRecurringFinanceHorizon({ businessId: businessIdBigInt });
 
   const { searchParams } = new URL(request.url);
   const typeParam = searchParams.get('type');
@@ -292,14 +335,7 @@ export async function GET(
     const income = sums.find((s) => s.type === FinanceType.INCOME)?._sum.amountCents ?? BigInt(0);
     const expense = sums.find((s) => s.type === FinanceType.EXPENSE)?._sum.amountCents ?? BigInt(0);
 
-    return withIdNoStore(
-      jsonNoStore({
-        incomeCents: income.toString(),
-        expenseCents: expense.toString(),
-        netCents: (income - expense).toString(),
-      }),
-      requestId
-    );
+    return jsonb({ incomeCents: income.toString(), expenseCents: expense.toString(), netCents: (income - expense).toString() }, requestId);
   }
 
   const finances = await prisma.finance.findMany({
@@ -312,52 +348,24 @@ export async function GET(
     },
   });
 
-  return withIdNoStore(
-    jsonNoStore({
-      items: finances.map(serializeFinance),
-    }),
-    requestId
-  );
-}
+  return jsonb({ items: finances.map(serializeFinance) }, requestId);
+});
 
 // POST /api/pro/businesses/{businessId}/finances
-export async function POST(
-  request: NextRequest,
-  context: { params: Promise<{ businessId: string }> }
-) {
-  const requestId = getRequestId(request);
-  const { businessId } = await context.params;
-
-  const csrf = assertSameOrigin(request);
-  if (csrf) return withIdNoStore(csrf, requestId);
-
-  let userId: string;
-  try {
-    ({ userId } = await requireAuthPro(request));
-  } catch {
-    return withIdNoStore(unauthorized(), requestId);
-  }
+export const POST = withBusinessRoute(
+  {
+    minRole: 'ADMIN',
+    rateLimit: {
+      key: (ctx) => `pro:finances:create:${ctx.businessId}:${ctx.userId}`,
+      limit: 200,
+      windowMs: 60 * 60 * 1000,
+    },
+  },
+  async (ctx, request) => {
+  const { requestId, businessId: businessIdBigInt } = ctx;
 
   const delegateError = ensureFinanceDelegate(requestId);
   if (delegateError) return delegateError;
-
-  const businessIdBigInt = parseId(businessId);
-  if (!businessIdBigInt) {
-    return withIdNoStore(badRequest('businessId invalide.'), requestId);
-  }
-
-  const business = await prisma.business.findUnique({ where: { id: businessIdBigInt } });
-  if (!business) return withIdNoStore(notFound('Entreprise introuvable.'), requestId);
-
-  const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'ADMIN');
-  if (!membership) return withIdNoStore(forbidden(), requestId);
-
-  const limited = rateLimit(request, {
-    key: `pro:finances:create:${businessIdBigInt}:${userId}`,
-    limit: 200,
-    windowMs: 60 * 60 * 1000,
-  });
-  if (limited) return withIdNoStore(limited, requestId);
 
   const body = await request.json().catch(() => null);
   if (!body || typeof body !== 'object') {
@@ -428,6 +436,28 @@ export async function POST(
     (Object.values(RecurringUnit) as string[]).includes(recurringUnitRaw.toUpperCase())
       ? (recurringUnitRaw.toUpperCase() as RecurringUnit)
       : null;
+  const recurringMonthsRaw = (body as { recurringMonths?: unknown }).recurringMonths;
+  const recurringMonths =
+    isRecurring && recurringUnit === RecurringUnit.MONTHLY && typeof recurringMonthsRaw === 'number' && Number.isFinite(recurringMonthsRaw)
+      ? Math.min(36, Math.max(1, Math.trunc(recurringMonthsRaw)))
+      : isRecurring && recurringUnit === RecurringUnit.MONTHLY
+        ? 12
+        : 0;
+  const recurringStartDateRaw = (body as { recurringStartDate?: unknown }).recurringStartDate;
+  const recurringStartDate = parseDate(recurringStartDateRaw) ?? dateParsed;
+  const recurringEndDateRaw = (body as { recurringEndDate?: unknown }).recurringEndDate;
+  const recurringEndDate = parseDate(recurringEndDateRaw);
+  const recurringDayRaw = (body as { recurringDayOfMonth?: unknown }).recurringDayOfMonth;
+  const recurringDayOfMonth =
+    typeof recurringDayRaw === 'number' && Number.isFinite(recurringDayRaw)
+      ? Math.min(31, Math.max(1, Math.trunc(recurringDayRaw)))
+      : typeof recurringDayRaw === 'string' && /^\d+$/.test(recurringDayRaw)
+        ? Math.min(31, Math.max(1, Math.trunc(Number(recurringDayRaw))))
+        : recurringStartDate.getDate();
+  const recurringRetroactive =
+    isRecurring && recurringUnit === RecurringUnit.MONTHLY
+      ? (body as { recurringRetroactive?: unknown }).recurringRetroactive !== false
+      : false;
 
   const metadata = sanitizeMetadata((body as { metadata?: unknown }).metadata);
   const noteToStore = metadata ? JSON.stringify(metadata) : note;
@@ -461,6 +491,33 @@ export async function POST(
     return withIdNoStore(badRequest(validated.error), requestId);
   }
 
+  let recurringRuleId: bigint | null = null;
+  const entryDate =
+    isRecurring && recurringUnit === RecurringUnit.MONTHLY ? recurringStartDate : dateParsed;
+  if (isRecurring && recurringUnit === RecurringUnit.MONTHLY) {
+    const rule = await prisma.financeRecurringRule.create({
+      data: {
+        businessId: businessIdBigInt,
+        projectId: projectId ?? null,
+        categoryReferenceId: validated.categoryId ?? null,
+        type: typeRaw,
+        amountCents,
+        category,
+        vendor,
+        method,
+        note: noteToStore,
+        startDate: recurringStartDate,
+        endDate: recurringEndDate,
+        dayOfMonth: recurringDayOfMonth,
+        frequency: RecurringUnit.MONTHLY,
+        nextRunAt: addMonths(recurringStartDate, 1, recurringDayOfMonth),
+        isActive: true,
+      },
+      select: { id: true },
+    });
+    recurringRuleId = rule.id;
+  }
+
   const finance = await prisma.finance.create({
     data: {
       businessId: businessIdBigInt,
@@ -472,7 +529,10 @@ export async function POST(
       method,
       isRecurring,
       recurringUnit,
-      date: dateParsed,
+      recurringRuleId: recurringRuleId ?? undefined,
+      date: entryDate,
+      isRuleOverride: false,
+      lockedFromRule: false,
       note: noteToStore,
       categoryReferenceId: validated.categoryId ?? undefined,
       tags:
@@ -489,5 +549,51 @@ export async function POST(
     },
   });
 
-  return withIdNoStore(jsonNoStore({ item: serializeFinance(finance) }, { status: 201 }), requestId);
-}
+  if (recurringRuleId && recurringMonths > 0) {
+    const now = new Date();
+    const currentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const startMonth = new Date(recurringStartDate.getFullYear(), recurringStartDate.getMonth(), 1);
+    const pastDates =
+      recurringRetroactive && startMonth < currentMonth
+        ? enumerateMonthlyDates({
+            startDate: recurringStartDate,
+            endDate: recurringEndDate,
+            dayOfMonth: recurringDayOfMonth,
+            from: startMonth,
+            to: currentMonth,
+          })
+        : [];
+    const futureStart = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    const futureEnd = new Date(now.getFullYear(), now.getMonth() + recurringMonths, 1);
+    const futureDates = enumerateMonthlyDates({
+      startDate: recurringStartDate,
+      endDate: recurringEndDate,
+      dayOfMonth: recurringDayOfMonth,
+      from: futureStart,
+      to: futureEnd,
+    });
+    const entries = [...pastDates, ...futureDates].map((occurrenceDate) => ({
+      businessId: businessIdBigInt,
+      projectId: projectId ?? null,
+      categoryReferenceId: validated.categoryId ?? null,
+      recurringRuleId,
+      type: typeRaw,
+      amountCents,
+      category,
+      vendor,
+      method,
+      isRecurring: true,
+      recurringUnit: RecurringUnit.MONTHLY,
+      date: occurrenceDate,
+      note: noteToStore,
+      isRuleOverride: false,
+      lockedFromRule: false,
+    }));
+    if (entries.length) {
+      await prisma.finance.createMany({ data: entries, skipDuplicates: true });
+    }
+  }
+
+  return jsonb({ item: serializeFinance(finance) }, requestId, { status: 201 });
+  });
+

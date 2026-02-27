@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Modal } from '@/components/ui/modal';
-import { formatCents, absCents } from '@/lib/money';
+import { absCents, formatCents, formatCentsToEuroInput, parseEuroToCents, sanitizeEuroInput } from '@/lib/money';
 
 type AccountItem = { id: string; name: string; currency: string };
 type CategoryItem = { id: string; name: string };
@@ -140,26 +140,6 @@ function formatDateFR(iso: string) {
   }).format(d);
 }
 
-function centsFromEuroInput(euros: string): string | null {
-  const cleaned = String(euros ?? '')
-    .trim()
-    .replace(/\s+/g, '')
-    .replace(',', '.');
-  if (!cleaned) return null;
-  const sign = cleaned.startsWith('-') ? -1n : 1n;
-  const unsigned = cleaned.replace(/^[+-]/, '');
-  if (!/^\d+(\.\d{0,2})?$/.test(unsigned)) return null;
-  const [intRaw, decRaw = ''] = unsigned.split('.');
-  try {
-    const intPart = BigInt(intRaw || '0');
-    const decPart = BigInt((decRaw + '00').slice(0, 2));
-    const cents = intPart * 100n + decPart;
-    return (sign * cents).toString();
-  } catch {
-    return null;
-  }
-}
-
 function isNegCents(cents: string) {
   try {
     return BigInt(cents) < 0n; // ✅ pas de 0n
@@ -231,17 +211,8 @@ export default function PersoTransactionsPage() {
   const [editAttemptedSubmit, setEditAttemptedSubmit] = useState(false);
 
   function euroFromCentsStr(centsStr: string) {
-    try {
-      const b = BigInt(centsStr);
-      const abs = b < 0n ? -b : b;
-      const euros = abs / 100n;
-      const remainder = abs % 100n;
-      return `${euros.toString()},${remainder.toString().padStart(2, '0')}`;
-    } catch {
-      return '';
-    }
+    return formatCentsToEuroInput(absCents(centsStr));
   }
-
   function toggleSelected(id: string) {
     setSelectedIds((prev) => {
       const next = new Set(prev);
@@ -396,7 +367,10 @@ export default function PersoTransactionsPage() {
     return accounts.find((a) => a.id === accountId)?.name ?? 'Compte';
   }, [accountId, accounts]);
 
-  const amountCentsRaw = useMemo(() => centsFromEuroInput(fAmountEuro), [fAmountEuro]);
+  const amountCentsRaw = useMemo(() => {
+    const cents = parseEuroToCents(fAmountEuro);
+    return Number.isFinite(cents) ? String(cents) : null;
+  }, [fAmountEuro]);
   const dateIso = useMemo(() => (fDate ? toISOFromDateOnly(fDate) : ''), [fDate]);
 
   const required = useMemo(
@@ -433,7 +407,10 @@ export default function PersoTransactionsPage() {
     setTimeout(() => eAmountRef.current?.focus(), 50);
   }
 
-  const eAmountCentsRaw = useMemo(() => centsFromEuroInput(eAmountEuro), [eAmountEuro]);
+  const eAmountCentsRaw = useMemo(() => {
+    const cents = parseEuroToCents(eAmountEuro);
+    return Number.isFinite(cents) ? String(cents) : null;
+  }, [eAmountEuro]);
   const eDateIso = useMemo(() => (eDate ? toISOFromDateOnly(eDate) : ''), [eDate]);
 
   const eRequired = useMemo(
@@ -898,7 +875,7 @@ export default function PersoTransactionsPage() {
               <input
                 ref={amountRef}
                 value={fAmountEuro}
-                onChange={(e) => setFAmountEuro(e.target.value)}
+                onChange={(e) => setFAmountEuro(sanitizeEuroInput(e.target.value))}
                 placeholder="0,00"
                 className="w-full bg-transparent text-4xl font-semibold tracking-tight text-slate-50 outline-none"
                 inputMode="decimal"
@@ -1097,7 +1074,7 @@ export default function PersoTransactionsPage() {
               <input
                 ref={eAmountRef}
                 value={eAmountEuro}
-                onChange={(e) => setEAmountEuro(e.target.value)}
+                onChange={(e) => setEAmountEuro(sanitizeEuroInput(e.target.value))}
                 placeholder="0,00"
                 className="w-full bg-transparent text-4xl font-semibold tracking-tight text-slate-50 outline-none"
                 inputMode="decimal"

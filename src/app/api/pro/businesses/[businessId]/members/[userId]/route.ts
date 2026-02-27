@@ -1,33 +1,15 @@
-import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/server/db/client';
-import { requireAuthPro } from '@/server/auth/requireAuthPro';
-import { requireBusinessRole } from '@/server/auth/businessRole';
 import { hasPermission, isAdminRole } from '@/server/auth/permissions';
-import { assertSameOrigin, jsonNoStore, withNoStore } from '@/server/security/csrf';
-import { rateLimit } from '@/server/security/rateLimit';
-import {
-  badRequest,
-  forbidden,
-  getRequestId,
-  notFound,
-  unauthorized,
-  withRequestId,
-} from '@/server/http/apiUtils';
+import { withBusinessRoute } from '@/server/http/routeHandler';
+import { jsonb, jsonbNoContent } from '@/server/http/json';
+import { badRequest, forbidden, notFound, withIdNoStore } from '@/server/http/apiUtils';
 import { BusinessPermission, Prisma } from '@/generated/prisma';
 
 type BusinessRole = 'OWNER' | 'ADMIN' | 'MEMBER' | 'VIEWER';
 
-function parseId(param: string | undefined) {
+function parseId(param: string | undefined | null): bigint | null {
   if (!param || !/^\d+$/.test(param)) return null;
-  try {
-    return BigInt(param);
-  } catch {
-    return null;
-  }
-}
-
-function withIdNoStore(res: NextResponse, requestId: string) {
-  return withNoStore(withRequestId(res, requestId));
+  try { return BigInt(param); } catch { return null; }
 }
 
 function isValidRole(role: unknown): role is BusinessRole {
@@ -40,12 +22,9 @@ function isAdmin(actorRole: BusinessRole) {
 
 function actorCanManageRole(actorRole: BusinessRole, targetRole: BusinessRole, nextRole: BusinessRole) {
   if (!isAdmin(actorRole)) return false;
-  if (nextRole === 'OWNER') return false; // on ne permet pas de transférer l’ownership ici
-  if (targetRole === 'OWNER') return false; // impossible de toucher à un OWNER
-
+  if (nextRole === 'OWNER') return false;
+  if (targetRole === 'OWNER') return false;
   if (actorRole === 'OWNER') return true;
-
-  // ADMIN : seulement sur MEMBER / VIEWER, et vers MEMBER / VIEWER
   const manageable = targetRole === 'MEMBER' || targetRole === 'VIEWER';
   const nextAllowed = nextRole === 'MEMBER' || nextRole === 'VIEWER';
   return manageable && nextAllowed;
@@ -60,7 +39,7 @@ function actorCanRemove(actorRole: BusinessRole, targetRole: BusinessRole) {
 
 type MembershipWithProfile = Prisma.BusinessMembershipGetPayload<{
   include: {
-    user: { select: { email: true, name: true } };
+    user: { select: { email: true; name: true } };
     employeeProfile: true;
     permissions: true;
     organizationUnit: { select: { id: true; name: true } };
@@ -103,245 +82,14 @@ function serializeMember(membership: MembershipWithProfile | null) {
 }
 
 // GET /api/pro/businesses/{businessId}/members/{userId}
-export async function GET(
-  request: NextRequest,
-  context: { params: Promise<{ businessId: string; userId: string }> }
-) {
-  const requestId = getRequestId(request);
-  const { businessId, userId } = await context.params;
+export const GET = withBusinessRoute<{ businessId: string; userId: string }>(
+  { minRole: 'VIEWER' },
+  async (ctx, _request, params) => {
+    const { requestId, businessId: businessIdBigInt } = ctx;
+    const targetUserId = parseId(params.userId);
+    if (!targetUserId) return withIdNoStore(badRequest('userId invalide.'), requestId);
 
-  let actorId: string;
-  try {
-    ({ userId: actorId } = await requireAuthPro(request));
-  } catch {
-    return withIdNoStore(unauthorized(), requestId);
-  }
-
-  const businessIdBigInt = parseId(businessId);
-  const targetUserId = parseId(userId);
-  if (!businessIdBigInt || !targetUserId) {
-    return withIdNoStore(badRequest('businessId ou userId invalide.'), requestId);
-  }
-
-  const membership = await requireBusinessRole(businessIdBigInt, BigInt(actorId), 'VIEWER');
-  if (!membership) return withIdNoStore(forbidden(), requestId);
-
-  const targetMembership = (await prisma.businessMembership.findUnique({
-    where: { businessId_userId: { businessId: businessIdBigInt, userId: targetUserId } },
-    include: {
-      user: { select: { email: true, name: true } },
-      employeeProfile: true,
-      permissions: true,
-      organizationUnit: { select: { id: true, name: true } },
-    },
-  })) as MembershipWithProfile | null;
-
-  if (!targetMembership) return withIdNoStore(notFound('Membre introuvable.'), requestId);
-
-  return withIdNoStore(jsonNoStore({ member: serializeMember(targetMembership) }), requestId);
-}
-
-// PATCH /api/pro/businesses/{businessId}/members/{userId}
-export async function PATCH(
-  request: NextRequest,
-  context: { params: Promise<{ businessId: string; userId: string }> }
-) {
-  const requestId = getRequestId(request);
-  const csrf = assertSameOrigin(request);
-  if (csrf) return withIdNoStore(csrf, requestId);
-
-  const { businessId, userId: userIdParam } = await context.params;
-  const businessIdBigInt = parseId(businessId);
-  const targetUserId = parseId(userIdParam);
-  if (!businessIdBigInt || !targetUserId) {
-    return withIdNoStore(badRequest('businessId ou userId invalide.'), requestId);
-  }
-
-  let actorId: string;
-  try {
-    ({ userId: actorId } = await requireAuthPro(request));
-  } catch {
-    return withIdNoStore(unauthorized(), requestId);
-  }
-
-  const actorMembership = await requireBusinessRole(businessIdBigInt, BigInt(actorId), 'VIEWER');
-  if (!actorMembership) return withIdNoStore(forbidden(), requestId);
-
-  const limited = rateLimit(request, {
-    key: `pro:members:update:${businessIdBigInt}:${actorId}`,
-    limit: 120,
-    windowMs: 60 * 60 * 1000,
-  });
-  if (limited) return withIdNoStore(limited, requestId);
-
-  const targetMembership = (await prisma.businessMembership.findUnique({
-    where: { businessId_userId: { businessId: businessIdBigInt, userId: targetUserId } },
-    include: {
-      user: { select: { email: true, name: true } },
-      employeeProfile: true,
-      permissions: true,
-      organizationUnit: { select: { id: true, name: true } },
-    },
-  })) as MembershipWithProfile | null;
-  if (!targetMembership) {
-    return withIdNoStore(notFound('Membre introuvable.'), requestId);
-  }
-
-  if (targetMembership.businessId !== businessIdBigInt) {
-    return withIdNoStore(notFound('Membre introuvable.'), requestId);
-  }
-
-  const body = await request.json().catch(() => null);
-  if (!body || typeof body !== 'object') {
-    return withIdNoStore(badRequest('Payload invalide.'), requestId);
-  }
-
-  const roleRaw = (body as { role?: unknown }).role;
-  const wantsRoleChange = roleRaw !== undefined;
-  const wantsProfileUpdate = typeof (body as { employeeProfile?: unknown }).employeeProfile === 'object';
-  const wantsPermissionsUpdate = Array.isArray((body as { permissions?: unknown }).permissions);
-
-  if (!wantsRoleChange && !wantsProfileUpdate && !wantsPermissionsUpdate) {
-    return withIdNoStore(badRequest('Aucun champ valide fourni.'), requestId);
-  }
-
-  const actor = (await prisma.businessMembership.findUnique({
-    where: { businessId_userId: { businessId: businessIdBigInt, userId: BigInt(actorId) } },
-    include: { permissions: true },
-  })) as (MembershipWithProfile | null);
-  if (!actor) return withIdNoStore(forbidden(), requestId);
-
-  const canEditProfile = hasPermission(actor, BusinessPermission.TEAM_EDIT);
-
-  let nextRole: BusinessRole | null = null;
-  if (wantsRoleChange) {
-    if (!isValidRole(roleRaw)) return withIdNoStore(badRequest('Rôle invalide.'), requestId);
-    nextRole = roleRaw;
-    if (!actorCanManageRole(actorMembership.role, targetMembership.role, nextRole)) {
-      return withIdNoStore(forbidden(), requestId);
-    }
-    if (nextRole === targetMembership.role) {
-      nextRole = null;
-    }
-  }
-
-  if (
-    wantsProfileUpdate &&
-    !canEditProfile &&
-    !isAdminRole(actorMembership.role)
-  ) {
-    return withIdNoStore(forbidden(), requestId);
-  }
-
-  if (targetMembership.userId.toString() === actorId && wantsRoleChange) {
-    if (!wantsProfileUpdate && !wantsPermissionsUpdate && nextRole && nextRole !== targetMembership.role) {
-      return withIdNoStore(badRequest('Impossible de modifier ton propre rôle.'), requestId);
-    }
-    nextRole = null;
-  }
-
-  const profilePayload = (body as { employeeProfile?: Record<string, unknown> }).employeeProfile ?? {};
-  const permissionsPayload = (body as { permissions?: string[] }).permissions ?? [];
-
-  const profileData: Record<string, unknown> = {};
-  const str = (v: unknown) => (typeof v === 'string' ? v.trim() : v === null ? null : undefined);
-  const num = (v: unknown) =>
-    v === null
-      ? null
-      : typeof v === 'number' && Number.isFinite(v)
-        ? Math.trunc(v)
-        : typeof v === 'string' && v.trim()
-          ? Number(v)
-          : undefined;
-  const date = (v: unknown) => {
-    if (v === null) return null;
-    if (typeof v === 'string' && v.trim()) {
-      const d = new Date(v);
-      return Number.isNaN(d.getTime()) ? undefined : d;
-    }
-    return undefined;
-  };
-  const big = (v: unknown) => {
-    if (typeof v === 'number' && Number.isFinite(v)) return BigInt(Math.trunc(v));
-    if (typeof v === 'string' && v.trim() && /^\d+$/.test(v.trim())) return BigInt(v.trim());
-    if (v === null) return null;
-    return undefined;
-  };
-
-  if (wantsProfileUpdate) {
-    const jobTitle = str(profilePayload.jobTitle);
-    if (jobTitle !== undefined) profileData.jobTitle = jobTitle || null;
-
-    const contractType = str(profilePayload.contractType);
-    if (contractType !== undefined) profileData.contractType = contractType || null;
-
-    const startDate = date(profilePayload.startDate);
-    if (startDate !== undefined) profileData.startDate = startDate;
-    const endDate = date(profilePayload.endDate);
-    if (endDate !== undefined) profileData.endDate = endDate;
-
-    const weeklyHours = num(profilePayload.weeklyHours);
-    if (weeklyHours !== undefined) profileData.weeklyHours = weeklyHours;
-
-    const hourlyCost = big(profilePayload.hourlyCostCents);
-    if (hourlyCost !== undefined) profileData.hourlyCostCents = hourlyCost;
-
-    const statusRaw = profilePayload.status;
-    if (statusRaw !== undefined) {
-      if (statusRaw !== 'ACTIVE' && statusRaw !== 'INACTIVE') {
-        return withIdNoStore(badRequest('Status invalide.'), requestId);
-      }
-      profileData.status = statusRaw;
-    }
-
-    const notes = str(profilePayload.notes);
-    if (notes !== undefined) profileData.notes = notes || null;
-  }
-
-  let permissionsValidated: BusinessPermission[] | null = null;
-  if (wantsPermissionsUpdate) {
-    const values: BusinessPermission[] = [];
-    for (const p of permissionsPayload) {
-      if (typeof p !== 'string' || !Object.values(BusinessPermission).includes(p as BusinessPermission)) {
-        return withIdNoStore(badRequest('Permission invalide.'), requestId);
-      }
-      values.push(p as BusinessPermission);
-    }
-    permissionsValidated = values;
-    if (!isAdmin(actorMembership.role)) {
-      return withIdNoStore(forbidden(), requestId);
-    }
-  }
-
-  const updated = await prisma.$transaction(async (tx) => {
-    if (nextRole) {
-      await tx.businessMembership.update({
-        where: { businessId_userId: { businessId: businessIdBigInt, userId: targetUserId } },
-        data: { role: nextRole },
-      });
-    }
-
-    if (Object.keys(profileData).length > 0) {
-      await tx.employeeProfile.upsert({
-        where: { membershipId: targetMembership.id },
-        update: profileData,
-        create: { membershipId: targetMembership.id, ...profileData },
-      });
-    }
-
-    if (permissionsValidated) {
-      await tx.businessMemberPermission.deleteMany({ where: { membershipId: targetMembership.id } });
-      if (permissionsValidated.length) {
-        await tx.businessMemberPermission.createMany({
-          data: permissionsValidated.map((permission) => ({
-            membershipId: targetMembership.id,
-            permission,
-          })),
-        });
-      }
-    }
-
-    return tx.businessMembership.findUnique({
+    const targetMembership = (await prisma.businessMembership.findUnique({
       where: { businessId_userId: { businessId: businessIdBigInt, userId: targetUserId } },
       include: {
         user: { select: { email: true, name: true } },
@@ -349,66 +97,230 @@ export async function PATCH(
         permissions: true,
         organizationUnit: { select: { id: true, name: true } },
       },
-    });
-  });
+    })) as MembershipWithProfile | null;
 
-  return withIdNoStore(jsonNoStore({ member: serializeMember(updated) }), requestId);
-}
+    if (!targetMembership) return withIdNoStore(notFound('Membre introuvable.'), requestId);
+
+    return jsonb({ item: serializeMember(targetMembership) }, requestId);
+  }
+);
+
+// PATCH /api/pro/businesses/{businessId}/members/{userId}
+export const PATCH = withBusinessRoute<{ businessId: string; userId: string }>(
+  { minRole: 'VIEWER', rateLimit: { key: (ctx) => `pro:members:update:${ctx.businessId}:${ctx.userId}`, limit: 120, windowMs: 60 * 60 * 1000 } },
+  async (ctx, request, params) => {
+    const { requestId, businessId: businessIdBigInt } = ctx;
+    const targetUserId = parseId(params.userId);
+    if (!targetUserId) return withIdNoStore(badRequest('userId invalide.'), requestId);
+
+    const targetMembership = (await prisma.businessMembership.findUnique({
+      where: { businessId_userId: { businessId: businessIdBigInt, userId: targetUserId } },
+      include: {
+        user: { select: { email: true, name: true } },
+        employeeProfile: true,
+        permissions: true,
+        organizationUnit: { select: { id: true, name: true } },
+      },
+    })) as MembershipWithProfile | null;
+    if (!targetMembership) {
+      return withIdNoStore(notFound('Membre introuvable.'), requestId);
+    }
+
+    if (targetMembership.businessId !== businessIdBigInt) {
+      return withIdNoStore(notFound('Membre introuvable.'), requestId);
+    }
+
+    const body = await request.json().catch(() => null);
+    if (!body || typeof body !== 'object') {
+      return withIdNoStore(badRequest('Payload invalide.'), requestId);
+    }
+
+    const roleRaw = (body as { role?: unknown }).role;
+    const wantsRoleChange = roleRaw !== undefined;
+    const wantsProfileUpdate = typeof (body as { employeeProfile?: unknown }).employeeProfile === 'object';
+    const wantsPermissionsUpdate = Array.isArray((body as { permissions?: unknown }).permissions);
+
+    if (!wantsRoleChange && !wantsProfileUpdate && !wantsPermissionsUpdate) {
+      return withIdNoStore(badRequest('Aucun champ valide fourni.'), requestId);
+    }
+
+    const actorWithPerms = (await prisma.businessMembership.findUnique({
+      where: { businessId_userId: { businessId: businessIdBigInt, userId: ctx.userId } },
+      include: { permissions: true },
+    })) as MembershipWithProfile | null;
+    if (!actorWithPerms) return withIdNoStore(forbidden(), requestId);
+
+    const actorRole = ctx.membership.role as BusinessRole;
+    const canEditProfile = hasPermission(actorWithPerms, BusinessPermission.TEAM_EDIT);
+
+    let nextRole: BusinessRole | null = null;
+    if (wantsRoleChange) {
+      if (!isValidRole(roleRaw)) return withIdNoStore(badRequest('Rôle invalide.'), requestId);
+      nextRole = roleRaw;
+      if (!actorCanManageRole(actorRole, targetMembership.role as BusinessRole, nextRole)) {
+        return withIdNoStore(forbidden(), requestId);
+      }
+      if (nextRole === targetMembership.role) {
+        nextRole = null;
+      }
+    }
+
+    if (wantsProfileUpdate && !canEditProfile && !isAdminRole(actorRole)) {
+      return withIdNoStore(forbidden(), requestId);
+    }
+
+    if (targetMembership.userId === ctx.userId && wantsRoleChange) {
+      if (!wantsProfileUpdate && !wantsPermissionsUpdate && nextRole && nextRole !== targetMembership.role) {
+        return withIdNoStore(badRequest('Impossible de modifier ton propre rôle.'), requestId);
+      }
+      nextRole = null;
+    }
+
+    const profilePayload = (body as { employeeProfile?: Record<string, unknown> }).employeeProfile ?? {};
+    const permissionsPayload = (body as { permissions?: string[] }).permissions ?? [];
+
+    const profileData: Record<string, unknown> = {};
+    const str = (v: unknown) => (typeof v === 'string' ? v.trim() : v === null ? null : undefined);
+    const num = (v: unknown) =>
+      v === null
+        ? null
+        : typeof v === 'number' && Number.isFinite(v)
+          ? Math.trunc(v)
+          : typeof v === 'string' && v.trim()
+            ? Number(v)
+            : undefined;
+    const date = (v: unknown) => {
+      if (v === null) return null;
+      if (typeof v === 'string' && v.trim()) {
+        const d = new Date(v);
+        return Number.isNaN(d.getTime()) ? undefined : d;
+      }
+      return undefined;
+    };
+    const big = (v: unknown) => {
+      if (typeof v === 'number' && Number.isFinite(v)) return BigInt(Math.trunc(v));
+      if (typeof v === 'string' && v.trim() && /^\d+$/.test(v.trim())) return BigInt(v.trim());
+      if (v === null) return null;
+      return undefined;
+    };
+
+    if (wantsProfileUpdate) {
+      const jobTitle = str(profilePayload.jobTitle);
+      if (jobTitle !== undefined) profileData.jobTitle = jobTitle || null;
+
+      const contractType = str(profilePayload.contractType);
+      if (contractType !== undefined) profileData.contractType = contractType || null;
+
+      const startDate = date(profilePayload.startDate);
+      if (startDate !== undefined) profileData.startDate = startDate;
+      const endDate = date(profilePayload.endDate);
+      if (endDate !== undefined) profileData.endDate = endDate;
+
+      const weeklyHours = num(profilePayload.weeklyHours);
+      if (weeklyHours !== undefined) profileData.weeklyHours = weeklyHours;
+
+      const hourlyCost = big(profilePayload.hourlyCostCents);
+      if (hourlyCost !== undefined) profileData.hourlyCostCents = hourlyCost;
+
+      const statusRaw = profilePayload.status;
+      if (statusRaw !== undefined) {
+        if (statusRaw !== 'ACTIVE' && statusRaw !== 'INACTIVE') {
+          return withIdNoStore(badRequest('Status invalide.'), requestId);
+        }
+        profileData.status = statusRaw;
+      }
+
+      const notes = str(profilePayload.notes);
+      if (notes !== undefined) profileData.notes = notes || null;
+    }
+
+    let permissionsValidated: BusinessPermission[] | null = null;
+    if (wantsPermissionsUpdate) {
+      const values: BusinessPermission[] = [];
+      for (const p of permissionsPayload) {
+        if (typeof p !== 'string' || !Object.values(BusinessPermission).includes(p as BusinessPermission)) {
+          return withIdNoStore(badRequest('Permission invalide.'), requestId);
+        }
+        values.push(p as BusinessPermission);
+      }
+      permissionsValidated = values;
+      if (!isAdmin(actorRole)) {
+        return withIdNoStore(forbidden(), requestId);
+      }
+    }
+
+    const updated = await prisma.$transaction(async (tx) => {
+      if (nextRole) {
+        await tx.businessMembership.update({
+          where: { businessId_userId: { businessId: businessIdBigInt, userId: targetUserId } },
+          data: { role: nextRole },
+        });
+      }
+
+      if (Object.keys(profileData).length > 0) {
+        await tx.employeeProfile.upsert({
+          where: { membershipId: targetMembership.id },
+          update: profileData,
+          create: { membershipId: targetMembership.id, ...profileData },
+        });
+      }
+
+      if (permissionsValidated) {
+        await tx.businessMemberPermission.deleteMany({ where: { membershipId: targetMembership.id } });
+        if (permissionsValidated.length) {
+          await tx.businessMemberPermission.createMany({
+            data: permissionsValidated.map((permission) => ({
+              membershipId: targetMembership.id,
+              permission,
+            })),
+          });
+        }
+      }
+
+      return tx.businessMembership.findUnique({
+        where: { businessId_userId: { businessId: businessIdBigInt, userId: targetUserId } },
+        include: {
+          user: { select: { email: true, name: true } },
+          employeeProfile: true,
+          permissions: true,
+          organizationUnit: { select: { id: true, name: true } },
+        },
+      });
+    });
+
+    return jsonb({ item: serializeMember(updated as MembershipWithProfile | null) }, requestId);
+  }
+);
 
 // DELETE /api/pro/businesses/{businessId}/members/{userId}
-export async function DELETE(
-  request: NextRequest,
-  context: { params: Promise<{ businessId: string; userId: string }> }
-) {
-  const requestId = getRequestId(request);
-  const csrf = assertSameOrigin(request);
-  if (csrf) return withIdNoStore(csrf, requestId);
+export const DELETE = withBusinessRoute<{ businessId: string; userId: string }>(
+  { minRole: 'ADMIN', rateLimit: { key: (ctx) => `pro:members:delete:${ctx.businessId}:${ctx.userId}`, limit: 60, windowMs: 60 * 60 * 1000 } },
+  async (ctx, _request, params) => {
+    const { requestId, businessId: businessIdBigInt } = ctx;
+    const targetUserId = parseId(params.userId);
+    if (!targetUserId) return withIdNoStore(badRequest('userId invalide.'), requestId);
 
-  const { businessId, userId: userIdParam } = await context.params;
-  const businessIdBigInt = parseId(businessId);
-  const targetUserId = parseId(userIdParam);
-  if (!businessIdBigInt || !targetUserId) {
-    return withIdNoStore(badRequest('businessId ou userId invalide.'), requestId);
+    const targetMembership = await prisma.businessMembership.findUnique({
+      where: { businessId_userId: { businessId: businessIdBigInt, userId: targetUserId } },
+      include: { user: { select: { email: true } } },
+    });
+    if (!targetMembership || targetMembership.businessId !== businessIdBigInt) {
+      return withIdNoStore(notFound('Membre introuvable.'), requestId);
+    }
+
+    if (targetMembership.userId === ctx.userId) {
+      return withIdNoStore(badRequest('Impossible de te retirer via cette action.'), requestId);
+    }
+
+    const actorRole = ctx.membership.role as BusinessRole;
+    if (!actorCanRemove(actorRole, targetMembership.role as BusinessRole)) {
+      return withIdNoStore(forbidden(), requestId);
+    }
+
+    await prisma.businessMembership.delete({
+      where: { businessId_userId: { businessId: businessIdBigInt, userId: targetUserId } },
+    });
+
+    return jsonbNoContent(requestId);
   }
-
-  let actorId: string;
-  try {
-    ({ userId: actorId } = await requireAuthPro(request));
-  } catch {
-    return withIdNoStore(unauthorized(), requestId);
-  }
-
-  const actorMembership = await requireBusinessRole(businessIdBigInt, BigInt(actorId), 'ADMIN');
-  if (!actorMembership) {
-    return withIdNoStore(forbidden(), requestId);
-  }
-
-  const limited = rateLimit(request, {
-    key: `pro:members:delete:${businessIdBigInt}:${actorId}`,
-    limit: 60,
-    windowMs: 60 * 60 * 1000,
-  });
-  if (limited) return withIdNoStore(limited, requestId);
-
-  const targetMembership = await prisma.businessMembership.findUnique({
-    where: { businessId_userId: { businessId: businessIdBigInt, userId: targetUserId } },
-    include: { user: { select: { email: true } } },
-  });
-  if (!targetMembership || targetMembership.businessId !== businessIdBigInt) {
-    return withIdNoStore(notFound('Membre introuvable.'), requestId);
-  }
-
-  if (targetMembership.userId.toString() === actorId) {
-    return withIdNoStore(badRequest('Impossible de te retirer via cette action.'), requestId);
-  }
-
-  if (!actorCanRemove(actorMembership.role, targetMembership.role)) {
-    return withIdNoStore(forbidden(), requestId);
-  }
-
-  await prisma.businessMembership.delete({
-    where: { businessId_userId: { businessId: businessIdBigInt, userId: targetUserId } },
-  });
-
-  return withIdNoStore(new NextResponse(null, { status: 204 }), requestId);
-}
+);

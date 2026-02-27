@@ -10,6 +10,7 @@ import { Select } from '@/components/ui/select';
 import { Modal } from '@/components/ui/modal';
 import { Input } from '@/components/ui/input';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
+import { formatCentsToEuroInput, parseEuroToCents, sanitizeEuroInput } from '@/lib/money';
 import { useActiveBusiness } from '../../../ActiveBusinessProvider';
 import { PageHeader } from '../../../../components/PageHeader';
 
@@ -465,7 +466,7 @@ export default function BusinessTeamSettingsPage() {
       endDate: toDateInput(member.employeeProfile?.endDate),
       weeklyHours:
         typeof member.employeeProfile?.weeklyHours === 'number' ? member.employeeProfile.weeklyHours : null,
-      hourlyCostCents: member.employeeProfile?.hourlyCostCents ?? '',
+      hourlyCostCents: formatCentsToEuroInput(member.employeeProfile?.hourlyCostCents),
       status: member.employeeProfile?.status ?? 'ACTIVE',
       notes: member.employeeProfile?.notes ?? '',
     });
@@ -479,6 +480,13 @@ export default function BusinessTeamSettingsPage() {
     setActionError(null);
     setSuccess(null);
     try {
+      const hourlyCostCents = employeeDraft.hourlyCostCents
+        ? parseEuroToCents(employeeDraft.hourlyCostCents)
+        : null;
+      if (employeeDraft.hourlyCostCents && !Number.isFinite(hourlyCostCents)) {
+        setActionError('Coût horaire invalide.');
+        return;
+      }
       const res = await fetchJson<{ member: Member }>(
         `/api/pro/businesses/${businessId}/members/${employeeModal.userId}`,
         {
@@ -491,7 +499,7 @@ export default function BusinessTeamSettingsPage() {
               startDate: employeeDraft.startDate || null,
               endDate: employeeDraft.endDate || null,
               weeklyHours: employeeDraft.weeklyHours,
-              hourlyCostCents: employeeDraft.hourlyCostCents || null,
+              hourlyCostCents: Number.isFinite(hourlyCostCents ?? NaN) ? (hourlyCostCents as number) : null,
               status: employeeDraft.status,
               notes: employeeDraft.notes || null,
             },
@@ -902,13 +910,14 @@ export default function BusinessTeamSettingsPage() {
               />
             </label>
             <label className="text-sm text-[var(--text-primary)]">
-              <span className="block text-xs text-[var(--text-secondary)]">Coût horaire (cents)</span>
+              <span className="block text-xs text-[var(--text-secondary)]">Coût horaire (€)</span>
               <input
-                type="number"
+                type="text"
+                inputMode="decimal"
                 className="mt-1 w-full rounded-md border border-[var(--border)] bg-[var(--surface)] p-2 text-sm"
                 value={employeeDraft.hourlyCostCents ?? ''}
                 onChange={(e) =>
-                  setEmployeeDraft((prev) => ({ ...prev, hourlyCostCents: e.target.value || '' }))
+                  setEmployeeDraft((prev) => ({ ...prev, hourlyCostCents: sanitizeEuroInput(e.target.value) || '' }))
                 }
                 disabled={actionLoading}
               />

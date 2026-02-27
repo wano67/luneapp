@@ -1,31 +1,14 @@
-import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/server/db/client';
-import { requireBusinessRole } from '@/server/auth/businessRole';
-import { assertSameOrigin, jsonNoStore } from '@/server/security/csrf';
-import { rateLimit } from '@/server/security/rateLimit';
-import { requireAuthPro } from '@/server/auth/requireAuthPro';
-import { badRequest, getRequestId, unauthorized, withIdNoStore, withRequestId } from '@/server/http/apiUtils';
+import { withBusinessRoute } from '@/server/http/routeHandler';
+import { parseIdOpt } from '@/server/http/parsers';
+import { jsonb, jsonbCreated } from '@/server/http/json';
+import { badRequest, withIdNoStore } from '@/server/http/apiUtils';
 import { BusinessReferenceType, ClientStatus, LeadSource } from '@/generated/prisma';
 import { normalizeWebsiteUrl } from '@/lib/website';
 
-function forbidden(requestId: string) {
-  return withIdNoStore(NextResponse.json({ error: 'Forbidden' }, { status: 403 }), requestId);
-}
-
-function isRecord(v: unknown): v is Record<string, unknown> {
-  return !!v && typeof v === 'object';
-}
-
-function parseId(param: string | undefined) {
-  if (!param || !/^\d+$/.test(param)) {
-    return null;
-  }
-  try {
-    return BigInt(param);
-  } catch {
-    return null;
-  }
-}
+// ---------------------------------------------------------------------------
+// Helpers de validation (inchangés — logique métier)
+// ---------------------------------------------------------------------------
 
 function normalizeStr(v: unknown) {
   return String(v ?? '').trim();
@@ -133,51 +116,23 @@ function serializeClient(client: {
   };
 }
 
+// ---------------------------------------------------------------------------
 // GET /api/pro/businesses/{businessId}/clients
-export async function GET(
-  request: NextRequest,
-  context: { params: Promise<{ businessId: string }> }
-) {
-  const requestId = getRequestId(request);
-  let userId: string;
-  try {
-    ({ userId } = await requireAuthPro(request));
-  } catch {
-    return withRequestId(unauthorized(), requestId);
-  }
+// ---------------------------------------------------------------------------
 
-  const { businessId } = await context.params;
-  const businessIdBigInt = parseId(businessId);
-  if (!businessIdBigInt) {
-    return withRequestId(badRequest('businessId invalide.'), requestId);
-  }
-
-  const business = await prisma.business.findUnique({ where: { id: businessIdBigInt } });
-  if (!business) {
-    return withRequestId(NextResponse.json({ error: 'Entreprise introuvable.' }, { status: 404 }), requestId);
-  }
-
-  const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'VIEWER');
-  if (!membership) return forbidden(requestId);
-
-  const { searchParams } = new URL(request.url);
+export const GET = withBusinessRoute({ minRole: 'VIEWER' }, async (ctx, req) => {
+  const { searchParams } = new URL(req.url);
   const search = searchParams.get('q')?.trim() ?? searchParams.get('search')?.trim();
   const status = searchParams.get('status') as ClientStatus | null;
   const sector = searchParams.get('sector')?.trim();
   const origin = searchParams.get('origin')?.trim();
-  const categoryReferenceIdParam = searchParams.get('categoryReferenceId');
-  const tagReferenceIdParam = searchParams.get('tagReferenceId');
   const archivedParam = searchParams.get('archived');
   const sortByParam = searchParams.get('sortBy') ?? 'name';
   const sortDirParam = searchParams.get('sortDir') ?? 'asc';
-  const categoryReferenceId = categoryReferenceIdParam ? parseId(categoryReferenceIdParam) : null;
-  if (categoryReferenceIdParam && !categoryReferenceId) {
-    return withRequestId(badRequest('categoryReferenceId invalide.'), requestId);
-  }
-  const tagReferenceId = tagReferenceIdParam ? parseId(tagReferenceIdParam) : null;
-  if (tagReferenceIdParam && !tagReferenceId) {
-    return withRequestId(badRequest('tagReferenceId invalide.'), requestId);
-  }
+
+  // parseIdOpt lance RouteParseError (→ 400) si présent mais invalide
+  const categoryReferenceId = parseIdOpt(searchParams.get('categoryReferenceId'));
+  const tagReferenceId = parseIdOpt(searchParams.get('tagReferenceId'));
 
   const showArchived = archivedParam === '1' || archivedParam === 'true';
   const sortBy =
@@ -188,13 +143,9 @@ export async function GET(
 
   const clients = await prisma.client.findMany({
     where: {
-      businessId: businessIdBigInt,
+      businessId: ctx.businessId,
       ...(showArchived ? {} : { archivedAt: null }),
-      ...(search
-        ? {
-            name: { contains: search, mode: 'insensitive' },
-          }
-        : {}),
+      ...(search ? { name: { contains: search, mode: 'insensitive' } } : {}),
       ...(status && STATUS_VALUES.has(status) ? { status } : {}),
       ...(sector ? { sector: { contains: sector, mode: 'insensitive' } } : {}),
       ...(origin ? { leadSource: origin as LeadSource } : {}),
@@ -208,151 +159,124 @@ export async function GET(
     },
   });
 
-  return withRequestId(
-    jsonNoStore({
-      items: clients.map((c) => serializeClient(c)),
-    }),
-    requestId
-  );
-}
+  return jsonb({ items: clients.map(serializeClient) }, ctx.requestId);
+});
 
+// ---------------------------------------------------------------------------
 // POST /api/pro/businesses/{businessId}/clients
-export async function POST(
-  request: NextRequest,
-  context: { params: Promise<{ businessId: string }> }
-) {
-  const requestId = getRequestId(request);
-  const csrf = assertSameOrigin(request);
-  if (csrf) return csrf;
+// ---------------------------------------------------------------------------
 
-  let userId: string;
-  try {
-    ({ userId } = await requireAuthPro(request));
-  } catch {
-    return withRequestId(unauthorized(), requestId);
-  }
+export const POST = withBusinessRoute(
+  {
+    minRole: 'ADMIN',
+    rateLimit: {
+      key: (ctx) => `pro:clients:create:${ctx.businessId}:${ctx.userId}`,
+      limit: 120,
+      windowMs: 60 * 60 * 1000,
+    },
+  },
+  async (ctx, req) => {
+    const body = await req.json().catch(() => null);
+    if (!body || typeof body !== 'object') {
+      return withIdNoStore(badRequest('Payload invalide.'), ctx.requestId);
+    }
 
-  const { businessId } = await context.params;
-  const businessIdBigInt = parseId(businessId);
-  if (!businessIdBigInt) {
-    return withRequestId(badRequest('businessId invalide.'), requestId);
-  }
+    const b = body as Record<string, unknown>;
 
-  const business = await prisma.business.findUnique({ where: { id: businessIdBigInt } });
-  if (!business) {
-    return withRequestId(NextResponse.json({ error: 'Entreprise introuvable.' }, { status: 404 }), requestId);
-  }
+    if (typeof b.name !== 'string') {
+      return withIdNoStore(badRequest('Le nom du client est requis.'), ctx.requestId);
+    }
 
-  const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'ADMIN');
-  if (!membership) return forbidden(requestId);
+    const name = normalizeStr(b.name);
+    if (!name)
+      return withIdNoStore(badRequest('Le nom du client ne peut pas être vide.'), ctx.requestId);
+    if (name.length > 120)
+      return withIdNoStore(badRequest('Le nom du client est trop long (max 120).'), ctx.requestId);
 
-  const limited = rateLimit(request, {
-    key: `pro:clients:create:${businessIdBigInt}:${userId.toString()}`,
-    limit: 120,
-    windowMs: 60 * 60 * 1000,
-  });
-  if (limited) return withRequestId(limited, requestId);
+    const emailRaw = normalizeStr(typeof b.email === 'string' ? b.email : '');
+    const email = emailRaw || undefined;
+    if (email && (email.length > 254 || !isValidEmail(email)))
+      return withIdNoStore(badRequest('Email invalide.'), ctx.requestId);
 
-  const body = await request.json().catch(() => null);
-  if (!isRecord(body) || typeof body.name !== 'string') {
-    return withRequestId(badRequest('Le nom du client est requis.'), requestId);
-  }
+    const phoneRaw = sanitizePhone(typeof b.phone === 'string' ? b.phone : '');
+    const phone = phoneRaw || undefined;
+    if (phone && (phone.length > 32 || !isValidPhone(phone)))
+      return withIdNoStore(badRequest('Téléphone invalide.'), ctx.requestId);
 
-  const name = normalizeStr(body.name);
-  if (!name) return withRequestId(badRequest('Le nom du client ne peut pas être vide.'), requestId);
-  if (name.length > 120) {
-    return withRequestId(badRequest('Le nom du client est trop long (max 120).'), requestId);
-  }
+    const notesRaw = normalizeStr(typeof b.notes === 'string' ? b.notes : '');
+    const notes = notesRaw || undefined;
+    if (notes && notes.length > 2000)
+      return withIdNoStore(badRequest('Notes trop longues (max 2000).'), ctx.requestId);
 
-  const emailRaw = normalizeStr(typeof body.email === 'string' ? body.email : '');
-  const email = emailRaw ? emailRaw : undefined;
-  if (email && (email.length > 254 || !isValidEmail(email))) {
-    return withRequestId(badRequest('Email invalide.'), requestId);
-  }
+    const websiteNormalized = normalizeWebsiteUrl(b.websiteUrl);
+    if (websiteNormalized.error)
+      return withIdNoStore(badRequest(websiteNormalized.error), ctx.requestId);
 
-  const phoneRaw = sanitizePhone(typeof body.phone === 'string' ? body.phone : '');
-  const phone = phoneRaw ? phoneRaw : undefined;
-  if (phone && (phone.length > 32 || !isValidPhone(phone))) {
-    return withRequestId(badRequest('Téléphone invalide.'), requestId);
-  }
-
-  const notesRaw = normalizeStr(typeof body.notes === 'string' ? body.notes : '');
-  const notes = notesRaw ? notesRaw : undefined;
-  if (notes && notes.length > 2000) {
-    return withRequestId(badRequest('Notes trop longues (max 2000).'), requestId);
-  }
-
-  const websiteNormalized = normalizeWebsiteUrl((body as Record<string, unknown>).websiteUrl);
-  if (websiteNormalized.error) {
-    return withRequestId(badRequest(websiteNormalized.error), requestId);
-  }
-
-  const sector = normalizeStr(body.sector);
-  const status =
-    typeof body.status === 'string' && STATUS_VALUES.has(body.status as ClientStatus)
-      ? (body.status as ClientStatus)
-      : undefined;
-  const leadSourceRaw = normalizeStr(body.leadSource);
-  const leadSource =
-    leadSourceRaw && Object.values(LeadSource).includes(leadSourceRaw as LeadSource)
-      ? (leadSourceRaw as LeadSource)
-      : undefined;
-  if (leadSourceRaw && !leadSource) {
-    return withRequestId(badRequest('leadSource invalide.'), requestId);
-  }
-
-  const categoryProvided = Object.prototype.hasOwnProperty.call(body, 'categoryReferenceId');
-  const categoryReferenceId =
-    categoryProvided && typeof body.categoryReferenceId === 'string' && /^\d+$/.test(body.categoryReferenceId)
-      ? BigInt(body.categoryReferenceId)
-      : categoryProvided
-        ? null
+    const sector = normalizeStr(b.sector);
+    const status =
+      typeof b.status === 'string' && STATUS_VALUES.has(b.status as ClientStatus)
+        ? (b.status as ClientStatus)
         : undefined;
 
-  const tagProvided = Object.prototype.hasOwnProperty.call(body, 'tagReferenceIds');
-  const tagReferenceIds: bigint[] | undefined = tagProvided
-    ? Array.from(
-        new Set(
-          ((Array.isArray(body.tagReferenceIds) ? body.tagReferenceIds : []) as unknown[])
-            .filter((id): id is string => typeof id === 'string' && /^\d+$/.test(id))
-            .map((id) => BigInt(id))
+    const leadSourceRaw = normalizeStr(b.leadSource);
+    const leadSource =
+      leadSourceRaw && Object.values(LeadSource).includes(leadSourceRaw as LeadSource)
+        ? (leadSourceRaw as LeadSource)
+        : undefined;
+    if (leadSourceRaw && !leadSource)
+      return withIdNoStore(badRequest('leadSource invalide.'), ctx.requestId);
+
+    const categoryProvided = Object.prototype.hasOwnProperty.call(b, 'categoryReferenceId');
+    const categoryReferenceId =
+      categoryProvided && typeof b.categoryReferenceId === 'string' && /^\d+$/.test(b.categoryReferenceId)
+        ? BigInt(b.categoryReferenceId)
+        : categoryProvided
+          ? null
+          : undefined;
+
+    const tagProvided = Object.prototype.hasOwnProperty.call(b, 'tagReferenceIds');
+    const tagReferenceIds: bigint[] | undefined = tagProvided
+      ? Array.from(
+          new Set(
+            ((Array.isArray(b.tagReferenceIds) ? b.tagReferenceIds : []) as unknown[])
+              .filter((id): id is string => typeof id === 'string' && /^\d+$/.test(id))
+              .map((id) => BigInt(id))
+          )
         )
-      )
-    : undefined;
+      : undefined;
 
-  const validated = await validateCategoryAndTags(
-    businessIdBigInt,
-    categoryReferenceId ?? null,
-    tagReferenceIds
-  );
-  if ('error' in validated) {
-    return withRequestId(badRequest(validated.error), requestId);
+    const validated = await validateCategoryAndTags(
+      ctx.businessId,
+      categoryReferenceId ?? null,
+      tagReferenceIds
+    );
+    if ('error' in validated) {
+      return withIdNoStore(badRequest(validated.error), ctx.requestId);
+    }
+
+    const client = await prisma.client.create({
+      data: {
+        businessId: ctx.businessId,
+        name,
+        email,
+        phone,
+        notes,
+        websiteUrl: websiteNormalized.value ?? undefined,
+        sector: sector || undefined,
+        status: status ?? undefined,
+        leadSource,
+        categoryReferenceId: validated.categoryId ?? undefined,
+        tags:
+          validated.tagIds.length > 0
+            ? { create: validated.tagIds.map((id) => ({ referenceId: id })) }
+            : undefined,
+      },
+      include: {
+        categoryReference: { select: { id: true, name: true } },
+        tags: { include: { reference: { select: { id: true, name: true } } } },
+      },
+    });
+
+    return jsonbCreated({ item: serializeClient(client) }, ctx.requestId);
   }
-
-  const client = await prisma.client.create({
-    data: {
-      businessId: businessIdBigInt,
-      name,
-      email,
-      phone,
-      notes,
-      websiteUrl: websiteNormalized.value ?? undefined,
-      sector: sector || undefined,
-      status: status ?? undefined,
-      leadSource,
-      categoryReferenceId: validated.categoryId ?? undefined,
-      tags:
-        validated.tagIds.length > 0
-          ? {
-              create: validated.tagIds.map((id) => ({ referenceId: id })),
-            }
-          : undefined,
-    },
-    include: {
-      categoryReference: { select: { id: true, name: true } },
-      tags: { include: { reference: { select: { id: true, name: true } } } },
-    },
-  });
-
-  return withRequestId(jsonNoStore(serializeClient(client), { status: 201 }), requestId);
-}
+);

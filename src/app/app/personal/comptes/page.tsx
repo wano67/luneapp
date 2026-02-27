@@ -10,6 +10,7 @@ import { Select } from '@/components/ui/select';
 import Modal from '@/components/ui/modal';
 import CsvImportModal from '@/components/CsvImportModal';
 import { useFileDropHandler } from '@/components/file-drop/FileDropProvider';
+import { parseEuroToCents, sanitizeEuroInput } from '@/lib/money';
 
 type AccountItem = {
   id: string;
@@ -51,25 +52,6 @@ function centsToEUR(centsStr: string) {
   }
 }
 
-function eurosToCentsBigInt(input: string): bigint | null {
-  const cleaned = String(input ?? '')
-    .trim()
-    .replace(/\s+/g, '')
-    .replace(',', '.');
-  if (!cleaned) return null;
-  const sign = cleaned.startsWith('-') ? -1n : 1n;
-  const unsigned = cleaned.replace(/^[+-]/, '');
-  if (!/^\d+(\.\d{0,2})?$/.test(unsigned)) return null;
-  const [intPartRaw, decPartRaw = ''] = unsigned.split('.');
-  try {
-    const intPart = BigInt(intPartRaw || '0');
-    const decPart = BigInt((decPartRaw + '00').slice(0, 2));
-    return sign * (intPart * 100n + decPart);
-  } catch {
-    return null;
-  }
-}
-
 function typeLabel(t: AccountItem['type']) {
   if (t === 'CURRENT') return 'Courant';
   if (t === 'SAVINGS') return 'Épargne';
@@ -99,7 +81,7 @@ export default function ComptesPage() {
 
   const [name, setName] = useState('');
   const [type, setType] = useState<AccountItem['type']>('CURRENT');
-  const [initialEuros, setInitialEuros] = useState('0.00');
+  const [initialEuros, setInitialEuros] = useState('0');
   const [institution, setInstitution] = useState('');
   const [iban, setIban] = useState('');
 
@@ -167,6 +149,12 @@ export default function ComptesPage() {
       return;
     }
 
+    const initialCents = parseEuroToCents(initialEuros);
+    if (!Number.isFinite(initialCents)) {
+      setCreateError('Montant invalide.');
+      return;
+    }
+
     try {
       setCreating(true);
       const res = await fetch('/api/personal/accounts', {
@@ -179,7 +167,7 @@ export default function ComptesPage() {
           currency: 'EUR',
           institution: institution.trim() || null,
           iban: iban.trim() || null,
-          initialCents: (eurosToCentsBigInt(initialEuros) ?? 0n).toString(),
+          initialCents: String(initialCents),
         }),
       });
 
@@ -189,7 +177,7 @@ export default function ComptesPage() {
       setOpen(false);
       setName('');
       setType('CURRENT');
-      setInitialEuros('0.00');
+      setInitialEuros('0');
       setInstitution('');
       setIban('');
 
@@ -337,8 +325,10 @@ export default function ComptesPage() {
           <Input
             label="Solde initial (€)"
             value={initialEuros}
-            onChange={(e) => setInitialEuros(e.target.value)}
-            placeholder="0.00"
+            onChange={(e) => setInitialEuros(sanitizeEuroInput(e.target.value))}
+            placeholder="0"
+            type="text"
+            inputMode="decimal"
           />
 
           <Input

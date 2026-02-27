@@ -1,20 +1,10 @@
-import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/server/db/client';
 import { BusinessReferenceType, TaskPhase, TaskStatus } from '@/generated/prisma';
-import { requireBusinessRole } from '@/server/auth/businessRole';
-import { requireAuthPro } from '@/server/auth/requireAuthPro';
-import { assertSameOrigin, jsonNoStore, withNoStore } from '@/server/security/csrf';
-import { rateLimit } from '@/server/security/rateLimit';
-import {
-  badRequest,
-  forbidden,
-  getRequestId,
-  notFound,
-  unauthorized,
-  withRequestId,
-} from '@/server/http/apiUtils';
+import { withBusinessRoute } from '@/server/http/routeHandler';
+import { jsonb, jsonbCreated } from '@/server/http/json';
+import { badRequest, serverError } from '@/server/http/apiUtils';
 
-function parseId(param: string | undefined) {
+function parseId(param: string | null | undefined): bigint | null {
   if (!param || !/^\d+$/.test(param)) return null;
   try {
     return BigInt(param);
@@ -23,19 +13,9 @@ function parseId(param: string | undefined) {
   }
 }
 
-function withIdNoStore(res: NextResponse, requestId: string) {
-  return withNoStore(withRequestId(res, requestId));
-}
-
-function ensureTaskDelegate(requestId: string) {
+function ensureTaskDelegate() {
   if (!(prisma as { task?: unknown }).task) {
-    return withIdNoStore(
-      NextResponse.json(
-        { error: 'Prisma client not generated / wrong import (task delegate absent).' },
-        { status: 500 }
-      ),
-      requestId
-    );
+    return serverError();
   }
   return null;
 }
@@ -151,300 +131,254 @@ async function validateCategoryAndTags(
 }
 
 // GET /api/pro/businesses/{businessId}/tasks
-export async function GET(
-  request: NextRequest,
-  context: { params: Promise<{ businessId: string }> }
-) {
-  const requestId = getRequestId(request);
-  const { businessId } = await context.params;
+export const GET = withBusinessRoute<{ businessId: string }>(
+  { minRole: 'VIEWER' },
+  async (ctx, req) => {
+    const { requestId, businessId: businessIdBigInt, userId } = ctx;
 
-  let userId: string;
-  try {
-    ({ userId } = await requireAuthPro(request));
-  } catch {
-    return withIdNoStore(unauthorized(), requestId);
-  }
+    const delegateError = ensureTaskDelegate();
+    if (delegateError) return delegateError;
 
-  const delegateError = ensureTaskDelegate(requestId);
-  if (delegateError) return delegateError;
+    const { searchParams } = new URL(req.url);
+    const statusParam = searchParams.get('status') as TaskStatus | null;
+    const statusFilter = statusParam && isValidStatus(statusParam) ? statusParam : null;
+    const projectParam = searchParams.get('projectId');
+    const projectIdFilter = projectParam ? parseId(projectParam) : null;
+    if (projectParam && !projectIdFilter) {
+      return badRequest('projectId invalide.');
+    }
+    const phaseParam = searchParams.get('phase');
+    const phaseFilter =
+      phaseParam && Object.values(TaskPhase).includes(phaseParam as TaskPhase)
+        ? (phaseParam as TaskPhase)
+        : null;
+    const assigneeParam = searchParams.get('assignee');
+    const assigneeFilter = assigneeParam === 'me' ? userId : null;
+    const categoryReferenceIdParam = searchParams.get('categoryReferenceId');
+    const categoryReferenceId = categoryReferenceIdParam ? parseId(categoryReferenceIdParam) : null;
+    if (categoryReferenceIdParam && !categoryReferenceId) {
+      return badRequest('categoryReferenceId invalide.');
+    }
+    const tagReferenceIdParam = searchParams.get('tagReferenceId');
+    const tagReferenceId = tagReferenceIdParam ? parseId(tagReferenceIdParam) : null;
+    if (tagReferenceIdParam && !tagReferenceId) {
+      return badRequest('tagReferenceId invalide.');
+    }
 
-  const businessIdBigInt = parseId(businessId);
-  if (!businessIdBigInt) {
-    return withIdNoStore(badRequest('businessId invalide.'), requestId);
-  }
-
-  const business = await prisma.business.findUnique({ where: { id: businessIdBigInt } });
-  if (!business) return withIdNoStore(notFound('Entreprise introuvable.'), requestId);
-
-  const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'VIEWER');
-  if (!membership) return withIdNoStore(forbidden(), requestId);
-
-  const { searchParams } = new URL(request.url);
-  const statusParam = searchParams.get('status') as TaskStatus | null;
-  const statusFilter = statusParam && isValidStatus(statusParam) ? statusParam : null;
-  const projectParam = searchParams.get('projectId');
-  const projectIdFilter = projectParam ? parseId(projectParam) : null;
-  if (projectParam && !projectIdFilter) {
-    return withIdNoStore(badRequest('projectId invalide.'), requestId);
-  }
-  const phaseParam = searchParams.get('phase');
-  const phaseFilter =
-    phaseParam && Object.values(TaskPhase).includes(phaseParam as TaskPhase)
-      ? (phaseParam as TaskPhase)
-      : null;
-  const assigneeParam = searchParams.get('assignee');
-  const assigneeFilter = assigneeParam === 'me' ? BigInt(userId) : null;
-  const categoryReferenceIdParam = searchParams.get('categoryReferenceId');
-  const categoryReferenceId = categoryReferenceIdParam ? parseId(categoryReferenceIdParam) : null;
-  if (categoryReferenceIdParam && !categoryReferenceId) {
-    return withIdNoStore(badRequest('categoryReferenceId invalide.'), requestId);
-  }
-  const tagReferenceIdParam = searchParams.get('tagReferenceId');
-  const tagReferenceId = tagReferenceIdParam ? parseId(tagReferenceIdParam) : null;
-  if (tagReferenceIdParam && !tagReferenceId) {
-    return withIdNoStore(badRequest('tagReferenceId invalide.'), requestId);
-  }
-
-  const tasks = await prisma.task.findMany({
-    where: {
-      businessId: businessIdBigInt,
-      ...(statusFilter ? { status: statusFilter } : {}),
-      ...(projectIdFilter ? { projectId: projectIdFilter } : {}),
-      ...(phaseFilter ? { phase: phaseFilter } : {}),
-      ...(assigneeFilter ? { assigneeUserId: assigneeFilter } : {}),
-      ...(categoryReferenceId ? { categoryReferenceId } : {}),
-      ...(tagReferenceId ? { tags: { some: { referenceId: tagReferenceId } } } : {}),
-    },
-    orderBy: [{ dueDate: 'asc' }, { createdAt: 'desc' }],
-    include: {
-      project: { select: { name: true } },
-      projectService: { select: { id: true, service: { select: { name: true } } } },
-      projectServiceStep: {
-        select: { id: true, name: true, phaseName: true, isBillableMilestone: true },
+    const tasks = await prisma.task.findMany({
+      where: {
+        businessId: businessIdBigInt,
+        ...(statusFilter ? { status: statusFilter } : {}),
+        ...(projectIdFilter ? { projectId: projectIdFilter } : {}),
+        ...(phaseFilter ? { phase: phaseFilter } : {}),
+        ...(assigneeFilter ? { assigneeUserId: assigneeFilter } : {}),
+        ...(categoryReferenceId ? { categoryReferenceId } : {}),
+        ...(tagReferenceId ? { tags: { some: { referenceId: tagReferenceId } } } : {}),
       },
-      assignee: { select: { id: true, email: true, name: true } },
-      categoryReference: { select: { id: true, name: true } },
-      tags: { include: { reference: { select: { id: true, name: true } } } },
-      _count: { select: { subtasks: true, checklistItems: true } },
-      checklistItems: { select: { isCompleted: true } },
-    },
-  });
+      orderBy: [{ dueDate: 'asc' }, { createdAt: 'desc' }],
+      include: {
+        project: { select: { name: true } },
+        projectService: { select: { id: true, service: { select: { name: true } } } },
+        projectServiceStep: {
+          select: { id: true, name: true, phaseName: true, isBillableMilestone: true },
+        },
+        assignee: { select: { id: true, email: true, name: true } },
+        categoryReference: { select: { id: true, name: true } },
+        tags: { include: { reference: { select: { id: true, name: true } } } },
+        _count: { select: { subtasks: true, checklistItems: true } },
+        checklistItems: { select: { isCompleted: true } },
+      },
+    });
 
-  return withIdNoStore(
-    jsonNoStore({
-      items: tasks.map(serializeTask),
-    }),
-    requestId
-  );
-}
+    return jsonb({ items: tasks.map(serializeTask) }, requestId);
+  }
+);
 
 // POST /api/pro/businesses/{businessId}/tasks
-export async function POST(
-  request: NextRequest,
-  context: { params: Promise<{ businessId: string }> }
-) {
-  const requestId = getRequestId(request);
-  const { businessId } = await context.params;
+export const POST = withBusinessRoute<{ businessId: string }>(
+  {
+    minRole: 'ADMIN',
+    rateLimit: {
+      key: (ctx) => `pro:tasks:create:${ctx.businessId}:${ctx.userId}`,
+      limit: 200,
+      windowMs: 60 * 60 * 1000,
+    },
+  },
+  async (ctx, req) => {
+    const { requestId, businessId: businessIdBigInt } = ctx;
 
-  const csrf = assertSameOrigin(request);
-  if (csrf) return withIdNoStore(csrf, requestId);
+    const delegateError = ensureTaskDelegate();
+    if (delegateError) return delegateError;
 
-  let userId: string;
-  try {
-    ({ userId } = await requireAuthPro(request));
-  } catch {
-    return withIdNoStore(unauthorized(), requestId);
-  }
-
-  const delegateError = ensureTaskDelegate(requestId);
-  if (delegateError) return delegateError;
-
-  const businessIdBigInt = parseId(businessId);
-  if (!businessIdBigInt) {
-    return withIdNoStore(badRequest('businessId invalide.'), requestId);
-  }
-
-  const business = await prisma.business.findUnique({ where: { id: businessIdBigInt } });
-  if (!business) return withIdNoStore(notFound('Entreprise introuvable.'), requestId);
-
-  const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'ADMIN');
-  if (!membership) return withIdNoStore(forbidden(), requestId);
-
-  const limited = rateLimit(request, {
-    key: `pro:tasks:create:${businessIdBigInt}:${userId}`,
-    limit: 200,
-    windowMs: 60 * 60 * 1000,
-  });
-  if (limited) return withIdNoStore(limited, requestId);
-
-  const body = await request.json().catch(() => null);
-  if (!body || typeof body !== 'object' || typeof (body as { title?: unknown }).title !== 'string') {
-    return withIdNoStore(badRequest('title requis.'), requestId);
-  }
-
-  const title = (body as { title: string }).title.trim();
-  if (!title) return withIdNoStore(badRequest('title ne peut pas être vide.'), requestId);
-  if (title.length > 200) return withIdNoStore(badRequest('title trop long (200 max).'), requestId);
-
-  let status: TaskStatus = TaskStatus.TODO;
-  if ('status' in body) {
-    if (!isValidStatus((body as { status?: unknown }).status)) {
-      return withIdNoStore(badRequest('status invalide.'), requestId);
+    const body = await req.json().catch(() => null);
+    if (!body || typeof body !== 'object' || typeof (body as { title?: unknown }).title !== 'string') {
+      return badRequest('title requis.');
     }
-    status = (body as { status: TaskStatus }).status;
-  }
 
-  let parentTaskId: bigint | undefined;
-  let parentTask: { projectId: bigint | null; projectServiceId: bigint | null } | null = null;
-  if ('parentTaskId' in body && (body as { parentTaskId?: unknown }).parentTaskId) {
-    const raw = (body as { parentTaskId?: unknown }).parentTaskId;
-    if (typeof raw !== 'string' || !/^\d+$/.test(raw)) {
-      return withIdNoStore(badRequest('parentTaskId invalide.'), requestId);
-    }
-    parentTaskId = BigInt(raw);
-    parentTask = await prisma.task.findFirst({
-      where: { id: parentTaskId, businessId: businessIdBigInt },
-      select: { projectId: true, projectServiceId: true },
-    });
-    if (!parentTask) {
-      return withIdNoStore(badRequest('parentTaskId doit appartenir au business.'), requestId);
-    }
-  }
+    const title = (body as { title: string }).title.trim();
+    if (!title) return badRequest('title ne peut pas être vide.');
+    if (title.length > 200) return badRequest('title trop long (200 max).');
 
-  let projectId: bigint | undefined;
-  if ('projectId' in body && (body as { projectId?: unknown }).projectId) {
-    const raw = (body as { projectId?: unknown }).projectId;
-    if (typeof raw !== 'string' || !/^\d+$/.test(raw)) {
-      return withIdNoStore(badRequest('projectId invalide.'), requestId);
+    let status: TaskStatus = TaskStatus.TODO;
+    if ('status' in body) {
+      if (!isValidStatus((body as { status?: unknown }).status)) {
+        return badRequest('status invalide.');
+      }
+      status = (body as { status: TaskStatus }).status;
     }
-    projectId = BigInt(raw);
-    const project = await prisma.project.findFirst({
-      where: { id: projectId, businessId: businessIdBigInt },
-      select: { id: true },
-    });
-    if (!project) {
-      return withIdNoStore(badRequest('projectId doit appartenir au business.'), requestId);
-    }
-  }
-  if (parentTask?.projectId) {
-    if (projectId && projectId !== parentTask.projectId) {
-      return withIdNoStore(badRequest('parentTaskId doit appartenir au même projet.'), requestId);
-    }
-    projectId = parentTask.projectId;
-  }
 
-  let projectServiceId: bigint | undefined;
-  if ('projectServiceId' in body && (body as { projectServiceId?: unknown }).projectServiceId) {
-    const raw = (body as { projectServiceId?: unknown }).projectServiceId;
-    if (typeof raw !== 'string' || !/^\d+$/.test(raw)) {
-      return withIdNoStore(badRequest('projectServiceId invalide.'), requestId);
+    let parentTaskId: bigint | undefined;
+    let parentTask: { projectId: bigint | null; projectServiceId: bigint | null } | null = null;
+    if ('parentTaskId' in body && (body as { parentTaskId?: unknown }).parentTaskId) {
+      const raw = (body as { parentTaskId?: unknown }).parentTaskId;
+      if (typeof raw !== 'string' || !/^\d+$/.test(raw)) {
+        return badRequest('parentTaskId invalide.');
+      }
+      parentTaskId = BigInt(raw);
+      parentTask = await prisma.task.findFirst({
+        where: { id: parentTaskId, businessId: businessIdBigInt },
+        select: { projectId: true, projectServiceId: true },
+      });
+      if (!parentTask) {
+        return badRequest('parentTaskId doit appartenir au business.');
+      }
     }
-    projectServiceId = BigInt(raw);
-    const projectService = await prisma.projectService.findFirst({
-      where: { id: projectServiceId },
-      select: { projectId: true, project: { select: { businessId: true } } },
-    });
-    if (!projectService || projectService.project.businessId !== businessIdBigInt) {
-      return withIdNoStore(badRequest('projectServiceId doit appartenir au business.'), requestId);
-    }
-    if (projectId && projectId !== projectService.projectId) {
-      return withIdNoStore(badRequest('projectServiceId doit appartenir au même projet.'), requestId);
-    }
-    if (!projectId) {
-      projectId = projectService.projectId;
-    }
-  }
-  if (parentTask?.projectServiceId) {
-    if (projectServiceId && projectServiceId !== parentTask.projectServiceId) {
-      return withIdNoStore(badRequest('parentTaskId doit appartenir au même service projet.'), requestId);
-    }
-    projectServiceId = projectServiceId ?? parentTask.projectServiceId;
-  }
 
-  let assigneeUserId: bigint | undefined;
-  if ('assigneeUserId' in body && (body as { assigneeUserId?: unknown }).assigneeUserId) {
-    const raw = (body as { assigneeUserId?: unknown }).assigneeUserId;
-    if (typeof raw !== 'string' || !/^\d+$/.test(raw)) {
-      return withIdNoStore(badRequest('assigneeUserId invalide.'), requestId);
+    let projectId: bigint | undefined;
+    if ('projectId' in body && (body as { projectId?: unknown }).projectId) {
+      const raw = (body as { projectId?: unknown }).projectId;
+      if (typeof raw !== 'string' || !/^\d+$/.test(raw)) {
+        return badRequest('projectId invalide.');
+      }
+      projectId = BigInt(raw);
+      const project = await prisma.project.findFirst({
+        where: { id: projectId, businessId: businessIdBigInt },
+        select: { id: true },
+      });
+      if (!project) {
+        return badRequest('projectId doit appartenir au business.');
+      }
     }
-    assigneeUserId = BigInt(raw);
-    const membershipAssignee = await prisma.businessMembership.findUnique({
-      where: { businessId_userId: { businessId: businessIdBigInt, userId: assigneeUserId } },
-    });
-    if (!membershipAssignee) {
-      return withIdNoStore(badRequest('assigneeUserId doit être membre du business.'), requestId);
+    if (parentTask?.projectId) {
+      if (projectId && projectId !== parentTask.projectId) {
+        return badRequest('parentTaskId doit appartenir au même projet.');
+      }
+      projectId = parentTask.projectId;
     }
-  }
 
-  let dueDate: Date | undefined;
-  if ('dueDate' in body && (body as { dueDate?: unknown }).dueDate) {
-    const raw = (body as { dueDate?: unknown }).dueDate;
-    if (typeof raw !== 'string') {
-      return withIdNoStore(badRequest('dueDate invalide.'), requestId);
+    let projectServiceId: bigint | undefined;
+    if ('projectServiceId' in body && (body as { projectServiceId?: unknown }).projectServiceId) {
+      const raw = (body as { projectServiceId?: unknown }).projectServiceId;
+      if (typeof raw !== 'string' || !/^\d+$/.test(raw)) {
+        return badRequest('projectServiceId invalide.');
+      }
+      projectServiceId = BigInt(raw);
+      const projectService = await prisma.projectService.findFirst({
+        where: { id: projectServiceId },
+        select: { projectId: true, project: { select: { businessId: true } } },
+      });
+      if (!projectService || projectService.project.businessId !== businessIdBigInt) {
+        return badRequest('projectServiceId doit appartenir au business.');
+      }
+      if (projectId && projectId !== projectService.projectId) {
+        return badRequest('projectServiceId doit appartenir au même projet.');
+      }
+      if (!projectId) {
+        projectId = projectService.projectId;
+      }
     }
-    const parsed = new Date(raw);
-    if (Number.isNaN(parsed.getTime())) {
-      return withIdNoStore(badRequest('dueDate invalide.'), requestId);
+    if (parentTask?.projectServiceId) {
+      if (projectServiceId && projectServiceId !== parentTask.projectServiceId) {
+        return badRequest('parentTaskId doit appartenir au même service projet.');
+      }
+      projectServiceId = projectServiceId ?? parentTask.projectServiceId;
     }
-    dueDate = parsed;
-  }
 
-  const categoryProvided = Object.prototype.hasOwnProperty.call(body, 'categoryReferenceId');
-  const categoryReferenceId =
-    categoryProvided && typeof (body as { categoryReferenceId?: unknown }).categoryReferenceId === 'string'
-      ? (() => {
-          const raw = (body as { categoryReferenceId: string }).categoryReferenceId;
-          return /^\d+$/.test(raw) ? BigInt(raw) : null;
-        })()
-      : categoryProvided
-        ? null
-        : undefined;
+    let assigneeUserId: bigint | undefined;
+    if ('assigneeUserId' in body && (body as { assigneeUserId?: unknown }).assigneeUserId) {
+      const raw = (body as { assigneeUserId?: unknown }).assigneeUserId;
+      if (typeof raw !== 'string' || !/^\d+$/.test(raw)) {
+        return badRequest('assigneeUserId invalide.');
+      }
+      assigneeUserId = BigInt(raw);
+      const membershipAssignee = await prisma.businessMembership.findUnique({
+        where: { businessId_userId: { businessId: businessIdBigInt, userId: assigneeUserId } },
+      });
+      if (!membershipAssignee) {
+        return badRequest('assigneeUserId doit être membre du business.');
+      }
+    }
 
-  const tagProvided = Object.prototype.hasOwnProperty.call(body, 'tagReferenceIds');
-  const tagReferenceIds: bigint[] | undefined = tagProvided
-    ? Array.from(
-        new Set(
-          ((Array.isArray((body as { tagReferenceIds?: unknown }).tagReferenceIds)
-            ? (body as { tagReferenceIds: unknown[] }).tagReferenceIds
-            : []) as unknown[])
-            .filter((id): id is string => typeof id === 'string' && /^\d+$/.test(id))
-            .map((id) => BigInt(id))
+    let dueDate: Date | undefined;
+    if ('dueDate' in body && (body as { dueDate?: unknown }).dueDate) {
+      const raw = (body as { dueDate?: unknown }).dueDate;
+      if (typeof raw !== 'string') {
+        return badRequest('dueDate invalide.');
+      }
+      const parsed = new Date(raw);
+      if (Number.isNaN(parsed.getTime())) {
+        return badRequest('dueDate invalide.');
+      }
+      dueDate = parsed;
+    }
+
+    const categoryProvided = Object.prototype.hasOwnProperty.call(body, 'categoryReferenceId');
+    const categoryReferenceId =
+      categoryProvided && typeof (body as { categoryReferenceId?: unknown }).categoryReferenceId === 'string'
+        ? (() => {
+            const raw = (body as { categoryReferenceId: string }).categoryReferenceId;
+            return /^\d+$/.test(raw) ? BigInt(raw) : null;
+          })()
+        : categoryProvided
+          ? null
+          : undefined;
+
+    const tagProvided = Object.prototype.hasOwnProperty.call(body, 'tagReferenceIds');
+    const tagReferenceIds: bigint[] | undefined = tagProvided
+      ? Array.from(
+          new Set(
+            ((Array.isArray((body as { tagReferenceIds?: unknown }).tagReferenceIds)
+              ? (body as { tagReferenceIds: unknown[] }).tagReferenceIds
+              : []) as unknown[])
+              .filter((id): id is string => typeof id === 'string' && /^\d+$/.test(id))
+              .map((id) => BigInt(id))
+          )
         )
-      )
-    : undefined;
+      : undefined;
 
-  const validated = await validateCategoryAndTags(businessIdBigInt, categoryReferenceId ?? null, tagReferenceIds);
-  if ('error' in validated) {
-    return withIdNoStore(badRequest(validated.error), requestId);
+    const validated = await validateCategoryAndTags(businessIdBigInt, categoryReferenceId ?? null, tagReferenceIds);
+    if ('error' in validated) {
+      return badRequest(validated.error);
+    }
+
+    const task = await prisma.task.create({
+      data: {
+        businessId: businessIdBigInt,
+        projectId,
+        projectServiceId,
+        parentTaskId,
+        assigneeUserId,
+        title,
+        status,
+        progress: status === TaskStatus.DONE ? 100 : undefined,
+        completedAt: status === TaskStatus.DONE ? new Date() : undefined,
+        dueDate,
+        categoryReferenceId: validated.categoryId ?? undefined,
+        tags:
+          validated.tagIds.length > 0
+            ? {
+                create: validated.tagIds.map((id) => ({ referenceId: id })),
+              }
+            : undefined,
+      },
+      include: {
+        project: { select: { name: true } },
+        assignee: { select: { id: true, email: true, name: true } },
+        categoryReference: { select: { id: true, name: true } },
+        tags: { include: { reference: { select: { id: true, name: true } } } },
+      },
+    });
+
+    return jsonbCreated({ item: serializeTask(task) }, requestId);
   }
-
-  const task = await prisma.task.create({
-    data: {
-      businessId: businessIdBigInt,
-      projectId,
-      projectServiceId,
-      parentTaskId,
-      assigneeUserId,
-      title,
-      status,
-      progress: status === TaskStatus.DONE ? 100 : undefined,
-      completedAt: status === TaskStatus.DONE ? new Date() : undefined,
-      dueDate,
-      categoryReferenceId: validated.categoryId ?? undefined,
-      tags:
-        validated.tagIds.length > 0
-          ? {
-              create: validated.tagIds.map((id) => ({ referenceId: id })),
-            }
-          : undefined,
-    },
-    include: {
-      project: { select: { name: true } },
-      assignee: { select: { id: true, email: true, name: true } },
-      categoryReference: { select: { id: true, name: true } },
-      tags: { include: { reference: { select: { id: true, name: true } } } },
-    },
-  });
-
-  return withIdNoStore(jsonNoStore({ item: serializeTask(task) }, { status: 201 }), requestId);
-}
+);

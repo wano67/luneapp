@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
+import { formatCentsToEuroInput, parseEuroToCents, sanitizeEuroInput } from '@/lib/money';
 import { useActiveBusiness } from '../../../ActiveBusinessProvider';
 import { ReferencePicker } from '../../references/ReferencePicker';
 
@@ -39,7 +40,7 @@ type ServiceDetail = {
   updatedAt: string;
 };
 
-type ServiceDetailResponse = ServiceDetail;
+type ServiceDetailResponse = { item: ServiceDetail };
 
 type FormState = {
   code: string;
@@ -116,8 +117,8 @@ export default function ServiceDetailPage() {
       name: value.name,
       type: value.type ?? '',
       description: value.description ?? '',
-      defaultPrice: value.defaultPriceCents ? (Number(value.defaultPriceCents) / 100).toString() : '',
-      tjm: value.tjmCents ? (Number(value.tjmCents) / 100).toString() : '',
+      defaultPrice: formatCentsToEuroInput(value.defaultPriceCents),
+      tjm: formatCentsToEuroInput(value.tjmCents),
       durationHours: value.durationHours != null ? String(value.durationHours) : '',
       vatRate: value.vatRate != null ? String(value.vatRate) : '',
       categoryReferenceId: value.categoryReferenceId ?? '',
@@ -144,14 +145,14 @@ export default function ServiceDetailPage() {
       );
       if (effectiveSignal?.aborted) return;
       setRequestId(res.requestId);
-      if (!res.ok || !res.data) {
+      if (!res.ok || !res.data?.item) {
         const msg = res.error ?? 'Service introuvable.';
         setError(res.requestId ? `${msg} (Ref: ${res.requestId})` : msg);
         setService(null);
         return;
       }
-      setService(res.data);
-      setForm(mapToForm(res.data));
+      setService(res.data.item);
+      setForm(mapToForm(res.data.item));
     } catch (err) {
       if (effectiveSignal?.aborted) return;
       setError(getErrorMessage(err));
@@ -178,14 +179,14 @@ export default function ServiceDetailPage() {
     setFormError(null);
     setInfo(null);
 
-    const priceNum = form.defaultPrice.trim() ? Number(form.defaultPrice) : null;
-    const tjmNum = form.tjm.trim() ? Number(form.tjm) : null;
+    const priceNum = form.defaultPrice.trim() ? parseEuroToCents(form.defaultPrice) : null;
+    const tjmNum = form.tjm.trim() ? parseEuroToCents(form.tjm) : null;
     const durationNum = form.durationHours.trim() ? Number(form.durationHours) : null;
     const vatNum = form.vatRate.trim() ? Number(form.vatRate) : null;
 
     if (
-      (priceNum != null && Number.isNaN(priceNum)) ||
-      (tjmNum != null && Number.isNaN(tjmNum)) ||
+      (priceNum != null && !Number.isFinite(priceNum)) ||
+      (tjmNum != null && !Number.isFinite(tjmNum)) ||
       (durationNum != null && Number.isNaN(durationNum)) ||
       (vatNum != null && Number.isNaN(vatNum))
     ) {
@@ -202,8 +203,8 @@ export default function ServiceDetailPage() {
       categoryReferenceId: form.categoryReferenceId || null,
       tagReferenceIds: form.tagReferenceIds,
     };
-    if (priceNum != null) payload.defaultPriceCents = Math.round(priceNum * 100);
-    if (tjmNum != null) payload.tjmCents = Math.round(tjmNum * 100);
+    if (priceNum != null) payload.defaultPriceCents = priceNum;
+    if (tjmNum != null) payload.tjmCents = tjmNum;
     if (durationNum != null) payload.durationHours = durationNum;
     if (vatNum != null) payload.vatRate = vatNum;
 
@@ -213,15 +214,15 @@ export default function ServiceDetailPage() {
       body: JSON.stringify(payload),
     });
     setRequestId(res.requestId);
-    if (!res.ok || !res.data) {
+    if (!res.ok || !res.data?.item) {
       const msg = res.error ?? 'Impossible de sauvegarder.';
       setFormError(res.requestId ? `${msg} (Ref: ${res.requestId})` : msg);
       setSaving(false);
       return;
     }
 
-    setService(res.data);
-    setForm(mapToForm(res.data));
+    setService(res.data.item);
+    setForm(mapToForm(res.data.item));
     setSaving(false);
     setInfo('Service mis à jour.');
   }
@@ -352,15 +353,19 @@ export default function ServiceDetailPage() {
               <Input
                 label="Prix par défaut (€ HT)"
                 value={form.defaultPrice}
-                onChange={(e) => setForm((prev) => ({ ...prev, defaultPrice: e.target.value }))}
+                onChange={(e) => setForm((prev) => ({ ...prev, defaultPrice: sanitizeEuroInput(e.target.value) }))}
                 placeholder="1500"
+                type="text"
+                inputMode="decimal"
                 disabled={!isAdmin || saving}
               />
               <Input
                 label="TJM (€ HT)"
                 value={form.tjm}
-                onChange={(e) => setForm((prev) => ({ ...prev, tjm: e.target.value }))}
+                onChange={(e) => setForm((prev) => ({ ...prev, tjm: sanitizeEuroInput(e.target.value) }))}
                 placeholder="800"
+                type="text"
+                inputMode="decimal"
                 disabled={!isAdmin || saving}
               />
               <Input

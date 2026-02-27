@@ -1,4 +1,3 @@
-import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/server/db/client';
 import {
   BusinessReferenceType,
@@ -15,28 +14,15 @@ import {
   type ProjectScope,
 } from '@/server/queries/projects';
 import { resolveServiceUnitPriceCents } from '@/server/services/pricing';
-import { requireBusinessRole } from '@/server/auth/businessRole';
-import { assertSameOrigin, jsonNoStore, withNoStore } from '@/server/security/csrf';
-import { rateLimit } from '@/server/security/rateLimit';
-import { requireAuthPro } from '@/server/auth/requireAuthPro';
-import {
-  badRequest,
-  forbidden,
-  getRequestId,
-  notFound,
-  unauthorized,
-  withRequestId,
-} from '@/server/http/apiUtils';
+import { pickProjectValueCents } from '@/server/billing/summary';
+import { withBusinessRoute } from '@/server/http/routeHandler';
+import { jsonb } from '@/server/http/json';
+import { badRequest, withIdNoStore } from '@/server/http/apiUtils';
 
-function parseId(param: string | undefined) {
-  if (!param || !/^\d+$/.test(param)) {
-    return null;
-  }
-  try {
-    return BigInt(param);
-  } catch {
-    return null;
-  }
+// Null-returning ID parser pour les query params (comportement "soft" intentionnel)
+function parseId(param: string | undefined | null): bigint | null {
+  if (!param || !/^\d+$/.test(param)) return null;
+  try { return BigInt(param); } catch { return null; }
 }
 
 function parseScope(value: string | null): ProjectScope | null {
@@ -65,10 +51,6 @@ function applyDiscount(params: {
     return final > BigInt(0) ? final : BigInt(0);
   }
   return params.unitPriceCents;
-}
-
-function withIdNoStore(res: NextResponse, requestId: string) {
-  return withNoStore(withRequestId(res, requestId));
 }
 
 async function validateCategoryAndTags(
@@ -110,28 +92,8 @@ async function validateCategoryAndTags(
 }
 
 // GET /api/pro/businesses/{businessId}/projects
-export async function GET(
-  request: NextRequest,
-  context: { params: Promise<{ businessId: string }> }
-) {
-  const requestId = getRequestId(request);
-  const { businessId } = await context.params;
-
-  let userId: string;
-  try {
-    ({ userId } = await requireAuthPro(request));
-  } catch {
-    return withIdNoStore(unauthorized(), requestId);
-  }
-
-  const businessIdBigInt = parseId(businessId);
-  if (!businessIdBigInt) {
-    return withIdNoStore(badRequest('businessId invalide.'), requestId);
-  }
-  const business = await prisma.business.findUnique({ where: { id: businessIdBigInt } });
-  if (!business) return withIdNoStore(notFound('Entreprise introuvable.'), requestId);
-  const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'VIEWER');
-  if (!membership) return withIdNoStore(forbidden(), requestId);
+export const GET = withBusinessRoute({ minRole: 'VIEWER' }, async (ctx, request) => {
+  const { requestId, businessId: businessIdBigInt } = ctx;
 
   const { searchParams } = new URL(request.url);
   const scopeParam = searchParams.get('scope');
@@ -291,11 +253,10 @@ export async function GET(
     }
   }
 
-  return withIdNoStore(
-    jsonNoStore({
-      counts,
-      totalCount,
-      items: projects.map((p) => ({
+  return jsonb({
+    counts,
+    totalCount,
+    items: projects.map((p) => ({
         id: p.id.toString(),
         businessId: p.businessId.toString(),
         clientId: p.clientId ? p.clientId.toString() : null,
@@ -317,10 +278,11 @@ export async function GET(
           const billingQuote = p.billingQuoteId ? billingQuoteById.get(p.billingQuoteId) : null;
           const latestSigned = latestSignedByProject.get(p.id);
           const serviceTotal = totalsByProject.get(p.id);
-          const value =
-            billingQuote?.totalCents ??
-            latestSigned?.totalCents ??
-            (serviceTotal?.count ? serviceTotal.total : null);
+          const value = pickProjectValueCents({
+            billingQuoteTotal: billingQuote?.totalCents ?? null,
+            latestSignedTotal: latestSigned?.totalCents ?? null,
+            serviceTotal: serviceTotal?.count ? serviceTotal.total : null,
+          });
           return value != null ? value.toString() : null;
         })(),
         progress: progressByProject.get(p.id)?.progressPct ?? 0,
@@ -333,44 +295,21 @@ export async function GET(
             }
           : { total: 0, open: 0, done: 0, progressPct: 0 },
       })),
-    }),
-    requestId
-  );
-}
+    }, requestId);
+});
 
 // POST /api/pro/businesses/{businessId}/projects
-export async function POST(
-  request: NextRequest,
-  context: { params: Promise<{ businessId: string }> }
-) {
-  const requestId = getRequestId(request);
-  const { businessId } = await context.params;
-
-  const csrf = assertSameOrigin(request);
-  if (csrf) return withIdNoStore(csrf, requestId);
-
-  let userId: string;
-  try {
-    ({ userId } = await requireAuthPro(request));
-  } catch {
-    return withIdNoStore(unauthorized(), requestId);
-  }
-
-  const businessIdBigInt = parseId(businessId);
-  if (!businessIdBigInt) {
-    return withIdNoStore(badRequest('businessId invalide.'), requestId);
-  }
-  const business = await prisma.business.findUnique({ where: { id: businessIdBigInt } });
-  if (!business) return withIdNoStore(notFound('Entreprise introuvable.'), requestId);
-  const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'ADMIN');
-  if (!membership) return withIdNoStore(forbidden(), requestId);
-
-  const limited = rateLimit(request, {
-    key: `pro:projects:create:${businessIdBigInt}:${userId.toString()}`,
-    limit: 120,
-    windowMs: 60 * 60 * 1000,
-  });
-  if (limited) return withIdNoStore(limited, requestId);
+export const POST = withBusinessRoute(
+  {
+    minRole: 'ADMIN',
+    rateLimit: {
+      key: (ctx) => `pro:projects:create:${ctx.businessId}:${ctx.userId}`,
+      limit: 120,
+      windowMs: 60 * 60 * 1000,
+    },
+  },
+  async (ctx, request) => {
+  const { requestId, businessId: businessIdBigInt } = ctx;
 
   const body = await request.json().catch(() => null);
   if (!body || typeof body.name !== 'string') {
@@ -459,9 +398,9 @@ export async function POST(
     },
   });
 
-  return withIdNoStore(
-    jsonNoStore(
-      {
+  return jsonb(
+    {
+      item: {
         id: project.id.toString(),
         businessId: project.businessId.toString(),
         clientId: project.clientId ? project.clientId.toString() : null,
@@ -478,8 +417,9 @@ export async function POST(
         createdAt: project.createdAt.toISOString(),
         updatedAt: project.updatedAt.toISOString(),
       },
-      { status: 201 }
-    ),
-    requestId
+    },
+    requestId,
+    { status: 201 }
   );
-}
+  }
+);

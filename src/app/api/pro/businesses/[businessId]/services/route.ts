@@ -1,27 +1,14 @@
-import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/server/db/client';
-import { requireAuthPro } from '@/server/auth/requireAuthPro';
-import { requireBusinessRole } from '@/server/auth/businessRole';
-import { assertSameOrigin, jsonNoStore, withNoStore } from '@/server/security/csrf';
-import { rateLimit } from '@/server/security/rateLimit';
-import { badRequest, getRequestId, unauthorized, withRequestId } from '@/server/http/apiUtils';
+import { withBusinessRoute } from '@/server/http/routeHandler';
+import { jsonb } from '@/server/http/json';
+import { badRequest, withIdNoStore } from '@/server/http/apiUtils';
 import { BusinessReferenceType, TaskPhase } from '@/generated/prisma';
+import { parseCentsInput } from '@/lib/money';
 
-function withIdNoStore(res: NextResponse, requestId: string) {
-  return withNoStore(withRequestId(res, requestId));
-}
-
-function forbidden(requestId: string) {
-  return withIdNoStore(NextResponse.json({ error: 'Forbidden' }, { status: 403 }), requestId);
-}
-
-function parseId(param: string | undefined) {
+// Null-returning ID parser pour les query params (comportement "soft" intentionnel)
+function parseId(param: string | undefined | null): bigint | null {
   if (!param || !/^\d+$/.test(param)) return null;
-  try {
-    return BigInt(param);
-  } catch {
-    return null;
-  }
+  try { return BigInt(param); } catch { return null; }
 }
 
 function normalizeStr(v: unknown) {
@@ -68,14 +55,11 @@ function validateServiceBody(body: unknown): ServiceBodyParsed {
   const name = normalizeStr(body.name);
   const type = normalizeStr(body.type);
   const description = normalizeStr(body.description);
+  const defaultPriceCentsRaw = parseCentsInput((body as { defaultPriceCents?: unknown }).defaultPriceCents);
   const defaultPriceCents =
-    typeof body.defaultPriceCents === 'number' && Number.isFinite(body.defaultPriceCents)
-      ? Math.max(0, Math.trunc(body.defaultPriceCents))
-      : null;
-  const tjmCents =
-    typeof body.tjmCents === 'number' && Number.isFinite(body.tjmCents)
-      ? Math.max(0, Math.trunc(body.tjmCents))
-      : null;
+    defaultPriceCentsRaw != null ? Math.max(0, Math.trunc(defaultPriceCentsRaw)) : null;
+  const tjmCentsRaw = parseCentsInput((body as { tjmCents?: unknown }).tjmCents);
+  const tjmCents = tjmCentsRaw != null ? Math.max(0, Math.trunc(tjmCentsRaw)) : null;
   const durationHours =
     typeof body.durationHours === 'number' && Number.isFinite(body.durationHours)
       ? Math.max(0, Math.trunc(body.durationHours))
@@ -153,13 +137,7 @@ function validateServiceBody(body: unknown): ServiceBodyParsed {
 
 function ensureServiceDelegate(requestId: string) {
   if (!(prisma as { service?: unknown }).service) {
-    return withIdNoStore(
-      NextResponse.json(
-        { error: 'Prisma client not generated / wrong import (service delegate absent).' },
-        { status: 500 }
-      ),
-      requestId
-    );
+    return jsonb({ error: 'Prisma client not generated / wrong import (service delegate absent).' }, requestId, { status: 500 });
   }
   return null;
 }
@@ -205,26 +183,11 @@ async function validateCategoryAndTags(
 }
 
 // GET /api/pro/businesses/{businessId}/services
-export async function GET(
-  request: NextRequest,
-  context: { params: Promise<{ businessId: string }> }
-) {
-  const requestId = getRequestId(request);
-  let userId: string;
-  try {
-    ({ userId } = await requireAuthPro(request));
-  } catch {
-    return withIdNoStore(unauthorized(), requestId);
-  }
-  const { businessId } = await context.params;
-  const businessIdBigInt = parseId(businessId);
-  if (!businessIdBigInt) return withIdNoStore(badRequest('businessId invalide.'), requestId);
+export const GET = withBusinessRoute({ minRole: 'VIEWER' }, async (ctx, request) => {
+  const { requestId, businessId: businessIdBigInt } = ctx;
 
   const delegateError = ensureServiceDelegate(requestId);
   if (delegateError) return delegateError;
-
-  const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'VIEWER');
-  if (!membership) return forbidden(requestId);
 
   const { searchParams } = new URL(request.url);
   const q = searchParams.get('q')?.trim();
@@ -265,63 +228,36 @@ export async function GET(
     },
   });
 
-  return withIdNoStore(
-    jsonNoStore({
-      items: services.map((s) => ({
-        id: s.id.toString(),
-        businessId: s.businessId.toString(),
-        code: s.code,
-        name: s.name,
-        type: s.type,
-        description: s.description,
-        categoryReferenceId: s.categoryReferenceId ? s.categoryReferenceId.toString() : null,
-        categoryReferenceName: s.categoryReference?.name ?? null,
-        tagReferences: s.tags.map((t) => ({ id: t.reference.id.toString(), name: t.reference.name })),
-        defaultPriceCents: s.defaultPriceCents?.toString() ?? null,
-        tjmCents: s.tjmCents?.toString() ?? null,
-        durationHours: s.durationHours,
-        vatRate: s.vatRate,
-        templateCount: s._count?.taskTemplates ?? 0,
-        createdAt: s.createdAt.toISOString(),
-        updatedAt: s.updatedAt.toISOString(),
-      })),
-    }),
-    requestId
-  );
-}
+  return jsonb({
+    items: services.map((s) => ({
+      id: s.id.toString(),
+      businessId: s.businessId.toString(),
+      code: s.code,
+      name: s.name,
+      type: s.type,
+      description: s.description,
+      categoryReferenceId: s.categoryReferenceId ? s.categoryReferenceId.toString() : null,
+      categoryReferenceName: s.categoryReference?.name ?? null,
+      tagReferences: s.tags.map((t) => ({ id: t.reference.id.toString(), name: t.reference.name })),
+      defaultPriceCents: s.defaultPriceCents?.toString() ?? null,
+      tjmCents: s.tjmCents?.toString() ?? null,
+      durationHours: s.durationHours,
+      vatRate: s.vatRate,
+      templateCount: s._count?.taskTemplates ?? 0,
+      createdAt: s.createdAt.toISOString(),
+      updatedAt: s.updatedAt.toISOString(),
+    })),
+  }, requestId);
+});
 
 // POST /api/pro/businesses/{businessId}/services
-export async function POST(
-  request: NextRequest,
-  context: { params: Promise<{ businessId: string }> }
-) {
-  const requestId = getRequestId(request);
-  const csrf = assertSameOrigin(request);
-  if (csrf) return withIdNoStore(csrf, requestId);
-
-  let userId: string;
-  try {
-    ({ userId } = await requireAuthPro(request));
-  } catch {
-    return withIdNoStore(unauthorized(), requestId);
-  }
-
-  const { businessId } = await context.params;
-  const businessIdBigInt = parseId(businessId);
-  if (!businessIdBigInt) return withIdNoStore(badRequest('businessId invalide.'), requestId);
-
-  const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'ADMIN');
-  if (!membership) return forbidden(requestId);
+export const POST = withBusinessRoute(
+  { minRole: 'ADMIN', rateLimit: { key: (ctx) => `pro:services:create:${ctx.businessId}:${ctx.userId}`, limit: 120, windowMs: 60 * 60 * 1000 } },
+  async (ctx, request) => {
+  const { requestId, businessId: businessIdBigInt } = ctx;
 
   const delegateError = ensureServiceDelegate(requestId);
   if (delegateError) return delegateError;
-
-  const limited = rateLimit(request, {
-    key: `pro:services:create:${businessIdBigInt}:${userId}`,
-    limit: 120,
-    windowMs: 60 * 60 * 1000,
-  });
-  if (limited) return withIdNoStore(limited, requestId);
 
   const body = await request.json().catch(() => null);
   const parsed = validateServiceBody(body);
@@ -369,9 +305,9 @@ export async function POST(
       include: { taskTemplates: true },
     });
 
-    return withIdNoStore(
-      NextResponse.json(
-        {
+    return jsonb(
+      {
+        item: {
           id: created.id.toString(),
           businessId: created.businessId.toString(),
           code: created.code,
@@ -395,12 +331,13 @@ export async function POST(
           createdAt: created.createdAt.toISOString(),
           updatedAt: created.updatedAt.toISOString(),
         },
-        { status: 201 }
-      ),
-      requestId
+      },
+      requestId,
+      { status: 201 }
     );
   } catch (err) {
     console.error(err);
     return withIdNoStore(badRequest('Création impossible.'), requestId);
   }
-}
+  }
+);

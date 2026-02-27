@@ -1,32 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/server/db/client';
 import { QuoteStatus } from '@/generated/prisma';
-import { requireAuthPro } from '@/server/auth/requireAuthPro';
-import { requireBusinessRole } from '@/server/auth/businessRole';
-import { assertSameOrigin, jsonNoStore, withNoStore } from '@/server/security/csrf';
-import { rateLimit } from '@/server/security/rateLimit';
-import {
-  badRequest,
-  forbidden,
-  getRequestId,
-  notFound,
-  unauthorized,
-  withRequestId,
-} from '@/server/http/apiUtils';
+import { withBusinessRoute } from '@/server/http/routeHandler';
+import { jsonb, jsonbCreated } from '@/server/http/json';
+import { badRequest, notFound } from '@/server/http/apiUtils';
 import { computeProjectPricing } from '@/server/services/pricing';
-
-function parseId(param: string | undefined) {
-  if (!param || !/^\d+$/.test(param)) return null;
-  try {
-    return BigInt(param);
-  } catch {
-    return null;
-  }
-}
-
-function withIdNoStore(res: NextResponse, requestId: string) {
-  return withNoStore(withRequestId(res, requestId));
-}
 
 function serializeQuote(
   quote: {
@@ -112,143 +89,104 @@ function serializeQuote(
 }
 
 // GET /api/pro/businesses/{businessId}/projects/{projectId}/quotes
-export async function GET(
-  request: NextRequest,
-  context: { params: Promise<{ businessId: string; projectId: string }> }
-) {
-  const requestId = getRequestId(request);
-  const { businessId, projectId } = await context.params;
+export const GET = withBusinessRoute<{ businessId: string; projectId: string }>(
+  { minRole: 'VIEWER' },
+  async (ctx, _req, params) => {
+    const { requestId, businessId: businessIdBigInt } = ctx;
+    const projectId = params?.projectId;
+    if (!projectId || !/^\d+$/.test(projectId)) return badRequest('projectId invalide.');
+    const projectIdBigInt = BigInt(projectId);
 
-  let userId: string;
-  try {
-    ({ userId } = await requireAuthPro(request));
-  } catch {
-    return withIdNoStore(unauthorized(), requestId);
+    const project = await prisma.project.findFirst({
+      where: { id: projectIdBigInt, businessId: businessIdBigInt },
+      select: { id: true },
+    });
+    if (!project) return notFound('Projet introuvable.');
+
+    const quotes = await prisma.quote.findMany({
+      where: { businessId: businessIdBigInt, projectId: projectIdBigInt },
+      orderBy: { createdAt: 'desc' },
+      include: { items: { orderBy: { id: 'asc' } } },
+    });
+
+    return jsonb({ items: quotes.map((q) => serializeQuote(q, { includeItems: true })) }, requestId);
   }
-
-  const businessIdBigInt = parseId(businessId);
-  const projectIdBigInt = parseId(projectId);
-  if (!businessIdBigInt || !projectIdBigInt) {
-    return withIdNoStore(badRequest('businessId ou projectId invalide.'), requestId);
-  }
-
-  const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'VIEWER');
-  if (!membership) return withIdNoStore(forbidden(), requestId);
-
-  const project = await prisma.project.findFirst({
-    where: { id: projectIdBigInt, businessId: businessIdBigInt },
-    select: { id: true },
-  });
-  if (!project) return withIdNoStore(notFound('Projet introuvable.'), requestId);
-
-  const quotes = await prisma.quote.findMany({
-    where: { businessId: businessIdBigInt, projectId: projectIdBigInt },
-    orderBy: { createdAt: 'desc' },
-    include: { items: { orderBy: { id: 'asc' } } },
-  });
-
-  return withIdNoStore(jsonNoStore({ items: quotes.map((q) => serializeQuote(q, { includeItems: true })) }), requestId);
-}
+);
 
 // POST /api/pro/businesses/{businessId}/projects/{projectId}/quotes
-export async function POST(
-  request: NextRequest,
-  context: { params: Promise<{ businessId: string; projectId: string }> }
-) {
-  const requestId = getRequestId(request);
-  const csrf = assertSameOrigin(request);
-  if (csrf) return withIdNoStore(csrf, requestId);
+export const POST = withBusinessRoute<{ businessId: string; projectId: string }>(
+  {
+    minRole: 'ADMIN',
+    rateLimit: {
+      key: (ctx) => `pro:quotes:create:${ctx.businessId}:${ctx.userId}`,
+      limit: 50,
+      windowMs: 60 * 60 * 1000,
+    },
+  },
+  async (ctx, _req, params) => {
+    const { requestId, businessId: businessIdBigInt, userId } = ctx;
+    const projectId = params?.projectId;
+    if (!projectId || !/^\d+$/.test(projectId)) return badRequest('projectId invalide.');
+    const projectIdBigInt = BigInt(projectId);
 
-  const { businessId, projectId } = await context.params;
-  const businessIdBigInt = parseId(businessId);
-  const projectIdBigInt = parseId(projectId);
-  if (!businessIdBigInt || !projectIdBigInt) {
-    return withIdNoStore(badRequest('businessId ou projectId invalide.'), requestId);
-  }
+    const pricing = await computeProjectPricing(businessIdBigInt, projectIdBigInt);
+    if (!pricing) return notFound('Projet introuvable.');
+    if (pricing.items.length === 0) {
+      return badRequest('Cannot create a quote with no billable items. Add services to the project first.');
+    }
+    if (pricing.missingPriceServices?.length) {
+      const names = pricing.missingPriceServices.map((item) => item.label).join(', ');
+      return badRequest(`Prix manquant pour les services suivants: ${names}. Definissez un tarif avant de creer un devis.`);
+    }
 
-  let userId: string;
-  try {
-    ({ userId } = await requireAuthPro(request));
-  } catch {
-    return withIdNoStore(unauthorized(), requestId);
-  }
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 30);
 
-  const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'ADMIN');
-  if (!membership) return withIdNoStore(forbidden(), requestId);
-
-  const limited = rateLimit(request, {
-    key: `pro:quotes:create:${businessIdBigInt}:${userId}`,
-    limit: 50,
-    windowMs: 60 * 60 * 1000,
-  });
-  if (limited) return withIdNoStore(limited, requestId);
-
-  const pricing = await computeProjectPricing(businessIdBigInt, projectIdBigInt);
-  if (!pricing) return withIdNoStore(notFound('Projet introuvable.'), requestId);
-  if (pricing.items.length === 0) {
-    return withIdNoStore(
-      badRequest('Cannot create a quote with no billable items. Add services to the project first.'),
-      requestId
-    );
-  }
-  if (pricing.missingPriceServices?.length) {
-    const names = pricing.missingPriceServices.map((item) => item.label).join(', ');
-    return withIdNoStore(
-      badRequest(`Prix manquant pour les services suivants: ${names}. Definissez un tarif avant de creer un devis.`),
-      requestId
-    );
-  }
-
-  const expiresAt = new Date();
-  expiresAt.setDate(expiresAt.getDate() + 30);
-
-  const quote = await prisma.$transaction(async (tx) => {
-    const created = await tx.quote.create({
-      data: {
-        businessId: businessIdBigInt,
-        projectId: projectIdBigInt,
-        clientId: pricing.clientId ?? undefined,
-        createdByUserId: BigInt(userId),
-        status: QuoteStatus.DRAFT,
-        depositPercent: pricing.depositPercent,
-        currency: pricing.currency,
-        totalCents: pricing.totalCents,
-        depositCents: pricing.depositCents,
-        balanceCents: pricing.balanceCents,
-        expiresAt,
-        items: {
-          create: pricing.items.map((item) => ({
-            serviceId: item.serviceId ?? undefined,
-            label: item.label,
-            description: item.description ?? undefined,
-            discountType: item.discountType ?? 'NONE',
-            discountValue: item.discountValue ?? undefined,
-            originalUnitPriceCents: item.originalUnitPriceCents ?? undefined,
-            unitLabel: item.unitLabel ?? undefined,
-            billingUnit: item.billingUnit ?? 'ONE_OFF',
-            quantity: item.quantity,
-            unitPriceCents: item.unitPriceCents,
-            totalCents: item.totalCents,
-          })),
+    const quote = await prisma.$transaction(async (tx) => {
+      const created = await tx.quote.create({
+        data: {
+          businessId: businessIdBigInt,
+          projectId: projectIdBigInt,
+          clientId: pricing.clientId ?? undefined,
+          createdByUserId: userId,
+          status: QuoteStatus.DRAFT,
+          depositPercent: pricing.depositPercent,
+          currency: pricing.currency,
+          totalCents: pricing.totalCents,
+          depositCents: pricing.depositCents,
+          balanceCents: pricing.balanceCents,
+          expiresAt,
+          items: {
+            create: pricing.items.map((item) => ({
+              serviceId: item.serviceId ?? undefined,
+              label: item.label,
+              description: item.description ?? undefined,
+              discountType: item.discountType ?? 'NONE',
+              discountValue: item.discountValue ?? undefined,
+              originalUnitPriceCents: item.originalUnitPriceCents ?? undefined,
+              unitLabel: item.unitLabel ?? undefined,
+              billingUnit: item.billingUnit ?? 'ONE_OFF',
+              quantity: item.quantity,
+              unitPriceCents: item.unitPriceCents,
+              totalCents: item.totalCents,
+            })),
+          },
         },
-      },
-      include: { items: true },
+        include: { items: true },
+      });
+      return created;
     });
-    return created;
-  });
 
-  const payload = serializeQuote(quote, { includeItems: true });
-  const basePath = `/api/pro/businesses/${businessId}/quotes/${payload.id}`;
+    const payload = serializeQuote(quote, { includeItems: true });
+    const basePath = `/api/pro/businesses/${businessIdBigInt}/quotes/${payload.id}`;
 
-  return withIdNoStore(
-    jsonNoStore(
+    return jsonbCreated(
       {
-        quote: payload,
+        item: payload,
         pdfUrl: `${basePath}/pdf`,
         downloadUrl: `${basePath}/pdf`,
       },
-      { status: 201 }
-    ),
-    requestId
-  );
-}
+      requestId
+    );
+  }
+);

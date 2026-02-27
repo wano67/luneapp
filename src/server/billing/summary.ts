@@ -10,6 +10,7 @@ export type BillingSummary = {
   currency: string;
   source: 'QUOTE' | 'PRICING';
   referenceQuoteId: bigint | null;
+  plannedValueCents: bigint;
   totalCents: bigint;
   depositPercent: number;
   depositCents: bigint;
@@ -17,8 +18,22 @@ export type BillingSummary = {
   alreadyInvoicedCents: bigint;
   alreadyPaidCents: bigint;
   remainingToCollectCents: bigint;
+  remainingToInvoiceCents: bigint;
   remainingCents: bigint;
 };
+
+export function pickProjectValueCents(params: {
+  billingQuoteTotal?: bigint | null;
+  latestSignedTotal?: bigint | null;
+  serviceTotal?: bigint | null;
+}) {
+  return (
+    params.billingQuoteTotal ??
+    params.latestSignedTotal ??
+    params.serviceTotal ??
+    null
+  );
+}
 
 type ReferenceQuote = {
   id: bigint;
@@ -176,6 +191,7 @@ export async function computeProjectBillingSummary(
     currency,
     source: referenceQuote ? 'QUOTE' : 'PRICING',
     referenceQuoteId: referenceQuote?.id ?? null,
+    plannedValueCents: totalCents,
     totalCents,
     depositPercent,
     depositCents,
@@ -183,6 +199,7 @@ export async function computeProjectBillingSummary(
     alreadyInvoicedCents,
     alreadyPaidCents,
     remainingToCollectCents,
+    remainingToInvoiceCents: remainingCents,
     remainingCents,
   };
 }

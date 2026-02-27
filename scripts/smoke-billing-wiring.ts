@@ -109,7 +109,9 @@ async function main() {
     }
   );
   if (!createSvcRes.ok) throw new Error(`Create service failed (${createSvcRes.status}) ref=${getLastRequestId()}`);
-  const serviceId = (createSvcJson as { id?: string })?.id;
+  const serviceId =
+    (createSvcJson as { item?: { id?: string }; id?: string })?.item?.id ??
+    (createSvcJson as { id?: string })?.id;
   if (!serviceId) throw new Error('Service creation returned no id.');
 
   console.log('Create task template for service…');
@@ -135,7 +137,9 @@ async function main() {
     }
   );
   if (!createSvcRes2.ok) throw new Error(`Create service B failed (${createSvcRes2.status}) ref=${getLastRequestId()}`);
-  const serviceIdB = (createSvcJson2 as { id?: string })?.id;
+  const serviceIdB =
+    (createSvcJson2 as { item?: { id?: string }; id?: string })?.item?.id ??
+    (createSvcJson2 as { id?: string })?.id;
   if (!serviceIdB) throw new Error('Service B creation returned no id.');
 
   console.log('Create project and attach services…');
@@ -146,7 +150,9 @@ async function main() {
   );
   if (!createProjRes.ok)
     throw new Error(`Create project failed (${createProjRes.status}) ref=${getLastRequestId()}`);
-  const projectId = (createProjJson as { id?: string })?.id;
+  const projectId =
+    (createProjJson as { item?: { id?: string }; id?: string })?.item?.id ??
+    (createProjJson as { id?: string })?.id;
   if (!projectId) throw new Error('Project creation returned no id.');
   console.log('Deposit paid date guard…');
   const badDeposit = await request(`/api/pro/businesses/${businessId}/projects/${projectId}`, {
@@ -296,7 +302,9 @@ async function main() {
   if (!customSvcRes.ok) {
     throw new Error(`Create custom service failed (${customSvcRes.status}) ref=${getLastRequestId()}`);
   }
-  const customServiceId = (customSvcJson as { id?: string })?.id;
+  const customServiceId =
+    (customSvcJson as { item?: { id?: string }; id?: string })?.item?.id ??
+    (customSvcJson as { id?: string })?.id;
   if (!customServiceId) throw new Error('Custom service id missing.');
   const { res: attachCustomRes } = await request(
     `/api/pro/businesses/${businessId}/projects/${projectId}/services`,
@@ -317,10 +325,10 @@ async function main() {
   }
 
   console.log('Validate tasks linked to project service…');
-  const { res: tasksRes, json: tasksJson } = await request(`/api/pro/businesses/${businessId}/tasks?projectId=${projectId}`);
-  if (!tasksRes.ok) throw new Error(`Tasks list failed (${tasksRes.status}) ref=${getLastRequestId()}`);
+  const { res: tasksRes2, json: tasksJson2 } = await request(`/api/pro/businesses/${businessId}/tasks?projectId=${projectId}`);
+  if (!tasksRes2.ok) throw new Error(`Tasks list failed (${tasksRes2.status}) ref=${getLastRequestId()}`);
   const linkedTasks =
-    (tasksJson as { items?: Array<{ projectServiceId?: string }> }).items?.filter((t) => t.projectServiceId === projectServiceId) ?? [];
+    (tasksJson2 as { items?: Array<{ projectServiceId?: string }> }).items?.filter((t) => t.projectServiceId === projectServiceId) ?? [];
   if (!linkedTasks.length) throw new Error('Expected tasks linked to project service.');
 
   console.log('Reorder services…');

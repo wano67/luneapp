@@ -187,12 +187,14 @@ model Business {
   projects    Project[]
   tasks       Task[]
   finances    Finance[]
+  financeRecurringRules FinanceRecurringRule[]
   payments    Payment[]
   services    Service[]
   serviceProcessTemplates ServiceProcessTemplate[]
   interactions Interaction[]
   quotes      Quote[]
   invoices    Invoice[]
+  subscriptions Subscription[]
   documents   BusinessDocument[]
   productImages ProductImage[]
   references  BusinessReference[]
@@ -203,6 +205,7 @@ model Business {
   inventoryMovements InventoryMovement[]
   inventoryReservations InventoryReservation[]
   ledgerEntries        LedgerEntry[]
+  projectServiceRecurringRules ProjectServiceRecurringRule[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -441,6 +444,7 @@ model Client {
   invoices  Invoice[]
   payments  Payment[]
   documents BusinessDocument[]
+  subscriptions Subscription[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -474,6 +478,7 @@ model Project {
   billingQuote Quote? @relation("ProjectBillingQuote", fields: [billingQuoteId], references: [id], onDelete: SetNull)
   tasks    Task[]
   finances Finance[]
+  financeRecurringRules FinanceRecurringRule[]
   payments Payment[]
   projectServices ProjectService[]
   interactions Interaction[]
@@ -481,6 +486,8 @@ model Project {
   quotes    Quote[]
   invoices  Invoice[]
   projectMembers ProjectMember[]
+  projectServiceRecurringRules ProjectServiceRecurringRule[]
+  subscriptions Subscription[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -586,6 +593,7 @@ model Finance {
   businessId BigInt
   projectId  BigInt?
   categoryReferenceId BigInt?
+  recurringRuleId BigInt?
   inventoryMovementId BigInt? @unique
   inventoryProductId  BigInt?
   type       FinanceType
@@ -595,6 +603,8 @@ model Finance {
   method     PaymentMethod?
   isRecurring Boolean @default(false)
   recurringUnit RecurringUnit?
+  isRuleOverride Boolean @default(false)
+  lockedFromRule Boolean @default(false)
   date       DateTime
   note       String?
   deletedAt  DateTime?
@@ -602,6 +612,7 @@ model Finance {
   business Business @relation(fields: [businessId], references: [id])
   project  Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
   categoryReference BusinessReference? @relation("FinanceCategoryReference", fields: [categoryReferenceId], references: [id], onDelete: SetNull)
+  recurringRule FinanceRecurringRule? @relation(fields: [recurringRuleId], references: [id], onDelete: SetNull)
   inventoryMovement  InventoryMovement? @relation("InventoryMovementFinance", fields: [inventoryMovementId], references: [id], onDelete: SetNull)
   inventoryProduct   Product?           @relation("ProductFinance", fields: [inventoryProductId], references: [id], onDelete: SetNull)
   tags     FinanceTag[]
@@ -614,6 +625,39 @@ model Finance {
   @@index([businessId, categoryReferenceId])
   @@index([businessId, inventoryProductId])
   @@index([businessId, deletedAt])
+  @@index([recurringRuleId])
+  @@unique([recurringRuleId, date])
+}
+
+model FinanceRecurringRule {
+  id         BigInt      @id @default(autoincrement())
+  businessId BigInt
+  projectId  BigInt?
+  categoryReferenceId BigInt?
+  type       FinanceType
+  amountCents BigInt
+  category   String
+  vendor     String?
+  method     PaymentMethod?
+  note       String?
+  startDate  DateTime
+  endDate    DateTime?
+  dayOfMonth Int
+  frequency  RecurringUnit @default(MONTHLY)
+  nextRunAt  DateTime?
+  isActive   Boolean   @default(true)
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  project  Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  categoryReference BusinessReference? @relation("FinanceRecurringCategoryReference", fields: [categoryReferenceId], references: [id], onDelete: SetNull)
+  entries  Finance[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([businessId, isActive])
+  @@index([businessId, nextRunAt])
+  @@index([businessId, projectId])
 }
 
 /**
@@ -878,6 +922,8 @@ model ProjectService {
   service Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
   steps   ProjectServiceStep[]
   tasks   Task[]
+  recurringRule ProjectServiceRecurringRule?
+  subscription Subscription?
 
   @@index([projectId, serviceId])
   @@index([projectId, position])
@@ -897,6 +943,85 @@ model ProjectServiceStep {
 
   @@index([projectServiceId])
   @@index([projectServiceId, order])
+}
+
+model ProjectServiceRecurringRule {
+  id         BigInt   @id @default(autoincrement())
+  businessId BigInt
+  projectId  BigInt
+  projectServiceId BigInt @unique
+  startDate  DateTime
+  dayOfMonth Int
+  frequency  RecurringUnit @default(MONTHLY)
+  nextRunAt  DateTime?
+  isActive   Boolean @default(true)
+  lastInvoicedAt DateTime?
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  project  Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectService ProjectService @relation(fields: [projectServiceId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([businessId, projectId])
+  @@index([businessId, nextRunAt])
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  PAUSED
+  CANCELLED
+  ENDED
+}
+
+model Subscription {
+  id         BigInt @id @default(autoincrement())
+  businessId BigInt
+  clientId   BigInt?
+  projectId  BigInt?
+  projectServiceId BigInt? @unique
+  label      String
+  amountCents BigInt
+  currency   String @default("EUR")
+  startDate  DateTime
+  endDate    DateTime?
+  commitmentMonths Int?
+  billingDay Int
+  status     SubscriptionStatus @default(ACTIVE)
+  nextInvoiceAt DateTime?
+  lastInvoicedAt DateTime?
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  client   Client?  @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  project  Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  projectService ProjectService? @relation(fields: [projectServiceId], references: [id], onDelete: SetNull)
+  periods  SubscriptionPeriod[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([businessId, status])
+  @@index([businessId, projectId])
+  @@index([clientId])
+  @@index([projectServiceId])
+}
+
+model SubscriptionPeriod {
+  id            BigInt @id @default(autoincrement())
+  subscriptionId BigInt
+  periodStart   DateTime
+  periodEnd     DateTime
+  invoiceId     BigInt? @unique
+
+  subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  invoice Invoice? @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@unique([subscriptionId, periodStart, periodEnd])
+  @@index([subscriptionId, periodStart])
+  @@index([invoiceId])
 }
 
 model Interaction {
@@ -936,6 +1061,7 @@ model BusinessReference {
   clientCategories  Client[]  @relation("ClientCategoryReference")
   taskCategories    Task[]    @relation("TaskCategoryReference")
   financeCategories Finance[] @relation("FinanceCategoryReference")
+  financeRecurringCategories FinanceRecurringRule[] @relation("FinanceRecurringCategoryReference")
   projectTags       ProjectTag[] @relation("ProjectTagReference")
   serviceTags       ServiceTag[] @relation("ServiceTagReference")
   clientTags        ClientTag[] @relation("ClientTagReference")
@@ -1210,6 +1336,7 @@ model Invoice {
   items    InvoiceItem[]
   reservation InventoryReservation?
   payments Payment[]
+  subscriptionPeriod SubscriptionPeriod?
 
   @@unique([businessId, number])
 }

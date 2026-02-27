@@ -52,7 +52,7 @@ type InvoiceDetail = {
   items: InvoiceItem[];
 };
 
-type InvoiceResponse = { invoice: InvoiceDetail };
+type InvoiceResponse = { item: InvoiceDetail };
 
 function formatDate(value: string | null | undefined) {
   if (!value) return '—';
@@ -121,7 +121,7 @@ export default function InvoiceDetailPage() {
         setInvoice(null);
         return;
       }
-      setInvoice(res.data.invoice);
+      setInvoice(res.data.item);
     } catch (err) {
       if (effectiveSignal?.aborted) return;
       setError(getErrorMessage(err));
@@ -160,7 +160,7 @@ export default function InvoiceDetailPage() {
       return;
     }
 
-    setInvoice(res.data.invoice);
+    setInvoice(res.data.item);
     setInfo(`Statut mis à jour (${getInvoiceStatusLabelFR(nextStatus)}).`);
     setUpdating(false);
   }

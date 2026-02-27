@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Select } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
+import { formatCentsToEuroDisplay, formatCentsToEuroInput, parseEuroToCents, sanitizeEuroInput } from '@/lib/money';
 import { useActiveBusiness } from '../../../ActiveBusinessProvider';
 
 type Product = {
@@ -85,7 +86,7 @@ export default function ProductDetailPage() {
       setError(null);
 
       const [prodRes, moveRes] = await Promise.all([
-        fetchJson<{ product: Product }>(`/api/pro/businesses/${businessId}/products/${productId}`, {}, controller.signal),
+        fetchJson<{ item: Product }>(`/api/pro/businesses/${businessId}/products/${productId}`, {}, controller.signal),
         fetchJson<{ items: Movement[] }>(
           `/api/pro/businesses/${businessId}/products/${productId}/movements`,
           {},
@@ -111,14 +112,14 @@ export default function ProductDetailPage() {
         setMovements(moveRes.data.items ?? []);
       }
 
-      setProduct(prodRes.data.product);
+      setProduct(prodRes.data.item);
       setProductDraft({
-        name: prodRes.data.product.name,
-        sku: prodRes.data.product.sku,
-        description: prodRes.data.product.description ?? '',
-        unit: prodRes.data.product.unit,
-        salePriceCents: prodRes.data.product.salePriceCents ?? '',
-        purchasePriceCents: prodRes.data.product.purchasePriceCents ?? '',
+        name: prodRes.data.item.name,
+        sku: prodRes.data.item.sku,
+        description: prodRes.data.item.description ?? '',
+        unit: prodRes.data.item.unit,
+        salePriceCents: formatCentsToEuroInput(prodRes.data.item.salePriceCents),
+        purchasePriceCents: formatCentsToEuroInput(prodRes.data.item.purchasePriceCents),
       });
     } catch (err) {
       if (controller.signal.aborted) return;
@@ -140,6 +141,13 @@ export default function ProductDetailPage() {
     setActionError(null);
     setSuccess(null);
     try {
+      const unitCostCents = movementDraft.unitCostCents.trim()
+        ? parseEuroToCents(movementDraft.unitCostCents)
+        : null;
+      if (movementDraft.unitCostCents.trim() && !Number.isFinite(unitCostCents)) {
+        setActionError('Coût invalide.');
+        return;
+      }
       const res = await fetchJson<{ movement: Movement }>(
         `/api/pro/businesses/${businessId}/products/${product.id}/movements`,
         {
@@ -148,7 +156,7 @@ export default function ProductDetailPage() {
           body: JSON.stringify({
             type: movementDraft.type,
             quantity: movementDraft.quantity,
-            unitCostCents: movementDraft.unitCostCents ? Number(movementDraft.unitCostCents) : undefined,
+            unitCostCents: Number.isFinite(unitCostCents ?? NaN) ? (unitCostCents as number) : undefined,
             reason: movementDraft.reason || null,
             createFinanceEntry: movementDraft.createFinanceEntry,
           }),
@@ -178,7 +186,20 @@ export default function ProductDetailPage() {
     setActionError(null);
     setSuccess(null);
     try {
-      const res = await fetchJson<{ product: Product }>(
+      const salePriceCents = productDraft.salePriceCents.trim()
+        ? parseEuroToCents(productDraft.salePriceCents)
+        : null;
+      const purchasePriceCents = productDraft.purchasePriceCents.trim()
+        ? parseEuroToCents(productDraft.purchasePriceCents)
+        : null;
+      if (
+        (productDraft.salePriceCents.trim() && !Number.isFinite(salePriceCents)) ||
+        (productDraft.purchasePriceCents.trim() && !Number.isFinite(purchasePriceCents))
+      ) {
+        setActionError('Prix invalide.');
+        return;
+      }
+      const res = await fetchJson<{ item: Product }>(
         `/api/pro/businesses/${businessId}/products/${product.id}`,
         {
           method: 'PATCH',
@@ -188,8 +209,8 @@ export default function ProductDetailPage() {
             sku: productDraft.sku,
             description: productDraft.description ?? null,
             unit: productDraft.unit,
-            salePriceCents: productDraft.salePriceCents ? Number(productDraft.salePriceCents) : null,
-            purchasePriceCents: productDraft.purchasePriceCents ? Number(productDraft.purchasePriceCents) : null,
+            salePriceCents: Number.isFinite(salePriceCents ?? NaN) ? (salePriceCents as number) : null,
+            purchasePriceCents: Number.isFinite(purchasePriceCents ?? NaN) ? (purchasePriceCents as number) : null,
           }),
         }
       );
@@ -201,7 +222,7 @@ export default function ProductDetailPage() {
         );
         return;
       }
-      setProduct(res.data.product);
+      setProduct(res.data.item);
       setSuccess('Produit mis à jour.');
     } catch (err) {
       console.error(err);
@@ -271,19 +292,28 @@ export default function ProductDetailPage() {
               </label>
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                 <label className="text-sm text-[var(--text-primary)]">
-                  <span className="block text-xs text-[var(--text-secondary)]">Prix de vente (cents)</span>
+                  <span className="block text-xs text-[var(--text-secondary)]">Prix de vente (€)</span>
                   <Input
-                    type="number"
+                    type="text"
+                    inputMode="decimal"
                     value={productDraft.salePriceCents}
-                    onChange={(e) => setProductDraft((prev) => ({ ...prev, salePriceCents: e.target.value }))}
+                    onChange={(e) =>
+                      setProductDraft((prev) => ({ ...prev, salePriceCents: sanitizeEuroInput(e.target.value) }))
+                    }
                   />
                 </label>
                 <label className="text-sm text-[var(--text-primary)]">
-                  <span className="block text-xs text-[var(--text-secondary)]">Prix d&apos;achat (cents)</span>
+                  <span className="block text-xs text-[var(--text-secondary)]">Prix d&apos;achat (€)</span>
                   <Input
-                    type="number"
+                    type="text"
+                    inputMode="decimal"
                     value={productDraft.purchasePriceCents}
-                    onChange={(e) => setProductDraft((prev) => ({ ...prev, purchasePriceCents: e.target.value }))}
+                    onChange={(e) =>
+                      setProductDraft((prev) => ({
+                        ...prev,
+                        purchasePriceCents: sanitizeEuroInput(e.target.value),
+                      }))
+                    }
                   />
                 </label>
               </div>
@@ -330,11 +360,14 @@ export default function ProductDetailPage() {
               />
             </label>
             <label className="text-sm text-[var(--text-primary)]">
-              <span className="block text-xs text-[var(--text-secondary)]">Coût unitaire (cents)</span>
+              <span className="block text-xs text-[var(--text-secondary)]">Coût unitaire (€)</span>
               <Input
-                type="number"
+                type="text"
+                inputMode="decimal"
                 value={movementDraft.unitCostCents}
-                onChange={(e) => setMovementDraft((prev) => ({ ...prev, unitCostCents: e.target.value }))}
+                onChange={(e) =>
+                  setMovementDraft((prev) => ({ ...prev, unitCostCents: sanitizeEuroInput(e.target.value) }))
+                }
                 disabled={!canEdit}
               />
             </label>
@@ -387,7 +420,7 @@ export default function ProductDetailPage() {
                   </p>
                 </div>
                 {m.unitCostCents ? (
-                  <Badge variant="neutral">Unit: {m.unitCostCents} cents</Badge>
+                  <Badge variant="neutral">Unit: {formatCentsToEuroDisplay(m.unitCostCents)}</Badge>
                 ) : null}
               </div>
             ))}

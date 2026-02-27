@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { fetchJson } from '@/lib/apiClient';
 import { formatCurrencyEUR } from '@/lib/formatCurrency';
+import { formatCentsToEuroInput, parseEuroToCents, sanitizeEuroInput } from '@/lib/money';
 import { KpiCirclesBlock } from '@/components/pro/KpiCirclesBlock';
 import { TabsPills } from '@/components/pro/TabsPills';
 
@@ -64,24 +65,22 @@ export function ProductDetailPage({ businessId, productId }: { businessId: strin
   const loadProduct = useCallback(async () => {
     setLoading(true);
     setError(null);
-    const res = await fetchJson<{ product: ProductDetail }>(
+    const res = await fetchJson<{ item: ProductDetail }>(
       `/api/pro/businesses/${businessId}/products/${productId}`
     );
     setLoading(false);
-    if (!res.ok || !res.data?.product) {
+    if (!res.ok || !res.data?.item) {
       setError(res.error ?? 'Produit introuvable.');
       return;
     }
-    setProduct(res.data.product);
+    setProduct(res.data.item);
     setForm({
-      sku: res.data.product.sku,
-      name: res.data.product.name,
-      description: res.data.product.description ?? '',
-      price: res.data.product.salePriceCents ? String(Number(res.data.product.salePriceCents)) : '',
-      unit: res.data.product.unit ?? 'PIECE',
-      purchasePrice: res.data.product.purchasePriceCents
-        ? String(Number(res.data.product.purchasePriceCents))
-        : '',
+      sku: res.data.item.sku,
+      name: res.data.item.name,
+      description: res.data.item.description ?? '',
+      price: formatCentsToEuroInput(res.data.item.salePriceCents),
+      unit: res.data.item.unit ?? 'PIECE',
+      purchasePrice: formatCentsToEuroInput(res.data.item.purchasePriceCents),
     });
   }, [businessId, productId]);
 
@@ -114,6 +113,16 @@ export function ProductDetailPage({ businessId, productId }: { businessId: strin
     }
     setSaving(true);
     setFormError(null);
+    const salePriceCents = form.price.trim() ? parseEuroToCents(form.price) : null;
+    const purchasePriceCents = form.purchasePrice.trim() ? parseEuroToCents(form.purchasePrice) : null;
+    if (
+      (form.price.trim() && !Number.isFinite(salePriceCents)) ||
+      (form.purchasePrice.trim() && !Number.isFinite(purchasePriceCents))
+    ) {
+      setFormError('Prix invalide.');
+      setSaving(false);
+      return;
+    }
     const res = await fetchJson(`/api/pro/businesses/${businessId}/products/${productId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -121,9 +130,9 @@ export function ProductDetailPage({ businessId, productId }: { businessId: strin
         sku: form.sku.trim(),
         name: form.name.trim(),
         description: form.description.trim() || null,
-        salePriceCents: form.price ? Number(form.price) : null,
+        salePriceCents: Number.isFinite(salePriceCents ?? NaN) ? (salePriceCents as number) : null,
         unit: form.unit || 'PIECE',
-        purchasePriceCents: form.purchasePrice ? Number(form.purchasePrice) : null,
+        purchasePriceCents: Number.isFinite(purchasePriceCents ?? NaN) ? (purchasePriceCents as number) : null,
       }),
     });
     setSaving(false);
@@ -368,16 +377,20 @@ export function ProductDetailPage({ businessId, productId }: { businessId: strin
                 />
               </div>
               <Input
-                label="Prix (cents)"
-                type="number"
+                label="Prix (€)"
+                type="text"
+                inputMode="decimal"
                 value={form.price}
-                onChange={(e) => setForm((p) => ({ ...p, price: e.target.value }))}
+                onChange={(e) => setForm((p) => ({ ...p, price: sanitizeEuroInput(e.target.value) }))}
               />
               <Input
-                label="Coût (cents)"
-                type="number"
+                label="Coût (€)"
+                type="text"
+                inputMode="decimal"
                 value={form.purchasePrice}
-                onChange={(e) => setForm((p) => ({ ...p, purchasePrice: e.target.value }))}
+                onChange={(e) =>
+                  setForm((p) => ({ ...p, purchasePrice: sanitizeEuroInput(e.target.value) }))
+                }
               />
               <Input label="Unité" value={form.unit} onChange={(e) => setForm((p) => ({ ...p, unit: e.target.value }))} />
               {formError ? <p className="text-sm text-rose-500">{formError}</p> : null}

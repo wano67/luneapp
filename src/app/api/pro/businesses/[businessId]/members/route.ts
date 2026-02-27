@@ -1,59 +1,10 @@
-import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/server/db/client';
-import { requireAuthPro } from '@/server/auth/requireAuthPro';
-import { requireBusinessRole } from '@/server/auth/businessRole';
-import { jsonNoStore, withNoStore } from '@/server/security/csrf';
-import {
-  badRequest,
-  forbidden,
-  getRequestId,
-  notFound,
-  unauthorized,
-  withRequestId,
-} from '@/server/http/apiUtils';
-
-function parseId(param: string | undefined) {
-  if (!param || !/^\d+$/.test(param)) return null;
-  try {
-    return BigInt(param);
-  } catch {
-    return null;
-  }
-}
-
-function withIdNoStore(res: NextResponse, requestId: string) {
-  return withNoStore(withRequestId(res, requestId));
-}
+import { withBusinessRoute } from '@/server/http/routeHandler';
+import { jsonb } from '@/server/http/json';
 
 // GET /api/pro/businesses/{businessId}/members
-export async function GET(
-  request: NextRequest,
-  context: { params: Promise<{ businessId: string }> }
-) {
-  const requestId = getRequestId(request);
-  const { businessId } = await context.params;
-
-  let userId: string;
-  try {
-    ({ userId } = await requireAuthPro(request));
-  } catch {
-    return withIdNoStore(unauthorized(), requestId);
-  }
-
-  const businessIdBigInt = parseId(businessId);
-  if (!businessIdBigInt) {
-    return withIdNoStore(badRequest('businessId invalide.'), requestId);
-  }
-
-  const business = await prisma.business.findUnique({ where: { id: businessIdBigInt } });
-  if (!business) {
-    return withIdNoStore(notFound('Entreprise introuvable.'), requestId);
-  }
-
-  const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'ADMIN');
-  if (!membership) {
-    return withIdNoStore(forbidden(), requestId);
-  }
+export const GET = withBusinessRoute({ minRole: 'ADMIN' }, async (ctx) => {
+  const { requestId, businessId: businessIdBigInt } = ctx;
 
   const members = await prisma.businessMembership.findMany({
     where: { businessId: businessIdBigInt },
@@ -66,38 +17,35 @@ export async function GET(
     orderBy: { createdAt: 'asc' },
   });
 
-  return withIdNoStore(
-    jsonNoStore({
-      items: members.map((m) => ({
-        membershipId: m.id.toString(),
-        userId: m.userId.toString(),
-        email: m.user?.email ?? '',
-        name: m.user?.name ?? null,
-        role: m.role,
-        createdAt: m.createdAt.toISOString(),
-        organizationUnit: m.organizationUnit
-          ? { id: m.organizationUnit.id.toString(), name: m.organizationUnit.name }
-          : null,
-        employeeProfile: m.employeeProfile
-          ? {
-              id: m.employeeProfile.id.toString(),
-              jobTitle: m.employeeProfile.jobTitle,
-              contractType: m.employeeProfile.contractType,
-              startDate: m.employeeProfile.startDate ? m.employeeProfile.startDate.toISOString() : null,
-              endDate: m.employeeProfile.endDate ? m.employeeProfile.endDate.toISOString() : null,
-              weeklyHours: m.employeeProfile.weeklyHours,
-              hourlyCostCents: m.employeeProfile.hourlyCostCents
-                ? m.employeeProfile.hourlyCostCents.toString()
-                : null,
-              status: m.employeeProfile.status,
-              notes: m.employeeProfile.notes,
-              createdAt: m.employeeProfile.createdAt.toISOString(),
-              updatedAt: m.employeeProfile.updatedAt.toISOString(),
-            }
-          : null,
-        permissions: m.permissions.map((p) => p.permission),
-      })),
-    }),
-    requestId
-  );
-}
+  return jsonb({
+    items: members.map((m) => ({
+      membershipId: m.id.toString(),
+      userId: m.userId.toString(),
+      email: m.user?.email ?? '',
+      name: m.user?.name ?? null,
+      role: m.role,
+      createdAt: m.createdAt.toISOString(),
+      organizationUnit: m.organizationUnit
+        ? { id: m.organizationUnit.id.toString(), name: m.organizationUnit.name }
+        : null,
+      employeeProfile: m.employeeProfile
+        ? {
+            id: m.employeeProfile.id.toString(),
+            jobTitle: m.employeeProfile.jobTitle,
+            contractType: m.employeeProfile.contractType,
+            startDate: m.employeeProfile.startDate ? m.employeeProfile.startDate.toISOString() : null,
+            endDate: m.employeeProfile.endDate ? m.employeeProfile.endDate.toISOString() : null,
+            weeklyHours: m.employeeProfile.weeklyHours,
+            hourlyCostCents: m.employeeProfile.hourlyCostCents
+              ? m.employeeProfile.hourlyCostCents.toString()
+              : null,
+            status: m.employeeProfile.status,
+            notes: m.employeeProfile.notes,
+            createdAt: m.employeeProfile.createdAt.toISOString(),
+            updatedAt: m.employeeProfile.updatedAt.toISOString(),
+          }
+        : null,
+      permissions: m.permissions.map((p) => p.permission),
+    })),
+  }, requestId);
+});

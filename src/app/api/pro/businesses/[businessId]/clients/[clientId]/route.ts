@@ -1,30 +1,9 @@
-import { NextRequest } from 'next/server';
 import { prisma } from '@/server/db/client';
-import { requireBusinessRole } from '@/server/auth/businessRole';
-import { requireAuthPro } from '@/server/auth/requireAuthPro';
-import {
-  badRequest,
-  forbidden,
-  getRequestId,
-  notFound,
-  unauthorized,
-  withRequestId,
-} from '@/server/http/apiUtils';
-import { assertSameOrigin, jsonNoStore, withNoStore } from '@/server/security/csrf';
-import { rateLimit } from '@/server/security/rateLimit';
+import { withBusinessRoute } from '@/server/http/routeHandler';
+import { jsonb } from '@/server/http/json';
+import { badRequest, notFound } from '@/server/http/apiUtils';
 import { BusinessReferenceType, ClientStatus, LeadSource } from '@/generated/prisma';
 import { normalizeWebsiteUrl } from '@/lib/website';
-
-function parseId(param: string | undefined) {
-  if (!param || !/^\d+$/.test(param)) {
-    return null;
-  }
-  try {
-    return BigInt(param);
-  } catch {
-    return null;
-  }
-}
 
 function normalizeStr(v: unknown) {
   return String(v ?? '').trim();
@@ -163,452 +142,405 @@ function serializeClient(client: {
 
 const STATUS_VALUES = new Set<ClientStatus>(['ACTIVE', 'PAUSED', 'FORMER']);
 
-export async function GET(
-  request: NextRequest,
-  context: { params: Promise<{ businessId: string; clientId: string }> }
-) {
-  const requestId = getRequestId(request);
-  let userId: string;
-  try {
-    ({ userId } = await requireAuthPro(request));
-  } catch {
-    return withNoStore(withRequestId(unauthorized(), requestId));
+// GET /api/pro/businesses/{businessId}/clients/{clientId}
+export const GET = withBusinessRoute<{ businessId: string; clientId: string }>(
+  { minRole: 'VIEWER' },
+  async (ctx, _req, params) => {
+    const { requestId, businessId: businessIdBigInt } = ctx;
+    const clientId = params?.clientId;
+    if (!clientId || !/^\d+$/.test(clientId)) return badRequest('Identifiants invalides.');
+    const clientIdBigInt = BigInt(clientId);
+
+    const client = await prisma.client.findFirst({
+      where: { id: clientIdBigInt, businessId: businessIdBigInt },
+      include: {
+        categoryReference: { select: { id: true, name: true } },
+        tags: { include: { reference: { select: { id: true, name: true } } } },
+      },
+    });
+    if (!client) return notFound('Client introuvable.');
+
+    return jsonb({ item: serializeClient(client) }, requestId);
   }
-
-  const { businessId, clientId } = await context.params;
-  const businessIdBigInt = parseId(businessId);
-  const clientIdBigInt = parseId(clientId);
-  if (!businessIdBigInt || !clientIdBigInt) {
-    return withNoStore(withRequestId(badRequest('Identifiants invalides.'), requestId));
-  }
-
-  const business = await prisma.business.findUnique({ where: { id: businessIdBigInt } });
-  if (!business) {
-    return withNoStore(withRequestId(notFound('Entreprise introuvable.'), requestId));
-  }
-
-  const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'VIEWER');
-  if (!membership) return withNoStore(withRequestId(forbidden(), requestId));
-
-  const client = await prisma.client.findFirst({
-    where: { id: clientIdBigInt, businessId: businessIdBigInt },
-    include: {
-      categoryReference: { select: { id: true, name: true } },
-      tags: { include: { reference: { select: { id: true, name: true } } } },
-    },
-  });
-
-  if (!client) {
-    return withNoStore(withRequestId(notFound('Client introuvable.'), requestId));
-  }
-
-  return withNoStore(
-    withRequestId(
-      jsonNoStore({
-        item: serializeClient(client),
-      }),
-      requestId
-    )
-  );
-}
+);
 
 // PATCH /api/pro/businesses/{businessId}/clients/{clientId}
-export async function PATCH(
-  request: NextRequest,
-  context: { params: Promise<{ businessId: string; clientId: string }> }
-) {
-  const requestId = getRequestId(request);
-  const csrf = assertSameOrigin(request);
-  if (csrf) return withNoStore(withRequestId(csrf, requestId));
-
-  const { businessId, clientId } = await context.params;
-  const businessIdBigInt = parseId(businessId);
-  const clientIdBigInt = parseId(clientId);
-  if (!businessIdBigInt || !clientIdBigInt) {
-    return withNoStore(withRequestId(badRequest('Identifiants invalides.'), requestId));
-  }
-
-  let userId: string;
-  try {
-    ({ userId } = await requireAuthPro(request));
-  } catch {
-    return withNoStore(withRequestId(unauthorized(), requestId));
-  }
-
-  const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'ADMIN');
-  if (!membership) return withNoStore(withRequestId(forbidden(), requestId));
-
-  const limited = rateLimit(request, {
-    key: `pro:clients:update:${businessIdBigInt}:${clientIdBigInt}`,
-    limit: 200,
-    windowMs: 60 * 60 * 1000,
-  });
-  if (limited) return withNoStore(withRequestId(limited, requestId));
-
-  const existing = await prisma.client.findFirst({
-    where: { id: clientIdBigInt, businessId: businessIdBigInt },
-    include: {
-      categoryReference: { select: { id: true, name: true } },
-      tags: { include: { reference: { select: { id: true, name: true } } } },
+export const PATCH = withBusinessRoute<{ businessId: string; clientId: string }>(
+  {
+    minRole: 'ADMIN',
+    rateLimit: {
+      key: (ctx) => `pro:clients:update:${ctx.businessId}:${ctx.userId}`,
+      limit: 200,
+      windowMs: 60 * 60 * 1000,
     },
-  });
-  if (!existing) {
-    return withNoStore(withRequestId(notFound('Client introuvable.'), requestId));
-  }
+  },
+  async (ctx, req, params) => {
+    const { requestId, businessId: businessIdBigInt } = ctx;
+    const clientId = params?.clientId;
+    if (!clientId || !/^\d+$/.test(clientId)) return badRequest('Identifiants invalides.');
+    const clientIdBigInt = BigInt(clientId);
 
-  const body = await request.json().catch(() => null);
-  if (!isRecord(body)) {
-    return withNoStore(withRequestId(badRequest('Payload invalide.'), requestId));
-  }
+    const existing = await prisma.client.findFirst({
+      where: { id: clientIdBigInt, businessId: businessIdBigInt },
+      include: {
+        categoryReference: { select: { id: true, name: true } },
+        tags: { include: { reference: { select: { id: true, name: true } } } },
+      },
+    });
+    if (!existing) return notFound('Client introuvable.');
 
-  const data: Record<string, unknown> = {};
+    const body = await req.json().catch(() => null);
+    if (!isRecord(body)) return badRequest('Payload invalide.');
 
-  if ('name' in body) {
-    if (typeof body.name !== 'string') return withNoStore(withRequestId(badRequest('Nom invalide.'), requestId));
-    const name = normalizeStr(body.name);
-    if (!name) return withNoStore(withRequestId(badRequest('Nom requis.'), requestId));
-    if (name.length > 120) return withNoStore(withRequestId(badRequest('Nom trop long (max 120).'), requestId));
-    data.name = name;
-  }
+    const data: Record<string, unknown> = {};
 
-  if ('email' in body) {
-    if (body.email == null || body.email === '') {
-      data.email = null;
-    } else if (typeof body.email === 'string') {
-      const email = normalizeStr(body.email);
-      if (email && (email.length > 254 || !isValidEmail(email))) {
-        return withNoStore(withRequestId(badRequest('Email invalide.'), requestId));
+    if ('name' in body) {
+      if (typeof body.name !== 'string') return badRequest('Nom invalide.');
+      const name = normalizeStr(body.name);
+      if (!name) return badRequest('Nom requis.');
+      if (name.length > 120) return badRequest('Nom trop long (max 120).');
+      data.name = name;
+    }
+
+    if ('email' in body) {
+      if (body.email == null || body.email === '') {
+        data.email = null;
+      } else if (typeof body.email === 'string') {
+        const email = normalizeStr(body.email);
+        if (email && (email.length > 254 || !isValidEmail(email))) {
+          return badRequest('Email invalide.');
+        }
+        data.email = email || null;
+      } else {
+        return badRequest('Email invalide.');
       }
-      data.email = email || null;
-    } else {
-      return withNoStore(withRequestId(badRequest('Email invalide.'), requestId));
     }
-  }
 
-  if ('companyName' in body || 'company' in body) {
-    const raw =
-      'companyName' in body
-        ? (body as Record<string, unknown>).companyName
-        : (body as Record<string, unknown>).company;
-    if (raw == null || raw === '') {
-      data.companyName = null;
-    } else if (typeof raw === 'string') {
-      const companyName = normalizeStr(raw);
-      if (companyName && companyName.length > 160) {
-        return withNoStore(withRequestId(badRequest('Nom de société trop long (max 160).'), requestId));
+    if ('companyName' in body || 'company' in body) {
+      const raw =
+        'companyName' in body
+          ? (body as Record<string, unknown>).companyName
+          : (body as Record<string, unknown>).company;
+      if (raw == null || raw === '') {
+        data.companyName = null;
+      } else if (typeof raw === 'string') {
+        const companyName = normalizeStr(raw);
+        if (companyName && companyName.length > 160) {
+          return badRequest('Nom de société trop long (max 160).');
+        }
+        data.companyName = companyName || null;
+      } else {
+        return badRequest('Nom de société invalide.');
       }
-      data.companyName = companyName || null;
-    } else {
-      return withNoStore(withRequestId(badRequest('Nom de société invalide.'), requestId));
     }
-  }
 
-  if ('mainContactName' in body) {
-    if (body.mainContactName == null || body.mainContactName === '') {
-      data.mainContactName = null;
-    } else if (typeof body.mainContactName === 'string') {
-      const mainContactName = normalizeStr(body.mainContactName);
-      if (mainContactName && mainContactName.length > 160) {
-        return withNoStore(withRequestId(badRequest('Contact principal trop long (max 160).'), requestId));
+    if ('mainContactName' in body) {
+      if (body.mainContactName == null || body.mainContactName === '') {
+        data.mainContactName = null;
+      } else if (typeof body.mainContactName === 'string') {
+        const mainContactName = normalizeStr(body.mainContactName);
+        if (mainContactName && mainContactName.length > 160) {
+          return badRequest('Contact principal trop long (max 160).');
+        }
+        data.mainContactName = mainContactName || null;
+      } else {
+        return badRequest('Contact principal invalide.');
       }
-      data.mainContactName = mainContactName || null;
-    } else {
-      return withNoStore(withRequestId(badRequest('Contact principal invalide.'), requestId));
     }
-  }
 
-  if ('phone' in body) {
-    if (body.phone == null || body.phone === '') {
-      data.phone = null;
-    } else if (typeof body.phone === 'string') {
-      const phone = sanitizePhone(body.phone);
-      if (phone && (phone.length > 32 || !isValidPhone(phone))) {
-        return withNoStore(withRequestId(badRequest('Téléphone invalide.'), requestId));
+    if ('phone' in body) {
+      if (body.phone == null || body.phone === '') {
+        data.phone = null;
+      } else if (typeof body.phone === 'string') {
+        const phone = sanitizePhone(body.phone);
+        if (phone && (phone.length > 32 || !isValidPhone(phone))) {
+          return badRequest('Téléphone invalide.');
+        }
+        data.phone = phone || null;
+      } else {
+        return badRequest('Téléphone invalide.');
       }
-      data.phone = phone || null;
-    } else {
-      return withNoStore(withRequestId(badRequest('Téléphone invalide.'), requestId));
     }
-  }
 
-  if ('billingCompanyName' in body) {
-    if (body.billingCompanyName == null || body.billingCompanyName === '') {
-      data.billingCompanyName = null;
-    } else if (typeof body.billingCompanyName === 'string') {
-      const billingCompanyName = normalizeStr(body.billingCompanyName);
-      if (billingCompanyName && billingCompanyName.length > 160) {
-        return withNoStore(withRequestId(badRequest('Société facturation trop longue (max 160).'), requestId));
+    if ('billingCompanyName' in body) {
+      if (body.billingCompanyName == null || body.billingCompanyName === '') {
+        data.billingCompanyName = null;
+      } else if (typeof body.billingCompanyName === 'string') {
+        const billingCompanyName = normalizeStr(body.billingCompanyName);
+        if (billingCompanyName && billingCompanyName.length > 160) {
+          return badRequest('Société facturation trop longue (max 160).');
+        }
+        data.billingCompanyName = billingCompanyName || null;
+      } else {
+        return badRequest('Société facturation invalide.');
       }
-      data.billingCompanyName = billingCompanyName || null;
-    } else {
-      return withNoStore(withRequestId(badRequest('Société facturation invalide.'), requestId));
     }
-  }
 
-  if ('billingContactName' in body) {
-    if (body.billingContactName == null || body.billingContactName === '') {
-      data.billingContactName = null;
-    } else if (typeof body.billingContactName === 'string') {
-      const billingContactName = normalizeStr(body.billingContactName);
-      if (billingContactName && billingContactName.length > 160) {
-        return withNoStore(withRequestId(badRequest('Contact facturation trop long (max 160).'), requestId));
+    if ('billingContactName' in body) {
+      if (body.billingContactName == null || body.billingContactName === '') {
+        data.billingContactName = null;
+      } else if (typeof body.billingContactName === 'string') {
+        const billingContactName = normalizeStr(body.billingContactName);
+        if (billingContactName && billingContactName.length > 160) {
+          return badRequest('Contact facturation trop long (max 160).');
+        }
+        data.billingContactName = billingContactName || null;
+      } else {
+        return badRequest('Contact facturation invalide.');
       }
-      data.billingContactName = billingContactName || null;
-    } else {
-      return withNoStore(withRequestId(badRequest('Contact facturation invalide.'), requestId));
     }
-  }
 
-  if ('billingEmail' in body) {
-    if (body.billingEmail == null || body.billingEmail === '') {
-      data.billingEmail = null;
-    } else if (typeof body.billingEmail === 'string') {
-      const billingEmail = normalizeStr(body.billingEmail);
-      if (billingEmail && (billingEmail.length > 254 || !isValidEmail(billingEmail))) {
-        return withNoStore(withRequestId(badRequest('Email facturation invalide.'), requestId));
+    if ('billingEmail' in body) {
+      if (body.billingEmail == null || body.billingEmail === '') {
+        data.billingEmail = null;
+      } else if (typeof body.billingEmail === 'string') {
+        const billingEmail = normalizeStr(body.billingEmail);
+        if (billingEmail && (billingEmail.length > 254 || !isValidEmail(billingEmail))) {
+          return badRequest('Email facturation invalide.');
+        }
+        data.billingEmail = billingEmail || null;
+      } else {
+        return badRequest('Email facturation invalide.');
       }
-      data.billingEmail = billingEmail || null;
-    } else {
-      return withNoStore(withRequestId(badRequest('Email facturation invalide.'), requestId));
     }
-  }
 
-  if ('billingPhone' in body) {
-    if (body.billingPhone == null || body.billingPhone === '') {
-      data.billingPhone = null;
-    } else if (typeof body.billingPhone === 'string') {
-      const billingPhone = sanitizePhone(body.billingPhone);
-      if (billingPhone && (billingPhone.length > 32 || !isValidPhone(billingPhone))) {
-        return withNoStore(withRequestId(badRequest('Téléphone facturation invalide.'), requestId));
+    if ('billingPhone' in body) {
+      if (body.billingPhone == null || body.billingPhone === '') {
+        data.billingPhone = null;
+      } else if (typeof body.billingPhone === 'string') {
+        const billingPhone = sanitizePhone(body.billingPhone);
+        if (billingPhone && (billingPhone.length > 32 || !isValidPhone(billingPhone))) {
+          return badRequest('Téléphone facturation invalide.');
+        }
+        data.billingPhone = billingPhone || null;
+      } else {
+        return badRequest('Téléphone facturation invalide.');
       }
-      data.billingPhone = billingPhone || null;
-    } else {
-      return withNoStore(withRequestId(badRequest('Téléphone facturation invalide.'), requestId));
     }
-  }
 
-  if ('billingVatNumber' in body) {
-    if (body.billingVatNumber == null || body.billingVatNumber === '') {
-      data.billingVatNumber = null;
-    } else if (typeof body.billingVatNumber === 'string') {
-      const billingVatNumber = normalizeStr(body.billingVatNumber);
-      if (billingVatNumber && billingVatNumber.length > 40) {
-        return withNoStore(withRequestId(badRequest('Numéro TVA trop long (40 max).'), requestId));
+    if ('billingVatNumber' in body) {
+      if (body.billingVatNumber == null || body.billingVatNumber === '') {
+        data.billingVatNumber = null;
+      } else if (typeof body.billingVatNumber === 'string') {
+        const billingVatNumber = normalizeStr(body.billingVatNumber);
+        if (billingVatNumber && billingVatNumber.length > 40) {
+          return badRequest('Numéro TVA trop long (40 max).');
+        }
+        data.billingVatNumber = billingVatNumber || null;
+      } else {
+        return badRequest('Numéro TVA invalide.');
       }
-      data.billingVatNumber = billingVatNumber || null;
-    } else {
-      return withNoStore(withRequestId(badRequest('Numéro TVA invalide.'), requestId));
     }
-  }
 
-  if ('billingReference' in body) {
-    if (body.billingReference == null || body.billingReference === '') {
-      data.billingReference = null;
-    } else if (typeof body.billingReference === 'string') {
-      const billingReference = normalizeStr(body.billingReference);
-      if (billingReference && billingReference.length > 120) {
-        return withNoStore(withRequestId(badRequest('Référence client trop longue (120 max).'), requestId));
+    if ('billingReference' in body) {
+      if (body.billingReference == null || body.billingReference === '') {
+        data.billingReference = null;
+      } else if (typeof body.billingReference === 'string') {
+        const billingReference = normalizeStr(body.billingReference);
+        if (billingReference && billingReference.length > 120) {
+          return badRequest('Référence client trop longue (120 max).');
+        }
+        data.billingReference = billingReference || null;
+      } else {
+        return badRequest('Référence client invalide.');
       }
-      data.billingReference = billingReference || null;
-    } else {
-      return withNoStore(withRequestId(badRequest('Référence client invalide.'), requestId));
     }
-  }
 
-  if ('billingAddressLine1' in body) {
-    if (body.billingAddressLine1 == null || body.billingAddressLine1 === '') {
-      data.billingAddressLine1 = null;
-    } else if (typeof body.billingAddressLine1 === 'string') {
-      const billingAddressLine1 = normalizeStr(body.billingAddressLine1);
-      if (billingAddressLine1 && billingAddressLine1.length > 200) {
-        return withNoStore(withRequestId(badRequest('Adresse facturation trop longue (200 max).'), requestId));
+    if ('billingAddressLine1' in body) {
+      if (body.billingAddressLine1 == null || body.billingAddressLine1 === '') {
+        data.billingAddressLine1 = null;
+      } else if (typeof body.billingAddressLine1 === 'string') {
+        const billingAddressLine1 = normalizeStr(body.billingAddressLine1);
+        if (billingAddressLine1 && billingAddressLine1.length > 200) {
+          return badRequest('Adresse facturation trop longue (200 max).');
+        }
+        data.billingAddressLine1 = billingAddressLine1 || null;
+      } else {
+        return badRequest('Adresse facturation invalide.');
       }
-      data.billingAddressLine1 = billingAddressLine1 || null;
-    } else {
-      return withNoStore(withRequestId(badRequest('Adresse facturation invalide.'), requestId));
     }
-  }
 
-  if ('billingAddressLine2' in body) {
-    if (body.billingAddressLine2 == null || body.billingAddressLine2 === '') {
-      data.billingAddressLine2 = null;
-    } else if (typeof body.billingAddressLine2 === 'string') {
-      const billingAddressLine2 = normalizeStr(body.billingAddressLine2);
-      if (billingAddressLine2 && billingAddressLine2.length > 200) {
-        return withNoStore(withRequestId(badRequest('Complément adresse facturation trop long (200 max).'), requestId));
+    if ('billingAddressLine2' in body) {
+      if (body.billingAddressLine2 == null || body.billingAddressLine2 === '') {
+        data.billingAddressLine2 = null;
+      } else if (typeof body.billingAddressLine2 === 'string') {
+        const billingAddressLine2 = normalizeStr(body.billingAddressLine2);
+        if (billingAddressLine2 && billingAddressLine2.length > 200) {
+          return badRequest('Complément adresse facturation trop long (200 max).');
+        }
+        data.billingAddressLine2 = billingAddressLine2 || null;
+      } else {
+        return badRequest('Complément adresse facturation invalide.');
       }
-      data.billingAddressLine2 = billingAddressLine2 || null;
-    } else {
-      return withNoStore(withRequestId(badRequest('Complément adresse facturation invalide.'), requestId));
     }
-  }
 
-  if ('billingPostalCode' in body) {
-    if (body.billingPostalCode == null || body.billingPostalCode === '') {
-      data.billingPostalCode = null;
-    } else if (typeof body.billingPostalCode === 'string') {
-      const billingPostalCode = normalizeStr(body.billingPostalCode);
-      if (billingPostalCode && billingPostalCode.length > 20) {
-        return withNoStore(withRequestId(badRequest('Code postal facturation trop long (20 max).'), requestId));
+    if ('billingPostalCode' in body) {
+      if (body.billingPostalCode == null || body.billingPostalCode === '') {
+        data.billingPostalCode = null;
+      } else if (typeof body.billingPostalCode === 'string') {
+        const billingPostalCode = normalizeStr(body.billingPostalCode);
+        if (billingPostalCode && billingPostalCode.length > 20) {
+          return badRequest('Code postal facturation trop long (20 max).');
+        }
+        data.billingPostalCode = billingPostalCode || null;
+      } else {
+        return badRequest('Code postal facturation invalide.');
       }
-      data.billingPostalCode = billingPostalCode || null;
-    } else {
-      return withNoStore(withRequestId(badRequest('Code postal facturation invalide.'), requestId));
     }
-  }
 
-  if ('billingCity' in body) {
-    if (body.billingCity == null || body.billingCity === '') {
-      data.billingCity = null;
-    } else if (typeof body.billingCity === 'string') {
-      const billingCity = normalizeStr(body.billingCity);
-      if (billingCity && billingCity.length > 100) {
-        return withNoStore(withRequestId(badRequest('Ville facturation trop longue (100 max).'), requestId));
+    if ('billingCity' in body) {
+      if (body.billingCity == null || body.billingCity === '') {
+        data.billingCity = null;
+      } else if (typeof body.billingCity === 'string') {
+        const billingCity = normalizeStr(body.billingCity);
+        if (billingCity && billingCity.length > 100) {
+          return badRequest('Ville facturation trop longue (100 max).');
+        }
+        data.billingCity = billingCity || null;
+      } else {
+        return badRequest('Ville facturation invalide.');
       }
-      data.billingCity = billingCity || null;
-    } else {
-      return withNoStore(withRequestId(badRequest('Ville facturation invalide.'), requestId));
     }
-  }
 
-  if ('billingCountryCode' in body) {
-    if (body.billingCountryCode == null || body.billingCountryCode === '') {
-      data.billingCountryCode = null;
-    } else if (typeof body.billingCountryCode === 'string') {
-      const billingCountryCode = normalizeStr(body.billingCountryCode);
-      if (billingCountryCode && billingCountryCode.length !== 2) {
-        return withNoStore(withRequestId(badRequest('Pays facturation invalide (ISO 2 lettres).'), requestId));
+    if ('billingCountryCode' in body) {
+      if (body.billingCountryCode == null || body.billingCountryCode === '') {
+        data.billingCountryCode = null;
+      } else if (typeof body.billingCountryCode === 'string') {
+        const billingCountryCode = normalizeStr(body.billingCountryCode);
+        if (billingCountryCode && billingCountryCode.length !== 2) {
+          return badRequest('Pays facturation invalide (ISO 2 lettres).');
+        }
+        data.billingCountryCode = billingCountryCode ? billingCountryCode.toUpperCase() : null;
+      } else {
+        return badRequest('Pays facturation invalide.');
       }
-      data.billingCountryCode = billingCountryCode ? billingCountryCode.toUpperCase() : null;
-    } else {
-      return withNoStore(withRequestId(badRequest('Pays facturation invalide.'), requestId));
     }
-  }
 
-  if ('websiteUrl' in body) {
-    const normalized = normalizeWebsiteUrl((body as Record<string, unknown>).websiteUrl);
-    if (normalized.error) {
-      return withNoStore(withRequestId(badRequest(normalized.error), requestId));
-    }
-    data.websiteUrl = normalized.value;
-  }
-
-  if ('notes' in body) {
-    if (body.notes == null || body.notes === '') {
-      data.notes = null;
-    } else if (typeof body.notes === 'string') {
-      const notes = normalizeStr(body.notes);
-      if (notes && notes.length > 2000) {
-        return withNoStore(withRequestId(badRequest('Notes trop longues (max 2000).'), requestId));
+    if ('websiteUrl' in body) {
+      const normalized = normalizeWebsiteUrl((body as Record<string, unknown>).websiteUrl);
+      if (normalized.error) {
+        return badRequest(normalized.error);
       }
-      data.notes = notes || null;
-    } else {
-      return withNoStore(withRequestId(badRequest('Notes invalides.'), requestId));
+      data.websiteUrl = normalized.value;
     }
-  }
 
-  if ('status' in body) {
-    if (body.status === null || body.status === undefined || body.status === '') {
-      data.status = ClientStatus.ACTIVE;
-    } else if (typeof body.status === 'string' && STATUS_VALUES.has(body.status as ClientStatus)) {
-      data.status = body.status as ClientStatus;
-    } else {
-      return withNoStore(withRequestId(badRequest('Statut invalide.'), requestId));
+    if ('notes' in body) {
+      if (body.notes == null || body.notes === '') {
+        data.notes = null;
+      } else if (typeof body.notes === 'string') {
+        const notes = normalizeStr(body.notes);
+        if (notes && notes.length > 2000) {
+          return badRequest('Notes trop longues (max 2000).');
+        }
+        data.notes = notes || null;
+      } else {
+        return badRequest('Notes invalides.');
+      }
     }
-  }
 
-  if ('leadSource' in body) {
-    if (body.leadSource === null || body.leadSource === undefined || body.leadSource === '') {
-      data.leadSource = null;
-    } else if (typeof body.leadSource === 'string' && Object.values(LeadSource).includes(body.leadSource as LeadSource)) {
-      data.leadSource = body.leadSource as LeadSource;
-    } else {
-      return withNoStore(withRequestId(badRequest('leadSource invalide.'), requestId));
+    if ('status' in body) {
+      if (body.status === null || body.status === undefined || body.status === '') {
+        data.status = ClientStatus.ACTIVE;
+      } else if (typeof body.status === 'string' && STATUS_VALUES.has(body.status as ClientStatus)) {
+        data.status = body.status as ClientStatus;
+      } else {
+        return badRequest('Statut invalide.');
+      }
     }
-  }
 
-  const categoryProvided = Object.prototype.hasOwnProperty.call(body, 'categoryReferenceId');
-  const categoryReferenceId =
-    categoryProvided && typeof body.categoryReferenceId === 'string' && /^\d+$/.test(body.categoryReferenceId)
-      ? BigInt(body.categoryReferenceId)
-      : categoryProvided
-        ? null
-        : undefined;
+    if ('leadSource' in body) {
+      if (body.leadSource === null || body.leadSource === undefined || body.leadSource === '') {
+        data.leadSource = null;
+      } else if (typeof body.leadSource === 'string' && Object.values(LeadSource).includes(body.leadSource as LeadSource)) {
+        data.leadSource = body.leadSource as LeadSource;
+      } else {
+        return badRequest('leadSource invalide.');
+      }
+    }
 
-  const tagProvided = Object.prototype.hasOwnProperty.call(body, 'tagReferenceIds');
-  const tagReferenceIds: bigint[] | undefined = tagProvided
-    ? Array.from(
-        new Set(
-          ((Array.isArray(body.tagReferenceIds) ? body.tagReferenceIds : []) as unknown[])
-            .filter((id): id is string => typeof id === 'string' && /^\d+$/.test(id))
-            .map((id) => BigInt(id))
+    const categoryProvided = Object.prototype.hasOwnProperty.call(body, 'categoryReferenceId');
+    const categoryReferenceId =
+      categoryProvided && typeof body.categoryReferenceId === 'string' && /^\d+$/.test(body.categoryReferenceId)
+        ? BigInt(body.categoryReferenceId)
+        : categoryProvided
+          ? null
+          : undefined;
+
+    const tagProvided = Object.prototype.hasOwnProperty.call(body, 'tagReferenceIds');
+    const tagReferenceIds: bigint[] | undefined = tagProvided
+      ? Array.from(
+          new Set(
+            ((Array.isArray(body.tagReferenceIds) ? body.tagReferenceIds : []) as unknown[])
+              .filter((id): id is string => typeof id === 'string' && /^\d+$/.test(id))
+              .map((id) => BigInt(id))
+          )
         )
-      )
-    : undefined;
+      : undefined;
 
-  let tagsInstruction:
-    | {
-        deleteMany: { clientId: bigint };
-        create: Array<{ referenceId: bigint }>;
+    let tagsInstruction:
+      | {
+          deleteMany: { clientId: bigint };
+          create: Array<{ referenceId: bigint }>;
+        }
+      | undefined;
+
+    if (categoryProvided || tagProvided) {
+      const validated = await validateCategoryAndTags(
+        businessIdBigInt,
+        categoryProvided ? categoryReferenceId ?? null : existing.categoryReferenceId ?? null,
+        tagProvided ? tagReferenceIds : existing.tags?.map((t) => t.referenceId)
+      );
+      if ('error' in validated) {
+        return badRequest(validated.error);
       }
-    | undefined;
-
-  if (categoryProvided || tagProvided) {
-    const validated = await validateCategoryAndTags(
-      businessIdBigInt,
-      categoryProvided ? categoryReferenceId ?? null : existing.categoryReferenceId ?? null,
-      tagProvided ? tagReferenceIds : existing.tags?.map((t) => t.referenceId)
-    );
-    if ('error' in validated) {
-      return withNoStore(withRequestId(badRequest(validated.error), requestId));
-    }
-    if (categoryProvided) {
-      data.categoryReferenceId = validated.categoryId;
-    }
-    if (tagProvided) {
-      tagsInstruction = {
-        deleteMany: { clientId: clientIdBigInt },
-        create: validated.tagIds.map((id) => ({ referenceId: id })),
-      };
-    }
-  }
-
-  if (!tagsInstruction && Object.keys(data).length === 0) {
-    return withNoStore(withRequestId(badRequest('Aucune modification.'), requestId));
-  }
-
-  if ('archive' in body) {
-    if (typeof body.archive !== 'boolean') {
-      return withNoStore(withRequestId(badRequest('archive doit être un booléen.'), requestId));
-    }
-    data.archivedAt = body.archive ? new Date() : null;
-  }
-
-  if ('archivedAt' in body) {
-    if (body.archivedAt === null || body.archivedAt === '') {
-      data.archivedAt = null;
-    } else if (typeof body.archivedAt === 'string') {
-      const parsed = new Date(body.archivedAt);
-      if (Number.isNaN(parsed.getTime())) {
-        return withNoStore(withRequestId(badRequest('archivedAt invalide.'), requestId));
+      if (categoryProvided) {
+        data.categoryReferenceId = validated.categoryId;
       }
-      data.archivedAt = parsed;
-    } else {
-      return withNoStore(withRequestId(badRequest('archivedAt invalide.'), requestId));
+      if (tagProvided) {
+        tagsInstruction = {
+          deleteMany: { clientId: clientIdBigInt },
+          create: validated.tagIds.map((id) => ({ referenceId: id })),
+        };
+      }
     }
+
+    if (!tagsInstruction && Object.keys(data).length === 0) {
+      return badRequest('Aucune modification.');
+    }
+
+    if ('archive' in body) {
+      if (typeof body.archive !== 'boolean') {
+        return badRequest('archive doit être un booléen.');
+      }
+      data.archivedAt = body.archive ? new Date() : null;
+    }
+
+    if ('archivedAt' in body) {
+      if (body.archivedAt === null || body.archivedAt === '') {
+        data.archivedAt = null;
+      } else if (typeof body.archivedAt === 'string') {
+        const parsed = new Date(body.archivedAt);
+        if (Number.isNaN(parsed.getTime())) {
+          return badRequest('archivedAt invalide.');
+        }
+        data.archivedAt = parsed;
+      } else {
+        return badRequest('archivedAt invalide.');
+      }
+    }
+
+    const updated = await prisma.client.update({
+      where: { id: clientIdBigInt },
+      data: {
+        ...data,
+        ...(tagsInstruction ? { tags: tagsInstruction } : {}),
+      },
+      include: {
+        categoryReference: { select: { id: true, name: true } },
+        tags: { include: { reference: { select: { id: true, name: true } } } },
+      },
+    });
+
+    return jsonb({ item: serializeClient(updated) }, requestId);
   }
-
-  const updated = await prisma.client.update({
-    where: { id: clientIdBigInt },
-    data: {
-      ...data,
-      ...(tagsInstruction ? { tags: tagsInstruction } : {}),
-    },
-    include: {
-      categoryReference: { select: { id: true, name: true } },
-      tags: { include: { reference: { select: { id: true, name: true } } } },
-    },
-  });
-
-  return withNoStore(withRequestId(jsonNoStore({ item: serializeClient(updated) }), requestId));
-}
+);

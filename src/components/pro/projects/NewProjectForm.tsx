@@ -25,15 +25,15 @@ export default function NewProjectForm({ businessId }: Props) {
     setLoading(true);
     setFormState((s) => ({ ...s, error: '' }));
     try {
-      const res = await fetchJson<{ id: string }>(`/api/pro/businesses/${businessId}/projects`, {
+      const res = await fetchJson<{ item: { id: string } }>(`/api/pro/businesses/${businessId}/projects`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name }),
       });
-      if (!res.ok || !res.data?.id) {
+      if (!res.ok || !res.data?.item?.id) {
         throw new Error(res.error ?? 'Création du projet impossible.');
       }
-      router.replace(`/app/pro/${businessId}/projects/${res.data.id}`);
+      router.replace(`/app/pro/${businessId}/projects/${res.data.item.id}`);
       router.refresh();
     } catch (err) {
       setFormState((s) => ({ ...s, error: getErrorMessage(err) || 'Erreur réseau.' }));

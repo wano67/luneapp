@@ -1,31 +1,37 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type DragEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type DragEvent } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { ArrowLeft, GripVertical } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
-import { Alert } from '@/components/ui/alert';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Input } from '@/components/ui/input';
 import Select from '@/components/ui/select';
 import { Modal } from '@/components/ui/modal';
 import { TabsPills } from '@/components/pro/TabsPills';
 import { cn } from '@/lib/cn';
+import {
+  UI,
+  formatDate,
+  InitialsAvatar,
+  SectionCard,
+  SectionHeader,
+  StatCard,
+  StatusPill,
+  MetaItem,
+  StickyHeaderActions,
+} from '@/components/pro/projects/workspace-ui';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import {
-  getInvoiceStatusLabelFR,
-  getPaymentStatusLabelFR,
   getProjectDepositStatusLabelFR,
   getProjectQuoteStatusLabelFR,
-  getQuoteStatusLabelFR,
 } from '@/lib/billingStatus';
 import { formatCurrencyEUR } from '@/lib/formatCurrency';
 import { useActiveBusiness } from '@/app/app/pro/ActiveBusinessProvider';
-import { ProjectSetupChecklist, type ChecklistItem } from '@/components/pro/projects/ProjectSetupChecklist';
-import { ServiceProgressRow } from '@/components/pro/projects/ServiceProgressRow';
+import type { ChecklistItem } from '@/components/pro/projects/ProjectSetupChecklist';
+import { OverviewTab } from '@/components/pro/projects/tabs/OverviewTab';
 import { GuidedCtaCard } from '@/components/pro/shared/GuidedCtaCard';
 import {
   getProjectScopeLabelFR,
@@ -34,6 +40,21 @@ import {
   isProjectOverdue,
   shouldWarnProjectCompletion,
 } from '@/lib/projectStatusUi';
+import { formatCentsToEuroInput, parseEuroToCents, sanitizeEuroInput } from '@/lib/money';
+import { QuoteWizardModal } from '@/components/pro/projects/modals/QuoteWizardModal';
+import { QuoteDateModal, type QuoteDateEditorState } from '@/components/pro/projects/modals/QuoteDateModal';
+import { CancelQuoteModal, type CancelQuoteEditorState } from '@/components/pro/projects/modals/CancelQuoteModal';
+import { InvoiceDateModal, type InvoiceDateEditorState } from '@/components/pro/projects/modals/InvoiceDateModal';
+import { DepositDateModal } from '@/components/pro/projects/modals/DepositDateModal';
+import { StagedInvoiceModal, type StagedInvoiceModalState } from '@/components/pro/projects/modals/StagedInvoiceModal';
+import { PaymentModal, type PaymentFormState } from '@/components/pro/projects/modals/PaymentModal';
+import { QuoteEditorModal } from '@/components/pro/projects/modals/QuoteEditorModal';
+import { InvoiceEditorModal } from '@/components/pro/projects/modals/InvoiceEditorModal';
+import { FilesTab } from '@/components/pro/projects/tabs/FilesTab';
+import { WorkTab } from '@/components/pro/projects/tabs/WorkTab';
+import { TeamTab } from '@/components/pro/projects/tabs/TeamTab';
+import { BillingQuotesSection } from '@/components/pro/projects/billing/BillingQuotesSection';
+import { BillingInvoicesSection } from '@/components/pro/projects/billing/BillingInvoicesSection';
 
 type ProjectDetail = {
   id: string;
@@ -100,7 +121,7 @@ type WizardLine = {
   title: string;
   description: string;
   quantity: number;
-  unitPriceCents: number | null;
+  unitPrice: string;
   priceLocked: boolean;
 };
 
@@ -285,67 +306,13 @@ type InvoiceDetail = InvoiceItem & {
 };
 
 const tabs = [
-  { key: 'overview', label: 'Vue d’ensemble' },
+  { key: 'overview', label: "Vue d\u2019ensemble" },
   { key: 'work', label: 'Travail' },
   { key: 'team', label: 'Équipe' },
   { key: 'billing', label: 'Facturation' },
   { key: 'files', label: 'Documents' },
 ];
 
-function formatDate(value: string | null) {
-  if (!value) return '—';
-  try {
-    return new Intl.DateTimeFormat('fr-FR').format(new Date(value));
-  } catch {
-    return '—';
-  }
-}
-
-function formatTaskStatus(status: string) {
-  if (status === 'DONE') return 'Terminée';
-  if (status === 'IN_PROGRESS') return 'En cours';
-  if (status === 'TODO') return 'À faire';
-  return status || '—';
-}
-
-const STATUS_BADGE_STYLES: Record<string, string> = {
-  DONE: 'border-emerald-200 bg-emerald-50 text-emerald-700',
-  IN_PROGRESS: 'border-amber-200 bg-amber-50 text-amber-700',
-  TODO: 'border-slate-200 bg-slate-50 text-slate-700',
-};
-
-function getStatusBadgeClasses(status: string) {
-  return STATUS_BADGE_STYLES[status] ?? 'border-[var(--border)]/60 bg-[var(--surface-2)] text-[var(--text-secondary)]';
-}
-
-function getInitials(name?: string | null, email?: string | null) {
-  const base = name?.trim() || email?.split('@')[0]?.trim() || '';
-  if (!base) return '??';
-  const parts = base.split(/\s+/).filter(Boolean);
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
-}
-
-function InitialsAvatar({
-  name,
-  email,
-  size = 28,
-}: {
-  name?: string | null;
-  email?: string | null;
-  size?: number;
-}) {
-  const initials = getInitials(name, email);
-  return (
-    <span
-      className="flex items-center justify-center rounded-full bg-[var(--surface-2)] text-[11px] font-semibold text-[var(--text-secondary)]"
-      style={{ width: size, height: size }}
-      aria-label={name ?? email ?? 'Utilisateur'}
-    >
-      {initials}
-    </span>
-  );
-}
 
 function toDateInput(value?: string | null) {
   if (!value) return '';
@@ -361,19 +328,9 @@ function parseCents(value?: string | null): number | null {
   return num;
 }
 
-function parseEuroInput(value: string): number | null {
-  const trimmed = value.trim();
-  if (!trimmed) return null;
-  const normalized = trimmed.replace(',', '.');
-  const num = Number(normalized);
-  if (!Number.isFinite(num)) return null;
-  return Math.round(num * 100);
-}
-
-function formatEuroInput(value?: string | null): string {
-  const cents = parseCents(value);
-  if (cents == null) return '';
-  return (cents / 100).toString();
+function parseEuroInputCents(value: string): number | null {
+  const cents = parseEuroToCents(value);
+  return Number.isFinite(cents) ? cents : null;
 }
 
 function getInvoicePaidCents(invoice: InvoiceItem): number {
@@ -387,26 +344,6 @@ function getInvoiceRemainingCents(invoice: InvoiceItem): number {
   if (Number.isFinite(remaining)) return Math.max(0, remaining);
   const paid = getInvoicePaidCents(invoice);
   return Math.max(0, Number(invoice.totalCents) - paid);
-}
-
-function normalizePaymentStatus(value?: string | null): 'UNPAID' | 'PARTIAL' | 'PAID' | null {
-  if (!value) return null;
-  const upper = value.toUpperCase();
-  if (upper === 'PARTIALLY_PAID') return 'PARTIAL';
-  if (upper === 'PARTIAL') return 'PARTIAL';
-  if (upper === 'PAID') return 'PAID';
-  if (upper === 'UNPAID') return 'UNPAID';
-  return null;
-}
-
-function getInvoicePaymentStatus(invoice: InvoiceItem): 'UNPAID' | 'PARTIAL' | 'PAID' {
-  const normalized = normalizePaymentStatus(invoice.paymentStatus);
-  if (normalized) return normalized;
-  const paid = getInvoicePaidCents(invoice);
-  const total = Number(invoice.totalCents);
-  if (paid <= 0) return 'UNPAID';
-  if (paid >= total) return 'PAID';
-  return 'PARTIAL';
 }
 
 function toEditableLine(item: {
@@ -423,117 +360,15 @@ function toEditableLine(item: {
     label: item.label,
     description: item.description ?? '',
     quantity: String(item.quantity),
-    unitPrice: formatEuroInput(item.unitPriceCents),
+    unitPrice: formatCentsToEuroInput(item.unitPriceCents),
     serviceId: item.serviceId ?? null,
     productId: item.productId ?? null,
   };
 }
 
-const UI = {
-  page: 'mx-auto max-w-6xl space-y-6 px-4 py-6',
-  section: 'rounded-3xl border border-[var(--border)] bg-[var(--surface)] p-5 shadow-sm',
-  sectionSoft: 'rounded-2xl border border-[var(--border)]/60 bg-[var(--surface-2)]/60 p-3',
-  sectionTitle: 'text-sm font-semibold text-[var(--text-primary)]',
-  sectionSubtitle: 'text-xs text-[var(--text-secondary)]',
-  label: 'text-[11px] uppercase tracking-[0.14em] text-[var(--text-secondary)]',
-  value: 'text-sm font-semibold text-[var(--text-primary)]',
-};
-
-const PAYMENT_METHOD_LABELS: Record<string, string> = {
-  WIRE: 'Virement',
-  CARD: 'Carte',
-  CHECK: 'Chèque',
-  CASH: 'Espèces',
-  OTHER: 'Autre',
-};
-
-const WIZARD_STEPS = ['Prestations', 'Tâches', 'Résumé'] as const;
 const OVERVIEW_PREVIEW_COUNT = 3;
 const OVERVIEW_ACTIVITY_COUNT = 5;
 const OVERVIEW_MEMBERS_COUNT = 6;
-
-function SectionCard({ children, className }: { children: ReactNode; className?: string }) {
-  return (
-    <Card className={cn(UI.section, className)}>{children}</Card>
-  );
-}
-
-function SectionHeader({
-  title,
-  subtitle,
-  actions,
-}: {
-  title: string;
-  subtitle?: string | null;
-  actions?: ReactNode;
-}) {
-  return (
-    <div className="flex flex-wrap items-start justify-between gap-3">
-      <div className="space-y-1">
-        <p className={UI.sectionTitle}>{title}</p>
-        {subtitle ? <p className={UI.sectionSubtitle}>{subtitle}</p> : null}
-      </div>
-      {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
-    </div>
-  );
-}
-
-function StatCard({
-  label,
-  value,
-  highlight,
-  align = 'left',
-}: {
-  label: string;
-  value: string;
-  highlight?: boolean;
-  align?: 'left' | 'right';
-}) {
-  return (
-    <div
-      className={cn(
-        UI.sectionSoft,
-        align === 'right' ? 'text-right' : 'text-left',
-        highlight ? 'border-[var(--accent-strong)]/40 bg-[var(--surface)]' : ''
-      )}
-    >
-      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-secondary)]">
-        {label}
-      </p>
-      <p className={cn('text-lg font-semibold text-[var(--text-primary)]', highlight ? 'text-xl' : '')}>
-        {value}
-      </p>
-    </div>
-  );
-}
-
-function StatusPill({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-center gap-2 rounded-full border border-[var(--border)]/60 bg-[var(--surface-2)]/70 px-3 py-1 text-xs text-[var(--text-secondary)]">
-      <span className="font-semibold uppercase tracking-[0.14em]">{label}</span>
-      <span className="text-[var(--text-primary)]">{value}</span>
-    </div>
-  );
-}
-
-function MetaItem({ label, value }: { label: string; value: ReactNode }) {
-  return (
-    <div className="flex flex-wrap items-center gap-2 text-sm text-[var(--text-secondary)]">
-      <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-secondary)]">
-        {label}
-      </span>
-      <span className="text-[var(--text-primary)]">{value}</span>
-    </div>
-  );
-}
-
-function StickyHeaderActions({ children }: { children: ReactNode }) {
-  return (
-    <div className="sticky top-3 z-10 -mx-3 flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-[var(--surface)]/90 px-3 py-2 shadow-sm backdrop-blur sm:static sm:mx-0 sm:bg-transparent sm:p-0 sm:shadow-none">
-      {children}
-    </div>
-  );
-}
 
 export function ProjectWorkspace({ businessId, projectId }: { businessId: string; projectId: string }) {
   const searchParams = useSearchParams();
@@ -570,11 +405,7 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
   const [invoiceEditError, setInvoiceEditError] = useState<string | null>(null);
   const [quoteEditing, setQuoteEditing] = useState(false);
   const [invoiceEditing, setInvoiceEditing] = useState(false);
-  const [stagedInvoiceModal, setStagedInvoiceModal] = useState<{
-    kind: 'DEPOSIT' | 'MID' | 'FINAL';
-    mode: 'PERCENT' | 'AMOUNT';
-    value: string;
-  } | null>(null);
+  const [stagedInvoiceModal, setStagedInvoiceModal] = useState<StagedInvoiceModalState | null>(null);
   const [stagedInvoiceError, setStagedInvoiceError] = useState<string | null>(null);
   const [stagedInvoiceLoading, setStagedInvoiceLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<'overview' | 'work' | 'team' | 'billing' | 'files'>('overview');
@@ -582,6 +413,7 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
   const [showAllServicesOverview, setShowAllServicesOverview] = useState(false);
   const [showAllActionsOverview, setShowAllActionsOverview] = useState(false);
   const [showAllActivity, setShowAllActivity] = useState(false);
+  const [showSummaryDetails, setShowSummaryDetails] = useState(false);
   const [accessModalOpen, setAccessModalOpen] = useState(false);
   const [unitsModalOpen, setUnitsModalOpen] = useState(false);
   const [unitDraftName, setUnitDraftName] = useState('');
@@ -606,6 +438,14 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
   const [startDateInput, setStartDateInput] = useState<string>('');
   const [endDateInput, setEndDateInput] = useState<string>('');
   const [serviceSelections, setServiceSelections] = useState<Record<string, number>>({});
+  const [quickServiceDraft, setQuickServiceDraft] = useState({
+    name: '',
+    code: '',
+    price: '',
+    billingUnit: 'ONE_OFF',
+  });
+  const [quickServiceSaving, setQuickServiceSaving] = useState(false);
+  const [quickServiceError, setQuickServiceError] = useState<string | null>(null);
   const [serviceDrafts, setServiceDrafts] = useState<
     Record<
       string,
@@ -627,6 +467,7 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
   const [creatingQuote, setCreatingQuote] = useState(false);
   const [quoteActionId, setQuoteActionId] = useState<string | null>(null);
   const [invoiceActionId, setInvoiceActionId] = useState<string | null>(null);
+  const [recurringInvoiceActionId, setRecurringInvoiceActionId] = useState<string | null>(null);
   const [paymentModal, setPaymentModal] = useState<{ invoice: InvoiceItem } | null>(null);
   const [paymentItems, setPaymentItems] = useState<PaymentItem[]>([]);
   const [paymentLoading, setPaymentLoading] = useState(false);
@@ -634,7 +475,7 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
   const [paymentNotice, setPaymentNotice] = useState<string | null>(null);
   const [paymentSaving, setPaymentSaving] = useState(false);
   const [paymentDeletingId, setPaymentDeletingId] = useState<string | null>(null);
-  const [paymentForm, setPaymentForm] = useState({
+  const [paymentForm, setPaymentForm] = useState<PaymentFormState>({
     amount: '',
     paidAt: '',
     method: 'WIRE',
@@ -665,26 +506,11 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
   const [openServiceTasks, setOpenServiceTasks] = useState<Record<string, boolean>>({});
   const [taskUpdating, setTaskUpdating] = useState<Record<string, boolean>>({});
   const [templatesApplying, setTemplatesApplying] = useState<Record<string, boolean>>({});
-  const [quoteDateEditor, setQuoteDateEditor] = useState<{
-    quoteId: string;
-    number: string | null;
-    status: string;
-    signedAt: string;
-  } | null>(null);
-  const [cancelQuoteEditor, setCancelQuoteEditor] = useState<{
-    quoteId: string;
-    number: string | null;
-    status: string;
-    reason: string;
-  } | null>(null);
+  const [quoteDateEditor, setQuoteDateEditor] = useState<QuoteDateEditorState | null>(null);
+  const [cancelQuoteEditor, setCancelQuoteEditor] = useState<CancelQuoteEditorState | null>(null);
   const [cancelQuoteError, setCancelQuoteError] = useState<string | null>(null);
   const [cancelQuoteSaving, setCancelQuoteSaving] = useState(false);
-  const [invoiceDateEditor, setInvoiceDateEditor] = useState<{
-    invoiceId: string;
-    number: string | null;
-    status: string;
-    paidAt: string;
-  } | null>(null);
+  const [invoiceDateEditor, setInvoiceDateEditor] = useState<InvoiceDateEditorState | null>(null);
   const [depositDateEditorOpen, setDepositDateEditorOpen] = useState(false);
   const [depositPaidDraft, setDepositPaidDraft] = useState('');
   const [dateModalError, setDateModalError] = useState<string | null>(null);
@@ -714,6 +540,9 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
     setModalError(null);
     setSaving(false);
     setDocumentFile(null);
+    setQuickServiceError(null);
+    setQuickServiceSaving(false);
+    setQuickServiceDraft({ name: '', code: '', price: '', billingUnit: 'ONE_OFF' });
   };
 
   const updateTaskDueDate = async (taskId: string, value: string) => {
@@ -921,7 +750,7 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
     setPaymentItems([]);
     setPaymentModal({ invoice });
     setPaymentForm({
-      amount: presetAmountCents != null ? formatEuroInput(String(presetAmountCents)) : '',
+      amount: presetAmountCents != null ? formatCentsToEuroInput(String(presetAmountCents)) : '',
       paidAt: new Date().toISOString().slice(0, 10),
       method: 'WIRE',
       reference: '',
@@ -981,7 +810,7 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
         );
       }
       const defaultCents = service.defaultPriceCents ?? service.tjmCents;
-      const unitPriceCents = defaultCents != null ? Number(defaultCents) : null;
+      const unitPrice = defaultCents != null ? formatCentsToEuroInput(defaultCents) : '';
       return [
         ...prev,
         {
@@ -992,7 +821,7 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
           title: service.name,
           description: '',
           quantity: 1,
-          unitPriceCents,
+          unitPrice,
           priceLocked: defaultCents != null,
         },
       ];
@@ -1011,7 +840,7 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
         title: '',
         description: '',
         quantity: 1,
-        unitPriceCents: null,
+        unitPrice: '',
         priceLocked: false,
       },
     ]);
@@ -1265,7 +1094,7 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
       return;
     }
 
-    const priceCents = draft.price.trim() ? parseEuroInput(draft.price) : null;
+    const priceCents = draft.price.trim() ? parseEuroInputCents(draft.price) : null;
     if (draft.price.trim() && priceCents == null) {
       setLineErrors((prev) => ({ ...prev, [serviceId]: 'Prix invalide.' }));
       return;
@@ -1291,8 +1120,13 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
     }
 
     const discountType = draft.discountType ?? 'NONE';
-    const discountValueRaw = draft.discountValue ? Number(draft.discountValue) : null;
-    const discountValue = Number.isFinite(discountValueRaw ?? NaN) ? Math.trunc(discountValueRaw ?? 0) : null;
+    const discountValue =
+      discountType === 'AMOUNT'
+        ? (draft.discountValue ? parseEuroInputCents(draft.discountValue) : null)
+        : (() => {
+            const raw = draft.discountValue ? Number(draft.discountValue) : null;
+            return Number.isFinite(raw ?? NaN) ? Math.trunc(raw ?? 0) : null;
+          })();
     if ((existing.discountType ?? 'NONE') !== discountType || (existing.discountValue ?? null) !== (discountValue ?? null)) {
       payload.discountType = discountType;
       payload.discountValue = discountValue ?? null;
@@ -1437,6 +1271,7 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
 
       for (const line of quoteWizardLines) {
         let serviceId = line.serviceId ?? null;
+        const unitPriceCents = line.unitPrice.trim() ? parseEuroInputCents(line.unitPrice) : null;
         if (!serviceId || line.source === 'custom') {
           const code = buildCustomServiceCode();
           const payload: Record<string, unknown> = {
@@ -1444,9 +1279,9 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
             name: line.title.trim() || 'Prestation personnalisée',
             type: 'CUSTOM',
             description: line.description.trim() || null,
-            defaultPriceCents: line.unitPriceCents ?? 0,
+            defaultPriceCents: unitPriceCents ?? 0,
           };
-          const res = await fetchJson<CatalogService & { id: string }>(
+          const res = await fetchJson<{ item: CatalogService & { id: string } }>(
             `/api/pro/businesses/${businessId}/services`,
             {
               method: 'POST',
@@ -1454,10 +1289,10 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
               body: JSON.stringify(payload),
             }
           );
-          if (!res.ok || !res.data?.id) {
+          if (!res.ok || !res.data?.item?.id) {
             throw new Error(res.error ?? 'Création du service personnalisé impossible.');
           }
-          serviceId = res.data.id;
+          serviceId = res.data.item.id;
         }
 
         const payload: Record<string, unknown> = {
@@ -1466,8 +1301,8 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
           titleOverride: line.title.trim() || undefined,
           description: line.description.trim() || undefined,
         };
-        if (line.unitPriceCents != null && (!line.priceLocked || line.source === 'custom')) {
-          payload.priceCents = Math.max(0, Math.trunc(line.unitPriceCents));
+        if (unitPriceCents != null && (!line.priceLocked || line.source === 'custom')) {
+          payload.priceCents = Math.max(0, Math.trunc(unitPriceCents));
         }
         if (createTasks) {
           payload.generateTasks = true;
@@ -1627,7 +1462,7 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
     setBillingError(null);
     setBillingInfo(null);
     try {
-      const res = await fetchJson<{ invoice: { id: string } }>(
+      const res = await fetchJson<{ item: { id: string } }>(
         `/api/pro/businesses/${businessId}/quotes/${quoteId}/invoices`,
         { method: 'POST' }
       );
@@ -1641,6 +1476,32 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
       setBillingError(getErrorMessage(err));
     } finally {
       setInvoiceActionId(null);
+    }
+  }
+
+  async function handleGenerateRecurringInvoice(projectServiceId: string) {
+    if (!isAdmin) {
+      setBillingError('Réservé aux admins/owners.');
+      return;
+    }
+    setRecurringInvoiceActionId(projectServiceId);
+    setBillingError(null);
+    setBillingInfo(null);
+    try {
+      const res = await fetchJson<{ invoice: { id: string } }>(
+        `/api/pro/businesses/${businessId}/projects/${projectId}/services/${projectServiceId}/recurring-invoices`,
+        { method: 'POST' }
+      );
+      if (!res.ok) {
+        setBillingError(res.error ?? 'Création de la facture mensuelle impossible.');
+        return;
+      }
+      setBillingInfo('Facture mensuelle créée.');
+      await loadInvoices();
+    } catch (err) {
+      setBillingError(getErrorMessage(err));
+    } finally {
+      setRecurringInvoiceActionId(null);
     }
   }
 
@@ -1683,7 +1544,7 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
       }
       value = percent;
     } else if (mode === 'AMOUNT') {
-      const cents = parseEuroInput(stagedInvoiceModal.value);
+      const cents = parseEuroInputCents(stagedInvoiceModal.value);
       if (cents == null || cents <= 0) {
         setStagedInvoiceError('Montant invalide.');
         return;
@@ -1738,7 +1599,7 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
     setBillingError(null);
     setBillingInfo(null);
     try {
-      const res = await fetchJson<{ invoice: InvoiceItem }>(
+      const res = await fetchJson<{ item: InvoiceItem }>(
         `/api/pro/businesses/${businessId}/invoices/${invoiceId}`,
         {
           method: 'PATCH',
@@ -1764,7 +1625,7 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
       setPaymentError('Réservé aux admins/owners.');
       return;
     }
-    const amountCents = parseEuroInput(paymentForm.amount);
+    const amountCents = parseEuroInputCents(paymentForm.amount);
     if (!amountCents || amountCents <= 0) {
       setPaymentError('Montant invalide.');
       return;
@@ -1791,7 +1652,7 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
         }
       );
       if (!res.ok) {
-        setPaymentError(res.error ?? 'Impossible d’ajouter le paiement.');
+        setPaymentError(res.error ?? "Impossible d'ajouter le paiement.");
         return;
       }
       const message = amountCents >= remainingBefore ? 'Facture soldée' : 'Paiement ajouté';
@@ -1896,7 +1757,7 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
     setDateModalSaving(true);
     setDateModalError(null);
     try {
-      const res = await fetchJson<{ invoice: InvoiceItem }>(
+      const res = await fetchJson<{ item: InvoiceItem }>(
         `/api/pro/businesses/${businessId}/invoices/${invoiceDateEditor.invoiceId}`,
         {
           method: 'PATCH',
@@ -2022,7 +1883,7 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
           setQuoteEditError('Quantité invalide.');
           return;
         }
-        const unitPriceCents = parseEuroInput(line.unitPrice);
+        const unitPriceCents = parseEuroInputCents(line.unitPrice);
         if (unitPriceCents == null) {
           setQuoteEditError('Prix unitaire invalide.');
           return;
@@ -2095,14 +1956,14 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
     setInvoiceEditError(null);
     setInvoiceEditor(null);
     try {
-      const res = await fetchJson<{ invoice: InvoiceDetail }>(`/api/pro/businesses/${businessId}/invoices/${invoiceId}`, {
+      const res = await fetchJson<{ item: InvoiceDetail }>(`/api/pro/businesses/${businessId}/invoices/${invoiceId}`, {
         cache: 'no-store',
       });
       if (!res.ok || !res.data) {
         setInvoiceEditError(res.error ?? 'Facture introuvable.');
         return;
       }
-      const invoice = res.data.invoice;
+      const invoice = res.data.item;
       setInvoiceEditor({
         invoiceId: invoice.id,
         status: invoice.status,
@@ -2179,7 +2040,7 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
           setInvoiceEditError('Quantité invalide.');
           return;
         }
-        const unitPriceCents = parseEuroInput(line.unitPrice);
+        const unitPriceCents = parseEuroInputCents(line.unitPrice);
         if (unitPriceCents == null) {
           setInvoiceEditError('Prix unitaire invalide.');
           return;
@@ -2200,7 +2061,7 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
     setInvoiceEditing(true);
     setInvoiceEditError(null);
     try {
-      const res = await fetchJson<{ invoice: InvoiceItem }>(
+      const res = await fetchJson<{ item: InvoiceItem }>(
         `/api/pro/businesses/${businessId}/invoices/${invoiceEditor.invoiceId}`,
         {
           method: 'PATCH',
@@ -2367,14 +2228,14 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
   }, [statusFilter, tasks]);
 
   const subtasksByParentId = useMemo(() => {
-    const map = new Map<string, TaskItem[]>();
+    const record: Record<string, TaskItem[]> = {};
     tasks.forEach((task) => {
       if (!task.parentTaskId) return;
-      const bucket = map.get(task.parentTaskId) ?? [];
+      const bucket = record[task.parentTaskId] ?? [];
       bucket.push(task);
-      map.set(task.parentTaskId, bucket);
+      record[task.parentTaskId] = bucket;
     });
-    return map;
+    return record;
   }, [tasks]);
 
   const tasksByAssignee = useMemo(() => {
@@ -2447,11 +2308,16 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
         if (!next[svc.id]) {
           next[svc.id] = {
             quantity: String(svc.quantity ?? 1),
-            price: formatEuroInput(svc.priceCents),
+            price: formatCentsToEuroInput(svc.priceCents),
             title: svc.titleOverride ?? '',
             description: svc.description ?? svc.notes ?? '',
             discountType: svc.discountType ?? 'NONE',
-            discountValue: svc.discountValue != null ? String(svc.discountValue) : '',
+            discountValue:
+              svc.discountType === 'AMOUNT'
+                ? formatCentsToEuroInput(svc.discountValue)
+                : svc.discountValue != null
+                  ? String(svc.discountValue)
+                  : '',
             billingUnit: svc.billingUnit ?? 'ONE_OFF',
             unitLabel: svc.unitLabel ?? '',
           };
@@ -2475,7 +2341,7 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
       const quantityNum = Number(quantityRaw);
       const quantity =
         Number.isFinite(quantityNum) && quantityNum > 0 ? Math.max(1, Math.trunc(quantityNum)) : svc.quantity ?? 1;
-      const draftPriceCents = draft?.price ? parseEuroInput(draft.price) : null;
+      const draftPriceCents = draft?.price ? parseEuroInputCents(draft.price) : null;
       const projectPriceCents = draftPriceCents ?? parseCents(svc.priceCents);
       const catalog = catalogById.get(svc.serviceId);
       const defaultPriceCents = parseCents(catalog?.defaultPriceCents ?? null);
@@ -2484,9 +2350,13 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
       const missingPrice = resolvedUnitCents == null;
       const discountType = draft?.discountType ?? svc.discountType ?? 'NONE';
       const discountValueRaw = draft?.discountValue ?? (svc.discountValue != null ? String(svc.discountValue) : '');
-      const discountValueNum = discountValueRaw ? Number(discountValueRaw) : null;
       const discountValue =
-        Number.isFinite(discountValueNum ?? NaN) ? Math.trunc(discountValueNum ?? 0) : null;
+        discountType === 'AMOUNT'
+          ? (discountValueRaw ? parseEuroInputCents(discountValueRaw) : null)
+          : (() => {
+              const num = discountValueRaw ? Number(discountValueRaw) : null;
+              return Number.isFinite(num ?? NaN) ? Math.trunc(num ?? 0) : null;
+            })();
       const applyDiscount = () => {
         if (resolvedUnitCents == null) return { final: null, original: null };
         if (discountType === 'PERCENT' && discountValue != null) {
@@ -2552,7 +2422,8 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
       const errors: string[] = [];
       if (!line.title.trim()) errors.push('Titre requis.');
       if (line.quantity <= 0) errors.push('Qté invalide.');
-      if (line.unitPriceCents === null || Number.isNaN(line.unitPriceCents)) {
+      const priceCents = line.unitPrice.trim() ? parseEuroInputCents(line.unitPrice) : null;
+      if (priceCents === null) {
         errors.push('Prix requis.');
       }
       return { id: line.id, errors };
@@ -2706,7 +2577,7 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
   const applyPaymentShortcut = (ratio: number) => {
     if (!Number.isFinite(paymentRemainingCents) || paymentRemainingCents <= 0) return;
     const cents = Math.max(0, Math.round(paymentRemainingCents * ratio));
-    setPaymentForm((prev) => ({ ...prev, amount: formatEuroInput(String(cents)) }));
+    setPaymentForm((prev) => ({ ...prev, amount: formatCentsToEuroInput(String(cents)) }));
   };
 
   const legalBlocks = useMemo(() => {
@@ -2726,7 +2597,7 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
   const stagedPercentValue =
     stagedMode === 'PERCENT' ? Number(stagedInvoiceModal?.value ?? '') : null;
   const stagedAmountValue =
-    stagedMode === 'AMOUNT' ? parseEuroInput(stagedInvoiceModal?.value ?? '') : null;
+    stagedMode === 'AMOUNT' ? parseEuroInputCents(stagedInvoiceModal?.value ?? '') : null;
   const stagedPreviewCents =
     stagedMode === 'FINAL'
       ? remainingToInvoiceCents
@@ -2957,6 +2828,67 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
     }
   }
 
+  async function handleQuickCreateService() {
+    if (!isAdmin) {
+      setQuickServiceError('Réservé aux admins/owners.');
+      return;
+    }
+    const name = quickServiceDraft.name.trim();
+    if (!name) {
+      setQuickServiceError('Nom requis.');
+      return;
+    }
+    const priceCents = parseEuroToCents(quickServiceDraft.price);
+    if (!Number.isFinite(priceCents) || priceCents <= 0) {
+      setQuickServiceError('Prix invalide.');
+      return;
+    }
+    const code =
+      quickServiceDraft.code.trim() ||
+      `SER-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+
+    setQuickServiceSaving(true);
+    setQuickServiceError(null);
+    try {
+      const createRes = await fetchJson<{ item: { id: string } }>(`/api/pro/businesses/${businessId}/services`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code,
+          name,
+          defaultPriceCents: priceCents,
+        }),
+      });
+      if (!createRes.ok || !createRes.data?.item?.id) {
+        throw new Error(createRes.error ?? 'Création du service impossible.');
+      }
+      const createdId = createRes.data.item.id;
+      const addRes = await fetchJson(`/api/pro/businesses/${businessId}/projects/${projectId}/services`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          serviceId: createdId,
+          quantity: 1,
+          billingUnit: quickServiceDraft.billingUnit,
+          unitLabel: quickServiceDraft.billingUnit === 'MONTHLY' ? '/mois' : null,
+          generateTasks: false,
+        }),
+      });
+      if (!addRes.ok) {
+        throw new Error(addRes.error ?? 'Ajout du service impossible.');
+      }
+      setQuickServiceDraft({ name: '', code: '', price: '', billingUnit: 'ONE_OFF' });
+      await refetchAll();
+      await loadCatalogServices('');
+      setBillingInfo('Service ajouté au projet.');
+      closeModal();
+    } catch (err) {
+      setQuickServiceError(getErrorMessage(err));
+    } finally {
+      setQuickServiceSaving(false);
+    }
+  }
+
   async function handleApplyServiceTemplates(projectServiceId: string) {
     if (!isAdmin) {
       setBillingError('Réservé aux admins/owners.');
@@ -3070,7 +3002,7 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
       }
     );
     if (!res.ok) {
-      setAccessInfo(res.error ?? 'Impossible d’ajouter l’accès.');
+      setAccessInfo(res.error ?? "Impossible d'ajouter l'acc\u00e8s.");
       return;
     }
     await loadProjectMembers();
@@ -3088,7 +3020,7 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
       { method: 'DELETE' }
     );
     if (!res.ok) {
-      setAccessInfo(res.error ?? 'Impossible de retirer l’accès.');
+      setAccessInfo(res.error ?? "Impossible de retirer l'acc\u00e8s.");
       return;
     }
     await loadProjectMembers();
@@ -3378,380 +3310,61 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
       />
 
       {activeTab === 'overview' ? (
-        <div className="space-y-4">
-          {showSetup ? (
-            <ProjectSetupChecklist items={checklistItems} onAction={(key) => setActiveSetupModal(key as typeof activeSetupModal)} />
-          ) : null}
-          {!showSetup && checklistItems.some((it) => !it.done) ? (
-            <ProjectSetupChecklist items={checklistItems} onAction={(key) => setActiveSetupModal(key as typeof activeSetupModal)} />
-          ) : null}
-
-          <SectionCard className="space-y-3">
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-semibold text-[var(--text-primary)]">Services inclus</p>
-              <div className="flex flex-wrap items-center gap-2">
-                {showServicesToggle ? (
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => setShowAllServicesOverview((prev) => !prev)}
-                  >
-                    {showAllServicesOverview ? 'Voir moins' : 'Voir +'}
-                  </Button>
-                ) : null}
-                <Button asChild size="sm" variant="outline">
-                  <Link href={`/app/pro/${businessId}/projects/${projectId}?tab=work`}>Ouvrir Travail</Link>
-                </Button>
-              </div>
-            </div>
-            {servicesWithTasks.length ? (
-              <div className="space-y-3">
-                {servicesOverview.map(({ service, tasks: svcTasks }) => (
-                  <ServiceProgressRow
-                    key={service.id}
-                    service={{ id: service.id, name: service.service.name }}
-                    tasks={svcTasks}
-                    businessId={businessId}
-                    projectId={projectId}
-                  />
-                ))}
-              </div>
-            ) : (
-              <GuidedCtaCard
-                title="Aucun service ajouté au projet."
-                description="Ajoute des services pour structurer le travail et la facturation."
-                primary={{ label: 'Ajouter des services', href: `/app/pro/${businessId}/projects/${projectId}?tab=billing` }}
-              />
-            )}
-          </SectionCard>
-
-          <SectionCard className="space-y-3">
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-semibold text-[var(--text-primary)]">Prochaines actions</p>
-              {showActionsToggle ? (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => setShowAllActionsOverview((prev) => !prev)}
-                >
-                  {showAllActionsOverview ? 'Voir moins' : 'Voir +'}
-                </Button>
-              ) : null}
-            </div>
-            {upcomingTasks.length ? (
-              <div className="space-y-2 text-sm text-[var(--text-secondary)]">
-                {upcomingTasksOverview.map((task) => (
-                  <Link
-                    key={task.id}
-                    href={`/app/pro/${businessId}/tasks/${task.id}`}
-                    className="block rounded-lg border border-[var(--border)]/60 bg-[var(--surface-2)]/70 px-3 py-2 transition hover:border-[var(--border)] hover:bg-[var(--surface)]"
-                  >
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="truncate text-[var(--text-primary)]">{task.title}</p>
-                        <p className="text-[11px] text-[var(--text-secondary)]">
-                          {task.assigneeName || task.assigneeEmail || 'Non assigné'}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2 text-[11px] text-[var(--text-secondary)]">
-                        <span
-                          className={cn(
-                            'inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide',
-                            getStatusBadgeClasses(task.status)
-                          )}
-                        >
-                          {formatTaskStatus(task.status)}
-                        </span>
-                        <span>{formatDate(task.dueDate)}</span>
-                      </div>
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            ) : (
-                <GuidedCtaCard
-                  title="Aucune tâche planifiée."
-                  description="Crée des tâches pour organiser le travail."
-                  primary={{ label: 'Créer une tâche', href: `/app/pro/${businessId}/projects/${projectId}?tab=work` }}
-                />
-            )}
-          </SectionCard>
-
-          <div className="grid gap-4 md:grid-cols-2">
-            <SectionCard className="space-y-3">
-              <div className="flex items-center justify-between gap-3">
-                <p className="text-sm font-semibold text-[var(--text-primary)]">Équipe (accès au projet)</p>
-                {isAdmin ? (
-                  <Button size="sm" variant="outline" onClick={() => setAccessModalOpen(true)}>
-                    Gérer l’accès
-                  </Button>
-                ) : null}
-              </div>
-              {projectMembersPreview.length ? (
-                <div className="flex flex-wrap items-center gap-3">
-                  {projectMembersPreview.map((member) => (
-                    <div key={member.membershipId} className="flex items-center gap-2 rounded-full border border-[var(--border)]/60 bg-[var(--surface-2)]/70 px-3 py-1.5 text-xs text-[var(--text-secondary)]">
-                      <InitialsAvatar name={member.user.name} email={member.user.email} size={24} />
-                      <span className="max-w-[140px] truncate text-[var(--text-primary)]">
-                        {member.user.name ?? member.user.email ?? '—'}
-                      </span>
-                    </div>
-                  ))}
-                  {projectMembersOverflow > 0 ? (
-                    <span className="rounded-full border border-[var(--border)]/60 bg-[var(--surface-2)]/70 px-3 py-1.5 text-xs text-[var(--text-secondary)]">
-                      +{projectMembersOverflow}
-                    </span>
-                  ) : null}
-                </div>
-              ) : (
-                <p className="text-xs text-[var(--text-secondary)]">
-                  Aucun accès configuré pour ce projet.
-                </p>
-              )}
-              {accessInfo ? <p className="text-xs text-emerald-600">{accessInfo}</p> : null}
-            </SectionCard>
-
-            <SectionCard className="space-y-3">
-              <div className="flex items-center justify-between gap-3">
-                <p className="text-sm font-semibold text-[var(--text-primary)]">Activité récente</p>
-                {showActivityToggle ? (
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => setShowAllActivity((prev) => !prev)}
-                  >
-                    {showAllActivity ? 'Voir moins' : 'Voir +'}
-                  </Button>
-                ) : null}
-              </div>
-              {activityOverview.length ? (
-                <div className="space-y-2 text-sm text-[var(--text-secondary)]">
-                  {activityOverview.map((item) => (
-                    <div
-                      key={`${item.taskId}-${item.occurredAt ?? ''}`}
-                      className="flex items-start gap-3 rounded-lg border border-[var(--border)]/60 bg-[var(--surface-2)]/70 px-3 py-2"
-                    >
-                      <InitialsAvatar name={item.actor?.name} email={item.actor?.email} size={26} />
-                      <div className="min-w-0">
-                        <p className="truncate text-[var(--text-primary)]">
-                          {item.actor?.name ?? item.actor?.email ?? 'Quelqu’un'} a marqué “{item.title}” comme {formatTaskStatus(item.status)}
-                        </p>
-                        <p className="text-[11px] text-[var(--text-secondary)]">
-                          {item.serviceName ? `${item.serviceName} · ` : ''}{formatDate(item.occurredAt)}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-xs text-[var(--text-secondary)]">Aucune activité récente.</p>
-              )}
-            </SectionCard>
-          </div>
-        </div>
+        <OverviewTab
+          showSetup={showSetup}
+          checklistItems={checklistItems}
+          onChecklistAction={(key) => setActiveSetupModal(key as typeof activeSetupModal)}
+          servicesWithTasks={servicesWithTasks}
+          servicesOverview={servicesOverview}
+          showServicesToggle={showServicesToggle}
+          showAllServicesOverview={showAllServicesOverview}
+          onToggleServicesOverview={() => setShowAllServicesOverview((prev) => !prev)}
+          upcomingTasks={upcomingTasks}
+          upcomingTasksOverview={upcomingTasksOverview}
+          showActionsToggle={showActionsToggle}
+          showAllActionsOverview={showAllActionsOverview}
+          onToggleActionsOverview={() => setShowAllActionsOverview((prev) => !prev)}
+          projectMembersPreview={projectMembersPreview}
+          projectMembersOverflow={projectMembersOverflow}
+          isAdmin={isAdmin}
+          accessInfo={accessInfo}
+          onOpenAccessModal={() => setAccessModalOpen(true)}
+          activityOverview={activityOverview}
+          showActivityToggle={showActivityToggle}
+          showAllActivity={showAllActivity}
+          onToggleActivity={() => setShowAllActivity((prev) => !prev)}
+          businessId={businessId}
+          projectId={projectId}
+        />
       ) : null}
 
       {activeTab === 'work' ? (
-        <div className="space-y-4">
-          <TabsPills
-            items={[
-              { key: 'TODO', label: 'À faire' },
-              { key: 'IN_PROGRESS', label: 'En cours' },
-              { key: 'DONE', label: 'Terminées' },
-              { key: 'all', label: 'Toutes' },
-            ]}
-            value={statusFilter}
-            onChange={(key) => setStatusFilter(key as typeof statusFilter)}
-            ariaLabel="Filtrer tâches"
-          />
-          {tasksByAssignee.length ? (
-            <div className="space-y-3">
-              {tasksByAssignee.map((group) => {
-                const total = group.tasks.length;
-                const done = group.tasks.filter((t) => t.status === 'DONE').length;
-                const inProgress = group.tasks.filter((t) => t.status === 'IN_PROGRESS').length;
-                const remaining = total - done;
-                const expanded = taskGroupExpanded[group.key] ?? false;
-                const previewTasks = expanded ? group.tasks : group.tasks.slice(0, 5);
-                const showToggle = group.tasks.length > 5;
-                return (
-                  <Card key={group.key} className="rounded-2xl border border-[var(--border)]/70 bg-[var(--surface)]/80 p-4 shadow-sm">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div className="flex items-center gap-3">
-                        <InitialsAvatar name={group.name} email={group.email} size={30} />
-                        <div>
-                          <p className="text-sm font-semibold text-[var(--text-primary)]">{group.label}</p>
-                          <p className="text-xs text-[var(--text-secondary)]">
-                            {done}/{total} terminées · {inProgress} en cours · {remaining} restantes
-                          </p>
-                        </div>
-                      </div>
-                      {showToggle ? (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() =>
-                            setTaskGroupExpanded((prev) => ({ ...prev, [group.key]: !expanded }))
-                          }
-                        >
-                          {expanded ? 'Voir moins' : 'Voir +'}
-                        </Button>
-                      ) : null}
-                    </div>
-                    <div className="mt-3 space-y-2">
-                      {previewTasks.map((task) => {
-                        const childTasks = subtasksByParentId.get(task.id) ?? [];
-                        const childDone = childTasks.filter((t) => t.status === 'DONE').length;
-                        const checklistTotal = task.checklistCount ?? 0;
-                        const checklistDone = task.checklistDoneCount ?? 0;
-                        const indicator =
-                          childTasks.length > 0
-                            ? `Sous-tâches ${childDone}/${childTasks.length}`
-                            : checklistTotal > 0
-                              ? `Checklist ${checklistDone}/${checklistTotal}`
-                              : null;
-                        const hasChildren = childTasks.length > 0;
-                        const rowExpanded = taskRowExpanded[task.id] ?? false;
-                        return (
-                          <div key={task.id} className="space-y-2">
-                            <Link
-                              href={`/app/pro/${businessId}/tasks/${task.id}`}
-                              className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--border)]/60 bg-[var(--surface-2)]/70 px-3 py-2 text-sm transition hover:border-[var(--border)] hover:bg-[var(--surface)]"
-                            >
-                              <div className="flex min-w-0 items-center gap-2">
-                                <InitialsAvatar name={task.assigneeName} email={task.assigneeEmail} size={22} />
-                                <div className="min-w-0">
-                                  <p className="truncate text-[var(--text-primary)]">{task.title}</p>
-                                  <span
-                                    className={cn(
-                                      'inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide',
-                                      getStatusBadgeClasses(task.status)
-                                    )}
-                                  >
-                                    {formatTaskStatus(task.status)}
-                                  </span>
-                                  {indicator ? (
-                                    <p className="text-[11px] text-[var(--text-secondary)]">{indicator}</p>
-                                  ) : null}
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-2 text-[11px] text-[var(--text-secondary)]">
-                                {hasChildren ? (
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={(event) => {
-                                      event.preventDefault();
-                                      event.stopPropagation();
-                                      setTaskRowExpanded((prev) => ({
-                                        ...prev,
-                                        [task.id]: !rowExpanded,
-                                      }));
-                                    }}
-                                  >
-                                    {rowExpanded ? 'Réduire' : 'Sous-tâches'}
-                                  </Button>
-                                ) : null}
-                                <span>{task.dueDate ? formatDate(task.dueDate) : '—'}</span>
-                              </div>
-                            </Link>
-                            {hasChildren && rowExpanded ? (
-                              <div className="ml-6 space-y-2 border-l border-[var(--border)]/60 pl-4">
-                                {childTasks.map((child) => (
-                                  <Link
-                                    key={child.id}
-                                    href={`/app/pro/${businessId}/tasks/${child.id}`}
-                                    className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--border)]/50 bg-[var(--surface-2)]/60 px-3 py-2 text-sm transition hover:border-[var(--border)] hover:bg-[var(--surface)]"
-                                  >
-                                    <div className="min-w-0">
-                                      <p className="truncate text-[var(--text-primary)]">{child.title}</p>
-                                      <span
-                                        className={cn(
-                                          'inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide',
-                                          getStatusBadgeClasses(child.status)
-                                        )}
-                                      >
-                                        {formatTaskStatus(child.status)}
-                                      </span>
-                                    </div>
-                                    <span className="text-[11px] text-[var(--text-secondary)]">
-                                      {child.dueDate ? formatDate(child.dueDate) : '—'}
-                                    </span>
-                                  </Link>
-                                ))}
-                              </div>
-                            ) : null}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </Card>
-                );
-              })}
-            </div>
-          ) : (
-            <GuidedCtaCard
-              title="Aucune tâche configurée."
-              description="Ajoute des services pour générer des tâches, ou crée-les manuellement."
-              primary={{ label: 'Ajouter des services', href: `/app/pro/${businessId}/projects/${projectId}?tab=billing` }}
-              secondary={{ label: 'Créer une tâche', href: `/app/pro/${businessId}/tasks?projectId=${projectId}` }}
-            />
-          )}
-        </div>
+        <WorkTab
+          tasksByAssignee={tasksByAssignee}
+          subtasksByParentId={subtasksByParentId}
+          statusFilter={statusFilter}
+          onStatusFilterChange={setStatusFilter}
+          taskGroupExpanded={taskGroupExpanded}
+          onTaskGroupToggle={(key, expanded) =>
+            setTaskGroupExpanded((prev) => ({ ...prev, [key]: expanded }))
+          }
+          taskRowExpanded={taskRowExpanded}
+          onTaskRowToggle={(taskId, expanded) =>
+            setTaskRowExpanded((prev) => ({ ...prev, [taskId]: expanded }))
+          }
+          businessId={businessId}
+          projectId={projectId}
+        />
       ) : null}
 
       {activeTab === 'team' ? (
-        <div className="space-y-4">
-          <SectionCard>
-            <SectionHeader
-              title="Équipe"
-              subtitle="Membres par pôle/secteur."
-              actions={
-                isAdmin ? (
-                  <Button size="sm" variant="outline" onClick={() => setUnitsModalOpen(true)}>
-                    Gérer les pôles
-                  </Button>
-                ) : null
-              }
-            />
-            {teamInfo ? <p className="mt-2 text-sm text-emerald-600">{teamInfo}</p> : null}
-          </SectionCard>
-
-          {membersByUnit.length ? (
-            <div className="space-y-3">
-              {membersByUnit.map((group) => (
-                <Card key={group.key} className="rounded-2xl border border-[var(--border)]/70 bg-[var(--surface)]/80 p-4 shadow-sm">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-semibold text-[var(--text-primary)]">{group.label}</p>
-                      <p className="text-xs text-[var(--text-secondary)]">{group.members.length} membres</p>
-                    </div>
-                  </div>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {group.members.map((member) => (
-                      <div key={member.membershipId} className="flex items-center gap-2 rounded-full border border-[var(--border)]/60 bg-[var(--surface-2)]/70 px-3 py-1.5 text-xs text-[var(--text-secondary)]">
-                        <InitialsAvatar name={member.name} email={member.email} size={22} />
-                        <span className="max-w-[160px] truncate text-[var(--text-primary)]">
-                          {member.name ?? member.email}
-                        </span>
-                        <span className="text-[11px] text-[var(--text-secondary)]">{member.role}</span>
-                      </div>
-                    ))}
-                  </div>
-                </Card>
-              ))}
-            </div>
-          ) : (
-            <GuidedCtaCard
-              title="Aucun membre disponible."
-              description="Invitez un membre pour commencer."
-              primary={{ label: 'Ajouter un membre', href: `/app/pro/${businessId}/settings/team` }}
-            />
-          )}
-        </div>
+        <TeamTab
+          membersByUnit={membersByUnit}
+          teamInfo={teamInfo}
+          isAdmin={isAdmin}
+          onOpenUnitsModal={() => setUnitsModalOpen(true)}
+          businessId={businessId}
+        />
       ) : null}
 
       {activeTab === 'billing' ? (
@@ -3788,7 +3401,7 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
                       onClick={() => openStagedInvoiceModal('DEPOSIT')}
                       disabled={!isAdmin || summaryTotals.totalCents <= 0}
                     >
-                      Facture d’acompte
+                      Facture d&apos;acompte
                     </Button>
                   </>
                 )
@@ -3812,10 +3425,10 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
                 Modifier date
               </Button>
               {!canEditDepositPaidDate ? (
-                <span>Disponible une fois l’acompte payé.</span>
+                <span>Disponible une fois l&apos;acompte payé.</span>
               ) : null}
             </div>
-            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <StatCard
                 label="Total TTC"
                 value={formatCurrencyEUR(summaryTotals.totalTtcCents, { minimumFractionDigits: 0 })}
@@ -3823,19 +3436,8 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
                 align="right"
               />
               <StatCard
-                label="Déjà facturé"
-                value={formatCurrencyEUR(alreadyInvoicedCents, { minimumFractionDigits: 0 })}
-                align="right"
-              />
-              <StatCard
                 label="Déjà payé"
                 value={formatCurrencyEUR(alreadyPaidCents, { minimumFractionDigits: 0 })}
-                align="right"
-              />
-              <StatCard
-                label="Reste à encaisser"
-                value={formatCurrencyEUR(remainingToCollectCents, { minimumFractionDigits: 0 })}
-                highlight
                 align="right"
               />
               <StatCard
@@ -3845,29 +3447,56 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
                 align="right"
               />
               <StatCard
-                label={`Acompte ${depositPercentLabel}`}
-                value={formatCurrencyEUR(summaryTotals.depositCents, { minimumFractionDigits: 0 })}
-                align="right"
-              />
-              <StatCard
-                label="Solde"
-                value={formatCurrencyEUR(summaryTotals.balanceCents, { minimumFractionDigits: 0 })}
+                label="Reste à encaisser"
+                value={formatCurrencyEUR(remainingToCollectCents, { minimumFractionDigits: 0 })}
+                highlight
                 align="right"
               />
             </div>
-            <div className="mt-3 flex flex-wrap gap-2 text-xs text-[var(--text-secondary)]">
-              <span>Total HT : {formatCurrencyEUR(summaryTotals.totalCents, { minimumFractionDigits: 0 })}</span>
-              <span aria-hidden>•</span>
-              <span>
-                TVA : {vatEnabled ? formatCurrencyEUR(summaryTotals.vatCents, { minimumFractionDigits: 0 }) : '—'}
-              </span>
-              {billingSettings?.paymentTermsDays != null ? (
-                <>
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-[var(--text-secondary)]">
+              <span>Vue synthétique. Détails financiers en option.</span>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setShowSummaryDetails((prev) => !prev)}
+              >
+                {showSummaryDetails ? 'Voir moins' : 'Voir +'}
+              </Button>
+            </div>
+            {showSummaryDetails ? (
+              <>
+                <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  <StatCard
+                    label="Déjà facturé"
+                    value={formatCurrencyEUR(alreadyInvoicedCents, { minimumFractionDigits: 0 })}
+                    align="right"
+                  />
+                  <StatCard
+                    label={`Acompte ${depositPercentLabel}`}
+                    value={formatCurrencyEUR(summaryTotals.depositCents, { minimumFractionDigits: 0 })}
+                    align="right"
+                  />
+                  <StatCard
+                    label="Solde"
+                    value={formatCurrencyEUR(summaryTotals.balanceCents, { minimumFractionDigits: 0 })}
+                    align="right"
+                  />
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2 text-xs text-[var(--text-secondary)]">
+                  <span>Total HT : {formatCurrencyEUR(summaryTotals.totalCents, { minimumFractionDigits: 0 })}</span>
                   <span aria-hidden>•</span>
-                  <span>Paiement sous {billingSettings.paymentTermsDays} jours</span>
-                </>
-              ) : null}
-            </div>
+                  <span>
+                    TVA : {vatEnabled ? formatCurrencyEUR(summaryTotals.vatCents, { minimumFractionDigits: 0 }) : '—'}
+                  </span>
+                  {billingSettings?.paymentTermsDays != null ? (
+                    <>
+                      <span aria-hidden>•</span>
+                      <span>Paiement sous {billingSettings.paymentTermsDays} jours</span>
+                    </>
+                  ) : null}
+                </div>
+              </>
+            ) : null}
           </SectionCard>
 
           <SectionCard>
@@ -3934,11 +3563,16 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
                 {services.map((svc) => {
                   const draft = serviceDrafts[svc.id] ?? {
                     quantity: String(svc.quantity ?? 1),
-                    price: formatEuroInput(svc.priceCents),
+                    price: formatCentsToEuroInput(svc.priceCents),
                     title: svc.titleOverride ?? '',
                     description: svc.description ?? svc.notes ?? '',
                     discountType: svc.discountType ?? 'NONE',
-                    discountValue: svc.discountValue != null ? String(svc.discountValue) : '',
+                    discountValue:
+                      svc.discountType === 'AMOUNT'
+                        ? formatCentsToEuroInput(svc.discountValue)
+                        : svc.discountValue != null
+                          ? String(svc.discountValue)
+                          : '',
                     billingUnit: svc.billingUnit ?? 'ONE_OFF',
                     unitLabel: svc.unitLabel ?? '',
                   };
@@ -3988,6 +3622,9 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
                             <div className="flex flex-wrap gap-2 text-xs text-[var(--text-secondary)]">
                               <span>{svc.service.code}</span>
                               {durationLabel ? <span>· Durée : {durationLabel}</span> : null}
+                              {draft.billingUnit === 'MONTHLY' ? (
+                                <Badge variant="neutral">Abonnement</Badge>
+                              ) : null}
                             </div>
                             <p className="text-[11px] uppercase tracking-[0.12em] text-[var(--text-secondary)]">
                               {priceSourceLabel}
@@ -4029,14 +3666,13 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
                         />
                         <Input
                           label="Prix unitaire (€)"
-                          type="number"
-                          min={0}
-                          step="0.01"
+                          type="text"
+                          inputMode="decimal"
                           value={draft.price}
                           onChange={(e) =>
                             setServiceDrafts((prev) => ({
                               ...prev,
-                              [svc.id]: { ...(prev[svc.id] ?? draft), price: e.target.value },
+                              [svc.id]: { ...(prev[svc.id] ?? draft), price: sanitizeEuroInput(e.target.value) },
                             }))
                           }
                           onInput={() => setLineErrors((prev) => ({ ...prev, [svc.id]: '' }))}
@@ -4073,14 +3709,21 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
                         </Select>
                         <Input
                           label={draft.discountType === 'PERCENT' ? 'Valeur (%)' : 'Valeur (€)'}
-                          type="number"
-                          min={0}
-                          step={draft.discountType === 'PERCENT' ? '1' : '0.01'}
+                          type={draft.discountType === 'PERCENT' ? 'number' : 'text'}
+                          inputMode={draft.discountType === 'PERCENT' ? 'numeric' : 'decimal'}
+                          min={draft.discountType === 'PERCENT' ? 0 : undefined}
+                          step={draft.discountType === 'PERCENT' ? '1' : undefined}
                           value={draft.discountValue}
                           onChange={(e) =>
                             setServiceDrafts((prev) => ({
                               ...prev,
-                              [svc.id]: { ...(prev[svc.id] ?? draft), discountValue: e.target.value },
+                              [svc.id]: {
+                                ...(prev[svc.id] ?? draft),
+                                discountValue:
+                                  draft.discountType === 'PERCENT'
+                                    ? e.target.value
+                                    : sanitizeEuroInput(e.target.value),
+                              },
                             }))
                           }
                           disabled={!isAdmin || isLineSaving || draft.discountType === 'NONE'}
@@ -4112,6 +3755,16 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
                           disabled={!isAdmin || isLineSaving || draft.billingUnit !== 'MONTHLY'}
                         />
                         <div className="flex flex-wrap gap-2">
+                          {draft.billingUnit === 'MONTHLY' ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleGenerateRecurringInvoice(svc.id)}
+                              disabled={!isAdmin || recurringInvoiceActionId === svc.id}
+                            >
+                              {recurringInvoiceActionId === svc.id ? 'Création…' : 'Générer facture mois prochain'}
+                            </Button>
+                          ) : null}
                           <Button
                             size="sm"
                             variant="outline"
@@ -4274,333 +3927,44 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
             )}
           </SectionCard>
 
-          <SectionCard>
-            <SectionHeader
-              title="Devis"
-              subtitle="Crée et gère les devis du projet."
-              actions={
-                isBillingEmpty ? null : (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={handleCreateQuote}
-                    disabled={!services.length || pricingTotals.missingCount > 0 || creatingQuote || !isAdmin}
-                  >
-                    {creatingQuote ? 'Création…' : 'Nouveau devis'}
-                  </Button>
-                )
-              }
-            />
-            {pricingTotals.missingCount > 0 ? (
-              <p className="mt-2 text-xs text-rose-500">
-                Renseigne les tarifs manquants pour créer un devis.
-              </p>
-            ) : null}
-            {quotes.length ? (
-              <div className="mt-4 space-y-2">
-                <div className="hidden md:grid md:grid-cols-[minmax(0,1.4fr)_minmax(0,0.8fr)_minmax(0,0.6fr)_auto] md:gap-3">
-                  <span className={UI.label}>Devis</span>
-                  <span className={UI.label}>Statut</span>
-                  <span className={cn(UI.label, 'text-right')}>Total</span>
-                  <span className={cn(UI.label, 'text-right')}>Actions</span>
-                </div>
-                {quotes.map((quote) => {
-                  const statusLabel = getQuoteStatusLabelFR(quote.status);
-                  const dateLabel = formatDate(quote.issuedAt ?? quote.createdAt);
-                  const pdfUrl = `/api/pro/businesses/${businessId}/quotes/${quote.id}/pdf`;
-                  const canSend = quote.status === 'DRAFT';
-                  const canSign = quote.status === 'SENT';
-                  const canCancel = quote.status === 'DRAFT' || quote.status === 'SENT' || quote.status === 'SIGNED';
-                  const canEdit = quote.status === 'DRAFT' || quote.status === 'SENT';
-                  const canEditSignedDate = quote.status === 'SIGNED';
-                  const canDelete =
-                    (quote.status === 'DRAFT' || quote.status === 'CANCELLED' || quote.status === 'EXPIRED') &&
-                    !quote.signedAt;
-                  const canInvoice =
-                    (quote.status === 'SENT' || quote.status === 'SIGNED') && !invoiceByQuoteId.has(quote.id);
-                  const isReference = billingReferenceId === quote.id;
-                  const canSetReference = quote.status === 'SIGNED' && !isReference;
-                  return (
-                    <div
-                      key={quote.id}
-                      className="flex flex-col gap-3 rounded-2xl border border-[var(--border)]/70 bg-[var(--surface-2)]/60 px-3 py-3 md:grid md:grid-cols-[minmax(0,1.4fr)_minmax(0,0.8fr)_minmax(0,0.6fr)_auto] md:items-center md:gap-3"
-                    >
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold text-[var(--text-primary)]">
-                          {quote.number ?? `Devis #${quote.id}`}
-                        </p>
-                        <p className="text-xs text-[var(--text-secondary)]">{dateLabel}</p>
-                        {isReference ? (
-                          <span className="mt-1 inline-flex rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-600">
-                            Référence
-                          </span>
-                        ) : null}
-                      </div>
-                      <div className="text-xs text-[var(--text-secondary)] md:text-sm">
-                        {statusLabel}
-                      </div>
-                      <div className="text-right text-sm font-semibold text-[var(--text-primary)]">
-                        {formatCurrencyEUR(Number(quote.totalCents), { minimumFractionDigits: 0 })}
-                      </div>
-                      <div className="flex flex-wrap items-center gap-2 md:justify-end">
-                        <Button asChild size="sm" variant="outline">
-                          <a href={pdfUrl} target="_blank" rel="noreferrer">
-                            PDF
-                          </a>
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => openQuoteEditor(quote)}
-                          disabled={!isAdmin || !canEdit || quoteActionId === quote.id}
-                          title={!canEdit ? 'Devis signé: modification interdite.' : undefined}
-                        >
-                          Modifier
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => openQuoteDateModal(quote)}
-                          disabled={!isAdmin || !canEditSignedDate}
-                        >
-                          Date signature
-                        </Button>
-                        {quote.status === 'SIGNED' ? (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => handleSetBillingReference(quote.id)}
-                            disabled={!isAdmin || !canSetReference || referenceUpdatingId === quote.id}
-                          >
-                            {isReference ? 'Référence' : 'Définir référence'}
-                          </Button>
-                        ) : null}
-                        {canSend ? (
-                          <Button
-                            size="sm"
-                            onClick={() => handleQuoteStatus(quote.id, 'SENT')}
-                            disabled={!isAdmin || quoteActionId === quote.id}
-                          >
-                            Envoyer
-                          </Button>
-                        ) : null}
-                        {canSign ? (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleQuoteStatus(quote.id, 'SIGNED')}
-                            disabled={!isAdmin || quoteActionId === quote.id}
-                          >
-                            Signer
-                          </Button>
-                        ) : null}
-                        {canCancel ? (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => openCancelQuoteModal(quote)}
-                            disabled={!isAdmin || quoteActionId === quote.id}
-                          >
-                            Annuler
-                          </Button>
-                        ) : null}
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => handleCreateInvoice(quote.id)}
-                          disabled={!canInvoice || !isAdmin || invoiceActionId === quote.id}
-                        >
-                          {invoiceByQuoteId.has(quote.id) ? 'Facture créée' : 'Créer facture'}
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => handleDeleteQuote(quote.id)}
-                          disabled={!isAdmin || !canDelete || quoteActionId === quote.id}
-                          title={!canDelete ? 'Suppression interdite pour un devis signé.' : undefined}
-                        >
-                          Supprimer
-                        </Button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className={cn(UI.sectionSoft, 'mt-4 text-xs text-[var(--text-secondary)]')}>
-                Aucun devis existant.
-              </div>
-            )}
-          </SectionCard>
+          <BillingQuotesSection
+            quotes={quotes}
+            isAdmin={isAdmin}
+            isBillingEmpty={isBillingEmpty}
+            servicesCount={services.length}
+            missingPriceCount={pricingTotals.missingCount}
+            creatingQuote={creatingQuote}
+            quoteActionId={quoteActionId}
+            invoiceActionId={invoiceActionId}
+            invoiceByQuoteId={invoiceByQuoteId}
+            billingReferenceId={billingReferenceId}
+            referenceUpdatingId={referenceUpdatingId}
+            businessId={businessId}
+            onCreateQuote={handleCreateQuote}
+            onOpenQuoteEditor={openQuoteEditor}
+            onOpenQuoteDateModal={openQuoteDateModal}
+            onSetBillingReference={handleSetBillingReference}
+            onQuoteStatus={handleQuoteStatus}
+            onOpenCancelQuoteModal={openCancelQuoteModal}
+            onCreateInvoice={handleCreateInvoice}
+            onDeleteQuote={handleDeleteQuote}
+          />
 
-          <SectionCard>
-            <SectionHeader
-              title="Factures"
-              subtitle="Générées à partir des devis envoyés/signés ou en facturation par étapes."
-              actions={
-                isBillingEmpty ? null : (
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => openStagedInvoiceModal('DEPOSIT')}
-                      disabled={!isAdmin || summaryTotals.totalCents <= 0}
-                    >
-                      Facture d’acompte
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => openStagedInvoiceModal('MID')}
-                      disabled={!isAdmin || summaryTotals.totalCents <= 0}
-                    >
-                      Facture intermédiaire
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => openStagedInvoiceModal('FINAL')}
-                      disabled={!isAdmin || remainingToInvoiceCents <= 0}
-                    >
-                      Facture finale
-                    </Button>
-                  </div>
-                )
-              }
-            />
-            <p className="mt-2 text-xs text-[var(--text-secondary)]">
-              Reste à facturer : {formatCurrencyEUR(remainingToInvoiceCents, { minimumFractionDigits: 0 })}
-            </p>
-            {invoices.length ? (
-              <div className="mt-4 space-y-2">
-                <div className="hidden md:grid md:grid-cols-[minmax(0,1.4fr)_minmax(0,0.8fr)_minmax(0,0.6fr)_auto] md:gap-3">
-                  <span className={UI.label}>Facture</span>
-                  <span className={UI.label}>Statut</span>
-                  <span className={cn(UI.label, 'text-right')}>Total</span>
-                  <span className={cn(UI.label, 'text-right')}>Actions</span>
-                </div>
-                {invoices.map((invoice) => {
-                  const statusLabel = getInvoiceStatusLabelFR(invoice.status);
-                  const paymentStatusLabel = getPaymentStatusLabelFR(getInvoicePaymentStatus(invoice));
-                  const dateLabel = formatDate(invoice.issuedAt ?? invoice.createdAt);
-                  const pdfUrl = `/api/pro/businesses/${businessId}/invoices/${invoice.id}/pdf`;
-                  const detailUrl = `/app/pro/${businessId}/finances/invoices/${invoice.id}`;
-                  const paidCents = getInvoicePaidCents(invoice);
-                  const remainingCents = getInvoiceRemainingCents(invoice);
-                  const canSend = invoice.status === 'DRAFT';
-                  const canCancel = invoice.status === 'DRAFT' || invoice.status === 'SENT';
-                  const canEdit = invoice.status === 'DRAFT' || invoice.status === 'SENT';
-                  const canEditPaidDate = invoice.status === 'PAID';
-                  const canDelete = invoice.status === 'DRAFT' || invoice.status === 'CANCELLED';
-                  const canManagePayments = invoice.status === 'SENT' || invoice.status === 'PAID';
-                  const canMarkPaid = canManagePayments && remainingCents > 0;
-                  return (
-                    <div
-                      key={invoice.id}
-                      className="flex flex-col gap-3 rounded-2xl border border-[var(--border)]/70 bg-[var(--surface-2)]/60 px-3 py-3 md:grid md:grid-cols-[minmax(0,1.4fr)_minmax(0,0.8fr)_minmax(0,0.6fr)_auto] md:items-center md:gap-3"
-                    >
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold text-[var(--text-primary)]">
-                          {invoice.number ?? `Facture #${invoice.id}`}
-                        </p>
-                        <p className="text-xs text-[var(--text-secondary)]">{dateLabel}</p>
-                      </div>
-                      <div className="text-xs text-[var(--text-secondary)] md:text-sm">
-                        <span>{statusLabel}</span>
-                        <span className="mt-1 block text-[11px] text-[var(--text-secondary)]">
-                          {paymentStatusLabel}
-                        </span>
-                      </div>
-                      <div className="text-right text-sm font-semibold text-[var(--text-primary)]">
-                        {formatCurrencyEUR(Number(invoice.totalCents), { minimumFractionDigits: 0 })}
-                        <div className="mt-1 text-[11px] font-normal text-[var(--text-secondary)]">
-                          Payé {formatCurrencyEUR(paidCents, { minimumFractionDigits: 0 })} · Reste{' '}
-                          {formatCurrencyEUR(remainingCents, { minimumFractionDigits: 0 })}
-                        </div>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-2 md:justify-end">
-                        <Button asChild size="sm" variant="outline">
-                          <a href={pdfUrl} target="_blank" rel="noreferrer">
-                            PDF
-                          </a>
-                        </Button>
-                        {canManagePayments ? (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => openPaymentModal(invoice)}
-                            disabled={!isAdmin}
-                          >
-                            Paiements
-                          </Button>
-                        ) : null}
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => openInvoiceEditor(invoice.id)}
-                          disabled={!isAdmin || !canEdit || invoiceActionId === invoice.id}
-                        >
-                          Modifier
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => openInvoiceDateModal(invoice)}
-                          disabled={!isAdmin || !canEditPaidDate}
-                        >
-                          Date paiement
-                        </Button>
-                        {canSend ? (
-                          <Button
-                            size="sm"
-                            onClick={() => handleInvoiceStatus(invoice.id, 'SENT')}
-                            disabled={!isAdmin || invoiceActionId === invoice.id}
-                          >
-                            Envoyer
-                          </Button>
-                        ) : null}
-                        {canMarkPaid ? (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => openPaymentModal(invoice, remainingCents)}
-                            disabled={!isAdmin || invoiceActionId === invoice.id}
-                          >
-                            Solder la facture
-                          </Button>
-                        ) : null}
-                        {canCancel ? (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => handleInvoiceStatus(invoice.id, 'CANCELLED')}
-                            disabled={!isAdmin || invoiceActionId === invoice.id}
-                          >
-                            Annuler
-                          </Button>
-                        ) : null}
-                        <Button asChild size="sm" variant="ghost">
-                          <Link href={detailUrl}>Voir</Link>
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => handleDeleteInvoice(invoice.id)}
-                          disabled={!isAdmin || !canDelete || invoiceActionId === invoice.id}
-                        >
-                          Supprimer
-                        </Button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className={cn(UI.sectionSoft, 'mt-4 text-xs text-[var(--text-secondary)]')}>
-                Aucune facture pour le moment.
-              </div>
-            )}
-          </SectionCard>
+          <BillingInvoicesSection
+            invoices={invoices}
+            isAdmin={isAdmin}
+            isBillingEmpty={isBillingEmpty}
+            summaryTotalCents={summaryTotals.totalCents}
+            remainingToInvoiceCents={remainingToInvoiceCents}
+            invoiceActionId={invoiceActionId}
+            businessId={businessId}
+            onOpenStagedInvoiceModal={openStagedInvoiceModal}
+            onOpenPaymentModal={openPaymentModal}
+            onOpenInvoiceEditor={openInvoiceEditor}
+            onOpenInvoiceDateModal={openInvoiceDateModal}
+            onInvoiceStatus={handleInvoiceStatus}
+            onDeleteInvoice={handleDeleteInvoice}
+          />
 
           <SectionCard>
             <SectionHeader
@@ -4635,1110 +3999,219 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
       ) : null}
 
       {activeTab === 'files' ? (
-        <div className="space-y-5">
-          <SectionCard>
-            <SectionHeader
-              title="Documents générés"
-              subtitle="Devis et factures exportables du projet."
-              actions={
-                <Button asChild size="sm" variant="outline">
-                  <Link href={`/app/pro/${businessId}/projects/${projectId}?tab=billing`}>Ouvrir la facturation</Link>
-                </Button>
-              }
-            />
-            <div className="mt-4 grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <p className={UI.label}>Devis</p>
-                {quotes.length ? (
-                  quotes.map((quote) => {
-                    const statusLabel = getQuoteStatusLabelFR(quote.status);
-                    const dateLabel = formatDate(quote.issuedAt ?? quote.createdAt);
-                    const pdfUrl = `/api/pro/businesses/${businessId}/quotes/${quote.id}/pdf`;
-                    return (
-                      <div key={quote.id} className={cn(UI.sectionSoft, 'flex items-center justify-between gap-2')}>
-                        <div className="min-w-0">
-                          <p className="text-sm font-semibold text-[var(--text-primary)]">
-                            {quote.number ?? `Devis #${quote.id}`}
-                          </p>
-                          <p className="text-xs text-[var(--text-secondary)]">{statusLabel} · {dateLabel}</p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-semibold text-[var(--text-primary)]">
-                            {formatCurrencyEUR(Number(quote.totalCents), { minimumFractionDigits: 0 })}
-                          </span>
-                          <Button asChild size="sm" variant="outline">
-                            <a href={pdfUrl} target="_blank" rel="noreferrer">
-                              PDF
-                            </a>
-                          </Button>
-                        </div>
-                      </div>
-                    );
-                  })
-                ) : (
-                  <div className={cn(UI.sectionSoft, 'text-xs text-[var(--text-secondary)]')}>
-                    Aucun devis généré.
-                  </div>
-                )}
-              </div>
-              <div className="space-y-2">
-                <p className={UI.label}>Factures</p>
-                {invoices.length ? (
-                  invoices.map((invoice) => {
-                    const statusLabel = getInvoiceStatusLabelFR(invoice.status);
-                    const dateLabel = formatDate(invoice.issuedAt ?? invoice.createdAt);
-                    const pdfUrl = `/api/pro/businesses/${businessId}/invoices/${invoice.id}/pdf`;
-                    return (
-                      <div key={invoice.id} className={cn(UI.sectionSoft, 'flex items-center justify-between gap-2')}>
-                        <div className="min-w-0">
-                          <p className="text-sm font-semibold text-[var(--text-primary)]">
-                            {invoice.number ?? `Facture #${invoice.id}`}
-                          </p>
-                          <p className="text-xs text-[var(--text-secondary)]">{statusLabel} · {dateLabel}</p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-semibold text-[var(--text-primary)]">
-                            {formatCurrencyEUR(Number(invoice.totalCents), { minimumFractionDigits: 0 })}
-                          </span>
-                          <Button asChild size="sm" variant="outline">
-                            <a href={pdfUrl} target="_blank" rel="noreferrer">
-                              PDF
-                            </a>
-                          </Button>
-                        </div>
-                      </div>
-                    );
-                  })
-                ) : (
-                  <div className={cn(UI.sectionSoft, 'text-xs text-[var(--text-secondary)]')}>
-                    Aucune facture générée.
-                  </div>
-                )}
-              </div>
-            </div>
-          </SectionCard>
-          <SectionCard>
-            <SectionHeader title="Administratif" actions={<Button size="sm" variant="outline">Upload</Button>} />
-            <p className={UI.sectionSubtitle}>Aucun document administratif.</p>
-          </SectionCard>
-          <SectionCard>
-            <SectionHeader title="Projet" actions={<Button size="sm" variant="outline">Upload</Button>} />
-            <p className={UI.sectionSubtitle}>Aucun document projet pour l’instant.</p>
-          </SectionCard>
-        </div>
+        <FilesTab
+          quotes={quotes}
+          invoices={invoices}
+          businessId={businessId}
+          projectId={projectId}
+        />
       ) : null}
 
-      <Modal
-        open={Boolean(stagedInvoiceModal)}
-        onCloseAction={closeStagedInvoiceModal}
-        title="Créer une facture d’étape"
-        description="Définis le montant à facturer pour cette étape."
-      >
-        <div className="space-y-3">
-          <p className="text-xs text-[var(--text-secondary)]">
-            Total projet : {formatCurrencyEUR(summaryTotals.totalCents, { minimumFractionDigits: 0 })} · Reste :{' '}
-            {formatCurrencyEUR(remainingToInvoiceCents, { minimumFractionDigits: 0 })}
-          </p>
-          {stagedInvoiceModal?.kind === 'FINAL' ? (
-            <p className="text-sm text-[var(--text-secondary)]">
-              Cette facture finalise le projet. Le montant correspond au reste à facturer.
-            </p>
-          ) : (
-            <div className="grid gap-3 md:grid-cols-2">
-              <Select
-                label="Mode de facturation"
-                value={stagedInvoiceModal?.mode ?? 'PERCENT'}
-                onChange={(e) =>
-                  setStagedInvoiceModal((prev) =>
-                    prev ? { ...prev, mode: e.target.value as 'PERCENT' | 'AMOUNT' } : prev
-                  )
+      <StagedInvoiceModal
+        editor={stagedInvoiceModal}
+        totalCents={summaryTotals.totalCents}
+        remainingCents={remainingToInvoiceCents}
+        previewCents={stagedPreviewCents}
+        previewTooHigh={stagedPreviewTooHigh}
+        error={stagedInvoiceError}
+        loading={stagedInvoiceLoading}
+        isAdmin={isAdmin}
+        onClose={closeStagedInvoiceModal}
+        onModeChange={(mode) =>
+          setStagedInvoiceModal((prev) =>
+            prev ? { ...prev, mode } : prev
+          )
+        }
+        onValueChange={(value) =>
+          setStagedInvoiceModal((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  value: prev.mode === 'AMOUNT' ? sanitizeEuroInput(value) : value,
                 }
-                disabled={!isAdmin || stagedInvoiceLoading}
-              >
-                <option value="PERCENT">Pourcentage</option>
-                <option value="AMOUNT">Montant fixe</option>
-              </Select>
-              <Input
-                label={stagedInvoiceModal?.mode === 'AMOUNT' ? 'Montant (€)' : 'Pourcentage (%)'}
-                type="number"
-                min={0}
-                step={stagedInvoiceModal?.mode === 'AMOUNT' ? '0.01' : '1'}
-                value={stagedInvoiceModal?.value ?? ''}
-                onChange={(e) =>
-                  setStagedInvoiceModal((prev) => (prev ? { ...prev, value: e.target.value } : prev))
+              : prev
+          )
+        }
+        onCreate={handleCreateStagedInvoice}
+      />
+
+      <QuoteEditorModal
+        editor={quoteEditor}
+        isAdmin={isAdmin}
+        canEditMeta={canEditQuoteMeta}
+        canEditLines={canEditQuoteLines}
+        editing={quoteEditing}
+        error={quoteEditError}
+        onClose={closeQuoteEditor}
+        onSave={handleSaveQuoteEdit}
+        onAddLine={addQuoteLine}
+        onRemoveLine={removeQuoteLine}
+        onChangeIssuedAt={(value) => setQuoteEditor((prev) => (prev ? { ...prev, issuedAt: value } : prev))}
+        onChangeExpiresAt={(value) => setQuoteEditor((prev) => (prev ? { ...prev, expiresAt: value } : prev))}
+        onChangeNote={(value) => setQuoteEditor((prev) => (prev ? { ...prev, note: value } : prev))}
+        onChangeLine={(lineId, patch) =>
+          setQuoteEditor((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  lines: prev.lines.map((line) =>
+                    line.id === lineId
+                      ? {
+                          ...line,
+                          ...patch,
+                          unitPrice:
+                            patch.unitPrice != null
+                              ? sanitizeEuroInput(patch.unitPrice)
+                              : line.unitPrice,
+                        }
+                      : line
+                  ),
                 }
-                disabled={!isAdmin || stagedInvoiceLoading}
-              />
-            </div>
-          )}
+              : prev
+          )
+        }
+      />
 
-          <div className="rounded-2xl border border-[var(--border)]/60 bg-[var(--surface-2)]/60 px-3 py-2">
-            <p className="text-[11px] uppercase tracking-[0.12em] text-[var(--text-secondary)]">
-              Montant estimé
-            </p>
-            <p className="text-sm font-semibold text-[var(--text-primary)]">
-              {formatCurrencyEUR(stagedPreviewCents, { minimumFractionDigits: 0 })}
-            </p>
-            {stagedPreviewTooHigh ? (
-              <p className="text-xs text-rose-500">Le montant dépasse le reste à facturer.</p>
-            ) : null}
-          </div>
+      <InvoiceEditorModal
+        editor={invoiceEditor}
+        isAdmin={isAdmin}
+        canEditMeta={canEditInvoiceMeta}
+        canEditLines={canEditInvoiceLines}
+        editing={invoiceEditing}
+        error={invoiceEditError}
+        onClose={closeInvoiceEditor}
+        onSave={handleSaveInvoiceEdit}
+        onAddLine={addInvoiceLine}
+        onRemoveLine={removeInvoiceLine}
+        onChangeIssuedAt={(value) => setInvoiceEditor((prev) => (prev ? { ...prev, issuedAt: value } : prev))}
+        onChangeDueAt={(value) => setInvoiceEditor((prev) => (prev ? { ...prev, dueAt: value } : prev))}
+        onChangeNote={(value) => setInvoiceEditor((prev) => (prev ? { ...prev, note: value } : prev))}
+        onChangeLine={(lineId, patch) =>
+          setInvoiceEditor((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  lines: prev.lines.map((line) =>
+                    line.id === lineId
+                      ? {
+                          ...line,
+                          ...patch,
+                          unitPrice:
+                            patch.unitPrice != null
+                              ? sanitizeEuroInput(patch.unitPrice)
+                              : line.unitPrice,
+                        }
+                      : line
+                  ),
+                }
+              : prev
+          )
+        }
+      />
 
-          {stagedInvoiceError ? <p className="text-xs text-rose-500">{stagedInvoiceError}</p> : null}
+      <QuoteDateModal
+        editor={quoteDateEditor}
+        isAdmin={isAdmin}
+        saving={dateModalSaving}
+        error={dateModalError}
+        onChangeSignedAt={(value) => setQuoteDateEditor((prev) => (prev ? { ...prev, signedAt: value } : prev))}
+        onClose={() => setQuoteDateEditor(null)}
+        onSave={handleSaveQuoteDate}
+      />
 
-          <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="outline" onClick={closeStagedInvoiceModal} disabled={stagedInvoiceLoading}>
-              Annuler
-            </Button>
-            <Button
-              type="button"
-              onClick={handleCreateStagedInvoice}
-              disabled={!isAdmin || stagedInvoiceLoading || stagedPreviewTooHigh}
-            >
-              {stagedInvoiceLoading ? 'Création…' : 'Créer la facture'}
-            </Button>
-          </div>
-        </div>
-      </Modal>
+      <CancelQuoteModal
+        editor={cancelQuoteEditor}
+        isAdmin={isAdmin}
+        saving={cancelQuoteSaving}
+        error={cancelQuoteError}
+        onChangeReason={(value) => setCancelQuoteEditor((prev) => (prev ? { ...prev, reason: value } : prev))}
+        onClose={() => setCancelQuoteEditor(null)}
+        onConfirm={handleCancelQuote}
+      />
 
-      <Modal
-        open={Boolean(quoteEditor)}
-        onCloseAction={closeQuoteEditor}
-        title="Modifier le devis"
-        description="Mets à jour les dates, notes et lignes du devis."
-      >
-        <div className="space-y-3">
-          {!canEditQuoteMeta ? (
-            <p className="text-xs text-[var(--text-secondary)]">
-              Devis verrouillé (signé/annulé). Les modifications sont désactivées.
-            </p>
-          ) : null}
-          <div className="grid gap-3 md:grid-cols-2">
-            <Input
-              label="Émission"
-              type="date"
-              value={quoteEditor?.issuedAt ?? ''}
-              onChange={(e) =>
-                setQuoteEditor((prev) => (prev ? { ...prev, issuedAt: e.target.value } : prev))
-              }
-              disabled={!isAdmin || !canEditQuoteMeta || quoteEditing}
-            />
-            <Input
-              label="Expiration"
-              type="date"
-              value={quoteEditor?.expiresAt ?? ''}
-              onChange={(e) =>
-                setQuoteEditor((prev) => (prev ? { ...prev, expiresAt: e.target.value } : prev))
-              }
-              disabled={!isAdmin || !canEditQuoteMeta || quoteEditing}
-            />
-          </div>
-          <div className="space-y-1">
-            <label className="text-sm font-medium text-[var(--text-secondary)]">Note</label>
-            <textarea
-              className="w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)]"
-              rows={3}
-              value={quoteEditor?.note ?? ''}
-              onChange={(e) =>
-                setQuoteEditor((prev) => (prev ? { ...prev, note: e.target.value } : prev))
-              }
-              disabled={!isAdmin || !canEditQuoteMeta || quoteEditing}
-            />
-          </div>
+      <InvoiceDateModal
+        editor={invoiceDateEditor}
+        isAdmin={isAdmin}
+        saving={dateModalSaving}
+        error={dateModalError}
+        onChangePaidAt={(value) => setInvoiceDateEditor((prev) => (prev ? { ...prev, paidAt: value } : prev))}
+        onClose={() => setInvoiceDateEditor(null)}
+        onSave={handleSaveInvoiceDate}
+      />
 
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-semibold text-[var(--text-primary)]">Lignes</p>
-              <Button size="sm" variant="outline" onClick={addQuoteLine} disabled={!isAdmin || !canEditQuoteLines}>
-                Ajouter une ligne
-              </Button>
-            </div>
-            {quoteEditor?.lines.map((line) => (
-              <div key={line.id} className="rounded-2xl border border-[var(--border)]/70 bg-[var(--surface-2)]/60 p-3">
-                <div className="grid gap-2 md:grid-cols-[1fr_120px_140px_auto] md:items-end">
-                  <Input
-                    label="Libellé"
-                    value={line.label}
-                    onChange={(e) =>
-                      setQuoteEditor((prev) =>
-                        prev
-                          ? {
-                              ...prev,
-                              lines: prev.lines.map((l) => (l.id === line.id ? { ...l, label: e.target.value } : l)),
-                            }
-                          : prev
-                      )
-                    }
-                    disabled={!isAdmin || !canEditQuoteLines || quoteEditing}
-                  />
-                  <Input
-                    label="Qté"
-                    type="number"
-                    min={1}
-                    value={line.quantity}
-                    onChange={(e) =>
-                      setQuoteEditor((prev) =>
-                        prev
-                          ? {
-                              ...prev,
-                              lines: prev.lines.map((l) =>
-                                l.id === line.id ? { ...l, quantity: e.target.value } : l
-                              ),
-                            }
-                          : prev
-                      )
-                    }
-                    disabled={!isAdmin || !canEditQuoteLines || quoteEditing}
-                  />
-                  <Input
-                    label="Prix (€)"
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    value={line.unitPrice}
-                    onChange={(e) =>
-                      setQuoteEditor((prev) =>
-                        prev
-                          ? {
-                              ...prev,
-                              lines: prev.lines.map((l) =>
-                                l.id === line.id ? { ...l, unitPrice: e.target.value } : l
-                              ),
-                            }
-                          : prev
-                      )
-                    }
-                    disabled={!isAdmin || !canEditQuoteLines || quoteEditing}
-                  />
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => removeQuoteLine(line.id)}
-                    disabled={!isAdmin || !canEditQuoteLines || quoteEditing}
-                  >
-                    Supprimer
-                  </Button>
-                </div>
-                <div className="mt-2 space-y-1">
-                  <label className="text-xs text-[var(--text-secondary)]">Description</label>
-                  <textarea
-                    className="w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)]"
-                    rows={2}
-                    value={line.description}
-                    onChange={(e) =>
-                      setQuoteEditor((prev) =>
-                        prev
-                          ? {
-                              ...prev,
-                              lines: prev.lines.map((l) =>
-                                l.id === line.id ? { ...l, description: e.target.value } : l
-                              ),
-                            }
-                          : prev
-                      )
-                    }
-                    disabled={!isAdmin || !canEditQuoteLines || quoteEditing}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {quoteEditError ? <p className="text-sm text-rose-500">{quoteEditError}</p> : null}
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={closeQuoteEditor}>
-              Annuler
-            </Button>
-            <Button onClick={handleSaveQuoteEdit} disabled={!isAdmin || !canEditQuoteMeta || quoteEditing}>
-              {quoteEditing ? 'Enregistrement…' : 'Enregistrer'}
-            </Button>
-          </div>
-        </div>
-      </Modal>
-
-      <Modal
-        open={Boolean(invoiceEditor)}
-        onCloseAction={closeInvoiceEditor}
-        title="Modifier la facture"
-        description="Mets à jour les dates, notes et lignes de la facture."
-      >
-        <div className="space-y-3">
-          {!canEditInvoiceMeta ? (
-            <p className="text-xs text-[var(--text-secondary)]">
-              Facture verrouillée (payée/annulée). Les modifications sont désactivées.
-            </p>
-          ) : null}
-          <div className="grid gap-3 md:grid-cols-2">
-            <Input
-              label="Émission"
-              type="date"
-              value={invoiceEditor?.issuedAt ?? ''}
-              onChange={(e) =>
-                setInvoiceEditor((prev) => (prev ? { ...prev, issuedAt: e.target.value } : prev))
-              }
-              disabled={!isAdmin || !canEditInvoiceMeta || invoiceEditing}
-            />
-            <Input
-              label="Échéance"
-              type="date"
-              value={invoiceEditor?.dueAt ?? ''}
-              onChange={(e) =>
-                setInvoiceEditor((prev) => (prev ? { ...prev, dueAt: e.target.value } : prev))
-              }
-              disabled={!isAdmin || !canEditInvoiceMeta || invoiceEditing}
-            />
-          </div>
-          <div className="space-y-1">
-            <label className="text-sm font-medium text-[var(--text-secondary)]">Note</label>
-            <textarea
-              className="w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)]"
-              rows={3}
-              value={invoiceEditor?.note ?? ''}
-              onChange={(e) =>
-                setInvoiceEditor((prev) => (prev ? { ...prev, note: e.target.value } : prev))
-              }
-              disabled={!isAdmin || !canEditInvoiceMeta || invoiceEditing}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-semibold text-[var(--text-primary)]">Lignes</p>
-              <Button size="sm" variant="outline" onClick={addInvoiceLine} disabled={!isAdmin || !canEditInvoiceLines}>
-                Ajouter une ligne
-              </Button>
-            </div>
-            {invoiceEditor?.lines.map((line) => (
-              <div key={line.id} className="rounded-2xl border border-[var(--border)]/70 bg-[var(--surface-2)]/60 p-3">
-                <div className="grid gap-2 md:grid-cols-[1fr_120px_140px_auto] md:items-end">
-                  <Input
-                    label="Libellé"
-                    value={line.label}
-                    onChange={(e) =>
-                      setInvoiceEditor((prev) =>
-                        prev
-                          ? {
-                              ...prev,
-                              lines: prev.lines.map((l) => (l.id === line.id ? { ...l, label: e.target.value } : l)),
-                            }
-                          : prev
-                      )
-                    }
-                    disabled={!isAdmin || !canEditInvoiceLines || invoiceEditing}
-                  />
-                  <Input
-                    label="Qté"
-                    type="number"
-                    min={1}
-                    value={line.quantity}
-                    onChange={(e) =>
-                      setInvoiceEditor((prev) =>
-                        prev
-                          ? {
-                              ...prev,
-                              lines: prev.lines.map((l) =>
-                                l.id === line.id ? { ...l, quantity: e.target.value } : l
-                              ),
-                            }
-                          : prev
-                      )
-                    }
-                    disabled={!isAdmin || !canEditInvoiceLines || invoiceEditing}
-                  />
-                  <Input
-                    label="Prix (€)"
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    value={line.unitPrice}
-                    onChange={(e) =>
-                      setInvoiceEditor((prev) =>
-                        prev
-                          ? {
-                              ...prev,
-                              lines: prev.lines.map((l) =>
-                                l.id === line.id ? { ...l, unitPrice: e.target.value } : l
-                              ),
-                            }
-                          : prev
-                      )
-                    }
-                    disabled={!isAdmin || !canEditInvoiceLines || invoiceEditing}
-                  />
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => removeInvoiceLine(line.id)}
-                    disabled={!isAdmin || !canEditInvoiceLines || invoiceEditing}
-                  >
-                    Supprimer
-                  </Button>
-                </div>
-                <div className="mt-2 space-y-1">
-                  <label className="text-xs text-[var(--text-secondary)]">Description</label>
-                  <textarea
-                    className="w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)]"
-                    rows={2}
-                    value={line.description}
-                    onChange={(e) =>
-                      setInvoiceEditor((prev) =>
-                        prev
-                          ? {
-                              ...prev,
-                              lines: prev.lines.map((l) =>
-                                l.id === line.id ? { ...l, description: e.target.value } : l
-                              ),
-                            }
-                          : prev
-                      )
-                    }
-                    disabled={!isAdmin || !canEditInvoiceLines || invoiceEditing}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {invoiceEditError ? <p className="text-sm text-rose-500">{invoiceEditError}</p> : null}
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={closeInvoiceEditor}>
-              Annuler
-            </Button>
-            <Button onClick={handleSaveInvoiceEdit} disabled={!isAdmin || !canEditInvoiceMeta || invoiceEditing}>
-              {invoiceEditing ? 'Enregistrement…' : 'Enregistrer'}
-            </Button>
-          </div>
-        </div>
-      </Modal>
-
-      <Modal
-        open={Boolean(quoteDateEditor)}
-        onCloseAction={() => setQuoteDateEditor(null)}
-        title="Date de signature"
-        description="Modifie la date de validation du devis."
-      >
-        <div className="space-y-3">
-          <p className="text-xs text-[var(--text-secondary)]">
-            {quoteDateEditor?.number ?? `Devis #${quoteDateEditor?.quoteId ?? ''}`} · Statut {quoteDateEditor?.status ?? '—'}
-          </p>
-          <Input
-            label="Date de signature"
-            type="date"
-            value={quoteDateEditor?.signedAt ?? ''}
-            onChange={(e) =>
-              setQuoteDateEditor((prev) => (prev ? { ...prev, signedAt: e.target.value } : prev))
-            }
-            disabled={!isAdmin || dateModalSaving}
-          />
-          {dateModalError ? <p className="text-sm text-rose-500">{dateModalError}</p> : null}
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setQuoteDateEditor(null)}>
-              Annuler
-            </Button>
-            <Button onClick={handleSaveQuoteDate} disabled={!isAdmin || dateModalSaving}>
-              {dateModalSaving ? 'Enregistrement…' : 'Enregistrer'}
-            </Button>
-          </div>
-        </div>
-      </Modal>
-
-      <Modal
-        open={Boolean(cancelQuoteEditor)}
-        onCloseAction={() => setCancelQuoteEditor(null)}
-        title="Annuler le devis"
-        description="L’annulation requiert une raison et bloque le devis."
-      >
-        <div className="space-y-3">
-          <p className="text-xs text-[var(--text-secondary)]">
-            {cancelQuoteEditor?.number ?? `Devis #${cancelQuoteEditor?.quoteId ?? ''}`} · Statut{' '}
-            {cancelQuoteEditor?.status ?? '—'}
-          </p>
-          <label className="text-xs font-medium text-[var(--text-secondary)]">Raison</label>
-          <textarea
-            className="min-h-[120px] w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)]"
-            value={cancelQuoteEditor?.reason ?? ''}
-            onChange={(e) =>
-              setCancelQuoteEditor((prev) => (prev ? { ...prev, reason: e.target.value } : prev))
-            }
-            disabled={!isAdmin || cancelQuoteSaving}
-          />
-          {cancelQuoteError ? <p className="text-sm text-rose-500">{cancelQuoteError}</p> : null}
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setCancelQuoteEditor(null)}>
-              Annuler
-            </Button>
-            <Button onClick={handleCancelQuote} disabled={!isAdmin || cancelQuoteSaving}>
-              {cancelQuoteSaving ? 'Annulation…' : 'Confirmer'}
-            </Button>
-          </div>
-        </div>
-      </Modal>
-
-      <Modal
-        open={Boolean(invoiceDateEditor)}
-        onCloseAction={() => setInvoiceDateEditor(null)}
-        title="Date de paiement"
-        description="Modifie la date de règlement de la facture."
-      >
-        <div className="space-y-3">
-          <p className="text-xs text-[var(--text-secondary)]">
-            {invoiceDateEditor?.number ?? `Facture #${invoiceDateEditor?.invoiceId ?? ''}`} · Statut {invoiceDateEditor?.status ?? '—'}
-          </p>
-          <Input
-            label="Date de paiement"
-            type="date"
-            value={invoiceDateEditor?.paidAt ?? ''}
-            onChange={(e) =>
-              setInvoiceDateEditor((prev) => (prev ? { ...prev, paidAt: e.target.value } : prev))
-            }
-            disabled={!isAdmin || dateModalSaving}
-          />
-          {dateModalError ? <p className="text-sm text-rose-500">{dateModalError}</p> : null}
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setInvoiceDateEditor(null)}>
-              Annuler
-            </Button>
-            <Button onClick={handleSaveInvoiceDate} disabled={!isAdmin || dateModalSaving}>
-              {dateModalSaving ? 'Enregistrement…' : 'Enregistrer'}
-            </Button>
-          </div>
-        </div>
-      </Modal>
-
-      <Modal
+      <QuoteWizardModal
         open={quoteWizardOpen}
-        onCloseAction={closeQuoteWizard}
-        title="Créer un devis"
-        description="Ajoutez vos prestations, générez les tâches, puis créez le devis."
-      >
-        <div className="space-y-4">
-          {quoteWizardResult ? (
-            <div className="space-y-4">
-              <Alert variant="success" title="Devis généré" />
-              <div className="rounded-2xl border border-[var(--border)]/70 bg-[var(--surface-2)]/60 p-4 text-sm text-[var(--text-secondary)]">
-                {quoteWizardGenerateTasks
-                  ? 'Les prestations et les tâches recommandées ont été ajoutées au projet.'
-                  : 'Les prestations ont été ajoutées au projet. Les tâches peuvent être créées plus tard.'}
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <Button asChild size="sm">
-                  <a href={quoteWizardResult.pdfUrl} target="_blank" rel="noreferrer">
-                    Télécharger le PDF
-                  </a>
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    closeQuoteWizard();
-                    setActiveTab('billing');
-                  }}
-                >
-                  Voir le devis
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    closeQuoteWizard();
-                    openStagedInvoiceModal('DEPOSIT');
-                  }}
-                >
-                  Facture d’acompte
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <>
-              <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--text-secondary)]">
-                {WIZARD_STEPS.map((label, idx) => (
-                  <div key={label} className="flex items-center gap-2">
-                    <span
-                      className={cn(
-                        'flex h-6 w-6 items-center justify-center rounded-full border text-[11px]',
-                        idx === quoteWizardStep
-                          ? 'border-[var(--text-primary)] text-[var(--text-primary)]'
-                          : 'border-[var(--border)] text-[var(--text-secondary)]'
-                      )}
-                    >
-                      {idx + 1}
-                    </span>
-                    <span className={idx === quoteWizardStep ? 'text-[var(--text-primary)]' : ''}>{label}</span>
-                    {idx < WIZARD_STEPS.length - 1 ? <span className="text-[var(--text-faint)]">→</span> : null}
-                  </div>
-                ))}
-              </div>
+        onClose={closeQuoteWizard}
+        step={quoteWizardStep}
+        onStepChange={setQuoteWizardStep}
+        lines={quoteWizardLines}
+        search={quoteWizardSearch}
+        onSearchChange={setQuoteWizardSearch}
+        generateTasks={quoteWizardGenerateTasks}
+        onGenerateTasksChange={setQuoteWizardGenerateTasks}
+        assigneeId={quoteWizardAssigneeId}
+        onAssigneeIdChange={setQuoteWizardAssigneeId}
+        dueOffsetDays={quoteWizardDueOffsetDays}
+        onDueOffsetDaysChange={setQuoteWizardDueOffsetDays}
+        error={quoteWizardError}
+        info={quoteWizardInfo}
+        saving={quoteWizardSaving}
+        result={quoteWizardResult}
+        lineValidation={wizardLineValidation}
+        canContinue={wizardCanContinue}
+        catalogResults={catalogSearchResults}
+        serviceTemplates={serviceTemplates}
+        templatesLoading={templatesLoading}
+        members={members}
+        isAdmin={isAdmin}
+        onAddCatalogLine={addCatalogLine}
+        onAddCustomLine={addCustomLine}
+        onRemoveLine={removeWizardLine}
+        onUpdateLine={updateWizardLine}
+        onLoadCatalogServices={loadCatalogServices}
+        onGenerate={handleWizardGenerateQuote}
+        onGoToBilling={() => setActiveTab('billing')}
+        onOpenDepositInvoice={() => openStagedInvoiceModal('DEPOSIT')}
+      />
 
-              {quoteWizardStep === 0 ? (
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Input
-                      placeholder="Rechercher un service"
-                      value={quoteWizardSearch}
-                      onChange={(e) => {
-                        const value = e.target.value;
-                        setQuoteWizardSearch(value);
-                        void loadCatalogServices(value);
-                      }}
-                    />
-                    <div className="max-h-52 space-y-2 overflow-auto rounded-2xl border border-[var(--border)]/60 p-2">
-                      {catalogSearchResults.map((svc) => {
-                        const priceHint = svc.defaultPriceCents ?? svc.tjmCents;
-                        return (
-                          <div
-                            key={svc.id}
-                            className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[var(--border)]/60 bg-[var(--surface)] px-3 py-2"
-                          >
-                            <div className="min-w-0">
-                              <p className="text-sm font-semibold text-[var(--text-primary)]">{svc.name}</p>
-                              <p className="text-xs text-[var(--text-secondary)]">{svc.code}</p>
-                            </div>
-                            <div className="flex items-center gap-3">
-                              <span className="text-xs text-[var(--text-secondary)]">
-                                {priceHint
-                                  ? formatCurrencyEUR(Number(priceHint), { minimumFractionDigits: 0 })
-                                  : 'Prix manquant'}
-                              </span>
-                              <Button size="sm" variant="outline" onClick={() => addCatalogLine(svc)}>
-                                Ajouter
-                              </Button>
-                            </div>
-                          </div>
-                        );
-                      })}
-                      {catalogSearchResults.length === 0 ? (
-                        <p className="px-2 text-sm text-[var(--text-secondary)]">Aucun service trouvé.</p>
-                      ) : null}
-                    </div>
-                  </div>
-
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-sm font-semibold text-[var(--text-primary)]">Prestations sélectionnées</p>
-                    <Button size="sm" variant="ghost" onClick={addCustomLine}>
-                      Ligne personnalisée
-                    </Button>
-                  </div>
-
-                  {quoteWizardLines.length ? (
-                    <div className="space-y-3">
-                      {quoteWizardLines.map((line) => {
-                        const errors = wizardLineValidation.find((entry) => entry.id === line.id)?.errors ?? [];
-                        const priceInput = line.unitPriceCents != null ? formatEuroInput(String(line.unitPriceCents)) : '';
-                        return (
-                          <div
-                            key={line.id}
-                            className={cn(
-                              'rounded-2xl border border-[var(--border)]/70 bg-[var(--surface-2)]/60 p-4',
-                              errors.length ? 'border-rose-200/70' : ''
-                            )}
-                          >
-                            <div className="flex flex-wrap items-start justify-between gap-3">
-                              <div className="min-w-0 space-y-1">
-                                <p className="text-xs uppercase tracking-[0.14em] text-[var(--text-secondary)]">
-                                  {line.source === 'custom'
-                                    ? 'Ligne personnalisée'
-                                    : line.code
-                                      ? `Service · ${line.code}`
-                                      : 'Service'}
-                                </p>
-                                <Input
-                                  label="Titre"
-                                  value={line.title}
-                                  onChange={(e) => updateWizardLine(line.id, { title: e.target.value })}
-                                />
-                              </div>
-                              <Button size="sm" variant="ghost" onClick={() => removeWizardLine(line.id)}>
-                                Supprimer
-                              </Button>
-                            </div>
-
-                            <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                              <Input
-                                label="Qté"
-                                type="number"
-                                min={1}
-                                value={line.quantity}
-                                onChange={(e) =>
-                                  updateWizardLine(line.id, {
-                                    quantity: Math.max(1, Math.trunc(Number(e.target.value) || 1)),
-                                  })
-                                }
-                              />
-                              {line.priceLocked ? (
-                                <div className="rounded-2xl border border-[var(--border)]/60 bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-secondary)]">
-                                  <p className="text-[11px] uppercase tracking-[0.12em] text-[var(--text-secondary)]">
-                                    Prix catalogue
-                                  </p>
-                                  <p className="text-sm font-semibold text-[var(--text-primary)]">
-                                    {line.unitPriceCents != null
-                                      ? formatCurrencyEUR(line.unitPriceCents, { minimumFractionDigits: 0 })
-                                      : '—'}
-                                  </p>
-                                </div>
-                              ) : (
-                                <Input
-                                  label="Prix unitaire (€)"
-                                  type="number"
-                                  min={0}
-                                  step="0.01"
-                                  value={priceInput}
-                                  onChange={(e) =>
-                                    updateWizardLine(line.id, { unitPriceCents: parseEuroInput(e.target.value) })
-                                  }
-                                />
-                              )}
-                            </div>
-
-                            <div className="mt-3">
-                              <label className="text-xs font-medium text-[var(--text-secondary)]">Description</label>
-                              <textarea
-                                className="mt-1 min-h-[90px] w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)]"
-                                value={line.description}
-                                onChange={(e) => updateWizardLine(line.id, { description: e.target.value })}
-                                placeholder="Optionnel"
-                              />
-                            </div>
-
-                            {errors.length ? (
-                              <p className="mt-2 text-xs text-rose-500">{errors.join(' ')}</p>
-                            ) : null}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <div className={cn(UI.sectionSoft, 'text-sm text-[var(--text-secondary)]')}>
-                      Aucune prestation sélectionnée.
-                    </div>
-                  )}
-
-                  <p className="text-xs text-[var(--text-secondary)]">
-                    Les lignes personnalisées seront ajoutées au catalogue pour réutilisation.
-                  </p>
-                </div>
-              ) : null}
-
-              {quoteWizardStep === 1 ? (
-                <div className="space-y-4">
-                  <label className="flex items-center gap-2 text-sm text-[var(--text-primary)]">
-                    <input
-                      type="checkbox"
-                      checked={quoteWizardGenerateTasks}
-                      onChange={(e) => setQuoteWizardGenerateTasks(e.target.checked)}
-                      disabled={!isAdmin}
-                    />
-                    Créer les tâches recommandées
-                  </label>
-
-                  {quoteWizardGenerateTasks ? (
-                    <div className="space-y-3">
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        <Select
-                          label="Assigner à"
-                          value={quoteWizardAssigneeId}
-                          onChange={(e) => setQuoteWizardAssigneeId(e.target.value)}
-                          disabled={!isAdmin}
-                        >
-                          <option value="">Non assigné</option>
-                          {members.map((m) => (
-                            <option key={m.userId} value={m.userId}>
-                              {m.email}
-                            </option>
-                          ))}
-                        </Select>
-                        <Input
-                          label="Échéance dans (jours)"
-                          type="number"
-                          min={0}
-                          max={365}
-                          value={quoteWizardDueOffsetDays}
-                          onChange={(e) => setQuoteWizardDueOffsetDays(e.target.value)}
-                          disabled={!isAdmin}
-                        />
-                      </div>
-
-                      <div className="space-y-2">
-                        <p className="text-xs font-semibold text-[var(--text-primary)]">Aperçu des tâches</p>
-                        {quoteWizardLines.length === 0 ? (
-                          <p className="text-xs text-[var(--text-secondary)]">Ajoute des prestations d’abord.</p>
-                        ) : (
-                          <div className="space-y-2">
-                            {quoteWizardLines.map((line) => {
-                              const templates = line.serviceId ? serviceTemplates[line.serviceId] ?? [] : [];
-                              const loading = line.serviceId ? templatesLoading[line.serviceId] : false;
-                              return (
-                                <div
-                                  key={line.id}
-                                  className="rounded-xl border border-[var(--border)]/60 bg-[var(--surface)] p-3"
-                                >
-                                  <p className="text-xs font-semibold text-[var(--text-primary)]">
-                                    {line.title.trim() || 'Prestation'}
-                                  </p>
-                                  {line.source === 'custom' ? (
-                                    <p className="text-[11px] text-[var(--text-secondary)]">
-                                      Aucune tâche recommandée pour une ligne personnalisée.
-                                    </p>
-                                  ) : loading ? (
-                                    <p className="text-[11px] text-[var(--text-secondary)]">Chargement des templates…</p>
-                                  ) : templates.length ? (
-                                    <ul className="mt-1 space-y-1 text-[11px] text-[var(--text-secondary)]">
-                                      {templates.map((tpl) => (
-                                        <li key={tpl.id}>• {tpl.title}</li>
-                                      ))}
-                                    </ul>
-                                  ) : (
-                                    <p className="text-[11px] text-[var(--text-secondary)]">Aucun template disponible.</p>
-                                  )}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ) : (
-                    <p className="text-sm text-[var(--text-secondary)]">
-                      Vous pourrez créer les tâches plus tard depuis chaque prestation.
-                    </p>
-                  )}
-                </div>
-              ) : null}
-
-              {quoteWizardStep === 2 ? (
-                <div className="space-y-4">
-                  <div className="grid gap-3 sm:grid-cols-3">
-                    <div className={cn(UI.sectionSoft, 'text-right')}>
-                      <p className={UI.label}>Prestations</p>
-                      <p className={UI.value}>{quoteWizardLines.length}</p>
-                    </div>
-                    <div className={cn(UI.sectionSoft, 'text-right')}>
-                      <p className={UI.label}>Tâches</p>
-                      <p className={UI.value}>{quoteWizardGenerateTasks ? 'Activées' : 'Non'}</p>
-                    </div>
-                    <div className={cn(UI.sectionSoft, 'text-right')}>
-                      <p className={UI.label}>Total</p>
-                      <p className={UI.value}>Calculé dans le devis</p>
-                    </div>
-                  </div>
-                  <p className="text-sm text-[var(--text-secondary)]">
-                    Le devis calculera automatiquement le total à partir des prestations ajoutées.
-                  </p>
-                </div>
-              ) : null}
-
-              {quoteWizardError ? <p className="text-sm text-rose-500">{quoteWizardError}</p> : null}
-              {quoteWizardInfo ? <p className="text-sm text-emerald-600">{quoteWizardInfo}</p> : null}
-
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <Button variant="outline" onClick={closeQuoteWizard}>
-                  Annuler
-                </Button>
-                <div className="flex flex-wrap items-center gap-2">
-                  {quoteWizardStep > 0 ? (
-                    <Button
-                      variant="outline"
-                      onClick={() => setQuoteWizardStep((prev) => Math.max(0, prev - 1))}
-                    >
-                      Retour
-                    </Button>
-                  ) : null}
-                  {quoteWizardStep < 2 ? (
-                    <Button
-                      onClick={() => setQuoteWizardStep((prev) => Math.min(2, prev + 1))}
-                      disabled={quoteWizardStep === 0 && !wizardCanContinue}
-                    >
-                      Continuer
-                    </Button>
-                  ) : (
-                    <Button onClick={handleWizardGenerateQuote} disabled={quoteWizardSaving || !wizardCanContinue}>
-                      {quoteWizardSaving ? 'Génération…' : 'Générer le devis'}
-                    </Button>
-                  )}
-                </div>
-              </div>
-            </>
-          )}
-        </div>
-      </Modal>
-
-      <Modal
+      <PaymentModal
         open={Boolean(paymentModal)}
-        onCloseAction={closePaymentModal}
-        title="Paiements"
-        description="Ajoute un règlement et consulte l’historique."
-      >
-        <div className="space-y-3">
-          <p className="text-xs text-[var(--text-secondary)]">
-            {activePaymentInvoice
-              ? `${activePaymentInvoice.number ?? `Facture #${activePaymentInvoice.id}`} · Total ${formatCurrencyEUR(
-                  paymentTotalCents,
-                  { minimumFractionDigits: 0 }
-                )}`
-              : 'Facture sélectionnée'}
-          </p>
-          <div className="grid gap-2 sm:grid-cols-3">
-            <div className={cn(UI.sectionSoft, 'text-right')}>
-              <p className={UI.label}>Total</p>
-              <p className={UI.value}>{formatCurrencyEUR(paymentTotalCents, { minimumFractionDigits: 0 })}</p>
-            </div>
-            <div className={cn(UI.sectionSoft, 'text-right')}>
-              <p className={UI.label}>Payé</p>
-              <p className={UI.value}>{formatCurrencyEUR(paymentPaidCents, { minimumFractionDigits: 0 })}</p>
-            </div>
-            <div className={cn(UI.sectionSoft, 'text-right')}>
-              <p className={UI.label}>Reste</p>
-              <p className={UI.value}>{formatCurrencyEUR(paymentRemainingCents, { minimumFractionDigits: 0 })}</p>
-            </div>
-          </div>
-          {paymentNotice ? <Alert variant="success" title={paymentNotice} /> : null}
+        invoice={activePaymentInvoice}
+        totalCents={paymentTotalCents}
+        paidCents={paymentPaidCents}
+        remainingCents={paymentRemainingCents}
+        notice={paymentNotice}
+        loading={paymentLoading}
+        items={paymentItems}
+        isAdmin={isAdmin}
+        deletingId={paymentDeletingId}
+        form={paymentForm}
+        saving={paymentSaving}
+        error={paymentError}
+        onClose={closePaymentModal}
+        onDeletePayment={handleDeletePayment}
+        onFormChange={(patch) =>
+          setPaymentForm((prev) => ({
+            ...prev,
+            ...patch,
+            amount: patch.amount != null ? sanitizeEuroInput(patch.amount) : prev.amount,
+          }))
+        }
+        onApplyShortcut={applyPaymentShortcut}
+        onSave={handleSavePayment}
+      />
 
-          <div className="space-y-2">
-            <p className={UI.label}>Historique</p>
-            {paymentLoading ? (
-              <div className={cn(UI.sectionSoft, 'text-xs text-[var(--text-secondary)]')}>Chargement…</div>
-            ) : paymentItems.length ? (
-              <div className="space-y-2">
-                {paymentItems.map((item) => (
-                  <div
-                    key={item.id}
-                    className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-[var(--border)]/60 bg-[var(--surface-2)]/60 px-3 py-2"
-                  >
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold text-[var(--text-primary)]">
-                        {formatCurrencyEUR(Number(item.amountCents), { minimumFractionDigits: 0 })}
-                      </p>
-                      <p className="text-xs text-[var(--text-secondary)]">
-                        {formatDate(item.paidAt)} · {PAYMENT_METHOD_LABELS[item.method] ?? item.method}
-                        {item.reference ? ` · ${item.reference}` : ''}
-                      </p>
-                      {item.note || item.createdBy?.name || item.createdBy?.email ? (
-                        <p className="text-[11px] text-[var(--text-secondary)]">
-                          {item.note ? item.note : ''}
-                          {item.note && (item.createdBy?.name || item.createdBy?.email) ? ' · ' : ''}
-                          {item.createdBy?.name || item.createdBy?.email
-                            ? `par ${item.createdBy?.name ?? item.createdBy?.email}`
-                            : ''}
-                        </p>
-                      ) : null}
-                    </div>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => handleDeletePayment(item.id)}
-                      disabled={!isAdmin || paymentDeletingId === item.id || activePaymentInvoice?.status === 'CANCELLED'}
-                    >
-                      Supprimer
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className={cn(UI.sectionSoft, 'text-xs text-[var(--text-secondary)]')}>
-                Aucun paiement enregistré.
-              </div>
-            )}
-          </div>
-
-          <div className="grid gap-2 md:grid-cols-2">
-            <Input
-              label="Montant (€)"
-              type="number"
-              min={0}
-              step="0.01"
-              value={paymentForm.amount}
-              onChange={(e) => setPaymentForm((prev) => ({ ...prev, amount: e.target.value }))}
-              disabled={!isAdmin || paymentSaving}
-            />
-            <Input
-              label="Date de paiement"
-              type="date"
-              value={paymentForm.paidAt}
-              onChange={(e) => setPaymentForm((prev) => ({ ...prev, paidAt: e.target.value }))}
-              disabled={!isAdmin || paymentSaving}
-            />
-            <Select
-              label="Mode"
-              value={paymentForm.method}
-              onChange={(e) => setPaymentForm((prev) => ({ ...prev, method: e.target.value }))}
-              disabled={!isAdmin || paymentSaving}
-            >
-              {Object.entries(PAYMENT_METHOD_LABELS).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </Select>
-            <Input
-              label="Référence"
-              value={paymentForm.reference}
-              onChange={(e) => setPaymentForm((prev) => ({ ...prev, reference: e.target.value }))}
-              disabled={!isAdmin || paymentSaving}
-            />
-            <Input
-              label="Note"
-              value={paymentForm.note}
-              onChange={(e) => setPaymentForm((prev) => ({ ...prev, note: e.target.value }))}
-              disabled={!isAdmin || paymentSaving}
-            />
-          </div>
-          {paymentRemainingCents > 0 ? (
-            <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--text-secondary)]">
-              <span className={UI.label}>Raccourcis</span>
-              {[0.25, 0.5, 1].map((ratio) => (
-                <Button
-                  key={ratio}
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => applyPaymentShortcut(ratio)}
-                  disabled={!isAdmin || paymentSaving}
-                >
-                  {Math.round(ratio * 100)}%
-                </Button>
-              ))}
-            </div>
-          ) : null}
-
-          {paymentError ? <p className="text-sm text-rose-500">{paymentError}</p> : null}
-
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={closePaymentModal}>
-              Annuler
-            </Button>
-            <Button onClick={handleSavePayment} disabled={!isAdmin || paymentSaving || paymentRemainingCents <= 0}>
-              {paymentSaving ? 'Enregistrement…' : 'Enregistrer le paiement'}
-            </Button>
-          </div>
-        </div>
-      </Modal>
-
-      <Modal
+      <DepositDateModal
         open={depositDateEditorOpen}
-        onCloseAction={() => setDepositDateEditorOpen(false)}
-        title="Date acompte"
-        description="Renseigne la date comptable de paiement de l’acompte."
-      >
-        <div className="space-y-3">
-          <p className="text-xs text-[var(--text-secondary)]">
-            Statut acompte : {getProjectDepositStatusLabelFR(project?.depositStatus ?? null)}
-          </p>
-          <Input
-            label="Date de paiement"
-            type="date"
-            value={depositPaidDraft}
-            onChange={(e) => setDepositPaidDraft(e.target.value)}
-            disabled={!isAdmin || dateModalSaving}
-          />
-          {dateModalError ? <p className="text-sm text-rose-500">{dateModalError}</p> : null}
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setDepositDateEditorOpen(false)}>
-              Annuler
-            </Button>
-            <Button onClick={handleSaveDepositDate} disabled={!isAdmin || dateModalSaving}>
-              {dateModalSaving ? 'Enregistrement…' : 'Enregistrer'}
-            </Button>
-          </div>
-        </div>
-      </Modal>
+        depositStatus={project?.depositStatus}
+        paidAt={depositPaidDraft}
+        isAdmin={isAdmin}
+        saving={dateModalSaving}
+        error={dateModalError}
+        onChangePaidAt={setDepositPaidDraft}
+        onClose={() => setDepositDateEditorOpen(false)}
+        onSave={handleSaveDepositDate}
+      />
 
       <Modal
         open={activeSetupModal === 'client'}
@@ -5789,7 +4262,7 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
       <Modal
         open={activeSetupModal === 'deadline'}
         onCloseAction={closeModal}
-        title="Définir l’échéance"
+        title="Définir l'échéance"
         description="Renseigne les dates clés du projet."
       >
         <div className="space-y-3">
@@ -5824,6 +4297,56 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
         description="Sélectionne les services du catalogue."
       >
         <div className="space-y-3">
+          <div className="rounded-2xl border border-[var(--border)]/70 bg-[var(--surface-2)]/60 p-3">
+            <p className="text-sm font-semibold text-[var(--text-primary)]">Créer un service rapide</p>
+            <p className="mt-1 text-xs text-[var(--text-secondary)]">
+              Crée un service et ajoute-le immédiatement au projet.
+            </p>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <Input
+                label="Nom *"
+                value={quickServiceDraft.name}
+                onChange={(e) => setQuickServiceDraft((prev) => ({ ...prev, name: e.target.value }))}
+              />
+              <Input
+                label="Code (optionnel)"
+                value={quickServiceDraft.code}
+                onChange={(e) => setQuickServiceDraft((prev) => ({ ...prev, code: e.target.value }))}
+                placeholder="SER-ABC"
+              />
+              <Input
+                label="Prix (€)"
+                type="text"
+                inputMode="decimal"
+                value={quickServiceDraft.price}
+                onChange={(e) =>
+                  setQuickServiceDraft((prev) => ({ ...prev, price: sanitizeEuroInput(e.target.value) }))
+                }
+                placeholder="1500"
+              />
+              <Select
+                label="Rythme"
+                value={quickServiceDraft.billingUnit}
+                onChange={(e) =>
+                  setQuickServiceDraft((prev) => ({ ...prev, billingUnit: e.target.value }))
+                }
+              >
+                <option value="ONE_OFF">Ponctuel</option>
+                <option value="MONTHLY">Mensuel</option>
+              </Select>
+            </div>
+            {quickServiceError ? <p className="mt-2 text-xs text-rose-500">{quickServiceError}</p> : null}
+            <div className="mt-3 flex justify-end gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleQuickCreateService}
+                disabled={quickServiceSaving || !isAdmin}
+              >
+                {quickServiceSaving ? 'Création…' : 'Créer & ajouter'}
+              </Button>
+            </div>
+          </div>
           <Input
             placeholder="Rechercher un service"
             value={serviceSearch}
@@ -6020,7 +4543,7 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
         open={activeSetupModal === 'team'}
         onCloseAction={closeModal}
         title="Ajouter des membres"
-        description="Invite un membre de l’entreprise."
+        description="Invite un membre de l'entreprise."
       >
         <div className="space-y-3">
           <Input
@@ -6050,7 +4573,7 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
         open={activeSetupModal === 'documents'}
         onCloseAction={closeModal}
         title="Ajouter un document"
-        description={project?.clientId ? 'Charge un document lié au client.' : 'Associe d’abord un client.'}
+        description={project?.clientId ? 'Charge un document lié au client.' : "Associe d'abord un client."}
       >
         <div className="space-y-3">
           <Select

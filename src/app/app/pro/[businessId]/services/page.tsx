@@ -12,6 +12,7 @@ import { Table, TableBody, TableCell, TableEmpty, TableHead, TableHeader, TableR
 import { Modal } from '@/components/ui/modal';
 import { Badge } from '@/components/ui/badge';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
+import { formatCentsToEuroInput, parseEuroToCents, sanitizeEuroInput } from '@/lib/money';
 import RoleBanner from '@/components/RoleBanner';
 import { useActiveBusiness } from '../../ActiveBusinessProvider';
 import { ReferencePicker } from '../references/ReferencePicker';
@@ -616,14 +617,14 @@ export default function ServicesPage() {
     setSaving(true);
     setInfo(null);
 
-    const priceNum = form.defaultPrice.trim() ? Number(form.defaultPrice) : null;
-    const tjmNum = form.tjm.trim() ? Number(form.tjm) : null;
+    const priceNum = form.defaultPrice.trim() ? parseEuroToCents(form.defaultPrice) : null;
+    const tjmNum = form.tjm.trim() ? parseEuroToCents(form.tjm) : null;
     const durationNum = form.durationHours.trim() ? Number(form.durationHours) : null;
     const vatNum = form.vatRate.trim() ? Number(form.vatRate) : null;
 
     if (
-      (priceNum != null && Number.isNaN(priceNum)) ||
-      (tjmNum != null && Number.isNaN(tjmNum)) ||
+      (priceNum != null && !Number.isFinite(priceNum)) ||
+      (tjmNum != null && !Number.isFinite(tjmNum)) ||
       (durationNum != null && Number.isNaN(durationNum)) ||
       (vatNum != null && Number.isNaN(vatNum))
     ) {
@@ -639,8 +640,8 @@ export default function ServicesPage() {
       description: form.description.trim() || null,
     };
 
-    if (priceNum != null) payload.defaultPriceCents = Math.round(priceNum * 100);
-    if (tjmNum != null) payload.tjmCents = Math.round(tjmNum * 100);
+    if (priceNum != null) payload.defaultPriceCents = priceNum;
+    if (tjmNum != null) payload.tjmCents = tjmNum;
     if (durationNum != null) payload.durationHours = durationNum;
     if (vatNum != null) payload.vatRate = vatNum;
     payload.categoryReferenceId = form.categoryReferenceId || null;
@@ -666,7 +667,7 @@ export default function ServicesPage() {
       return;
     }
 
-    const createdId = (res.data as { id?: string } | null)?.id ?? null;
+    const createdId = res.data.item?.id ?? null;
     setInfo(isEdit ? 'Service mis à jour.' : 'Service créé.');
     setModalOpen(false);
     setEditing(null);
@@ -702,8 +703,8 @@ export default function ServicesPage() {
       name: service.name,
       type: service.type ?? '',
       description: service.description ?? '',
-      defaultPrice: service.defaultPriceCents ? (Number(service.defaultPriceCents) / 100).toString() : '',
-      tjm: service.tjmCents ? (Number(service.tjmCents) / 100).toString() : '',
+      defaultPrice: formatCentsToEuroInput(service.defaultPriceCents),
+      tjm: formatCentsToEuroInput(service.tjmCents),
       durationHours: service.durationHours != null ? String(service.durationHours) : '',
       vatRate: service.vatRate != null ? String(service.vatRate) : '',
       categoryReferenceId: service.categoryReferenceId ?? '',
@@ -1379,18 +1380,18 @@ export default function ServicesPage() {
               <p className="text-xs font-semibold text-[var(--text-secondary)]">Tarification</p>
               <Input
                 label="Prix par défaut (€)"
-                type="number"
+                type="text"
                 inputMode="decimal"
                 value={form.defaultPrice}
-                onChange={(e) => setForm((prev) => ({ ...prev, defaultPrice: e.target.value }))}
+                onChange={(e) => setForm((prev) => ({ ...prev, defaultPrice: sanitizeEuroInput(e.target.value) }))}
                 placeholder="1500"
               />
               <Input
                 label="TJM (€)"
-                type="number"
+                type="text"
                 inputMode="decimal"
                 value={form.tjm}
-                onChange={(e) => setForm((prev) => ({ ...prev, tjm: e.target.value }))}
+                onChange={(e) => setForm((prev) => ({ ...prev, tjm: sanitizeEuroInput(e.target.value) }))}
                 placeholder="800"
               />
               <div className="grid gap-2 md:grid-cols-2">

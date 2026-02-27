@@ -1,27 +1,14 @@
-import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/server/db/client';
-import { requireAuthPro } from '@/server/auth/requireAuthPro';
-import { requireBusinessRole } from '@/server/auth/businessRole';
-import { assertSameOrigin, jsonNoStore, withNoStore } from '@/server/security/csrf';
-import { rateLimit } from '@/server/security/rateLimit';
-import { badRequest, getRequestId, unauthorized, withRequestId } from '@/server/http/apiUtils';
+import { withBusinessRoute } from '@/server/http/routeHandler';
+import { jsonb, jsonbNoContent } from '@/server/http/json';
+import { badRequest, notFound, withIdNoStore } from '@/server/http/apiUtils';
 import { BusinessReferenceType, TaskPhase } from '@/generated/prisma';
+import { parseCentsInput } from '@/lib/money';
 
-function withIdNoStore(res: NextResponse, requestId: string) {
-  return withNoStore(withRequestId(res, requestId));
-}
-
-function forbidden(requestId: string) {
-  return withIdNoStore(NextResponse.json({ error: 'Forbidden' }, { status: 403 }), requestId);
-}
-
-function parseId(param: string | undefined) {
+// Null-returning ID parser pour les query params (comportement "soft" intentionnel)
+function parseId(param: string | undefined | null): bigint | null {
   if (!param || !/^\d+$/.test(param)) return null;
-  try {
-    return BigInt(param);
-  } catch {
-    return null;
-  }
+  try { return BigInt(param); } catch { return null; }
 }
 
 function normalizeStr(v: unknown) {
@@ -69,14 +56,11 @@ function validateServiceBody(body: unknown): ServiceBodyParsed {
   const name = normalizeStr(body.name);
   const type = normalizeStr(body.type);
   const description = normalizeStr(body.description);
+  const defaultPriceCentsRaw = parseCentsInput((body as { defaultPriceCents?: unknown }).defaultPriceCents);
   const defaultPriceCents =
-    typeof body.defaultPriceCents === 'number' && Number.isFinite(body.defaultPriceCents)
-      ? Math.max(0, Math.trunc(body.defaultPriceCents))
-      : null;
-  const tjmCents =
-    typeof body.tjmCents === 'number' && Number.isFinite(body.tjmCents)
-      ? Math.max(0, Math.trunc(body.tjmCents))
-      : null;
+    defaultPriceCentsRaw != null ? Math.max(0, Math.trunc(defaultPriceCentsRaw)) : null;
+  const tjmCentsRaw = parseCentsInput((body as { tjmCents?: unknown }).tjmCents);
+  const tjmCents = tjmCentsRaw != null ? Math.max(0, Math.trunc(tjmCentsRaw)) : null;
   const durationHours =
     typeof body.durationHours === 'number' && Number.isFinite(body.durationHours)
       ? Math.max(0, Math.trunc(body.durationHours))
@@ -166,13 +150,7 @@ async function ensureService(businessId: bigint, serviceId: bigint) {
 
 function ensureServiceDelegate(requestId: string) {
   if (!(prisma as { service?: unknown }).service) {
-    return withIdNoStore(
-      NextResponse.json(
-        { error: 'Prisma client not generated / wrong import (service delegate absent).' },
-        { status: 500 }
-      ),
-      requestId
-    );
+    return jsonb({ error: 'Prisma client not generated / wrong import (service delegate absent).' }, requestId, { status: 500 });
   }
   return null;
 }
@@ -218,106 +196,65 @@ async function validateCategoryAndTags(
 }
 
 // GET /api/pro/businesses/{businessId}/services/{serviceId}
-export async function GET(
-  request: NextRequest,
-  context: { params: Promise<{ businessId: string; serviceId: string }> }
-) {
-  const requestId = getRequestId(request);
-  let userId: string;
-  try {
-    ({ userId } = await requireAuthPro(request));
-  } catch {
-    return withRequestId(unauthorized(), requestId);
-  }
-
-  const { businessId, serviceId } = await context.params;
-  const businessIdBigInt = parseId(businessId);
-  const serviceIdBigInt = parseId(serviceId);
-  if (!businessIdBigInt || !serviceIdBigInt) {
-    return withRequestId(badRequest('Ids invalides.'), requestId);
-  }
+export const GET = withBusinessRoute<{ businessId: string; serviceId: string }>(
+  { minRole: 'VIEWER' },
+  async (ctx, _request, params) => {
+  const { requestId, businessId: businessIdBigInt } = ctx;
+  const serviceIdBigInt = parseId(params.serviceId);
+  if (!serviceIdBigInt) return withIdNoStore(badRequest('serviceId invalide.'), requestId);
 
   const delegateError = ensureServiceDelegate(requestId);
   if (delegateError) return delegateError;
-
-  const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'VIEWER');
-  if (!membership) return forbidden(requestId);
 
   const service = await ensureService(businessIdBigInt, serviceIdBigInt);
-  if (!service) {
-    return withRequestId(NextResponse.json({ error: 'Service introuvable.' }, { status: 404 }), requestId);
-  }
+  if (!service) return withIdNoStore(notFound('Service introuvable.'), requestId);
 
-  return jsonNoStore({
-    id: service.id.toString(),
-    businessId: service.businessId.toString(),
-    code: service.code,
-    name: service.name,
-    categoryReferenceId: service.categoryReferenceId ? service.categoryReferenceId.toString() : null,
-    categoryReferenceName: service.categoryReference?.name ?? null,
-    tagReferences: service.tags.map((t) => ({ id: t.reference.id.toString(), name: t.reference.name })),
-    type: service.type,
-    description: service.description,
-    defaultPriceCents: service.defaultPriceCents?.toString() ?? null,
-    tjmCents: service.tjmCents?.toString() ?? null,
-    durationHours: service.durationHours,
-    vatRate: service.vatRate,
-    taskTemplates: service.taskTemplates.map((tpl) => ({
-      id: tpl.id.toString(),
-      phase: tpl.phase,
-      title: tpl.title,
-      defaultAssigneeRole: tpl.defaultAssigneeRole,
-      defaultDueOffsetDays: tpl.defaultDueOffsetDays,
-    })),
-    createdAt: service.createdAt.toISOString(),
-    updatedAt: service.updatedAt.toISOString(),
-  });
-}
+  return jsonb({
+    item: {
+      id: service.id.toString(),
+      businessId: service.businessId.toString(),
+      code: service.code,
+      name: service.name,
+      categoryReferenceId: service.categoryReferenceId ? service.categoryReferenceId.toString() : null,
+      categoryReferenceName: service.categoryReference?.name ?? null,
+      tagReferences: service.tags.map((t) => ({ id: t.reference.id.toString(), name: t.reference.name })),
+      type: service.type,
+      description: service.description,
+      defaultPriceCents: service.defaultPriceCents?.toString() ?? null,
+      tjmCents: service.tjmCents?.toString() ?? null,
+      durationHours: service.durationHours,
+      vatRate: service.vatRate,
+      taskTemplates: service.taskTemplates.map((tpl) => ({
+        id: tpl.id.toString(),
+        phase: tpl.phase,
+        title: tpl.title,
+        defaultAssigneeRole: tpl.defaultAssigneeRole,
+        defaultDueOffsetDays: tpl.defaultDueOffsetDays,
+      })),
+      createdAt: service.createdAt.toISOString(),
+      updatedAt: service.updatedAt.toISOString(),
+    },
+  }, requestId);
+  }
+);
 
 // PATCH /api/pro/businesses/{businessId}/services/{serviceId}
-export async function PATCH(
-  request: NextRequest,
-  context: { params: Promise<{ businessId: string; serviceId: string }> }
-) {
-  const requestId = getRequestId(request);
-  const csrf = assertSameOrigin(request);
-  if (csrf) return csrf;
-
-  let userId: string;
-  try {
-    ({ userId } = await requireAuthPro(request));
-  } catch {
-    return withRequestId(unauthorized(), requestId);
-  }
-
-  const { businessId, serviceId } = await context.params;
-  const businessIdBigInt = parseId(businessId);
-  const serviceIdBigInt = parseId(serviceId);
-  if (!businessIdBigInt || !serviceIdBigInt) {
-    return withRequestId(badRequest('Ids invalides.'), requestId);
-  }
-
-  const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'ADMIN');
-  if (!membership) return forbidden(requestId);
+export const PATCH = withBusinessRoute<{ businessId: string; serviceId: string }>(
+  { minRole: 'ADMIN', rateLimit: { key: (ctx) => `pro:services:update:${ctx.businessId}:${ctx.userId}`, limit: 200, windowMs: 60 * 60 * 1000 } },
+  async (ctx, request, params) => {
+  const { requestId, businessId: businessIdBigInt } = ctx;
+  const serviceIdBigInt = parseId(params.serviceId);
+  if (!serviceIdBigInt) return withIdNoStore(badRequest('serviceId invalide.'), requestId);
 
   const delegateError = ensureServiceDelegate(requestId);
   if (delegateError) return delegateError;
-
-  const limited = rateLimit(request, {
-    key: `pro:services:update:${businessIdBigInt}:${serviceIdBigInt}`,
-    limit: 200,
-    windowMs: 60 * 60 * 1000,
-  });
-  if (limited) return limited;
 
   const body = await request.json().catch(() => null);
   const parsed = validateServiceBody(body);
-  if ('error' in parsed) return withRequestId(badRequest(parsed.error), requestId);
+  if ('error' in parsed) return withIdNoStore(badRequest(parsed.error), requestId);
 
   const existing = await ensureService(businessIdBigInt, serviceIdBigInt);
-  if (!existing) {
-    return withRequestId(NextResponse.json({ error: 'Service introuvable.' }, { status: 404 }), requestId);
-  }
+  if (!existing) return withIdNoStore(notFound('Service introuvable.'), requestId);
 
   const categoryToApply =
     parsed.categoryReferenceId !== undefined ? parsed.categoryReferenceId : existing.categoryReferenceId;
@@ -332,7 +269,7 @@ export async function PATCH(
     tagsToApply
   );
   if ('error' in validated) {
-    return withRequestId(badRequest(validated.error), requestId);
+    return withIdNoStore(badRequest(validated.error), requestId);
   }
 
   const updateData: Record<string, unknown> = {
@@ -377,74 +314,51 @@ export async function PATCH(
     },
   });
 
-  return jsonNoStore({
-    id: updated.id.toString(),
-    businessId: updated.businessId.toString(),
-    code: updated.code,
-    name: updated.name,
-    categoryReferenceId: updated.categoryReferenceId ? updated.categoryReferenceId.toString() : null,
-    categoryReferenceName: updated.categoryReference?.name ?? null,
-    tagReferences: updated.tags.map((t) => ({ id: t.reference.id.toString(), name: t.reference.name })),
-    type: updated.type,
-    description: updated.description,
-    defaultPriceCents: updated.defaultPriceCents?.toString() ?? null,
-    tjmCents: updated.tjmCents?.toString() ?? null,
-    durationHours: updated.durationHours,
-    vatRate: updated.vatRate,
-    taskTemplates: updated.taskTemplates.map((tpl) => ({
-      id: tpl.id.toString(),
-      phase: tpl.phase,
-      title: tpl.title,
-      defaultAssigneeRole: tpl.defaultAssigneeRole,
-      defaultDueOffsetDays: tpl.defaultDueOffsetDays,
-    })),
-    createdAt: updated.createdAt.toISOString(),
-    updatedAt: updated.updatedAt.toISOString(),
-  });
-}
+  return jsonb({
+    item: {
+      id: updated.id.toString(),
+      businessId: updated.businessId.toString(),
+      code: updated.code,
+      name: updated.name,
+      categoryReferenceId: updated.categoryReferenceId ? updated.categoryReferenceId.toString() : null,
+      categoryReferenceName: updated.categoryReference?.name ?? null,
+      tagReferences: updated.tags.map((t) => ({ id: t.reference.id.toString(), name: t.reference.name })),
+      type: updated.type,
+      description: updated.description,
+      defaultPriceCents: updated.defaultPriceCents?.toString() ?? null,
+      tjmCents: updated.tjmCents?.toString() ?? null,
+      durationHours: updated.durationHours,
+      vatRate: updated.vatRate,
+      taskTemplates: updated.taskTemplates.map((tpl) => ({
+        id: tpl.id.toString(),
+        phase: tpl.phase,
+        title: tpl.title,
+        defaultAssigneeRole: tpl.defaultAssigneeRole,
+        defaultDueOffsetDays: tpl.defaultDueOffsetDays,
+      })),
+      createdAt: updated.createdAt.toISOString(),
+      updatedAt: updated.updatedAt.toISOString(),
+    },
+  }, requestId);
+  }
+);
 
 // DELETE /api/pro/businesses/{businessId}/services/{serviceId}
-export async function DELETE(
-  request: NextRequest,
-  context: { params: Promise<{ businessId: string; serviceId: string }> }
-) {
-  const requestId = getRequestId(request);
-  const csrf = assertSameOrigin(request);
-  if (csrf) return csrf;
-
-  let userId: string;
-  try {
-    ({ userId } = await requireAuthPro(request));
-  } catch {
-    return withRequestId(unauthorized(), requestId);
-  }
-
-  const { businessId, serviceId } = await context.params;
-  const businessIdBigInt = parseId(businessId);
-  const serviceIdBigInt = parseId(serviceId);
-  if (!businessIdBigInt || !serviceIdBigInt) {
-    return withRequestId(badRequest('Ids invalides.'), requestId);
-  }
-
-  const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'ADMIN');
-  if (!membership) return forbidden(requestId);
+export const DELETE = withBusinessRoute<{ businessId: string; serviceId: string }>(
+  { minRole: 'ADMIN', rateLimit: { key: (ctx) => `pro:services:delete:${ctx.businessId}:${ctx.userId}`, limit: 50, windowMs: 60 * 60 * 1000 } },
+  async (ctx, _request, params) => {
+  const { requestId, businessId: businessIdBigInt } = ctx;
+  const serviceIdBigInt = parseId(params.serviceId);
+  if (!serviceIdBigInt) return withIdNoStore(badRequest('serviceId invalide.'), requestId);
 
   const delegateError = ensureServiceDelegate(requestId);
   if (delegateError) return delegateError;
 
-  const limited = rateLimit(request, {
-    key: `pro:services:delete:${businessIdBigInt}:${serviceIdBigInt}`,
-    limit: 50,
-    windowMs: 60 * 60 * 1000,
-  });
-  if (limited) return limited;
-
   const existing = await ensureService(businessIdBigInt, serviceIdBigInt);
-  if (!existing) {
-    return withRequestId(NextResponse.json({ error: 'Service introuvable.' }, { status: 404 }), requestId);
-  }
+  if (!existing) return withIdNoStore(notFound('Service introuvable.'), requestId);
 
   await prisma.service.delete({ where: { id: serviceIdBigInt } });
 
-  return jsonNoStore({ ok: true });
-}
+  return jsonbNoContent(requestId);
+  }
+);

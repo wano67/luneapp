@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Modal } from '@/components/ui/modal';
 import { fetchJson } from '@/lib/apiClient';
 import { formatCurrencyEUR } from '@/lib/formatCurrency';
+import { formatCentsToEuroInput, parseEuroToCents, sanitizeEuroInput } from '@/lib/money';
 
 type Template = {
   id: string;
@@ -34,6 +35,8 @@ type ServiceDetail = {
   isArchived?: boolean;
   taskTemplates: Template[];
 };
+
+type ServiceDetailResponse = { item: ServiceDetail };
 
 type ServiceForm = {
   code: string;
@@ -102,21 +105,21 @@ export function ServiceDetailPage({ businessId, serviceId }: { businessId: strin
   const loadService = useCallback(async () => {
     setLoading(true);
     setError(null);
-    const res = await fetchJson<ServiceDetail>(`/api/pro/businesses/${businessId}/services/${serviceId}`);
+    const res = await fetchJson<ServiceDetailResponse>(`/api/pro/businesses/${businessId}/services/${serviceId}`);
     setLoading(false);
-    if (!res.ok || !res.data) {
+    if (!res.ok || !res.data?.item) {
       setError(res.error ?? 'Service introuvable.');
       return;
     }
-    setService(res.data);
-    setTemplates(res.data.taskTemplates ?? []);
+    setService(res.data.item);
+    setTemplates(res.data.item.taskTemplates ?? []);
     setServiceForm({
-      code: res.data.code,
-      name: res.data.name,
-      description: res.data.description ?? '',
-      price: res.data.defaultPriceCents ? String(Number(res.data.defaultPriceCents)) : '',
-      vatRate: res.data.vatRate != null ? String(res.data.vatRate) : '',
-      type: res.data.type ?? '',
+      code: res.data.item.code,
+      name: res.data.item.name,
+      description: res.data.item.description ?? '',
+      price: formatCentsToEuroInput(res.data.item.defaultPriceCents),
+      vatRate: res.data.item.vatRate != null ? String(res.data.item.vatRate) : '',
+      type: res.data.item.type ?? '',
     });
   }, [businessId, serviceId]);
 
@@ -156,11 +159,17 @@ export function ServiceDetailPage({ businessId, serviceId }: { businessId: strin
     }
     setSaving(true);
     setFormError(null);
+    const priceCents = serviceForm.price.trim() ? parseEuroToCents(serviceForm.price) : null;
+    if (serviceForm.price.trim() && !Number.isFinite(priceCents)) {
+      setFormError('Prix invalide.');
+      setSaving(false);
+      return;
+    }
     const body = {
       code: serviceForm.code.trim(),
       name: serviceForm.name.trim(),
       description: serviceForm.description.trim() || null,
-      defaultPriceCents: serviceForm.price ? Number(serviceForm.price) : null,
+      defaultPriceCents: Number.isFinite(priceCents ?? NaN) ? (priceCents as number) : null,
       vatRate: serviceForm.vatRate ? Number(serviceForm.vatRate) : null,
       type: serviceForm.type.trim() || null,
     };
@@ -385,10 +394,11 @@ export function ServiceDetailPage({ businessId, serviceId }: { businessId: strin
             onChange={(e) => setServiceForm((p) => ({ ...p, description: e.target.value }))}
           />
           <Input
-            label="Prix (cents)"
-            type="number"
+            label="Prix (€)"
+            type="text"
+            inputMode="decimal"
             value={serviceForm.price}
-            onChange={(e) => setServiceForm((p) => ({ ...p, price: e.target.value }))}
+            onChange={(e) => setServiceForm((p) => ({ ...p, price: sanitizeEuroInput(e.target.value) }))}
           />
           <Input
             label="TVA (%)"
