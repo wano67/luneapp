@@ -2,7 +2,8 @@ import { prisma } from '@/server/db/client';
 import { withBusinessRoute } from '@/server/http/routeHandler';
 import { jsonbNoContent } from '@/server/http/json';
 import { badRequest, notFound, withIdNoStore } from '@/server/http/apiUtils';
-import { InvoiceStatus } from '@/generated/prisma';
+import { InvoiceStatus, LedgerSourceType } from '@/generated/prisma';
+import { softDeleteFinanceForInvoice } from '@/server/billing/invoiceFinance';
 
 function parseId(param: string | undefined) {
   if (!param || !/^\d+$/.test(param)) return null;
@@ -59,6 +60,18 @@ export const DELETE = withBusinessRoute<{ businessId: string; invoiceId: string;
         await tx.invoice.update({
           where: { id: invoice.id },
           data: { status: InvoiceStatus.SENT, paidAt: null },
+        });
+        // D1: Reverse the cash-sale ledger entry (LedgerLines cascade-delete)
+        await tx.ledgerEntry.deleteMany({
+          where: {
+            sourceType: LedgerSourceType.INVOICE_CASH_SALE,
+            sourceId: invoiceIdBigInt,
+          },
+        });
+        // D2: Soft-delete the corresponding Finance INCOME record
+        await softDeleteFinanceForInvoice(tx, {
+          businessId: businessIdBigInt,
+          invoiceId: invoiceIdBigInt,
         });
       }
     });

@@ -5,6 +5,7 @@ import { badRequest, notFound, withIdNoStore } from '@/server/http/apiUtils';
 import { InvoiceStatus, PaymentMethod } from '@/generated/prisma';
 import { ensureLegacyPaymentForPaidInvoice } from '@/server/billing/payments';
 import { upsertCashSaleLedgerForInvoicePaid } from '@/server/services/ledger';
+import { upsertFinanceForInvoicePaid } from '@/server/billing/invoiceFinance';
 import { parseCentsInput } from '@/lib/money';
 
 function parseId(param: string | undefined) {
@@ -171,6 +172,16 @@ export const POST = withBusinessRoute<{ businessId: string; invoiceId: string }>
               number: invoice.number,
             },
             createdByUserId: ctx.userId,
+          });
+          await upsertFinanceForInvoicePaid(tx, {
+            invoice: {
+              id: invoice.id,
+              businessId: invoice.businessId,
+              projectId: invoice.projectId,
+              quoteId: invoice.quoteId ?? null,
+              totalCents: invoice.totalCents,
+            },
+            paidAt,
           });
         }
       });

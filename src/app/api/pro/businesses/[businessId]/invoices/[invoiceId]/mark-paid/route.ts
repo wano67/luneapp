@@ -4,6 +4,7 @@ import { jsonbCreated } from '@/server/http/json';
 import { badRequest, notFound, withIdNoStore } from '@/server/http/apiUtils';
 import { InvoiceStatus, PaymentMethod } from '@/generated/prisma';
 import { upsertCashSaleLedgerForInvoicePaid } from '@/server/services/ledger';
+import { upsertFinanceForInvoicePaid } from '@/server/billing/invoiceFinance';
 
 function parseId(param: string | undefined) {
   if (!param || !/^\d+$/.test(param)) return null;
@@ -95,6 +96,16 @@ export const POST = withBusinessRoute<{ businessId: string; invoiceId: string }>
             number: invoice.number,
           },
           createdByUserId: ctx.userId,
+        });
+        await upsertFinanceForInvoicePaid(tx, {
+          invoice: {
+            id: invoice.id,
+            businessId: invoice.businessId,
+            projectId: invoice.projectId,
+            quoteId: invoice.quoteId ?? null,
+            totalCents: invoice.totalCents,
+          },
+          paidAt,
         });
       });
     } catch (err) {
