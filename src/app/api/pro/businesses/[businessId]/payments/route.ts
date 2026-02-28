@@ -4,6 +4,7 @@ import { jsonb } from '@/server/http/json';
 import { badRequest, notFound, withIdNoStore } from '@/server/http/apiUtils';
 import { InvoiceStatus, PaymentMethod } from '@/generated/prisma';
 import { upsertCashSaleLedgerForInvoicePaid } from '@/server/services/ledger';
+import { upsertFinanceForInvoicePaid } from '@/server/billing/invoiceFinance';
 import { parseCentsInput, parseEuroToCents } from '@/lib/money';
 
 // Null-returning ID parser pour les query params (comportement "soft" intentionnel)
@@ -49,7 +50,7 @@ export const GET = withBusinessRoute({ minRole: 'VIEWER' }, async (ctx, request)
       id: payment.id.toString(),
       invoiceId: payment.invoiceId.toString(),
       clientId: payment.clientId ? payment.clientId.toString() : payment.invoice.clientId?.toString() ?? null,
-      amountCents: Number(payment.amountCents),
+      amountCents: payment.amountCents.toString(),
       currency: payment.invoice.currency,
       paidAt: payment.paidAt.toISOString(),
       method: payment.method,
@@ -160,6 +161,16 @@ export const POST = withBusinessRoute(
             number: invoice.number,
           },
           createdByUserId: userId,
+        });
+        await upsertFinanceForInvoicePaid(tx, {
+          invoice: {
+            id: invoice.id,
+            businessId: invoice.businessId,
+            projectId: invoice.projectId,
+            quoteId: invoice.quoteId ?? null,
+            totalCents: invoice.totalCents,
+          },
+          paidAt: paymentDate,
         });
       }
     });

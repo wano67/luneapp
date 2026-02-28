@@ -1,33 +1,43 @@
 'use client';
 
-import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type ChangeEvent } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
-import { Modal } from '@/components/ui/modal';
 import { Table, TableBody, TableCell, TableEmpty, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import {
-  formatCurrency,
-  formatDate,
-  paginate,
-  type PaymentMethod,
-  type PaymentRow,
-  type PaymentStatus,
-} from '@/app/app/pro/pro-data';
+import { formatCurrency, formatDate, paginate, type PaymentMethod } from '@/app/app/pro/pro-data';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import { KpiCard } from '@/components/ui/kpi-card';
 import { PageHeader } from '@/app/app/components/PageHeader';
-import { sanitizeEuroInput } from '@/lib/money';
 
-type SortKey = 'date' | 'amount' | 'status';
+// ─── Types ────────────────────────────────────────────────────────────────────
 
-const STATUS_LABELS: Record<PaymentStatus, string> = {
-  PAID: 'Payé',
-  PENDING: 'En attente',
-  LATE: 'En retard',
+type FinanceType = 'INCOME' | 'EXPENSE';
+type TypeFilter = FinanceType | 'ALL';
+type SortKey = 'date' | 'amount';
+
+type FinanceEntry = {
+  id: string;
+  businessId: string;
+  projectId: string | null;
+  projectName: string | null;
+  type: FinanceType;
+  amountCents: string;
+  category: string;
+  vendor: string | null;
+  method: PaymentMethod | null;
+  date: string;
+  note: string | null;
+  isRecurring: boolean;
+  recurringUnit: string | null;
+  createdAt: string;
 };
+
+type FinanceListResponse = { items: FinanceEntry[] };
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const METHOD_LABELS: Record<PaymentMethod, string> = {
   WIRE: 'Virement',
@@ -37,115 +47,53 @@ const METHOD_LABELS: Record<PaymentMethod, string> = {
   OTHER: 'Autre',
 };
 
-function buildPaymentDate(p: PaymentRow) {
-  return new Date(p.receivedAt || p.expectedAt);
+function centsToEuro(amountCents: string): number {
+  const n = Number(amountCents);
+  return Number.isFinite(n) ? n / 100 : 0;
 }
 
-type FinanceApiItem = {
-  id: string;
-  invoiceId: string;
-  clientId: string | null;
-  amountCents: number;
-  currency: string;
-  paidAt: string;
-  method?: PaymentMethod;
-  reference: string | null;
-};
+function entryLabel(entry: FinanceEntry): string {
+  const parts: string[] = [];
+  if (entry.category) parts.push(entry.category);
+  if (entry.vendor) parts.push(entry.vendor);
+  if (parts.length === 0) return entry.type === 'INCOME' ? 'Entrée' : 'Sortie';
+  return parts.join(' · ');
+}
 
-type FinanceListResponse = { items: FinanceApiItem[] };
-type ClientsListResponse = { items: Array<{ id: string; name: string }> };
+// ─── Component ────────────────────────────────────────────────────────────────
 
 export function PaymentsPanel({ businessId }: { businessId: string }) {
-  const [payments, setPayments] = useState<PaymentRow[]>([]);
+  const [entries, setEntries] = useState<FinanceEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [requestId, setRequestId] = useState<string | null>(null);
 
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<PaymentStatus | 'ALL'>('ALL');
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>('ALL');
   const [methodFilter, setMethodFilter] = useState<PaymentMethod | 'ALL'>('ALL');
   const [sort, setSort] = useState<SortKey>('date');
   const [page, setPage] = useState(1);
-  const pageSize = 6;
+  const pageSize = 15;
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [createOpen, setCreateOpen] = useState(false);
-  const [form, setForm] = useState<{
-    clientName: string;
-    project: string;
-    amount: string;
-    method: PaymentMethod;
-    receivedAt: string;
-    expectedAt: string;
-    status: PaymentStatus;
-    note: string;
-  }>({
-    clientName: '',
-    project: '',
-    amount: '',
-    method: 'WIRE',
-    receivedAt: '',
-    expectedAt: '',
-    status: 'PAID',
-    note: '',
-  });
-  const [formError, setFormError] = useState<string | null>(null);
 
-  function toPaymentRow(item: FinanceApiItem, clientNames: Record<string, string>): PaymentRow {
-    const receivedAt = item.paidAt;
-    const expectedAt = item.paidAt;
-    const status: PaymentStatus = 'PAID';
-    const method: PaymentMethod = item.method ?? 'WIRE';
-    const clientName = item.clientId ? clientNames[item.clientId] ?? 'Client' : 'Client';
+  // ─── Data loading ─────────────────────────────────────────────────────────
 
-    return {
-      id: item.id,
-      businessId,
-      invoiceId: item.invoiceId,
-      clientName,
-      project: undefined,
-      amount: Number(item.amountCents) / 100,
-      currency: item.currency || 'EUR',
-      receivedAt,
-      expectedAt,
-      method,
-      status,
-      note: item.reference ?? undefined,
-    };
-  }
-
-  async function loadPayments() {
+  async function loadEntries() {
     try {
       setLoading(true);
       setError(null);
-      setRequestId(null);
-      const [paymentsRes, clientsRes] = await Promise.all([
-        fetchJson<FinanceListResponse>(`/api/pro/businesses/${businessId}/payments`),
-        fetchJson<ClientsListResponse>(`/api/pro/businesses/${businessId}/clients`),
-      ]);
-
-      setRequestId(paymentsRes.requestId ?? clientsRes.requestId);
-      if (!paymentsRes.ok || !paymentsRes.data) {
-        setError(
-          paymentsRes.requestId
-            ? `${paymentsRes.error ?? 'Chargement impossible.'} (Ref: ${paymentsRes.requestId})`
-            : paymentsRes.error ?? 'Chargement impossible.'
-        );
-        setPayments([]);
+      const res = await fetchJson<FinanceListResponse>(
+        `/api/pro/businesses/${businessId}/finances`
+      );
+      if (!res.ok || !res.data) {
+        setError(res.error ?? 'Chargement impossible.');
+        setEntries([]);
         return;
       }
-
-      const clientNames = clientsRes.ok && clientsRes.data
-        ? clientsRes.data.items.reduce<Record<string, string>>((acc, item) => {
-            acc[item.id] = item.name;
-            return acc;
-          }, {})
-        : {};
-
-      setPayments(paymentsRes.data.items.map((item) => toPaymentRow(item, clientNames)));
+      setEntries(res.data.items);
     } catch (err) {
       setError(getErrorMessage(err));
-      setPayments([]);
+      setEntries([]);
     } finally {
       setLoading(false);
     }
@@ -153,157 +101,164 @@ export function PaymentsPanel({ businessId }: { businessId: string }) {
 
   useEffect(() => {
     if (!businessId) return;
-    void loadPayments();
+    void loadEntries();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [businessId]);
 
+  // ─── Filtered & sorted ───────────────────────────────────────────────────
+
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
-    let list = payments;
-    if (statusFilter !== 'ALL') list = list.filter((p) => p.status === statusFilter);
-    if (methodFilter !== 'ALL') list = list.filter((p) => p.method === methodFilter);
+    let list = entries;
+    if (typeFilter !== 'ALL') list = list.filter((e) => e.type === typeFilter);
+    if (methodFilter !== 'ALL') list = list.filter((e) => e.method === methodFilter);
     if (term) {
       list = list.filter(
-        (p) =>
-          p.clientName.toLowerCase().includes(term) ||
-          (p.invoiceId ?? '').toLowerCase().includes(term) ||
-          (p.project ?? '').toLowerCase().includes(term)
+        (e) =>
+          e.category.toLowerCase().includes(term) ||
+          (e.vendor ?? '').toLowerCase().includes(term) ||
+          (e.note ?? '').toLowerCase().includes(term) ||
+          (e.projectName ?? '').toLowerCase().includes(term)
       );
     }
 
     return [...list].sort((a, b) => {
-      if (sort === 'amount') return b.amount - a.amount;
-      if (sort === 'status') return a.status.localeCompare(b.status);
-      return buildPaymentDate(b).getTime() - buildPaymentDate(a).getTime();
+      if (sort === 'amount') return Math.abs(centsToEuro(b.amountCents)) - Math.abs(centsToEuro(a.amountCents));
+      return new Date(b.date).getTime() - new Date(a.date).getTime();
     });
-  }, [methodFilter, payments, search, sort, statusFilter]);
+  }, [entries, methodFilter, search, sort, typeFilter]);
 
   const { pageItems, totalPages } = useMemo(
     () => paginate(filtered, page, pageSize),
     [filtered, page]
   );
 
-  const displaySelectedId = selectedId ?? pageItems[0]?.id ?? null;
-  const selected = payments.find((p) => p.id === displaySelectedId) ?? null;
+  const selected = entries.find((e) => e.id === selectedId) ?? null;
+
+  // ─── KPIs (mois en cours) ────────────────────────────────────────────────
 
   const kpis = useMemo(() => {
     const now = new Date();
-    const monthPaid = payments.filter(
-      (p) =>
-        p.status === 'PAID' &&
-        p.receivedAt &&
-        new Date(p.receivedAt).getMonth() === now.getMonth() &&
-        new Date(p.receivedAt).getFullYear() === now.getFullYear()
-    );
-    const overdue = payments.filter((p) => p.status === 'LATE');
+    const thisMonth = entries.filter((e) => {
+      const d = new Date(e.date);
+      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+    });
+    const incomeCents = thisMonth
+      .filter((e) => e.type === 'INCOME')
+      .reduce((sum, e) => sum + centsToEuro(e.amountCents), 0);
+    const expenseCents = thisMonth
+      .filter((e) => e.type === 'EXPENSE')
+      .reduce((sum, e) => sum + centsToEuro(e.amountCents), 0);
     return {
-      paidThisMonth: monthPaid.reduce((acc, p) => acc + p.amount, 0),
-      overdueCount: overdue.length,
-      pending: payments.filter((p) => p.status === 'PENDING').length,
+      income: incomeCents,
+      expense: expenseCents,
+      net: incomeCents - expenseCents,
     };
-  }, [payments]);
+  }, [entries]);
 
-  function onSearch(e: ChangeEvent<HTMLInputElement>) {
-    setSearch(e.target.value);
-  }
-
-  function onCreate(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setFormError('Création non implémentée (placeholder).');
-  }
+  // ─── Render ───────────────────────────────────────────────────────────────
 
   return (
     <div className="space-y-4">
       <PageHeader
         backHref={`/app/pro/${businessId}/finances`}
         backLabel="Finances"
-        title="Paiements"
-        subtitle="Paiements issus des factures payees."
+        title="Mouvements"
+        subtitle="Vue complète des entrées et sorties d'argent."
       />
 
       <div className="grid gap-3 md:grid-cols-3">
-        <KpiCard label="Payés ce mois" value={formatCurrency(kpis.paidThisMonth)} trend="neutral" />
         <KpiCard
-          label="En retard"
-          value={`${kpis.overdueCount}`}
-          trend={kpis.overdueCount > 0 ? 'down' : 'neutral'}
+          label="Entrées (mois)"
+          value={formatCurrency(kpis.income)}
+          trend={kpis.income > 0 ? 'up' : 'neutral'}
         />
-        <KpiCard label="En attente" value={`${kpis.pending}`} trend="neutral" />
+        <KpiCard
+          label="Sorties (mois)"
+          value={formatCurrency(kpis.expense)}
+          trend={kpis.expense > 0 ? 'down' : 'neutral'}
+        />
+        <KpiCard
+          label="Solde net (mois)"
+          value={formatCurrency(kpis.net)}
+          trend={kpis.net > 0 ? 'up' : kpis.net < 0 ? 'down' : 'neutral'}
+        />
       </div>
 
       <Card className="p-4 space-y-3">
         <div className="grid gap-2 md:grid-cols-4">
-          <Input placeholder="Rechercher" value={search} onChange={onSearch} />
-          <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as PaymentStatus | 'ALL')}>
-            <option value="ALL">Tous statuts</option>
-            {Object.entries(STATUS_LABELS).map(([key, label]) => (
-              <option key={key} value={key}>
-                {label}
-              </option>
-            ))}
+          <Input
+            placeholder="Rechercher (catégorie, fournisseur, projet…)"
+            value={search}
+            onChange={(e: ChangeEvent<HTMLInputElement>) => { setSearch(e.target.value); setPage(1); }}
+          />
+          <Select value={typeFilter} onChange={(e) => { setTypeFilter(e.target.value as TypeFilter); setPage(1); }}>
+            <option value="ALL">Tous types</option>
+            <option value="INCOME">Entrées</option>
+            <option value="EXPENSE">Sorties</option>
           </Select>
-          <Select value={methodFilter} onChange={(e) => setMethodFilter(e.target.value as PaymentMethod | 'ALL')}>
+          <Select value={methodFilter} onChange={(e) => { setMethodFilter(e.target.value as PaymentMethod | 'ALL'); setPage(1); }}>
             <option value="ALL">Tous moyens</option>
             {Object.entries(METHOD_LABELS).map(([key, label]) => (
-              <option key={key} value={key}>
-                {label}
-              </option>
+              <option key={key} value={key}>{label}</option>
             ))}
           </Select>
           <Select value={sort} onChange={(e) => setSort(e.target.value as SortKey)}>
             <option value="date">Date</option>
             <option value="amount">Montant</option>
-            <option value="status">Statut</option>
           </Select>
         </div>
 
         {loading ? <p className="text-xs text-[var(--text-secondary)]">Chargement…</p> : null}
         {error ? <p className="text-xs text-rose-500">{error}</p> : null}
-        {requestId ? <p className="text-[10px] text-[var(--text-secondary)]">Req: {requestId}</p> : null}
 
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Client</TableHead>
-              <TableHead>Projet</TableHead>
-              <TableHead>Montant</TableHead>
+              <TableHead>Date</TableHead>
+              <TableHead>Libellé</TableHead>
+              <TableHead>Type</TableHead>
+              <TableHead className="text-right">Montant</TableHead>
               <TableHead>Méthode</TableHead>
-              <TableHead>Échéance/Réception</TableHead>
-              <TableHead>Statut</TableHead>
+              <TableHead>Projet</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {pageItems.map((p) => (
-              <TableRow
-                key={p.id}
-                onClick={() => setSelectedId(p.id)}
-                className="cursor-pointer hover:bg-[var(--surface-hover)]"
-                data-selected={selectedId === p.id}
-              >
-                <TableCell className="font-semibold">{p.clientName}</TableCell>
-                <TableCell>{p.project ?? '—'}</TableCell>
-                <TableCell>{formatCurrency(p.amount)}</TableCell>
-                <TableCell>{METHOD_LABELS[p.method]}</TableCell>
-                <TableCell>
-                  {p.receivedAt ? (
-                    <span className="text-xs text-emerald-700">Reçu le {formatDate(p.receivedAt)}</span>
-                  ) : (
-                    <span className="text-xs text-[var(--text-secondary)]">Échéance {formatDate(p.expectedAt)}</span>
-                  )}
-                </TableCell>
-                <TableCell>
-                  <Badge variant={p.status === 'PAID' ? 'pro' : p.status === 'LATE' ? 'performance' : 'neutral'}>
-                    {STATUS_LABELS[p.status]}
-                  </Badge>
-                </TableCell>
-              </TableRow>
-            ))}
+            {pageItems.map((entry) => {
+              const amount = centsToEuro(entry.amountCents);
+              const isIncome = entry.type === 'INCOME';
+              return (
+                <TableRow
+                  key={entry.id}
+                  onClick={() => setSelectedId(entry.id)}
+                  className="cursor-pointer hover:bg-[var(--surface-hover)]"
+                  data-selected={selectedId === entry.id}
+                >
+                  <TableCell className="text-xs whitespace-nowrap">{formatDate(entry.date)}</TableCell>
+                  <TableCell className="font-medium">{entryLabel(entry)}</TableCell>
+                  <TableCell>
+                    <Badge variant={isIncome ? 'pro' : 'performance'}>
+                      {isIncome ? '↑ Entrée' : '↓ Sortie'}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className={`text-right font-semibold tabular-nums ${isIncome ? 'text-emerald-700' : 'text-rose-600'}`}>
+                    {isIncome ? '+' : '−'}{formatCurrency(amount)}
+                  </TableCell>
+                  <TableCell className="text-xs">
+                    {entry.method ? METHOD_LABELS[entry.method] ?? entry.method : '—'}
+                  </TableCell>
+                  <TableCell className="text-xs text-[var(--text-secondary)]">
+                    {entry.projectName ?? '—'}
+                  </TableCell>
+                </TableRow>
+              );
+            })}
             {pageItems.length === 0 ? (
               <TableEmpty>
                 <div className="space-y-1">
-                  <p className="font-semibold">Aucun paiement</p>
+                  <p className="font-semibold">Aucun mouvement</p>
                   <p className="text-sm text-[var(--text-secondary)]">
-                    Aucune écriture de paiement trouvée pour l’instant.
+                    Aucune écriture comptable trouvée.
                   </p>
                 </div>
               </TableEmpty>
@@ -312,19 +267,12 @@ export function PaymentsPanel({ businessId }: { businessId: string }) {
         </Table>
 
         <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-[var(--text-secondary)]">
-          <div>
-            Page {page} / {totalPages || 1}
-          </div>
+          <div>{filtered.length} écriture{filtered.length > 1 ? 's' : ''} · Page {page} / {totalPages || 1}</div>
           <div className="flex gap-2">
             <Button size="sm" variant="outline" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}>
               Précédent
             </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setPage((p) => (p < totalPages ? p + 1 : p))}
-              disabled={page >= totalPages}
-            >
+            <Button size="sm" variant="outline" onClick={() => setPage((p) => (p < totalPages ? p + 1 : p))} disabled={page >= totalPages}>
               Suivant
             </Button>
           </div>
@@ -335,44 +283,30 @@ export function PaymentsPanel({ businessId }: { businessId: string }) {
         <Card className="p-4 space-y-2">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-semibold text-[var(--text-primary)]">{selected.clientName}</p>
+              <p className="text-sm font-semibold text-[var(--text-primary)]">{entryLabel(selected)}</p>
               <p className="text-xs text-[var(--text-secondary)]">
-                {selected.project ?? '—'} · {selected.status === 'PAID' ? 'Payé' : 'En attente'}
+                {selected.type === 'INCOME' ? 'Entrée' : 'Sortie'} · {formatDate(selected.date)}
+                {selected.projectName ? ` · ${selected.projectName}` : ''}
               </p>
             </div>
-            <p className="text-sm font-semibold">{formatCurrency(selected.amount)}</p>
+            <p className={`text-sm font-semibold ${selected.type === 'INCOME' ? 'text-emerald-700' : 'text-rose-600'}`}>
+              {selected.type === 'INCOME' ? '+' : '−'}{formatCurrency(centsToEuro(selected.amountCents))}
+            </p>
           </div>
-          {selected.note ? <p className="text-xs text-[var(--text-secondary)]">{selected.note}</p> : null}
+          {selected.vendor ? (
+            <p className="text-xs text-[var(--text-secondary)]">Fournisseur : {selected.vendor}</p>
+          ) : null}
+          {selected.method ? (
+            <p className="text-xs text-[var(--text-secondary)]">Méthode : {METHOD_LABELS[selected.method] ?? selected.method}</p>
+          ) : null}
+          {selected.note ? (
+            <p className="text-xs text-[var(--text-secondary)]">Note : {selected.note}</p>
+          ) : null}
+          {selected.isRecurring ? (
+            <Badge variant="neutral">Récurrent ({selected.recurringUnit === 'MONTHLY' ? 'mensuel' : 'annuel'})</Badge>
+          ) : null}
         </Card>
       ) : null}
-
-      <Modal open={createOpen} onCloseAction={() => setCreateOpen(false)} title="Nouvel encaissement" description="Placeholder (non implémenté).">
-        <form className="space-y-3" onSubmit={onCreate}>
-          <Input label="Client" value={form.clientName} onChange={(e) => setForm((prev) => ({ ...prev, clientName: e.target.value }))} />
-          <Input label="Projet" value={form.project} onChange={(e) => setForm((prev) => ({ ...prev, project: e.target.value }))} />
-          <Input
-            label="Montant"
-            type="text"
-            inputMode="decimal"
-            value={form.amount}
-            onChange={(e) => setForm((prev) => ({ ...prev, amount: sanitizeEuroInput(e.target.value) }))}
-          />
-          <Select value={form.method} onChange={(e) => setForm((prev) => ({ ...prev, method: e.target.value as PaymentMethod }))}>
-            {Object.entries(METHOD_LABELS).map(([key, label]) => (
-              <option key={key} value={key}>
-                {label}
-              </option>
-            ))}
-          </Select>
-          {formError ? <p className="text-xs text-rose-500">{formError}</p> : null}
-          <div className="flex justify-end gap-2">
-            <Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>
-              Annuler
-            </Button>
-            <Button type="submit">Enregistrer</Button>
-          </div>
-        </form>
-      </Modal>
     </div>
   );
 }

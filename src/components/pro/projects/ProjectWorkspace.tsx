@@ -49,6 +49,8 @@ import { useProjectDataLoaders } from '@/components/pro/projects/hooks/useProjec
 import { useBillingHandlers } from '@/components/pro/projects/hooks/useBillingHandlers';
 import { useTeamManagement } from '@/components/pro/projects/hooks/useTeamManagement';
 import { useServiceManagement } from '@/components/pro/projects/hooks/useServiceManagement';
+import { useProjectSetupModals } from '@/components/pro/projects/hooks/useProjectSetupModals';
+import { useTaskHandlers } from '@/components/pro/projects/hooks/useTaskHandlers';
 
 type ProjectDetail = {
   id: string;
@@ -213,101 +215,10 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
   const [showAllActivity, setShowAllActivity] = useState(false);
   const [showSummaryDetails, setShowSummaryDetails] = useState(false);
 
-  const [taskGroupExpanded, setTaskGroupExpanded] = useState<Record<string, boolean>>({});
-  const [taskRowExpanded, setTaskRowExpanded] = useState<Record<string, boolean>>({});
-  const [activeSetupModal, setActiveSetupModal] = useState<
-    null | 'client' | 'deadline' | 'services' | 'tasks' | 'team' | 'documents'
-  >(null);
-  const [saving, setSaving] = useState(false);
   const [markingCompleted, setMarkingCompleted] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [modalError, setModalError] = useState<string | null>(null);
-  const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
-  const [startDateInput, setStartDateInput] = useState<string>('');
-  const [endDateInput, setEndDateInput] = useState<string>('');
-  const [serviceSelections, setServiceSelections] = useState<Record<string, number>>({});
-  const [quickServiceDraft, setQuickServiceDraft] = useState({
-    name: '',
-    code: '',
-    price: '',
-    billingUnit: 'ONE_OFF',
-  });
-  const [quickServiceSaving, setQuickServiceSaving] = useState(false);
-  const [quickServiceError, setQuickServiceError] = useState<string | null>(null);
 
 
-  const [taskAssignments, setTaskAssignments] = useState<Record<string, string>>({});
-  const [generateTasksOnAdd, setGenerateTasksOnAdd] = useState(true);
-  const [taskAssigneeId, setTaskAssigneeId] = useState('');
-  const [taskDueOffsetDays, setTaskDueOffsetDays] = useState('');
-  const [openServiceTasks, setOpenServiceTasks] = useState<Record<string, boolean>>({});
-  const [taskUpdating, setTaskUpdating] = useState<Record<string, boolean>>({});
-  const [templatesApplying, setTemplatesApplying] = useState<Record<string, boolean>>({});
-
-  const [inviteEmail, setInviteEmail] = useState('');
-  const [inviteRole, setInviteRole] = useState('MEMBER');
-  const [documentFile, setDocumentFile] = useState<File | null>(null);
-  const [documentKind, setDocumentKind] = useState<'Administratif' | 'Projet'>('Administratif');
-  const [clientSearch, setClientSearch] = useState('');
-  const [serviceSearch, setServiceSearch] = useState('');
-
-
-
-  const closeModal = () => {
-    setActiveSetupModal(null);
-    setModalError(null);
-    setSaving(false);
-    setDocumentFile(null);
-    setQuickServiceError(null);
-    setQuickServiceSaving(false);
-    setQuickServiceDraft({ name: '', code: '', price: '', billingUnit: 'ONE_OFF' });
-  };
-
-  const updateTaskDueDate = async (taskId: string, value: string) => {
-    try {
-      setModalError(null);
-      const res = await fetchJson(`/api/pro/businesses/${businessId}/tasks/${taskId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dueDate: value || null }),
-      });
-      if (!res.ok) {
-        setModalError(res.error ?? 'Impossible de mettre à jour la date.');
-        return;
-      }
-      await loadTasks();
-    } catch (err) {
-      setModalError(getErrorMessage(err));
-    }
-  };
-
-  const updateTask = async (taskId: string, payload: Record<string, unknown>) => {
-    if (!isAdmin) {
-      setBillingError('Réservé aux admins/owners.');
-      return;
-    }
-    setTaskUpdating((prev) => ({ ...prev, [taskId]: true }));
-    try {
-      setBillingError(null);
-      const res = await fetchJson(`/api/pro/businesses/${businessId}/tasks/${taskId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) {
-        setBillingError(res.error ?? 'Impossible de mettre à jour la tâche.');
-        return;
-      }
-      await loadTasks();
-      if (Object.prototype.hasOwnProperty.call(payload, 'status')) {
-        await loadActivity();
-      }
-    } catch (err) {
-      setBillingError(getErrorMessage(err));
-    } finally {
-      setTaskUpdating((prev) => ({ ...prev, [taskId]: false }));
-    }
-  };
 
   const {
     project,
@@ -350,8 +261,26 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
     onBillingError: setBillingError,
   });
 
-
-
+  const {
+    taskGroupExpanded,
+    setTaskGroupExpanded,
+    taskRowExpanded,
+    setTaskRowExpanded,
+    openServiceTasks,
+    setOpenServiceTasks,
+    taskUpdating,
+    templatesApplying,
+    updateTaskDueDate,
+    updateTask,
+    handleApplyServiceTemplates: applyServiceTemplatesRaw,
+  } = useTaskHandlers({
+    businessId,
+    projectId,
+    isAdmin,
+    loadTasks,
+    loadActivity,
+    onBillingError: setBillingError,
+  });
 
 
 
@@ -508,6 +437,81 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
     onBillingInfo: setBillingInfo,
     onBillingError: setBillingError,
   });
+
+  const {
+    activeSetupModal,
+    setActiveSetupModal,
+    saving,
+    modalError,
+    selectedClientId,
+    setSelectedClientId,
+    startDateInput,
+    setStartDateInput,
+    endDateInput,
+    setEndDateInput,
+    serviceSelections,
+    setServiceSelections,
+    quickServiceDraft,
+    setQuickServiceDraft,
+    quickServiceSaving,
+    quickServiceError,
+    taskAssignments,
+    setTaskAssignments,
+    generateTasksOnAdd,
+    setGenerateTasksOnAdd,
+    taskAssigneeId,
+    setTaskAssigneeId,
+    taskDueOffsetDays,
+    setTaskDueOffsetDays,
+    inviteEmail,
+    setInviteEmail,
+    inviteRole,
+    setInviteRole,
+    documentKind,
+    setDocumentKind,
+    setDocumentFile,
+    clientSearch,
+    setClientSearch,
+    serviceSearch,
+    setServiceSearch,
+    selectedServiceIds,
+    closeModal,
+    handleAttachClient,
+    handleUpdateDates,
+    handleAddServices,
+    handleQuickCreateService,
+    handleAssignTasks,
+    handleInviteMember,
+    handleUploadDocument,
+  } = useProjectSetupModals({
+    businessId,
+    projectId,
+    isAdmin,
+    projectClientId: project?.clientId ?? null,
+    projectStartDate: project?.startDate ?? null,
+    projectEndDate: project?.endDate ?? null,
+    clients,
+    catalogSearchResults,
+    serviceTemplates,
+    templatesLoading,
+    members,
+    tasks,
+    services,
+    patchProject,
+    refetchAll,
+    loadClients,
+    loadCatalogServices,
+    loadMembers,
+    loadTasks,
+    loadDocuments,
+    loadServiceTemplates,
+    setMembers,
+    onBillingInfo: setBillingInfo,
+    onBillingError: setBillingError,
+  });
+
+  const handleApplyServiceTemplates = (projectServiceId: string) =>
+    applyServiceTemplatesRaw(projectServiceId, taskAssigneeId, taskDueOffsetDays);
 
   async function handleMarkCompleted() {
     if (!project) return;
@@ -1093,10 +1097,6 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
     return new Map(pricingLines.map((line) => [line.id, line]));
   }, [pricingLines]);
 
-  const selectedServiceIds = useMemo(() => {
-    return Object.keys(serviceSelections).filter((id) => (serviceSelections[id] ?? 0) > 0);
-  }, [serviceSelections]);
-
   const projectValueCents = useMemo(() => {
     const raw = project?.valueCents ?? project?.billingSummary?.totalCents;
     if (raw != null) {
@@ -1128,328 +1128,6 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
       { label: 'Échéance', value: formatDate(project?.endDate ?? null) },
     ];
   }, [projectValueCents, progressPct, project?.endDate]);
-
-  useEffect(() => {
-    if (project) {
-      setSelectedClientId(project.clientId);
-      setStartDateInput(project.startDate ? project.startDate.slice(0, 10) : '');
-      setEndDateInput(project.endDate ? project.endDate.slice(0, 10) : '');
-    }
-  }, [project]);
-
-  useEffect(() => {
-    if (activeSetupModal === 'client') {
-      setModalError(null);
-      void loadClients();
-    } else if (activeSetupModal === 'services') {
-      setModalError(null);
-      void loadCatalogServices();
-      void loadMembers();
-    } else if (activeSetupModal === 'team') {
-      setModalError(null);
-      void loadMembers();
-    } else if (activeSetupModal === 'tasks') {
-      setModalError(null);
-      void loadMembers();
-      void loadTasks();
-    } else if (activeSetupModal === 'documents') {
-      setModalError(null);
-      if (project?.clientId) {
-        void loadDocuments(project.clientId);
-      }
-    }
-  }, [activeSetupModal, loadClients, loadCatalogServices, loadMembers, loadTasks, loadDocuments, project?.clientId]);
-
-  useEffect(() => {
-    if (!generateTasksOnAdd) return;
-    const selectedIds = Object.keys(serviceSelections);
-    selectedIds.forEach((serviceId) => {
-      if (!serviceTemplates[serviceId] && !templatesLoading[serviceId]) {
-        void loadServiceTemplates(serviceId);
-      }
-    });
-  }, [generateTasksOnAdd, serviceSelections, serviceTemplates, templatesLoading, loadServiceTemplates]);
-
-  async function handleAttachClient() {
-    if (!selectedClientId) {
-      setModalError('Sélectionne un client.');
-      return;
-    }
-    setSaving(true);
-    setModalError(null);
-    const res = await patchProject({ clientId: selectedClientId });
-    setSaving(false);
-    if (!res.ok) {
-      setModalError(res.error ?? 'Impossible de lier le client.');
-      return;
-    }
-    await refetchAll();
-    closeModal();
-  }
-
-  async function handleUpdateDates() {
-    if (startDateInput && endDateInput && new Date(endDateInput) < new Date(startDateInput)) {
-      setModalError('La fin doit être après le début.');
-      return;
-    }
-    setSaving(true);
-    setModalError(null);
-    const res = await patchProject({
-      startDate: startDateInput || null,
-      endDate: endDateInput || null,
-    });
-    setSaving(false);
-    if (!res.ok) {
-      setModalError(res.error ?? 'Impossible de mettre à jour les dates.');
-      return;
-    }
-    await refetchAll();
-    closeModal();
-  }
-
-  async function handleAddServices() {
-    if (!isAdmin) {
-      setModalError('Réservé aux admins/owners.');
-      return;
-    }
-    const entries = Object.entries(serviceSelections).filter(([, qty]) => qty > 0);
-    if (!entries.length) {
-      setModalError('Sélectionne au moins un service.');
-      return;
-    }
-    const dueOffset =
-      taskDueOffsetDays.trim() === ''
-        ? null
-        : Number.isFinite(Number(taskDueOffsetDays))
-          ? Math.trunc(Number(taskDueOffsetDays))
-          : null;
-    if (dueOffset !== null && (dueOffset < 0 || dueOffset > 365)) {
-      setModalError('Décalage jours invalide (0-365).');
-      return;
-    }
-    setSaving(true);
-    setModalError(null);
-    try {
-      for (const [serviceId, qty] of entries) {
-        const res = await fetchJson(
-          `/api/pro/businesses/${businessId}/projects/${projectId}/services`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              serviceId,
-              quantity: qty,
-              generateTasks: generateTasksOnAdd,
-              ...(generateTasksOnAdd && taskAssigneeId ? { taskAssigneeUserId: taskAssigneeId } : {}),
-              ...(generateTasksOnAdd && dueOffset !== null ? { taskDueOffsetDays: dueOffset } : {}),
-            }),
-          }
-        );
-        if (!res.ok) {
-          throw new Error(res.error ?? 'Erreur service');
-        }
-      }
-      await refetchAll();
-      closeModal();
-    } catch (err) {
-      setModalError(getErrorMessage(err));
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function handleQuickCreateService() {
-    if (!isAdmin) {
-      setQuickServiceError('Réservé aux admins/owners.');
-      return;
-    }
-    const name = quickServiceDraft.name.trim();
-    if (!name) {
-      setQuickServiceError('Nom requis.');
-      return;
-    }
-    const priceCents = parseEuroToCents(quickServiceDraft.price);
-    if (!Number.isFinite(priceCents) || priceCents <= 0) {
-      setQuickServiceError('Prix invalide.');
-      return;
-    }
-    const code =
-      quickServiceDraft.code.trim() ||
-      `SER-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
-
-    setQuickServiceSaving(true);
-    setQuickServiceError(null);
-    try {
-      const createRes = await fetchJson<{ item: { id: string } }>(`/api/pro/businesses/${businessId}/services`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          code,
-          name,
-          defaultPriceCents: priceCents,
-        }),
-      });
-      if (!createRes.ok || !createRes.data?.item?.id) {
-        throw new Error(createRes.error ?? 'Création du service impossible.');
-      }
-      const createdId = createRes.data.item.id;
-      const addRes = await fetchJson(`/api/pro/businesses/${businessId}/projects/${projectId}/services`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          serviceId: createdId,
-          quantity: 1,
-          billingUnit: quickServiceDraft.billingUnit,
-          unitLabel: quickServiceDraft.billingUnit === 'MONTHLY' ? '/mois' : null,
-          generateTasks: false,
-        }),
-      });
-      if (!addRes.ok) {
-        throw new Error(addRes.error ?? 'Ajout du service impossible.');
-      }
-      setQuickServiceDraft({ name: '', code: '', price: '', billingUnit: 'ONE_OFF' });
-      await refetchAll();
-      await loadCatalogServices('');
-      setBillingInfo('Service ajouté au projet.');
-      closeModal();
-    } catch (err) {
-      setQuickServiceError(getErrorMessage(err));
-    } finally {
-      setQuickServiceSaving(false);
-    }
-  }
-
-  async function handleApplyServiceTemplates(projectServiceId: string) {
-    if (!isAdmin) {
-      setBillingError('Réservé aux admins/owners.');
-      return;
-    }
-    const dueOffset =
-      taskDueOffsetDays.trim() === ''
-        ? null
-        : Number.isFinite(Number(taskDueOffsetDays))
-          ? Math.trunc(Number(taskDueOffsetDays))
-          : null;
-    if (dueOffset !== null && (dueOffset < 0 || dueOffset > 365)) {
-      setBillingError('Décalage jours invalide (0-365).');
-      return;
-    }
-    setTemplatesApplying((prev) => ({ ...prev, [projectServiceId]: true }));
-    setBillingError(null);
-    try {
-      const res = await fetchJson(
-        `/api/pro/businesses/${businessId}/projects/${projectId}/services/${projectServiceId}/tasks`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            ...(taskAssigneeId ? { taskAssigneeUserId: taskAssigneeId } : {}),
-            ...(dueOffset !== null ? { taskDueOffsetDays: dueOffset } : {}),
-          }),
-        }
-      );
-      if (!res.ok) {
-        setBillingError(res.error ?? 'Impossible de générer les tâches.');
-        return;
-      }
-      await loadTasks();
-    } catch (err) {
-      setBillingError(getErrorMessage(err));
-    } finally {
-      setTemplatesApplying((prev) => ({ ...prev, [projectServiceId]: false }));
-    }
-  }
-
-  async function handleAssignTasks() {
-    const entries = Object.entries(taskAssignments).filter(([, memberId]) => memberId);
-    if (!entries.length) {
-      setModalError('Aucune assignation sélectionnée.');
-      return;
-    }
-    setSaving(true);
-    setModalError(null);
-    try {
-      for (const [taskId, memberId] of entries) {
-        const res = await fetchJson(
-          `/api/pro/businesses/${businessId}/tasks/${taskId}`,
-          {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ assigneeUserId: memberId }),
-          }
-        );
-        if (!res.ok) {
-          throw new Error(res.error ?? 'Erreur assignation');
-        }
-      }
-      await refetchAll();
-      closeModal();
-    } catch (err) {
-      setModalError(getErrorMessage(err));
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function handleInviteMember() {
-    if (!inviteEmail) {
-      setModalError('Email requis.');
-      return;
-    }
-    setSaving(true);
-    setModalError(null);
-    const res = await fetchJson(`/api/pro/businesses/${businessId}/invites`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: inviteEmail, role: inviteRole }),
-    });
-    setSaving(false);
-    if (!res.ok) {
-      setModalError(res.error ?? 'Invitation impossible.');
-      return;
-    }
-    const inviteId = `invite-${inviteEmail}`;
-    setMembers((prev) => [
-      ...prev,
-      { membershipId: inviteId, userId: inviteId, email: inviteEmail, role: inviteRole, name: null, organizationUnit: null },
-    ]);
-    await refetchAll();
-    closeModal();
-  }
-
-  async function handleUploadDocument() {
-    if (!project?.clientId) {
-      setModalError('Associe un client avant de déposer un document.');
-      return;
-    }
-    if (!documentFile) {
-      setModalError('Choisis un fichier.');
-      return;
-    }
-    setSaving(true);
-    setModalError(null);
-    try {
-      const form = new FormData();
-      form.append('file', documentFile);
-      form.append('title', `${documentKind} - ${documentFile.name}`);
-      const res = await fetch(`/api/pro/businesses/${businessId}/clients/${project.clientId}/documents`, {
-        method: 'POST',
-        credentials: 'include',
-        body: form,
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => null);
-        const msg = (data as { error?: string } | null)?.error ?? 'Upload impossible.';
-        throw new Error(msg);
-      }
-      await refetchAll();
-      closeModal();
-    } catch (err) {
-      setModalError(getErrorMessage(err));
-    } finally {
-      setSaving(false);
-    }
-  }
 
   if (loading) {
     return <EmptyState title="Chargement..." description="Nous récupérons le projet." />;
