@@ -43,6 +43,7 @@ import { FilesTab } from '@/components/pro/projects/tabs/FilesTab';
 import { WorkTab } from '@/components/pro/projects/tabs/WorkTab';
 import { TeamTab } from '@/components/pro/projects/tabs/TeamTab';
 import { SetupModals } from '@/components/pro/projects/modals/SetupModals';
+import { useQuoteWizard } from '@/components/pro/projects/hooks/useQuoteWizard';
 
 type ProjectDetail = {
   id: string;
@@ -97,20 +98,6 @@ type CatalogService = {
   defaultPriceCents: string | null;
   tjmCents: string | null;
   durationHours: number | null;
-};
-
-type WizardLineSource = 'catalog' | 'custom';
-
-type WizardLine = {
-  id: string;
-  source: WizardLineSource;
-  serviceId?: string | null;
-  code?: string | null;
-  title: string;
-  description: string;
-  quantity: number;
-  unitPrice: string;
-  priceLocked: boolean;
 };
 
 type ServiceTemplate = {
@@ -470,21 +457,6 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
     reference: '',
     note: '',
   });
-  const [quoteWizardOpen, setQuoteWizardOpen] = useState(false);
-  const [quoteWizardStep, setQuoteWizardStep] = useState(0);
-  const [quoteWizardLines, setQuoteWizardLines] = useState<WizardLine[]>([]);
-  const [quoteWizardSearch, setQuoteWizardSearch] = useState('');
-  const [quoteWizardGenerateTasks, setQuoteWizardGenerateTasks] = useState(true);
-  const [quoteWizardAssigneeId, setQuoteWizardAssigneeId] = useState('');
-  const [quoteWizardDueOffsetDays, setQuoteWizardDueOffsetDays] = useState('');
-  const [quoteWizardError, setQuoteWizardError] = useState<string | null>(null);
-  const [quoteWizardInfo, setQuoteWizardInfo] = useState<string | null>(null);
-  const [quoteWizardSaving, setQuoteWizardSaving] = useState(false);
-  const [quoteWizardResult, setQuoteWizardResult] = useState<{
-    quoteId: string;
-    pdfUrl: string;
-    downloadUrl: string;
-  } | null>(null);
   const [taskAssignments, setTaskAssignments] = useState<Record<string, string>>({});
   const [serviceTemplates, setServiceTemplates] = useState<Record<string, ServiceTemplate[]>>({});
   const [templatesLoading, setTemplatesLoading] = useState<Record<string, boolean>>({});
@@ -757,97 +729,6 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
     setPaymentDeletingId(null);
   }
 
-  function resetQuoteWizard() {
-    setQuoteWizardStep(0);
-    setQuoteWizardLines([]);
-    setQuoteWizardSearch('');
-    setQuoteWizardGenerateTasks(true);
-    setQuoteWizardAssigneeId('');
-    setQuoteWizardDueOffsetDays('');
-    setQuoteWizardError(null);
-    setQuoteWizardInfo(null);
-    setQuoteWizardResult(null);
-    setQuoteWizardSaving(false);
-  }
-
-  function openQuoteWizard() {
-    resetQuoteWizard();
-    setQuoteWizardOpen(true);
-    void loadCatalogServices();
-    void loadMembers();
-  }
-
-  function closeQuoteWizard() {
-    setQuoteWizardOpen(false);
-    resetQuoteWizard();
-  }
-
-  function createWizardLineId() {
-    if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
-      return crypto.randomUUID();
-    }
-    return `wiz-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
-  }
-
-  function addCatalogLine(service: CatalogService) {
-    setQuoteWizardLines((prev) => {
-      const existing = prev.find((line) => line.source === 'catalog' && line.serviceId === service.id);
-      if (existing) {
-        return prev.map((line) =>
-          line.id === existing.id ? { ...line, quantity: Math.max(1, line.quantity + 1) } : line
-        );
-      }
-      const defaultCents = service.defaultPriceCents ?? service.tjmCents;
-      const unitPrice = defaultCents != null ? formatCentsToEuroInput(defaultCents) : '';
-      return [
-        ...prev,
-        {
-          id: createWizardLineId(),
-          source: 'catalog',
-          serviceId: service.id,
-          code: service.code,
-          title: service.name,
-          description: '',
-          quantity: 1,
-          unitPrice,
-          priceLocked: defaultCents != null,
-        },
-      ];
-    });
-    if (quoteWizardGenerateTasks && !serviceTemplates[service.id] && !templatesLoading[service.id]) {
-      void loadServiceTemplates(service.id);
-    }
-  }
-
-  function addCustomLine() {
-    setQuoteWizardLines((prev) => [
-      ...prev,
-      {
-        id: createWizardLineId(),
-        source: 'custom',
-        title: '',
-        description: '',
-        quantity: 1,
-        unitPrice: '',
-        priceLocked: false,
-      },
-    ]);
-  }
-
-  function updateWizardLine(id: string, patch: Partial<WizardLine>) {
-    setQuoteWizardLines((prev) => prev.map((line) => (line.id === id ? { ...line, ...patch } : line)));
-  }
-
-  function removeWizardLine(id: string) {
-    setQuoteWizardLines((prev) => prev.filter((line) => line.id !== id));
-  }
-
-  function buildCustomServiceCode() {
-    const stamp = Date.now().toString(36).toUpperCase();
-    const rand = Math.random().toString(36).slice(2, 6).toUpperCase();
-    return `SER-CUSTOM-${stamp}-${rand}`;
-  }
-
   const loadClients = useCallback(async (q?: string) => {
     const query = q ? `?q=${encodeURIComponent(q)}` : '';
     const res = await fetchJson<{ items: ClientLite[] }>(
@@ -919,6 +800,45 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
     loadServices,
     loadTasks,
   ]);
+
+  const {
+    quoteWizardOpen,
+    quoteWizardStep,
+    setQuoteWizardStep,
+    quoteWizardLines,
+    quoteWizardSearch,
+    setQuoteWizardSearch,
+    quoteWizardGenerateTasks,
+    setQuoteWizardGenerateTasks,
+    quoteWizardAssigneeId,
+    setQuoteWizardAssigneeId,
+    quoteWizardDueOffsetDays,
+    setQuoteWizardDueOffsetDays,
+    quoteWizardError,
+    quoteWizardInfo,
+    quoteWizardSaving,
+    quoteWizardResult,
+    wizardLineValidation,
+    wizardCanContinue,
+    openQuoteWizard,
+    closeQuoteWizard,
+    addCatalogLine,
+    addCustomLine,
+    updateWizardLine,
+    removeWizardLine,
+    handleWizardGenerateQuote,
+  } = useQuoteWizard({
+    businessId,
+    projectId,
+    isAdmin,
+    serviceTemplates,
+    templatesLoading,
+    loadCatalogServices,
+    loadMembers,
+    loadServiceTemplates,
+    refetchAll,
+    onBillingInfo: setBillingInfo,
+  });
 
   const patchProject = async (body: Record<string, unknown>) => {
     return fetchJson<{ item: ProjectDetail }>(`/api/pro/businesses/${businessId}/projects/${projectId}`, {
@@ -1235,105 +1155,6 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
       setBillingError(getErrorMessage(err));
     } finally {
       setCreatingQuote(false);
-    }
-  }
-
-  async function handleWizardGenerateQuote() {
-    if (!isAdmin) {
-      setQuoteWizardError('Réservé aux admins/owners.');
-      return;
-    }
-    if (!wizardCanContinue) {
-      setQuoteWizardError('Ajoute des prestations et un prix valide avant de continuer.');
-      return;
-    }
-    setQuoteWizardSaving(true);
-    setQuoteWizardError(null);
-    setQuoteWizardInfo('Ajout des prestations…');
-    try {
-      const dueOffset = quoteWizardDueOffsetDays.trim()
-        ? Math.max(0, Math.min(365, Number(quoteWizardDueOffsetDays)))
-        : null;
-      const hasDueOffset = Number.isFinite(dueOffset ?? NaN);
-      const createTasks = quoteWizardGenerateTasks;
-
-      for (const line of quoteWizardLines) {
-        let serviceId = line.serviceId ?? null;
-        const unitPriceCents = line.unitPrice.trim() ? parseEuroInputCents(line.unitPrice) : null;
-        if (!serviceId || line.source === 'custom') {
-          const code = buildCustomServiceCode();
-          const payload: Record<string, unknown> = {
-            code,
-            name: line.title.trim() || 'Prestation personnalisée',
-            type: 'CUSTOM',
-            description: line.description.trim() || null,
-            defaultPriceCents: unitPriceCents ?? 0,
-          };
-          const res = await fetchJson<{ item: CatalogService & { id: string } }>(
-            `/api/pro/businesses/${businessId}/services`,
-            {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(payload),
-            }
-          );
-          if (!res.ok || !res.data?.item?.id) {
-            throw new Error(res.error ?? 'Création du service personnalisé impossible.');
-          }
-          serviceId = res.data.item.id;
-        }
-
-        const payload: Record<string, unknown> = {
-          serviceId,
-          quantity: Math.max(1, Math.trunc(line.quantity)),
-          titleOverride: line.title.trim() || undefined,
-          description: line.description.trim() || undefined,
-        };
-        if (unitPriceCents != null && (!line.priceLocked || line.source === 'custom')) {
-          payload.priceCents = Math.max(0, Math.trunc(unitPriceCents));
-        }
-        if (createTasks) {
-          payload.generateTasks = true;
-          if (quoteWizardAssigneeId) payload.taskAssigneeUserId = quoteWizardAssigneeId;
-          if (hasDueOffset) payload.taskDueOffsetDays = Math.trunc(dueOffset as number);
-        } else {
-          payload.generateTasks = false;
-        }
-
-        const addRes = await fetchJson<{ id: string }>(
-          `/api/pro/businesses/${businessId}/projects/${projectId}/services`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-          }
-        );
-        if (!addRes.ok) {
-          throw new Error(addRes.error ?? 'Ajout des services au projet impossible.');
-        }
-      }
-
-      setQuoteWizardInfo('Génération du devis…');
-      const quoteRes = await fetchJson<{
-        quote: { id: string };
-        pdfUrl: string;
-        downloadUrl: string;
-      }>(`/api/pro/businesses/${businessId}/projects/${projectId}/quotes`, { method: 'POST' });
-      if (!quoteRes.ok || !quoteRes.data) {
-        throw new Error(quoteRes.error ?? 'Création du devis impossible.');
-      }
-      setQuoteWizardResult({
-        quoteId: quoteRes.data.quote.id,
-        pdfUrl: quoteRes.data.pdfUrl,
-        downloadUrl: quoteRes.data.downloadUrl,
-      });
-      setQuoteWizardInfo('Devis généré');
-      setBillingInfo('Devis généré');
-      await refetchAll();
-    } catch (err) {
-      setQuoteWizardError(getErrorMessage(err));
-    } finally {
-      setQuoteWizardSaving(false);
     }
   }
 
@@ -2410,22 +2231,6 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
 
   const isBillingEmpty = services.length === 0;
 
-  const wizardLineValidation = useMemo(() => {
-    return quoteWizardLines.map((line) => {
-      const errors: string[] = [];
-      if (!line.title.trim()) errors.push('Titre requis.');
-      if (line.quantity <= 0) errors.push('Qté invalide.');
-      const priceCents = line.unitPrice.trim() ? parseEuroInputCents(line.unitPrice) : null;
-      if (priceCents === null) {
-        errors.push('Prix requis.');
-      }
-      return { id: line.id, errors };
-    });
-  }, [quoteWizardLines]);
-
-  const wizardHasErrors = wizardLineValidation.some((entry) => entry.errors.length > 0);
-  const wizardCanContinue = quoteWizardLines.length > 0 && !wizardHasErrors;
-
   const missingPriceNames = useMemo(() => {
     return pricingLines
       .filter((line) => line.missingPrice)
@@ -2720,18 +2525,6 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
       }
     });
   }, [generateTasksOnAdd, serviceSelections, serviceTemplates, templatesLoading, loadServiceTemplates]);
-
-  useEffect(() => {
-    if (!quoteWizardOpen || !quoteWizardGenerateTasks) return;
-    const selectedIds = quoteWizardLines
-      .map((line) => line.serviceId)
-      .filter((id): id is string => Boolean(id));
-    selectedIds.forEach((serviceId) => {
-      if (!serviceTemplates[serviceId] && !templatesLoading[serviceId]) {
-        void loadServiceTemplates(serviceId);
-      }
-    });
-  }, [quoteWizardOpen, quoteWizardGenerateTasks, quoteWizardLines, serviceTemplates, templatesLoading, loadServiceTemplates]);
 
   async function handleAttachClient() {
     if (!selectedClientId) {
