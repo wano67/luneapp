@@ -3,36 +3,25 @@
 import { useCallback, useEffect, useMemo, useState, type DragEvent } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { ArrowLeft, GripVertical } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
-import { Input } from '@/components/ui/input';
-import Select from '@/components/ui/select';
-import { Modal } from '@/components/ui/modal';
 import { TabsPills } from '@/components/pro/TabsPills';
-import { cn } from '@/lib/cn';
 import {
   UI,
   formatDate,
-  InitialsAvatar,
   SectionCard,
-  SectionHeader,
   StatCard,
-  StatusPill,
   MetaItem,
   StickyHeaderActions,
 } from '@/components/pro/projects/workspace-ui';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
-import {
-  getProjectDepositStatusLabelFR,
-  getProjectQuoteStatusLabelFR,
-} from '@/lib/billingStatus';
 import { formatCurrencyEUR } from '@/lib/formatCurrency';
 import { useActiveBusiness } from '@/app/app/pro/ActiveBusinessProvider';
 import type { ChecklistItem } from '@/components/pro/projects/ProjectSetupChecklist';
 import { OverviewTab } from '@/components/pro/projects/tabs/OverviewTab';
-import { GuidedCtaCard } from '@/components/pro/shared/GuidedCtaCard';
+import { BillingTab } from '@/components/pro/projects/tabs/BillingTab';
 import {
   getProjectScopeLabelFR,
   getProjectScopeVariant,
@@ -53,8 +42,7 @@ import { InvoiceEditorModal } from '@/components/pro/projects/modals/InvoiceEdit
 import { FilesTab } from '@/components/pro/projects/tabs/FilesTab';
 import { WorkTab } from '@/components/pro/projects/tabs/WorkTab';
 import { TeamTab } from '@/components/pro/projects/tabs/TeamTab';
-import { BillingQuotesSection } from '@/components/pro/projects/billing/BillingQuotesSection';
-import { BillingInvoicesSection } from '@/components/pro/projects/billing/BillingInvoicesSection';
+import { SetupModals } from '@/components/pro/projects/modals/SetupModals';
 
 type ProjectDetail = {
   id: string;
@@ -2334,6 +2322,11 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
     return new Map(catalogServices.map((svc) => [svc.id, svc]));
   }, [catalogServices]);
 
+  const catalogDurationById = useMemo(
+    () => new Map(catalogServices.map((svc) => [svc.id, svc.durationHours])),
+    [catalogServices]
+  );
+
   const pricingLines = useMemo(() => {
     return services.map((svc) => {
       const draft = serviceDrafts[svc.id];
@@ -3368,634 +3361,94 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
       ) : null}
 
       {activeTab === 'billing' ? (
-        <div className="space-y-5">
-          {billingError ? (
-            <SectionCard className="border-rose-200/60 bg-rose-50/70 text-sm text-rose-500">
-              {billingError}
-            </SectionCard>
-          ) : null}
-          {billingInfo ? <p className="text-sm text-emerald-500">{billingInfo}</p> : null}
-          {!isAdmin ? (
-            <div className={cn(UI.sectionSoft, 'text-xs text-[var(--text-secondary)]')}>
-              Lecture seule : réservée aux admins/owners.
-            </div>
-          ) : null}
-
-          <SectionCard>
-            <SectionHeader
-              title="Résumé & situation"
-              subtitle={`Acompte de référence : ${depositPercentLabel} · Source : ${summaryTotals.sourceLabel}`}
-              actions={
-                isBillingEmpty ? null : (
-                  <>
-                    <Button
-                      size="sm"
-                      onClick={handleCreateQuote}
-                      disabled={!services.length || pricingTotals.missingCount > 0 || creatingQuote || !isAdmin}
-                    >
-                      {creatingQuote ? 'Création…' : 'Créer un devis'}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => openStagedInvoiceModal('DEPOSIT')}
-                      disabled={!isAdmin || summaryTotals.totalCents <= 0}
-                    >
-                      Facture d&apos;acompte
-                    </Button>
-                  </>
-                )
-              }
-            />
-            <div className="mt-4 flex flex-wrap gap-2">
-              <StatusPill label="Devis" value={getProjectQuoteStatusLabelFR(project?.quoteStatus ?? null)} />
-              <StatusPill label="Acompte" value={getProjectDepositStatusLabelFR(project?.depositStatus ?? null)} />
-            </div>
-            <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-[var(--text-secondary)]">
-              <span>Date acompte : {depositPaidLabel}</span>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => {
-                  setDateModalError(null);
-                  setDepositDateEditorOpen(true);
-                }}
-                disabled={!isAdmin || !canEditDepositPaidDate}
-              >
-                Modifier date
-              </Button>
-              {!canEditDepositPaidDate ? (
-                <span>Disponible une fois l&apos;acompte payé.</span>
-              ) : null}
-            </div>
-            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <StatCard
-                label="Total TTC"
-                value={formatCurrencyEUR(summaryTotals.totalTtcCents, { minimumFractionDigits: 0 })}
-                highlight
-                align="right"
-              />
-              <StatCard
-                label="Déjà payé"
-                value={formatCurrencyEUR(alreadyPaidCents, { minimumFractionDigits: 0 })}
-                align="right"
-              />
-              <StatCard
-                label="Reste à facturer"
-                value={formatCurrencyEUR(remainingToInvoiceCents, { minimumFractionDigits: 0 })}
-                highlight
-                align="right"
-              />
-              <StatCard
-                label="Reste à encaisser"
-                value={formatCurrencyEUR(remainingToCollectCents, { minimumFractionDigits: 0 })}
-                highlight
-                align="right"
-              />
-            </div>
-            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-[var(--text-secondary)]">
-              <span>Vue synthétique. Détails financiers en option.</span>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => setShowSummaryDetails((prev) => !prev)}
-              >
-                {showSummaryDetails ? 'Voir moins' : 'Voir +'}
-              </Button>
-            </div>
-            {showSummaryDetails ? (
-              <>
-                <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  <StatCard
-                    label="Déjà facturé"
-                    value={formatCurrencyEUR(alreadyInvoicedCents, { minimumFractionDigits: 0 })}
-                    align="right"
-                  />
-                  <StatCard
-                    label={`Acompte ${depositPercentLabel}`}
-                    value={formatCurrencyEUR(summaryTotals.depositCents, { minimumFractionDigits: 0 })}
-                    align="right"
-                  />
-                  <StatCard
-                    label="Solde"
-                    value={formatCurrencyEUR(summaryTotals.balanceCents, { minimumFractionDigits: 0 })}
-                    align="right"
-                  />
-                </div>
-                <div className="mt-3 flex flex-wrap gap-2 text-xs text-[var(--text-secondary)]">
-                  <span>Total HT : {formatCurrencyEUR(summaryTotals.totalCents, { minimumFractionDigits: 0 })}</span>
-                  <span aria-hidden>•</span>
-                  <span>
-                    TVA : {vatEnabled ? formatCurrencyEUR(summaryTotals.vatCents, { minimumFractionDigits: 0 }) : '—'}
-                  </span>
-                  {billingSettings?.paymentTermsDays != null ? (
-                    <>
-                      <span aria-hidden>•</span>
-                      <span>Paiement sous {billingSettings.paymentTermsDays} jours</span>
-                    </>
-                  ) : null}
-                </div>
-              </>
-            ) : null}
-          </SectionCard>
-
-          <SectionCard>
-            <SectionHeader
-              title="Détail des prestations"
-              subtitle="Texte narratif repris dans les devis (hors lignes tarifées)."
-            />
-            <div className="mt-4 space-y-3">
-              <textarea
-                className="min-h-[180px] w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3 py-3 text-sm text-[var(--text-primary)]"
-                placeholder="Décris le périmètre, les livrables, les phases…"
-                value={prestationsDraft}
-                onChange={(e) => setPrestationsDraft(e.target.value)}
-                disabled={!isAdmin || prestationsSaving}
-              />
-              {prestationsError ? <p className="text-xs text-rose-500">{prestationsError}</p> : null}
-              <div className="flex flex-wrap items-center gap-2">
-                <Button
-                  size="sm"
-                  onClick={handleSavePrestations}
-                  disabled={!isAdmin || prestationsSaving || !prestationsDirty}
-                >
-                  {prestationsSaving ? 'Enregistrement…' : 'Enregistrer'}
-                </Button>
-                {!isAdmin ? (
-                  <span className="text-xs text-[var(--text-secondary)]">Réservé aux admins/owners.</span>
-                ) : null}
-              </div>
-            </div>
-          </SectionCard>
-
-          <SectionCard>
-            <SectionHeader
-              title="Prestations facturables"
-              subtitle="Ajuste les quantités, tarifs et remises avant de générer un devis."
-              actions={
-                isBillingEmpty ? null : (
-                  <>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setActiveSetupModal('services')}
-                      disabled={!isAdmin}
-                    >
-                      Ajouter au projet
-                    </Button>
-                    <Button asChild size="sm">
-                      <Link href={`/app/pro/${businessId}/services`}>Catalogue services</Link>
-                    </Button>
-                  </>
-                )
-              }
-            />
-
-            {pricingTotals.missingCount > 0 ? (
-              <div className="mt-4 rounded-2xl border border-rose-200/60 bg-rose-50/60 p-3 text-xs text-rose-500">
-                Prix manquant pour {pricingTotals.missingCount} service(s)
-                {missingPriceNames.length ? ` : ${missingPriceNames.join(', ')}.` : '.'}
-              </div>
-            ) : null}
-
-            {services.length ? (
-              <div className="mt-4 space-y-4">
-                {services.map((svc) => {
-                  const draft = serviceDrafts[svc.id] ?? {
-                    quantity: String(svc.quantity ?? 1),
-                    price: formatCentsToEuroInput(svc.priceCents),
-                    title: svc.titleOverride ?? '',
-                    description: svc.description ?? svc.notes ?? '',
-                    discountType: svc.discountType ?? 'NONE',
-                    discountValue:
-                      svc.discountType === 'AMOUNT'
-                        ? formatCentsToEuroInput(svc.discountValue)
-                        : svc.discountValue != null
-                          ? String(svc.discountValue)
-                          : '',
-                    billingUnit: svc.billingUnit ?? 'ONE_OFF',
-                    unitLabel: svc.unitLabel ?? '',
-                  };
-                  const line = pricingByServiceId.get(svc.id);
-                  const lineError = lineErrors[svc.id];
-                  const isLineSaving = lineSavingId === svc.id;
-                  const isDragOver = dragOverServiceId === svc.id && draggingServiceId !== svc.id;
-                  const catalog = catalogById.get(svc.serviceId);
-                  const serviceTasks = tasksByServiceId.get(svc.id) ?? [];
-                  const tasksOpen = openServiceTasks[svc.id];
-                  const applyingTemplates = templatesApplying[svc.id];
-                  const durationLabel =
-                    catalog?.durationHours != null ? `${catalog.durationHours} h` : null;
-                  const unitSuffix =
-                    line?.unitLabel ?? (line?.billingUnit === 'MONTHLY' ? '/mois' : null);
-                  const priceSourceLabel =
-                    line?.priceSource === 'project'
-                      ? 'Tarif projet'
-                      : line?.priceSource === 'default'
-                        ? 'Catalogue'
-                        : line?.priceSource === 'tjm'
-                          ? 'TJM'
-                          : 'Prix manquant';
-                  return (
-                    <div
-                      key={svc.id}
-                      onDragOver={(event) => handleServiceDragOver(event, svc.id)}
-                      onDrop={(event) => void handleServiceDrop(event, svc.id)}
-                      className={`rounded-2xl border border-[var(--border)]/60 bg-[var(--surface-2)]/60 p-4 ${isDragOver ? 'ring-2 ring-[var(--focus-ring)]' : ''}`}
-                    >
-                      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                        <div className="flex min-w-0 items-start gap-3">
-                          <button
-                            type="button"
-                            className="mt-1 flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border)]/70 text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-                            draggable={isAdmin && !reordering}
-                            onDragStart={(event) => handleServiceDragStart(event, svc.id)}
-                            onDragEnd={handleServiceDragEnd}
-                            aria-label="Réordonner le service"
-                          >
-                            <GripVertical size={16} />
-                          </button>
-                          <div className="min-w-0 space-y-1">
-                            <p className="text-sm font-semibold text-[var(--text-primary)]">
-                              {svc.titleOverride?.trim() || svc.service.name}
-                            </p>
-                            <div className="flex flex-wrap gap-2 text-xs text-[var(--text-secondary)]">
-                              <span>{svc.service.code}</span>
-                              {durationLabel ? <span>· Durée : {durationLabel}</span> : null}
-                              {draft.billingUnit === 'MONTHLY' ? (
-                                <Badge variant="neutral">Abonnement</Badge>
-                              ) : null}
-                            </div>
-                            <p className="text-[11px] uppercase tracking-[0.12em] text-[var(--text-secondary)]">
-                              {priceSourceLabel}
-                            </p>
-                            {line?.missingPrice ? (
-                              <p className="text-xs text-rose-500">Prix manquant</p>
-                            ) : null}
-                          </div>
-                        </div>
-                        <div className="rounded-2xl border border-[var(--border)]/60 bg-[var(--surface)] px-3 py-2 text-right">
-                          <p className={UI.label}>Total</p>
-                          <p className="text-sm font-semibold text-[var(--text-primary)]">
-                            {formatCurrencyEUR(line?.totalCents ?? 0, { minimumFractionDigits: 0 })}
-                            {unitSuffix ? ` ${unitSuffix}` : ''}
-                          </p>
-                          {line?.originalUnitPriceCents ? (
-                            <p className="text-[11px] text-[var(--text-secondary)]">
-                              Avant remise :{' '}
-                              {formatCurrencyEUR(line.originalUnitPriceCents, { minimumFractionDigits: 0 })}
-                            </p>
-                          ) : null}
-                        </div>
-                      </div>
-
-                      <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                        <Input
-                          label="Qté"
-                          type="number"
-                          min={1}
-                          value={draft.quantity}
-                          onChange={(e) =>
-                            setServiceDrafts((prev) => ({
-                              ...prev,
-                              [svc.id]: { ...(prev[svc.id] ?? draft), quantity: e.target.value },
-                            }))
-                          }
-                          onInput={() => setLineErrors((prev) => ({ ...prev, [svc.id]: '' }))}
-                          disabled={!isAdmin || isLineSaving}
-                        />
-                        <Input
-                          label="Prix unitaire (€)"
-                          type="text"
-                          inputMode="decimal"
-                          value={draft.price}
-                          onChange={(e) =>
-                            setServiceDrafts((prev) => ({
-                              ...prev,
-                              [svc.id]: { ...(prev[svc.id] ?? draft), price: sanitizeEuroInput(e.target.value) },
-                            }))
-                          }
-                          onInput={() => setLineErrors((prev) => ({ ...prev, [svc.id]: '' }))}
-                          disabled={!isAdmin || isLineSaving}
-                        />
-                        <Input
-                          label="Libellé (optionnel)"
-                          value={draft.title}
-                          onChange={(e) =>
-                            setServiceDrafts((prev) => ({
-                              ...prev,
-                              [svc.id]: { ...(prev[svc.id] ?? draft), title: e.target.value },
-                            }))
-                          }
-                          disabled={!isAdmin || isLineSaving}
-                        />
-                      </div>
-
-                      <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-                        <Select
-                          label="Remise"
-                          value={draft.discountType}
-                          onChange={(e) =>
-                            setServiceDrafts((prev) => ({
-                              ...prev,
-                              [svc.id]: { ...(prev[svc.id] ?? draft), discountType: e.target.value },
-                            }))
-                          }
-                          disabled={!isAdmin || isLineSaving}
-                        >
-                          <option value="NONE">Aucune</option>
-                          <option value="PERCENT">%</option>
-                          <option value="AMOUNT">€</option>
-                        </Select>
-                        <Input
-                          label={draft.discountType === 'PERCENT' ? 'Valeur (%)' : 'Valeur (€)'}
-                          type={draft.discountType === 'PERCENT' ? 'number' : 'text'}
-                          inputMode={draft.discountType === 'PERCENT' ? 'numeric' : 'decimal'}
-                          min={draft.discountType === 'PERCENT' ? 0 : undefined}
-                          step={draft.discountType === 'PERCENT' ? '1' : undefined}
-                          value={draft.discountValue}
-                          onChange={(e) =>
-                            setServiceDrafts((prev) => ({
-                              ...prev,
-                              [svc.id]: {
-                                ...(prev[svc.id] ?? draft),
-                                discountValue:
-                                  draft.discountType === 'PERCENT'
-                                    ? e.target.value
-                                    : sanitizeEuroInput(e.target.value),
-                              },
-                            }))
-                          }
-                          disabled={!isAdmin || isLineSaving || draft.discountType === 'NONE'}
-                        />
-                        <Select
-                          label="Rythme"
-                          value={draft.billingUnit}
-                          onChange={(e) =>
-                            setServiceDrafts((prev) => ({
-                              ...prev,
-                              [svc.id]: { ...(prev[svc.id] ?? draft), billingUnit: e.target.value },
-                            }))
-                          }
-                          disabled={!isAdmin || isLineSaving}
-                        >
-                          <option value="ONE_OFF">Ponctuel</option>
-                          <option value="MONTHLY">Mensuel</option>
-                        </Select>
-                        <Input
-                          label="Unité"
-                          value={draft.unitLabel}
-                          onChange={(e) =>
-                            setServiceDrafts((prev) => ({
-                              ...prev,
-                              [svc.id]: { ...(prev[svc.id] ?? draft), unitLabel: e.target.value },
-                            }))
-                          }
-                          placeholder="/mois"
-                          disabled={!isAdmin || isLineSaving || draft.billingUnit !== 'MONTHLY'}
-                        />
-                        <div className="flex flex-wrap gap-2">
-                          {draft.billingUnit === 'MONTHLY' ? (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleGenerateRecurringInvoice(svc.id)}
-                              disabled={!isAdmin || recurringInvoiceActionId === svc.id}
-                            >
-                              {recurringInvoiceActionId === svc.id ? 'Création…' : 'Générer facture mois prochain'}
-                            </Button>
-                          ) : null}
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() =>
-                              setOpenNotes((prev) => ({ ...prev, [svc.id]: !prev[svc.id] }))
-                            }
-                          >
-                            Description
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() =>
-                              setOpenServiceTasks((prev) => ({ ...prev, [svc.id]: !prev[svc.id] }))
-                            }
-                          >
-                            {tasksOpen ? 'Masquer tâches' : `Tâches (${serviceTasks.length})`}
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="danger"
-                            onClick={() => handleDeleteService(svc.id)}
-                            disabled={!isAdmin || isLineSaving}
-                          >
-                            Supprimer
-                          </Button>
-                          <Button
-                            size="sm"
-                            onClick={() => handleUpdateService(svc.id)}
-                            disabled={!isAdmin || isLineSaving}
-                          >
-                            {isLineSaving ? 'Enregistrement…' : 'Enregistrer'}
-                          </Button>
-                        </div>
-                      </div>
-
-                      {openNotes[svc.id] ? (
-                        <div className="mt-3 space-y-2">
-                          <label className="text-xs font-medium text-[var(--text-secondary)]">Description</label>
-                          <textarea
-                            className="w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)]"
-                            rows={3}
-                            value={draft.description}
-                            onChange={(e) =>
-                              setServiceDrafts((prev) => ({
-                                ...prev,
-                                [svc.id]: { ...(prev[svc.id] ?? draft), description: e.target.value },
-                              }))
-                            }
-                            onInput={() => setLineErrors((prev) => ({ ...prev, [svc.id]: '' }))}
-                            disabled={!isAdmin || isLineSaving}
-                          />
-                        </div>
-                      ) : null}
-
-                      {tasksOpen ? (
-                        <div className="mt-4 rounded-2xl border border-[var(--border)]/60 bg-[var(--surface)] p-3">
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <p className="text-xs font-semibold text-[var(--text-primary)]">Tâches liées</p>
-                            {serviceTasks.length === 0 ? (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => handleApplyServiceTemplates(svc.id)}
-                                disabled={!isAdmin || applyingTemplates}
-                              >
-                                {applyingTemplates ? 'Génération…' : 'Appliquer templates'}
-                              </Button>
-                            ) : null}
-                          </div>
-                          {serviceTasks.length ? (
-                            <div className="mt-3 space-y-2">
-                              {serviceTasks.map((task) => {
-                                const isTaskSaving = taskUpdating[task.id];
-                                return (
-                                  <div
-                                    key={task.id}
-                                    className="rounded-xl border border-[var(--border)]/60 bg-[var(--surface-2)]/70 px-3 py-2"
-                                  >
-                                    <div className="flex flex-wrap items-start justify-between gap-2">
-                                      <div className="min-w-0">
-                                        <p className="text-sm font-semibold text-[var(--text-primary)]">
-                                          {task.title}
-                                        </p>
-                                        <p className="text-xs text-[var(--text-secondary)]">
-                                          {task.assigneeName || task.assigneeEmail || 'Non assigné'}
-                                        </p>
-                                      </div>
-                                      <div className="flex flex-wrap items-center gap-2">
-                                        <Select
-                                          value={task.status}
-                                          onChange={(e) => void updateTask(task.id, { status: e.target.value })}
-                                          disabled={!isAdmin || isTaskSaving}
-                                        >
-                                          <option value="TODO">À faire</option>
-                                          <option value="IN_PROGRESS">En cours</option>
-                                          <option value="DONE">Terminée</option>
-                                        </Select>
-                                        <Select
-                                          value={task.assigneeUserId ?? ''}
-                                          onChange={(e) =>
-                                            void updateTask(task.id, {
-                                              assigneeUserId: e.target.value || null,
-                                            })
-                                          }
-                                          disabled={!isAdmin || isTaskSaving}
-                                        >
-                                          <option value="">Non assigné</option>
-                                          {members.map((m) => (
-                                            <option key={m.userId} value={m.userId}>
-                                              {m.email}
-                                            </option>
-                                          ))}
-                                        </Select>
-                                        <Input
-                                          type="date"
-                                          value={task.dueDate ? task.dueDate.slice(0, 10) : ''}
-                                          onChange={(e) =>
-                                            void updateTask(task.id, { dueDate: e.target.value || null })
-                                          }
-                                          disabled={!isAdmin || isTaskSaving}
-                                        />
-                                      </div>
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          ) : (
-                            <p className="mt-2 text-xs text-[var(--text-secondary)]">
-                              Aucune tâche liée à ce service.
-                            </p>
-                          )}
-                        </div>
-                      ) : null}
-
-                      {lineError ? <p className="mt-2 text-xs text-rose-500">{lineError}</p> : null}
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="mt-6 rounded-3xl border border-[var(--border)]/70 bg-[var(--surface-2)]/60 p-6 text-center">
-                <p className="text-base font-semibold text-[var(--text-primary)]">Créer un devis</p>
-                <p className="mt-2 text-sm text-[var(--text-secondary)]">
-                  Ajoutez vos prestations, générez les tâches, puis créez le devis.
-                </p>
-                <div className="mt-4 flex flex-col items-center justify-center gap-2 sm:flex-row">
-                  <Button onClick={openQuoteWizard} disabled={!isAdmin}>
-                    Créer un devis
-                  </Button>
-                  <Button asChild variant="ghost">
-                    <Link href={`/app/pro/${businessId}/services`}>Créer un service dans le catalogue</Link>
-                  </Button>
-                </div>
-                {!isAdmin ? (
-                  <p className="mt-2 text-xs text-[var(--text-secondary)]">Réservé aux admins/owners.</p>
-                ) : null}
-              </div>
-            )}
-          </SectionCard>
-
-          <BillingQuotesSection
-            quotes={quotes}
-            isAdmin={isAdmin}
-            isBillingEmpty={isBillingEmpty}
-            servicesCount={services.length}
-            missingPriceCount={pricingTotals.missingCount}
-            creatingQuote={creatingQuote}
-            quoteActionId={quoteActionId}
-            invoiceActionId={invoiceActionId}
-            invoiceByQuoteId={invoiceByQuoteId}
-            billingReferenceId={billingReferenceId}
-            referenceUpdatingId={referenceUpdatingId}
-            businessId={businessId}
-            onCreateQuote={handleCreateQuote}
-            onOpenQuoteEditor={openQuoteEditor}
-            onOpenQuoteDateModal={openQuoteDateModal}
-            onSetBillingReference={handleSetBillingReference}
-            onQuoteStatus={handleQuoteStatus}
-            onOpenCancelQuoteModal={openCancelQuoteModal}
-            onCreateInvoice={handleCreateInvoice}
-            onDeleteQuote={handleDeleteQuote}
-          />
-
-          <BillingInvoicesSection
-            invoices={invoices}
-            isAdmin={isAdmin}
-            isBillingEmpty={isBillingEmpty}
-            summaryTotalCents={summaryTotals.totalCents}
-            remainingToInvoiceCents={remainingToInvoiceCents}
-            invoiceActionId={invoiceActionId}
-            businessId={businessId}
-            onOpenStagedInvoiceModal={openStagedInvoiceModal}
-            onOpenPaymentModal={openPaymentModal}
-            onOpenInvoiceEditor={openInvoiceEditor}
-            onOpenInvoiceDateModal={openInvoiceDateModal}
-            onInvoiceStatus={handleInvoiceStatus}
-            onDeleteInvoice={handleDeleteInvoice}
-          />
-
-          <SectionCard>
-            <SectionHeader
-              title="CGV & modalités"
-              subtitle="Ces éléments sont intégrés automatiquement aux PDF."
-              actions={
-                <Button asChild size="sm" variant="outline">
-                  <Link href={`/app/pro/${businessId}/settings/billing`}>Configurer</Link>
-                </Button>
-              }
-            />
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <Badge variant={legalConfigured ? 'personal' : 'performance'}>
-                {legalConfigured ? 'Configuré' : 'À configurer'}
-              </Badge>
-              <span className="text-xs text-[var(--text-secondary)]">
-                {legalBlocks.filled}/{legalBlocks.total} blocs renseignés
-              </span>
-            </div>
-            <div className="mt-4 grid gap-2 sm:grid-cols-2">
-              {legalBlocks.blocks.map((block) => (
-                <div key={block.label} className={cn(UI.sectionSoft, 'flex items-center justify-between')}>
-                  <span className="text-xs font-medium text-[var(--text-primary)]">{block.label}</span>
-                  <span className="text-xs text-[var(--text-secondary)]">
-                    {(block.value ?? '').trim() ? 'Renseigné' : 'Manquant'}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </SectionCard>
-        </div>
+        <BillingTab
+          billingError={billingError}
+          billingInfo={billingInfo}
+          isAdmin={isAdmin}
+          isBillingEmpty={isBillingEmpty}
+          businessId={businessId}
+          summaryTotals={summaryTotals}
+          depositPercentLabel={depositPercentLabel}
+          depositPaidLabel={depositPaidLabel}
+          canEditDepositPaidDate={canEditDepositPaidDate}
+          alreadyPaidCents={alreadyPaidCents}
+          alreadyInvoicedCents={alreadyInvoicedCents}
+          remainingToInvoiceCents={remainingToInvoiceCents}
+          remainingToCollectCents={remainingToCollectCents}
+          vatEnabled={vatEnabled}
+          billingSettingsPaymentTermsDays={billingSettings?.paymentTermsDays}
+          showSummaryDetails={showSummaryDetails}
+          projectQuoteStatus={project?.quoteStatus}
+          projectDepositStatus={project?.depositStatus}
+          creatingQuote={creatingQuote}
+          prestationsDraft={prestationsDraft}
+          prestationsSaving={prestationsSaving}
+          prestationsDirty={prestationsDirty}
+          prestationsError={prestationsError}
+          services={services}
+          pricingTotals={pricingTotals}
+          missingPriceNames={missingPriceNames}
+          serviceDrafts={serviceDrafts}
+          lineErrors={lineErrors}
+          lineSavingId={lineSavingId}
+          dragOverServiceId={dragOverServiceId}
+          draggingServiceId={draggingServiceId}
+          pricingByServiceId={pricingByServiceId}
+          catalogDurationById={catalogDurationById}
+          tasksByServiceId={tasksByServiceId}
+          openServiceTasks={openServiceTasks}
+          openNotes={openNotes}
+          templatesApplying={templatesApplying}
+          recurringInvoiceActionId={recurringInvoiceActionId}
+          reordering={reordering}
+          members={members}
+          taskUpdating={taskUpdating}
+          setServiceDrafts={setServiceDrafts}
+          setLineErrors={setLineErrors}
+          setOpenNotes={setOpenNotes}
+          setOpenServiceTasks={setOpenServiceTasks}
+          quotes={quotes}
+          quoteActionId={quoteActionId}
+          invoiceActionId={invoiceActionId}
+          invoiceByQuoteId={invoiceByQuoteId}
+          billingReferenceId={billingReferenceId}
+          referenceUpdatingId={referenceUpdatingId}
+          invoices={invoices}
+          legalConfigured={legalConfigured}
+          legalBlocks={legalBlocks}
+          onCreateQuote={handleCreateQuote}
+          onOpenStagedInvoiceModal={openStagedInvoiceModal}
+          onToggleSummaryDetails={() => setShowSummaryDetails((prev) => !prev)}
+          onOpenDepositDateModal={() => {
+            setDateModalError(null);
+            setDepositDateEditorOpen(true);
+          }}
+          onPrestationsDraftChange={setPrestationsDraft}
+          onSavePrestations={handleSavePrestations}
+          onServiceDragStart={handleServiceDragStart}
+          onServiceDragOver={handleServiceDragOver}
+          onServiceDrop={handleServiceDrop}
+          onServiceDragEnd={handleServiceDragEnd}
+          onDeleteService={handleDeleteService}
+          onUpdateService={handleUpdateService}
+          onApplyServiceTemplates={handleApplyServiceTemplates}
+          onGenerateRecurringInvoice={handleGenerateRecurringInvoice}
+          onUpdateTask={updateTask}
+          onOpenQuoteWizard={openQuoteWizard}
+          onOpenAddServicesModal={() => setActiveSetupModal('services')}
+          onOpenQuoteEditor={openQuoteEditor}
+          onOpenQuoteDateModal={openQuoteDateModal}
+          onSetBillingReference={handleSetBillingReference}
+          onQuoteStatus={handleQuoteStatus}
+          onOpenCancelQuoteModal={openCancelQuoteModal}
+          onCreateInvoice={handleCreateInvoice}
+          onDeleteQuote={handleDeleteQuote}
+          onOpenPaymentModal={openPaymentModal}
+          onOpenInvoiceEditor={openInvoiceEditor}
+          onOpenInvoiceDateModal={openInvoiceDateModal}
+          onInvoiceStatus={handleInvoiceStatus}
+          onDeleteInvoice={handleDeleteInvoice}
+        />
       ) : null}
 
       {activeTab === 'files' ? (
@@ -4213,595 +3666,85 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
         onSave={handleSaveDepositDate}
       />
 
-      <Modal
-        open={activeSetupModal === 'client'}
-        onCloseAction={closeModal}
-        title="Associer un client"
-        description="Sélectionne un client existant."
-      >
-        <div className="space-y-3">
-          <Input
-            placeholder="Rechercher un client"
-            value={clientSearch}
-            onChange={(e) => {
-              setClientSearch(e.target.value);
-              void loadClients(e.target.value);
-            }}
-          />
-          <div className="max-h-64 space-y-2 overflow-auto">
-            {clients.map((c) => (
-              <label
-                key={c.id}
-                className="flex cursor-pointer items-center justify-between rounded-lg border border-[var(--border)]/70 px-3 py-2"
-              >
-                <div>
-                  <p className="text-sm font-semibold text-[var(--text-primary)]">{c.name}</p>
-                  <p className="text-xs text-[var(--text-secondary)]">{c.email ?? '—'}</p>
-                </div>
-                <input
-                  type="radio"
-                  name="client"
-                  checked={selectedClientId === c.id}
-                  onChange={() => setSelectedClientId(c.id)}
-                />
-              </label>
-            ))}
-          </div>
-          {modalError ? <p className="text-sm text-rose-500">{modalError}</p> : null}
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={closeModal}>
-              Annuler
-            </Button>
-            <Button onClick={handleAttachClient} disabled={saving}>
-              {saving ? 'Enregistrement…' : 'Associer'}
-            </Button>
-          </div>
-        </div>
-      </Modal>
-
-      <Modal
-        open={activeSetupModal === 'deadline'}
-        onCloseAction={closeModal}
-        title="Définir l'échéance"
-        description="Renseigne les dates clés du projet."
-      >
-        <div className="space-y-3">
-          <Input
-            label="Début"
-            type="date"
-            value={startDateInput}
-            onChange={(e) => setStartDateInput(e.target.value)}
-          />
-          <Input
-            label="Fin"
-            type="date"
-            value={endDateInput}
-            onChange={(e) => setEndDateInput(e.target.value)}
-          />
-          {modalError ? <p className="text-sm text-rose-500">{modalError}</p> : null}
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={closeModal}>
-              Annuler
-            </Button>
-            <Button onClick={handleUpdateDates} disabled={saving}>
-              {saving ? 'Enregistrement…' : 'Enregistrer'}
-            </Button>
-          </div>
-        </div>
-      </Modal>
-
-      <Modal
-        open={activeSetupModal === 'services'}
-        onCloseAction={closeModal}
-        title="Ajouter des services au projet"
-        description="Sélectionne les services du catalogue."
-      >
-        <div className="space-y-3">
-          <div className="rounded-2xl border border-[var(--border)]/70 bg-[var(--surface-2)]/60 p-3">
-            <p className="text-sm font-semibold text-[var(--text-primary)]">Créer un service rapide</p>
-            <p className="mt-1 text-xs text-[var(--text-secondary)]">
-              Crée un service et ajoute-le immédiatement au projet.
-            </p>
-            <div className="mt-3 grid gap-3 sm:grid-cols-2">
-              <Input
-                label="Nom *"
-                value={quickServiceDraft.name}
-                onChange={(e) => setQuickServiceDraft((prev) => ({ ...prev, name: e.target.value }))}
-              />
-              <Input
-                label="Code (optionnel)"
-                value={quickServiceDraft.code}
-                onChange={(e) => setQuickServiceDraft((prev) => ({ ...prev, code: e.target.value }))}
-                placeholder="SER-ABC"
-              />
-              <Input
-                label="Prix (€)"
-                type="text"
-                inputMode="decimal"
-                value={quickServiceDraft.price}
-                onChange={(e) =>
-                  setQuickServiceDraft((prev) => ({ ...prev, price: sanitizeEuroInput(e.target.value) }))
-                }
-                placeholder="1500"
-              />
-              <Select
-                label="Rythme"
-                value={quickServiceDraft.billingUnit}
-                onChange={(e) =>
-                  setQuickServiceDraft((prev) => ({ ...prev, billingUnit: e.target.value }))
-                }
-              >
-                <option value="ONE_OFF">Ponctuel</option>
-                <option value="MONTHLY">Mensuel</option>
-              </Select>
-            </div>
-            {quickServiceError ? <p className="mt-2 text-xs text-rose-500">{quickServiceError}</p> : null}
-            <div className="mt-3 flex justify-end gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={handleQuickCreateService}
-                disabled={quickServiceSaving || !isAdmin}
-              >
-                {quickServiceSaving ? 'Création…' : 'Créer & ajouter'}
-              </Button>
-            </div>
-          </div>
-          <Input
-            placeholder="Rechercher un service"
-            value={serviceSearch}
-            onChange={(e) => {
-              setServiceSearch(e.target.value);
-              void loadCatalogServices(e.target.value);
-            }}
-          />
-          <div className="max-h-72 space-y-2 overflow-auto">
-            {catalogSearchResults.map((svc) => (
-              <div
-                key={svc.id}
-                className="flex items-center justify-between rounded-lg border border-[var(--border)]/70 px-3 py-2"
-              >
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold text-[var(--text-primary)]">{svc.name}</p>
-                  <p className="text-xs text-[var(--text-secondary)]">{svc.code}</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={serviceSelections[svc.id] !== undefined}
-                    onChange={(e) =>
-                      setServiceSelections((prev) => {
-                        const next = { ...prev };
-                        if (e.target.checked) next[svc.id] = next[svc.id] ?? 1;
-                        else delete next[svc.id];
-                        return next;
-                      })
-                    }
-                  />
-                  <Input
-                    type="number"
-                    className="w-20"
-                    min={1}
-                    value={serviceSelections[svc.id] ?? ''}
-                    onChange={(e) =>
-                      setServiceSelections((prev) => ({
-                        ...prev,
-                        [svc.id]: Number(e.target.value) || 0,
-                      }))
-                    }
-                    placeholder="Qté"
-                  />
-                </div>
-              </div>
-            ))}
-            {catalogSearchResults.length === 0 ? (
-              <p className="text-sm text-[var(--text-secondary)]">Aucun service trouvé.</p>
-            ) : null}
-          </div>
-          <div className="rounded-2xl border border-[var(--border)]/70 bg-[var(--surface-2)]/60 p-3">
-            <label className="flex items-center gap-2 text-sm text-[var(--text-primary)]">
-              <input
-                type="checkbox"
-                checked={generateTasksOnAdd}
-                onChange={(e) => setGenerateTasksOnAdd(e.target.checked)}
-                disabled={!isAdmin}
-              />
-              Créer les tâches recommandées (templates)
-            </label>
-            {generateTasksOnAdd ? (
-              <div className="mt-3 space-y-3">
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <Select
-                    label="Assigner à"
-                    value={taskAssigneeId}
-                    onChange={(e) => setTaskAssigneeId(e.target.value)}
-                    disabled={!isAdmin}
-                  >
-                    <option value="">Non assigné</option>
-                    {members.map((m) => (
-                      <option key={m.userId} value={m.userId}>
-                        {m.email}
-                      </option>
-                    ))}
-                  </Select>
-                  <Input
-                    label="Décalage échéance (jours)"
-                    type="number"
-                    min={0}
-                    max={365}
-                    value={taskDueOffsetDays}
-                    onChange={(e) => setTaskDueOffsetDays(e.target.value)}
-                    disabled={!isAdmin}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <p className="text-xs font-semibold text-[var(--text-primary)]">Aperçu des tâches</p>
-                  {selectedServiceIds.length === 0 ? (
-                    <p className="text-xs text-[var(--text-secondary)]">Sélectionne un service pour voir les templates.</p>
-                  ) : (
-                    <div className="space-y-2">
-                      {selectedServiceIds.map((serviceId) => {
-                        const svc = catalogSearchResults.find((item) => item.id === serviceId) ?? catalogById.get(serviceId);
-                        const templates = serviceTemplates[serviceId] ?? [];
-                        const loading = templatesLoading[serviceId];
-                        return (
-                          <div key={serviceId} className="rounded-lg border border-[var(--border)]/60 bg-[var(--surface)] p-2">
-                            <p className="text-xs font-semibold text-[var(--text-primary)]">
-                              {svc?.name ?? `Service #${serviceId}`}
-                            </p>
-                            {loading ? (
-                              <p className="text-[11px] text-[var(--text-secondary)]">Chargement des templates…</p>
-                            ) : templates.length ? (
-                              <ul className="mt-1 space-y-1 text-[11px] text-[var(--text-secondary)]">
-                                {templates.map((tpl) => (
-                                  <li key={tpl.id}>• {tpl.title}{tpl.phase ? ` · ${tpl.phase}` : ''}</li>
-                                ))}
-                              </ul>
-                            ) : (
-                              <p className="text-[11px] text-[var(--text-secondary)]">Aucun template pour ce service.</p>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <p className="mt-2 text-xs text-[var(--text-secondary)]">
-                Les services seront ajoutés sans tâches associées.
-              </p>
-            )}
-          </div>
-          {modalError ? <p className="text-sm text-rose-500">{modalError}</p> : null}
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={closeModal}>
-              Annuler
-            </Button>
-            <Button onClick={handleAddServices} disabled={saving}>
-              {saving ? 'Ajout…' : 'Ajouter au projet'}
-            </Button>
-          </div>
-        </div>
-      </Modal>
-
-      <Modal
-        open={activeSetupModal === 'tasks'}
-        onCloseAction={closeModal}
-        title="Configurer les tâches"
-        description="Assigne rapidement les tâches existantes."
-      >
-        <div className="space-y-3">
-          {services.length === 0 ? (
-            <GuidedCtaCard
-              title="Aucun service"
-              description="Ajoute des services pour générer des tâches."
-              primary={{ label: 'Ajouter des services', href: '#' }}
-            />
-          ) : null}
-          <div className="space-y-2">
-            {tasks.filter((t) => t.status !== 'DONE').slice(0, 10).map((task) => (
-              <div key={task.id} className="rounded-lg border border-[var(--border)]/70 bg-[var(--surface-2)]/70 p-3">
-                <p className="text-sm font-semibold text-[var(--text-primary)]">{task.title}</p>
-                <div className="mt-2 flex gap-2">
-                  <Select
-                    value={taskAssignments[task.id] ?? ''}
-                    onChange={(e) =>
-                      setTaskAssignments((prev) => ({ ...prev, [task.id]: e.target.value }))
-                    }
-                  >
-                    <option value="">Non assigné</option>
-                    {members.map((m) => (
-                      <option key={m.userId} value={m.userId}>
-                        {m.email}
-                      </option>
-                    ))}
-                  </Select>
-                  <Input
-                    type="date"
-                    value={task.dueDate ?? ''}
-                    onChange={(e) => void updateTaskDueDate(task.id, e.target.value)}
-                  />
-                </div>
-              </div>
-            ))}
-            {tasks.length === 0 ? <p className="text-sm text-[var(--text-secondary)]">Aucune tâche.</p> : null}
-          </div>
-          {modalError ? <p className="text-sm text-rose-500">{modalError}</p> : null}
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={closeModal}>
-              Annuler
-            </Button>
-            <Button onClick={handleAssignTasks} disabled={saving}>
-              {saving ? 'Enregistrement…' : 'Enregistrer'}
-            </Button>
-          </div>
-        </div>
-      </Modal>
-
-      <Modal
-        open={activeSetupModal === 'team'}
-        onCloseAction={closeModal}
-        title="Ajouter des membres"
-        description="Invite un membre de l'entreprise."
-      >
-        <div className="space-y-3">
-          <Input
-            label="Email"
-            type="email"
-            value={inviteEmail}
-            onChange={(e) => setInviteEmail(e.target.value)}
-          />
-          <Select label="Rôle" value={inviteRole} onChange={(e) => setInviteRole(e.target.value)}>
-            <option value="MEMBER">Membre</option>
-            <option value="VIEWER">Viewer</option>
-            <option value="ADMIN">Admin</option>
-          </Select>
-          {modalError ? <p className="text-sm text-rose-500">{modalError}</p> : null}
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={closeModal}>
-              Annuler
-            </Button>
-            <Button onClick={handleInviteMember} disabled={saving}>
-              {saving ? 'Invitation…' : 'Inviter'}
-            </Button>
-          </div>
-        </div>
-      </Modal>
-
-      <Modal
-        open={activeSetupModal === 'documents'}
-        onCloseAction={closeModal}
-        title="Ajouter un document"
-        description={project?.clientId ? 'Charge un document lié au client.' : "Associe d'abord un client."}
-      >
-        <div className="space-y-3">
-          <Select
-            label="Catégorie"
-            value={documentKind}
-            onChange={(e) => setDocumentKind(e.target.value as 'Administratif' | 'Projet')}
-          >
-            <option value="Administratif">Administratif</option>
-            <option value="Projet">Projet</option>
-          </Select>
-          <input
-            type="file"
-            onChange={(e) => setDocumentFile(e.target.files?.[0] ?? null)}
-            className="text-sm text-[var(--text-secondary)]"
-          />
-          {modalError ? <p className="text-sm text-rose-500">{modalError}</p> : null}
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={closeModal}>
-              Annuler
-            </Button>
-            <Button onClick={handleUploadDocument} disabled={saving || !project?.clientId}>
-              {saving ? 'Upload…' : 'Uploader'}
-            </Button>
-          </div>
-        </div>
-      </Modal>
-
-      <Modal
-        open={accessModalOpen}
-        onCloseAction={() => {
-          setAccessModalOpen(false);
-          setAccessInfo(null);
-        }}
-        title="Accès au projet"
-        description="Ajoute ou retire les membres autorisés à voir ce projet."
-      >
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <p className="text-xs font-semibold text-[var(--text-primary)]">Accès actuel</p>
-            {projectMembers.length ? (
-              <div className="space-y-2">
-                {projectMembers.map((member) => {
-                  const implicit = member.implicit || member.role === 'OWNER' || member.role === 'ADMIN';
-                  return (
-                    <div
-                      key={member.membershipId}
-                      className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--border)]/60 bg-[var(--surface-2)]/70 px-3 py-2"
-                    >
-                      <div className="flex items-center gap-2 text-sm text-[var(--text-secondary)]">
-                        <InitialsAvatar name={member.user.name} email={member.user.email} size={24} />
-                        <div className="min-w-0">
-                          <p className="truncate text-[var(--text-primary)]">
-                            {member.user.name ?? member.user.email}
-                          </p>
-                          <p className="text-[11px] text-[var(--text-secondary)]">{member.role}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {implicit ? <Badge variant="neutral">Accès implicite</Badge> : null}
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleRemoveProjectMember(member.membershipId)}
-                          disabled={!isAdmin || implicit}
-                        >
-                          Retirer
-                        </Button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <p className="text-sm text-[var(--text-secondary)]">Aucun membre associé.</p>
-            )}
-          </div>
-
-          <div className="space-y-2">
-            <p className="text-xs font-semibold text-[var(--text-primary)]">Ajouter un collaborateur</p>
-            {availableMembers.length ? (
-              <div className="space-y-2">
-                {availableMembers.map((member) => (
-                  <div
-                    key={member.membershipId}
-                    className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--border)]/60 bg-[var(--surface-2)]/70 px-3 py-2"
-                  >
-                    <div className="flex items-center gap-2 text-sm text-[var(--text-secondary)]">
-                      <InitialsAvatar name={member.name} email={member.email} size={24} />
-                      <div className="min-w-0">
-                        <p className="truncate text-[var(--text-primary)]">
-                          {member.name ?? member.email}
-                        </p>
-                        <p className="text-[11px] text-[var(--text-secondary)]">{member.role}</p>
-                      </div>
-                    </div>
-                    <Button
-                      size="sm"
-                      variant="primary"
-                      onClick={() => handleAddProjectMember(member.membershipId)}
-                      disabled={!isAdmin}
-                    >
-                      Ajouter
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm text-[var(--text-secondary)]">Tous les membres sont déjà associés.</p>
-            )}
-          </div>
-          {accessInfo ? <p className="text-sm text-emerald-600">{accessInfo}</p> : null}
-          <div className="flex justify-end">
-            <Button variant="outline" onClick={() => setAccessModalOpen(false)}>
-              Fermer
-            </Button>
-          </div>
-        </div>
-      </Modal>
-
-      <Modal
-        open={unitsModalOpen}
-        onCloseAction={() => {
-          setUnitsModalOpen(false);
-          setUnitErrors(null);
-        }}
-        title="Gérer les pôles"
-        description="Créez des pôles et assignez les membres."
-      >
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <p className="text-xs font-semibold text-[var(--text-primary)]">Nouveau pôle</p>
-            <div className="grid gap-2 sm:grid-cols-[2fr_1fr]">
-              <Input
-                placeholder="Nom du pôle"
-                value={unitDraftName}
-                onChange={(e) => setUnitDraftName(e.target.value)}
-              />
-              <Input
-                placeholder="Ordre"
-                type="number"
-                value={unitDraftOrder}
-                onChange={(e) => setUnitDraftOrder(e.target.value)}
-              />
-            </div>
-            <Button size="sm" onClick={handleCreateUnit} disabled={!isAdmin}>
-              Ajouter
-            </Button>
-          </div>
-
-          <div className="space-y-2">
-            <p className="text-xs font-semibold text-[var(--text-primary)]">Pôles existants</p>
-            {organizationUnits.length ? (
-              <div className="space-y-2">
-                {organizationUnits.map((unit) => (
-                  <div key={unit.id} className="rounded-lg border border-[var(--border)]/60 bg-[var(--surface-2)]/70 p-3">
-                    <div className="grid gap-2 sm:grid-cols-[2fr_1fr_auto_auto] sm:items-center">
-                      <Input
-                        value={unitDrafts[unit.id]?.name ?? unit.name}
-                        onChange={(e) =>
-                          setUnitDrafts((prev) => ({
-                            ...prev,
-                            [unit.id]: { name: e.target.value, order: prev[unit.id]?.order ?? String(unit.order) },
-                          }))
-                        }
-                      />
-                      <Input
-                        type="number"
-                        value={unitDrafts[unit.id]?.order ?? String(unit.order)}
-                        onChange={(e) =>
-                          setUnitDrafts((prev) => ({
-                            ...prev,
-                            [unit.id]: { name: prev[unit.id]?.name ?? unit.name, order: e.target.value },
-                          }))
-                        }
-                      />
-                      <Button size="sm" variant="outline" onClick={() => handleUpdateUnit(unit.id)} disabled={!isAdmin}>
-                        Enregistrer
-                      </Button>
-                      <Button size="sm" variant="ghost" onClick={() => handleDeleteUnit(unit.id)} disabled={!isAdmin}>
-                        Supprimer
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm text-[var(--text-secondary)]">Aucun pôle configuré.</p>
-            )}
-          </div>
-
-          <div className="space-y-2">
-            <p className="text-xs font-semibold text-[var(--text-primary)]">Assignation des membres</p>
-            <div className="space-y-2">
-              {members.map((member) => (
-                <div key={member.membershipId} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--border)]/60 bg-[var(--surface-2)]/70 px-3 py-2">
-                  <div className="flex items-center gap-2 text-sm text-[var(--text-secondary)]">
-                    <InitialsAvatar name={member.name} email={member.email} size={24} />
-                    <div className="min-w-0">
-                      <p className="truncate text-[var(--text-primary)]">{member.name ?? member.email}</p>
-                      <p className="text-[11px] text-[var(--text-secondary)]">{member.role}</p>
-                    </div>
-                  </div>
-                  <Select
-                    value={member.organizationUnit?.id ?? ''}
-                    onChange={(e) => handleAssignMemberToUnit(member.membershipId, e.target.value || null)}
-                    disabled={!isAdmin}
-                  >
-                    <option value="">Sans pôle</option>
-                    {organizationUnits.map((unit) => (
-                      <option key={unit.id} value={unit.id}>
-                        {unit.name}
-                      </option>
-                    ))}
-                  </Select>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {unitErrors ? <p className="text-sm text-rose-500">{unitErrors}</p> : null}
-          {teamInfo ? <p className="text-sm text-emerald-600">{teamInfo}</p> : null}
-          <div className="flex justify-end">
-            <Button variant="outline" onClick={() => setUnitsModalOpen(false)}>
-              Fermer
-            </Button>
-          </div>
-        </div>
-      </Modal>
+      <SetupModals
+        activeSetupModal={activeSetupModal}
+        accessModalOpen={accessModalOpen}
+        unitsModalOpen={unitsModalOpen}
+        isAdmin={isAdmin}
+        saving={saving}
+        modalError={modalError}
+        hasClientId={Boolean(project?.clientId)}
+        clients={clients}
+        clientSearch={clientSearch}
+        selectedClientId={selectedClientId}
+        setClientSearch={setClientSearch}
+        setSelectedClientId={setSelectedClientId}
+        onLoadClients={(search) => void loadClients(search)}
+        onAttachClient={handleAttachClient}
+        startDateInput={startDateInput}
+        endDateInput={endDateInput}
+        setStartDateInput={setStartDateInput}
+        setEndDateInput={setEndDateInput}
+        onUpdateDates={handleUpdateDates}
+        catalogSearchResults={catalogSearchResults}
+        serviceSearch={serviceSearch}
+        serviceSelections={serviceSelections}
+        generateTasksOnAdd={generateTasksOnAdd}
+        taskAssigneeId={taskAssigneeId}
+        taskDueOffsetDays={taskDueOffsetDays}
+        serviceTemplates={serviceTemplates}
+        templatesLoading={templatesLoading}
+        selectedServiceIds={selectedServiceIds}
+        quickServiceDraft={quickServiceDraft}
+        quickServiceSaving={quickServiceSaving}
+        quickServiceError={quickServiceError}
+        services={services}
+        setServiceSearch={setServiceSearch}
+        setServiceSelections={setServiceSelections}
+        setGenerateTasksOnAdd={setGenerateTasksOnAdd}
+        setTaskAssigneeId={setTaskAssigneeId}
+        setTaskDueOffsetDays={setTaskDueOffsetDays}
+        setQuickServiceDraft={setQuickServiceDraft}
+        members={members}
+        onLoadCatalogServices={loadCatalogServices}
+        onAddServices={handleAddServices}
+        onQuickCreateService={handleQuickCreateService}
+        tasks={tasks}
+        taskAssignments={taskAssignments}
+        setTaskAssignments={setTaskAssignments}
+        onUpdateTaskDueDate={updateTaskDueDate}
+        onAssignTasks={handleAssignTasks}
+        inviteEmail={inviteEmail}
+        inviteRole={inviteRole}
+        setInviteEmail={setInviteEmail}
+        setInviteRole={setInviteRole}
+        onInviteMember={handleInviteMember}
+        documentKind={documentKind}
+        setDocumentKind={setDocumentKind}
+        setDocumentFile={setDocumentFile}
+        onUploadDocument={handleUploadDocument}
+        projectMembers={projectMembers}
+        availableMembers={availableMembers}
+        accessInfo={accessInfo}
+        onAddProjectMember={handleAddProjectMember}
+        onRemoveProjectMember={handleRemoveProjectMember}
+        organizationUnits={organizationUnits}
+        unitDraftName={unitDraftName}
+        unitDraftOrder={unitDraftOrder}
+        unitErrors={unitErrors}
+        teamInfo={teamInfo}
+        unitDrafts={unitDrafts}
+        setUnitDraftName={setUnitDraftName}
+        setUnitDraftOrder={setUnitDraftOrder}
+        setUnitDrafts={setUnitDrafts}
+        onCreateUnit={handleCreateUnit}
+        onUpdateUnit={handleUpdateUnit}
+        onDeleteUnit={handleDeleteUnit}
+        onAssignMemberToUnit={handleAssignMemberToUnit}
+        onCloseModal={closeModal}
+        onCloseAccessModal={() => setAccessModalOpen(false)}
+        onCloseUnitsModal={() => setUnitsModalOpen(false)}
+      />
     </div>
   );
 }
