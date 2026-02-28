@@ -1,7 +1,7 @@
 // src/app/app/pro/[businessId]/settings/team/page.tsx
 'use client';
 
-import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type FormEvent } from 'react';
 import { useParams } from 'next/navigation';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -9,121 +9,22 @@ import { Badge } from '@/components/ui/badge';
 import { Select } from '@/components/ui/select';
 import { Modal } from '@/components/ui/modal';
 import { Input } from '@/components/ui/input';
-import { fetchJson, getErrorMessage } from '@/lib/apiClient';
-import { formatCentsToEuroInput, parseEuroToCents, sanitizeEuroInput } from '@/lib/money';
+import { sanitizeEuroInput } from '@/lib/money';
 import { useActiveBusiness } from '../../../ActiveBusinessProvider';
 import { PageHeader } from '../../../../components/PageHeader';
-
-type BusinessRole = 'OWNER' | 'ADMIN' | 'MEMBER' | 'VIEWER';
-type BusinessPermission = 'TEAM_EDIT' | 'FINANCE_EDIT';
-type BusinessInviteStatus = 'PENDING' | 'ACCEPTED' | 'EXPIRED' | 'REVOKED';
-
-type EmployeeProfile = {
-  id?: string;
-  jobTitle: string | null;
-  contractType: string | null;
-  startDate: string | null;
-  endDate: string | null;
-  weeklyHours: number | null;
-  hourlyCostCents: string | null;
-  status: 'ACTIVE' | 'INACTIVE';
-  notes: string | null;
-  createdAt?: string;
-  updatedAt?: string;
-};
-
-type Member = {
-  userId: string;
-  email: string;
-  role: BusinessRole;
-  createdAt: string;
-  employeeProfile: EmployeeProfile | null;
-  permissions: BusinessPermission[];
-};
-
-type MembersResponse = {
-  items: Member[];
-};
-
-type MeResponse = {
-  user: {
-    id: string;
-    email: string;
-  };
-};
-
-type InviteItem = {
-  id: string;
-  email: string;
-  role: BusinessRole;
-  status: BusinessInviteStatus;
-  createdAt: string;
-  expiresAt: string | null;
-  inviteLink?: string;
-  tokenPreview?: string;
-};
-
-type InvitesResponse = {
-  items: InviteItem[];
-};
-
-const ROLE_LABELS: Record<BusinessRole, string> = {
-  OWNER: 'Owner',
-  ADMIN: 'Admin',
-  MEMBER: 'Member',
-  VIEWER: 'Viewer',
-};
-
-function formatDate(value: string) {
-  try {
-    return new Intl.DateTimeFormat('fr-FR').format(new Date(value));
-  } catch {
-    return value;
-  }
-}
-
-function canChangeRole(
-  actorRole: BusinessRole | null | undefined,
-  target: Member,
-  currentUserId: string | null
-) {
-  if (!actorRole) return false;
-  if (target.userId === currentUserId) return false;
-  if (target.role === 'OWNER') return false;
-  if (actorRole === 'OWNER') return true;
-  return actorRole === 'ADMIN' && (target.role === 'MEMBER' || target.role === 'VIEWER');
-}
-
-function allowedRoles(actorRole: BusinessRole | null | undefined, target: Member): BusinessRole[] {
-  if (actorRole === 'OWNER') return ['ADMIN', 'MEMBER', 'VIEWER'];
-  if (actorRole === 'ADMIN' && (target.role === 'MEMBER' || target.role === 'VIEWER')) {
-    return ['MEMBER', 'VIEWER'];
-  }
-  return [];
-}
-
-function canEditEmployeeProfile(
-  actorRole: BusinessRole | null | undefined,
-  actorPermissions: BusinessPermission[] | undefined,
-  target: Member
-) {
-  const hasFlag = actorPermissions?.includes('TEAM_EDIT');
-  if (actorRole === 'OWNER' || actorRole === 'ADMIN') return true;
-  if (hasFlag && target.role !== 'OWNER') return true;
-  return false;
-}
-
-function canRemove(
-  actorRole: BusinessRole | null | undefined,
-  target: Member,
-  currentUserId: string | null
-) {
-  if (!actorRole) return false;
-  if (target.userId === currentUserId) return false;
-  if (target.role === 'OWNER') return false;
-  if (actorRole === 'OWNER') return true;
-  return actorRole === 'ADMIN' && (target.role === 'MEMBER' || target.role === 'VIEWER');
-}
+import {
+  formatDate,
+  canChangeRole,
+  allowedRoles,
+  canEditEmployeeProfile,
+  canRemove,
+  ROLE_LABELS,
+  type BusinessRole,
+  type Member,
+} from '../hooks/types';
+import { useTeamData } from '../hooks/useTeamData';
+import { useInviteManagement } from '../hooks/useInviteManagement';
+import { useMemberActions } from '../hooks/useMemberActions';
 
 export default function BusinessTeamSettingsPage() {
   const params = useParams();
@@ -131,406 +32,52 @@ export default function BusinessTeamSettingsPage() {
   const activeCtx = useActiveBusiness({ optional: true });
   const actorRole = activeCtx?.activeBusiness?.role as BusinessRole | undefined;
 
-  const [members, setMembers] = useState<Member[]>([]);
-  const [me, setMe] = useState<MeResponse['user'] | null>(null);
-  const [invites, setInvites] = useState<InviteItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
-  const [roleDrafts, setRoleDrafts] = useState<Record<string, BusinessRole>>({});
-  const [roleModal, setRoleModal] = useState<{ member: Member; nextRole: BusinessRole } | null>(null);
-  const [removeModal, setRemoveModal] = useState<Member | null>(null);
-  const [employeeModal, setEmployeeModal] = useState<Member | null>(null);
-  const [employeeDraft, setEmployeeDraft] = useState<EmployeeProfile>({
-    jobTitle: '',
-    contractType: '',
-    startDate: '',
-    endDate: '',
-    weeklyHours: null,
-    hourlyCostCents: '',
-    status: 'ACTIVE',
-    notes: '',
-  });
-  const [actionLoading, setActionLoading] = useState(false);
-  const controllerRef = useRef<AbortController | null>(null);
-  const [inviteDraft, setInviteDraft] = useState<{ email: string; role: BusinessRole }>({
-    email: '',
-    role: 'MEMBER',
-  });
-  const [inviteLoading, setInviteLoading] = useState(false);
-  const [inviteError, setInviteError] = useState<string | null>(null);
-  const [inviteSuccess, setInviteSuccess] = useState<string | null>(null);
-  const [lastInviteLink, setLastInviteLink] = useState<string | null>(null);
-
-  const currentUserId = me?.id ?? null;
-  const actorMember = useMemo(
-    () => members.find((m) => m.userId === currentUserId),
-    [currentUserId, members]
-  );
-
-  const sortedMembers = useMemo(
-    () => [...members].sort((a, b) => a.email.localeCompare(b.email)),
-    [members]
-  );
-
-  const redirectToLogin = useCallback(() => {
-    const from = window.location.pathname + window.location.search;
-    window.location.href = `/login?from=${encodeURIComponent(from)}`;
-  }, []);
-
-  const load = useCallback(async () => {
-    const controller = new AbortController();
-    controllerRef.current?.abort();
-    controllerRef.current = controller;
-
-    try {
-      setLoading(true);
-      setError(null);
-
-      const [meRes, membersRes, invitesRes] = await Promise.all([
-        fetchJson<MeResponse>('/api/auth/me', {}, controller.signal),
-        fetchJson<MembersResponse>(`/api/pro/businesses/${businessId}/members`, {}, controller.signal),
-        fetchJson<InvitesResponse>(`/api/pro/businesses/${businessId}/invites`, {}, controller.signal),
-      ]);
-
-      if (controller.signal.aborted) return;
-
-      if (meRes.status === 401 || membersRes.status === 401 || invitesRes.status === 401) {
-        redirectToLogin();
-        return;
-      }
-
-      if (!meRes.ok || !membersRes.ok || !invitesRes.ok || !meRes.data || !membersRes.data || !invitesRes.data) {
-        const ref = meRes.requestId ?? membersRes.requestId ?? invitesRes.requestId;
-        const msg =
-          meRes.error || membersRes.error || invitesRes.error || 'Impossible de charger les membres ou invitations.';
-        setError(ref ? `${msg} (Ref: ${ref})` : msg);
-        setMembers([]);
-        setInvites([]);
-        return;
-      }
-
-      setMe(meRes.data.user);
-      setMembers(membersRes.data.items);
-      setInvites(invitesRes.data.items ?? []);
-      setRoleDrafts({});
-      setLastInviteLink(null);
-    } catch (err) {
-      if (controller.signal.aborted) return;
-      console.error(err);
-      setError(getErrorMessage(err));
-      setMembers([]);
-      setInvites([]);
-    } finally {
-      if (!controller.signal.aborted) setLoading(false);
-    }
-  }, [businessId, redirectToLogin]);
-
-  useEffect(() => {
-    void load();
-    return () => controllerRef.current?.abort();
-  }, [load]);
+  const {
+    invites,
+    loading,
+    error,
+    currentUserId,
+    actorMember,
+    sortedMembers,
+    load,
+    redirectToLogin,
+  } = useTeamData({ businessId });
 
   const canInvite = actorRole === 'OWNER' || actorRole === 'ADMIN';
 
-  async function copyInviteLink(link: string) {
-    try {
-      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(link);
-      } else {
-        const el = document.createElement('textarea');
-        el.value = link;
-        el.setAttribute('readonly', '');
-        el.style.position = 'absolute';
-        el.style.left = '-9999px';
-        document.body.appendChild(el);
-        el.select();
-        document.execCommand('copy');
-        document.body.removeChild(el);
-      }
-      setInviteSuccess('Lien copié.');
-    } catch (err) {
-      console.error(err);
-      setInviteError("Impossible de copier le lien.");
-    }
-  }
+  const {
+    inviteDraft,
+    setInviteDraft,
+    inviteLoading,
+    inviteError,
+    inviteSuccess,
+    lastInviteLink,
+    copyInviteLink,
+    onInviteSubmit,
+    onRevokeInvite,
+  } = useInviteManagement({ businessId, canInvite, load, redirectToLogin });
 
-  async function onInviteSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!canInvite) {
-      setInviteError("Tu n'as pas les droits pour inviter.");
-      return;
-    }
-    const email = inviteDraft.email.trim().toLowerCase();
-    if (!email) {
-      setInviteError('Email requis.');
-      return;
-    }
-    if (!isValidEmail(email)) {
-      setInviteError('Email invalide.');
-      return;
-    }
-    if (!inviteDraft.role) {
-      setInviteError('Rôle requis.');
-      return;
-    }
-
-    setInviteLoading(true);
-    setInviteError(null);
-    setInviteSuccess(null);
-    try {
-      const res = await fetchJson<InviteItem>(
-        `/api/pro/businesses/${businessId}/invites`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, role: inviteDraft.role }),
-        }
-      );
-
-      if (res.status === 401) {
-        redirectToLogin();
-        return;
-      }
-
-      if (!res.ok || !res.data) {
-        setInviteError(
-          res.requestId
-            ? `${res.error ?? "Impossible d'envoyer l'invitation."} (Ref: ${res.requestId})`
-            : res.error ?? "Impossible d'envoyer l'invitation."
-        );
-        return;
-      }
-
-      setInviteDraft({ email: '', role: 'MEMBER' });
-      setInviteSuccess('Invitation envoyée.');
-      setLastInviteLink(res.data.inviteLink ?? null);
-      await load();
-    } catch (err) {
-      console.error(err);
-      setInviteError(getErrorMessage(err));
-    } finally {
-      setInviteLoading(false);
-    }
-  }
-
-  async function onRevokeInvite(inviteId: string) {
-    if (!canInvite) return;
-    setInviteLoading(true);
-    setInviteError(null);
-    setInviteSuccess(null);
-    try {
-      const res = await fetchJson(
-        `/api/pro/businesses/${businessId}/invites/${inviteId}`,
-        { method: 'DELETE' }
-      );
-
-      if (res.status === 401) {
-        redirectToLogin();
-        return;
-      }
-
-      if (!res.ok) {
-        setInviteError(
-          res.requestId
-            ? `${res.error ?? "Impossible de révoquer l'invitation."} (Ref: ${res.requestId})`
-            : res.error ?? "Impossible de révoquer l'invitation."
-        );
-        return;
-      }
-
-      setInviteSuccess('Invitation révoquée.');
-      await load();
-    } catch (err) {
-      console.error(err);
-      setInviteError(getErrorMessage(err));
-    } finally {
-      setInviteLoading(false);
-    }
-  }
-
-  function onRoleChange(member: Member, value: string) {
-    if (!isValidRole(value)) return;
-    if (!canChangeRole(actorRole, member, currentUserId)) return;
-    setRoleDrafts((prev) => ({ ...prev, [member.userId]: value }));
-    setRoleModal({ member, nextRole: value });
-    setActionError(null);
-    setSuccess(null);
-  }
-
-  async function confirmRoleChange() {
-    if (!roleModal) return;
-    setActionLoading(true);
-    setActionError(null);
-    setSuccess(null);
-    try {
-      const res = await fetchJson<Member>(
-        `/api/pro/businesses/${businessId}/members/${roleModal.member.userId}`,
-        {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ role: roleModal.nextRole }),
-        }
-      );
-
-      if (res.status === 401) {
-        redirectToLogin();
-        return;
-      }
-
-      if (!res.ok || !res.data) {
-        setActionError(
-          res.requestId
-            ? `${res.error ?? 'Impossible de modifier le rôle.'} (Ref: ${res.requestId})`
-            : res.error ?? 'Impossible de modifier le rôle.'
-        );
-        return;
-      }
-
-      setSuccess('Rôle mis à jour.');
-      await load();
-    } catch (err) {
-      console.error(err);
-      setActionError(getErrorMessage(err));
-    } finally {
-      setActionLoading(false);
-      setRoleModal(null);
-      setRoleDrafts((prev) => {
-        const copy = { ...prev };
-        delete copy[roleModal.member.userId];
-        return copy;
-      });
-    }
-  }
-
-  function cancelRoleChange() {
-    if (roleModal) {
-      setRoleDrafts((prev) => {
-        const copy = { ...prev };
-        delete copy[roleModal.member.userId];
-        return copy;
-      });
-    }
-    setRoleModal(null);
-  }
-
-  async function confirmRemoval() {
-    if (!removeModal) return;
-    setActionLoading(true);
-    setActionError(null);
-    setSuccess(null);
-    try {
-      const res = await fetchJson(
-        `/api/pro/businesses/${businessId}/members/${removeModal.userId}`,
-        {
-          method: 'DELETE',
-        }
-      );
-
-      if (res.status === 401) {
-        redirectToLogin();
-        return;
-      }
-
-      if (!res.ok) {
-        setActionError(
-          res.requestId
-            ? `${res.error ?? 'Impossible de retirer ce membre.'} (Ref: ${res.requestId})`
-            : res.error ?? 'Impossible de retirer ce membre.'
-        );
-        return;
-      }
-
-      setSuccess('Membre retiré.');
-      await load();
-    } catch (err) {
-      console.error(err);
-      setActionError(getErrorMessage(err));
-    } finally {
-      setActionLoading(false);
-      setRemoveModal(null);
-    }
-  }
-
-  const roleValueFor = (member: Member) => roleDrafts[member.userId] ?? member.role;
-
-  const toDateInput = (value: string | null | undefined) => (value ? value.slice(0, 10) : '');
-
-  function openEmployeeModal(member: Member) {
-    setEmployeeModal(member);
-    setEmployeeDraft({
-      jobTitle: member.employeeProfile?.jobTitle ?? '',
-      contractType: member.employeeProfile?.contractType ?? '',
-      startDate: toDateInput(member.employeeProfile?.startDate),
-      endDate: toDateInput(member.employeeProfile?.endDate),
-      weeklyHours:
-        typeof member.employeeProfile?.weeklyHours === 'number' ? member.employeeProfile.weeklyHours : null,
-      hourlyCostCents: formatCentsToEuroInput(member.employeeProfile?.hourlyCostCents),
-      status: member.employeeProfile?.status ?? 'ACTIVE',
-      notes: member.employeeProfile?.notes ?? '',
-    });
-    setActionError(null);
-    setSuccess(null);
-  }
-
-  async function saveEmployeeProfile() {
-    if (!employeeModal) return;
-    setActionLoading(true);
-    setActionError(null);
-    setSuccess(null);
-    try {
-      const hourlyCostCents = employeeDraft.hourlyCostCents
-        ? parseEuroToCents(employeeDraft.hourlyCostCents)
-        : null;
-      if (employeeDraft.hourlyCostCents && !Number.isFinite(hourlyCostCents)) {
-        setActionError('Coût horaire invalide.');
-        return;
-      }
-      const res = await fetchJson<{ member: Member }>(
-        `/api/pro/businesses/${businessId}/members/${employeeModal.userId}`,
-        {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            employeeProfile: {
-              jobTitle: employeeDraft.jobTitle || null,
-              contractType: employeeDraft.contractType || null,
-              startDate: employeeDraft.startDate || null,
-              endDate: employeeDraft.endDate || null,
-              weeklyHours: employeeDraft.weeklyHours,
-              hourlyCostCents: Number.isFinite(hourlyCostCents ?? NaN) ? (hourlyCostCents as number) : null,
-              status: employeeDraft.status,
-              notes: employeeDraft.notes || null,
-            },
-          }),
-        }
-      );
-
-      if (res.status === 401) {
-        redirectToLogin();
-        return;
-      }
-
-      if (!res.ok || !res.data) {
-        setActionError(
-          res.requestId
-            ? `${res.error ?? 'Impossible de sauvegarder le profil employé.'} (Ref: ${res.requestId})`
-            : res.error ?? 'Impossible de sauvegarder le profil employé.'
-        );
-        return;
-      }
-
-      setSuccess('Profil employé mis à jour.');
-      await load();
-    } catch (err) {
-      console.error(err);
-      setActionError(getErrorMessage(err));
-    } finally {
-      setActionLoading(false);
-      setEmployeeModal(null);
-    }
-  }
+  const {
+    roleModal,
+    removeModal,
+    setRemoveModal,
+    employeeModal,
+    setEmployeeModal,
+    employeeDraft,
+    setEmployeeDraft,
+    actionLoading,
+    actionError,
+    setActionError,
+    success,
+    setSuccess,
+    roleValueFor,
+    onRoleChange,
+    confirmRoleChange,
+    cancelRoleChange,
+    confirmRemoval,
+    openEmployeeModal,
+    saveEmployeeProfile,
+  } = useMemberActions({ businessId, actorRole, currentUserId, load, redirectToLogin });
 
   return (
     <div className="space-y-5">
@@ -538,7 +85,7 @@ export default function BusinessTeamSettingsPage() {
         backHref={`/app/pro/${businessId}/settings`}
         backLabel="Paramètres"
         title="Équipe"
-        subtitle="Gère les membres et rôles pour l’entreprise."
+        subtitle="Gère les membres et rôles pour l'entreprise."
       />
 
       <Card className="p-5 space-y-4">
@@ -558,7 +105,7 @@ export default function BusinessTeamSettingsPage() {
             Seuls les Owner/Admin peuvent inviter de nouveaux collaborateurs.
           </p>
         ) : (
-          <form className="grid grid-cols-1 gap-3 md:grid-cols-[1.6fr,0.8fr,auto]" onSubmit={onInviteSubmit}>
+          <form className="grid grid-cols-1 gap-3 md:grid-cols-[1.6fr,0.8fr,auto]" onSubmit={(e: FormEvent<HTMLFormElement>) => void onInviteSubmit(e)}>
             <Input
               type="email"
               placeholder="email@exemple.com"
@@ -578,7 +125,7 @@ export default function BusinessTeamSettingsPage() {
               <option value="VIEWER">Viewer</option>
             </Select>
             <Button type="submit" disabled={inviteLoading}>
-              {inviteLoading ? 'Envoi…' : 'Envoyer l’invitation'}
+              {inviteLoading ? 'Envoi…' : "Envoyer l'invitation"}
             </Button>
           </form>
         )}
@@ -593,7 +140,7 @@ export default function BusinessTeamSettingsPage() {
               size="sm"
               variant="outline"
               disabled={inviteLoading}
-              onClick={() => copyInviteLink(lastInviteLink)}
+              onClick={() => void copyInviteLink(lastInviteLink)}
             >
               Copier le lien
             </Button>
@@ -660,7 +207,7 @@ export default function BusinessTeamSettingsPage() {
                         size="sm"
                         variant="outline"
                         disabled={inv.status !== 'PENDING'}
-                        onClick={() => copyInviteLink(inv.inviteLink!)}
+                        onClick={() => void copyInviteLink(inv.inviteLink!)}
                       >
                         Copier le lien
                       </Button>
@@ -681,7 +228,7 @@ export default function BusinessTeamSettingsPage() {
                       size="sm"
                       variant="outline"
                       disabled={inviteLoading}
-                      onClick={() => onRevokeInvite(inv.id)}
+                      onClick={() => void onRevokeInvite(inv.id)}
                     >
                       Révoquer
                     </Button>
@@ -710,7 +257,7 @@ export default function BusinessTeamSettingsPage() {
         ) : error ? (
           <div className="space-y-2">
             <p className="text-sm text-rose-400">{error}</p>
-            <Button size="sm" variant="outline" onClick={() => load()}>
+            <Button size="sm" variant="outline" onClick={() => void load()}>
               Réessayer
             </Button>
           </div>
@@ -718,7 +265,7 @@ export default function BusinessTeamSettingsPage() {
           <p className="text-sm text-[var(--text-secondary)]">Aucun membre trouvé.</p>
         ) : (
           <div className="space-y-2">
-            {sortedMembers.map((member) => {
+            {sortedMembers.map((member: Member) => {
               const canEdit = canChangeRole(actorRole, member, currentUserId);
               const canDelete = canRemove(actorRole, member, currentUserId);
               const options = allowedRoles(actorRole, member);
@@ -746,7 +293,8 @@ export default function BusinessTeamSettingsPage() {
                     </div>
                     {member.employeeProfile?.jobTitle ? (
                       <p className="text-xs text-[var(--text-secondary)]">
-                        {member.employeeProfile.jobTitle} {member.employeeProfile.contractType ? `· ${member.employeeProfile.contractType}` : ''}
+                        {member.employeeProfile.jobTitle}{' '}
+                        {member.employeeProfile.contractType ? `· ${member.employeeProfile.contractType}` : ''}
                       </p>
                     ) : null}
                   </div>
@@ -821,7 +369,7 @@ export default function BusinessTeamSettingsPage() {
             <Button variant="outline" onClick={cancelRoleChange} disabled={actionLoading}>
               Annuler
             </Button>
-            <Button onClick={confirmRoleChange} disabled={actionLoading}>
+            <Button onClick={() => void confirmRoleChange()} disabled={actionLoading}>
               {actionLoading ? 'Modification…' : 'Confirmer'}
             </Button>
           </div>
@@ -838,13 +386,13 @@ export default function BusinessTeamSettingsPage() {
       >
         <div className="space-y-4">
           <p className="text-sm text-[var(--text-secondary)]">
-            Action immédiate. Utilise “Quitter” côté membre pour te retirer toi-même.
+            Action immédiate. Utilise &quot;Quitter&quot; côté membre pour te retirer toi-même.
           </p>
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => setRemoveModal(null)} disabled={actionLoading}>
               Annuler
             </Button>
-            <Button variant="danger" onClick={confirmRemoval} disabled={actionLoading}>
+            <Button variant="danger" onClick={() => void confirmRemoval()} disabled={actionLoading}>
               {actionLoading ? 'Retrait…' : 'Retirer'}
             </Button>
           </div>
@@ -904,7 +452,10 @@ export default function BusinessTeamSettingsPage() {
                 className="mt-1 w-full rounded-md border border-[var(--border)] bg-[var(--surface)] p-2 text-sm"
                 value={employeeDraft.weeklyHours ?? ''}
                 onChange={(e) =>
-                  setEmployeeDraft((prev) => ({ ...prev, weeklyHours: e.target.value ? Number(e.target.value) : null }))
+                  setEmployeeDraft((prev) => ({
+                    ...prev,
+                    weeklyHours: e.target.value ? Number(e.target.value) : null,
+                  }))
                 }
                 disabled={actionLoading}
               />
@@ -917,7 +468,10 @@ export default function BusinessTeamSettingsPage() {
                 className="mt-1 w-full rounded-md border border-[var(--border)] bg-[var(--surface)] p-2 text-sm"
                 value={employeeDraft.hourlyCostCents ?? ''}
                 onChange={(e) =>
-                  setEmployeeDraft((prev) => ({ ...prev, hourlyCostCents: sanitizeEuroInput(e.target.value) || '' }))
+                  setEmployeeDraft((prev) => ({
+                    ...prev,
+                    hourlyCostCents: sanitizeEuroInput(e.target.value) || '',
+                  }))
                 }
                 disabled={actionLoading}
               />
@@ -926,7 +480,12 @@ export default function BusinessTeamSettingsPage() {
               <span className="block text-xs text-[var(--text-secondary)]">Statut</span>
               <Select
                 value={employeeDraft.status}
-                onChange={(e) => setEmployeeDraft((prev) => ({ ...prev, status: e.target.value as 'ACTIVE' | 'INACTIVE' }))}
+                onChange={(e) =>
+                  setEmployeeDraft((prev) => ({
+                    ...prev,
+                    status: e.target.value as 'ACTIVE' | 'INACTIVE',
+                  }))
+                }
                 disabled={actionLoading}
               >
                 <option value="ACTIVE">Actif</option>
@@ -949,7 +508,7 @@ export default function BusinessTeamSettingsPage() {
             <Button variant="outline" onClick={() => setEmployeeModal(null)} disabled={actionLoading}>
               Annuler
             </Button>
-            <Button onClick={saveEmployeeProfile} disabled={actionLoading}>
+            <Button onClick={() => void saveEmployeeProfile()} disabled={actionLoading}>
               {actionLoading ? 'Enregistrement…' : 'Enregistrer'}
             </Button>
           </div>
@@ -957,12 +516,4 @@ export default function BusinessTeamSettingsPage() {
       </Modal>
     </div>
   );
-}
-
-function isValidRole(role: string): role is BusinessRole {
-  return role === 'OWNER' || role === 'ADMIN' || role === 'MEMBER' || role === 'VIEWER';
-}
-
-function isValidEmail(email: string) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }

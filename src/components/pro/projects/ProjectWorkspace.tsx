@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type DragEvent } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
@@ -48,6 +48,7 @@ import { usePaymentModal } from '@/components/pro/projects/hooks/usePaymentModal
 import { useProjectDataLoaders } from '@/components/pro/projects/hooks/useProjectDataLoaders';
 import { useBillingHandlers } from '@/components/pro/projects/hooks/useBillingHandlers';
 import { useTeamManagement } from '@/components/pro/projects/hooks/useTeamManagement';
+import { useServiceManagement } from '@/components/pro/projects/hooks/useServiceManagement';
 
 type ProjectDetail = {
   id: string;
@@ -77,22 +78,6 @@ type ProjectDetail = {
   }>;
 };
 
-type ServiceItem = {
-  id: string;
-  projectId: string;
-  serviceId: string;
-  priceCents: string | null;
-  quantity: number;
-  notes: string | null;
-  titleOverride?: string | null;
-  description?: string | null;
-  discountType?: string | null;
-  discountValue?: number | null;
-  billingUnit?: string | null;
-  unitLabel?: string | null;
-  position?: number;
-  service: { id: string; code: string; name: string; type: string | null };
-};
 
 type TaskItem = {
   id: string;
@@ -190,6 +175,7 @@ const tabs = [
 ];
 
 
+
 function parseCents(value?: string | null): number | null {
   if (!value) return null;
   const num = Number(value);
@@ -248,24 +234,7 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
   });
   const [quickServiceSaving, setQuickServiceSaving] = useState(false);
   const [quickServiceError, setQuickServiceError] = useState<string | null>(null);
-  const [serviceDrafts, setServiceDrafts] = useState<
-    Record<
-      string,
-      {
-        quantity: string;
-        price: string;
-        title: string;
-        description: string;
-        discountType: string;
-        discountValue: string;
-        billingUnit: string;
-        unitLabel: string;
-      }
-    >
-  >({});
-  const [lineSavingId, setLineSavingId] = useState<string | null>(null);
-  const [lineErrors, setLineErrors] = useState<Record<string, string>>({});
-  const [openNotes, setOpenNotes] = useState<Record<string, boolean>>({});
+
 
   const [taskAssignments, setTaskAssignments] = useState<Record<string, string>>({});
   const [generateTasksOnAdd, setGenerateTasksOnAdd] = useState(true);
@@ -281,12 +250,7 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
   const [documentKind, setDocumentKind] = useState<'Administratif' | 'Projet'>('Administratif');
   const [clientSearch, setClientSearch] = useState('');
   const [serviceSearch, setServiceSearch] = useState('');
-  const [draggingServiceId, setDraggingServiceId] = useState<string | null>(null);
-  const [dragOverServiceId, setDragOverServiceId] = useState<string | null>(null);
-  const [reordering, setReordering] = useState(false);
-  const [prestationsDraft, setPrestationsDraft] = useState('');
-  const [prestationsSaving, setPrestationsSaving] = useState(false);
-  const [prestationsError, setPrestationsError] = useState<string | null>(null);
+
 
 
   const closeModal = () => {
@@ -387,11 +351,7 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
   });
 
 
-  useEffect(() => {
-    if (!project) return;
-    setPrestationsDraft(project.prestationsText ?? '');
-    setPrestationsError(null);
-  }, [project]);
+
 
 
 
@@ -511,114 +471,43 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
     });
   };
 
-  const prestationsDirty = useMemo(() => {
-    const current = (project?.prestationsText ?? '').trim();
-    return prestationsDraft.trim() !== current;
-  }, [prestationsDraft, project?.prestationsText]);
-
-  async function handleSavePrestations() {
-    if (!project) return;
-    if (!isAdmin) {
-      setPrestationsError('Réservé aux admins/owners.');
-      return;
-    }
-    if (!prestationsDirty) return;
-    setPrestationsSaving(true);
-    setPrestationsError(null);
-    try {
-      const payload = { prestationsText: prestationsDraft.trim() || null };
-      const res = await patchProject(payload);
-      if (!res.ok) {
-        setPrestationsError(res.error ?? 'Mise à jour impossible.');
-        return;
-      }
-      setBillingInfo('Détail des prestations mis à jour.');
-      await loadProject();
-    } catch (err) {
-      setPrestationsError(getErrorMessage(err));
-    } finally {
-      setPrestationsSaving(false);
-    }
-  }
-
-  const reorderServices = useCallback(
-    (fromId: string, toId: string) => {
-      const fromIndex = services.findIndex((svc) => svc.id === fromId);
-      const toIndex = services.findIndex((svc) => svc.id === toId);
-      if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return services;
-      const next = [...services];
-      const [moved] = next.splice(fromIndex, 1);
-      next.splice(toIndex, 0, moved);
-      return next.map((svc, index) => ({ ...svc, position: index }));
-    },
-    [services]
-  );
-
-  const persistServiceOrder = useCallback(
-    async (nextServices: ServiceItem[]) => {
-      if (!isAdmin) return;
-      setReordering(true);
-      setBillingError(null);
-      try {
-        const res = await fetchJson(
-          `/api/pro/businesses/${businessId}/projects/${projectId}/services/reorder`,
-          {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              items: nextServices.map((svc, index) => ({ id: svc.id, position: index })),
-            }),
-          }
-        );
-        if (!res.ok) {
-          setBillingError(res.error ?? 'Réorganisation impossible.');
-          await loadServices();
-          return;
-        }
-        setBillingInfo('Ordre des services mis à jour.');
-      } catch (err) {
-        setBillingError(getErrorMessage(err));
-        await loadServices();
-      } finally {
-        setReordering(false);
-      }
-    },
-    [businessId, isAdmin, loadServices, projectId]
-  );
-
-  const handleServiceDragStart = (event: DragEvent<HTMLButtonElement>, serviceId: string) => {
-    if (!isAdmin || reordering) return;
-    event.dataTransfer.effectAllowed = 'move';
-    event.dataTransfer.setData('text/plain', serviceId);
-    setDraggingServiceId(serviceId);
-    setDragOverServiceId(null);
-  };
-
-  const handleServiceDragOver = (event: DragEvent<HTMLDivElement>, serviceId: string) => {
-    if (!isAdmin || reordering) return;
-    if (!draggingServiceId || draggingServiceId === serviceId) return;
-    event.preventDefault();
-    event.dataTransfer.dropEffect = 'move';
-    setDragOverServiceId(serviceId);
-  };
-
-  const handleServiceDrop = async (event: DragEvent<HTMLDivElement>, serviceId: string) => {
-    if (!isAdmin || reordering) return;
-    event.preventDefault();
-    const sourceId = draggingServiceId || event.dataTransfer.getData('text/plain');
-    setDragOverServiceId(null);
-    setDraggingServiceId(null);
-    if (!sourceId || sourceId === serviceId) return;
-    const next = reorderServices(sourceId, serviceId);
-    if (next === services) return;
-    setServices(next);
-    await persistServiceOrder(next);
-  };
-
-  const handleServiceDragEnd = () => {
-    setDraggingServiceId(null);
-    setDragOverServiceId(null);
-  };
+  const {
+    serviceDrafts,
+    setServiceDrafts,
+    lineSavingId,
+    lineErrors,
+    setLineErrors,
+    openNotes,
+    setOpenNotes,
+    draggingServiceId,
+    dragOverServiceId,
+    reordering,
+    prestationsDraft,
+    setPrestationsDraft,
+    prestationsSaving,
+    prestationsError,
+    prestationsDirty,
+    handleSavePrestations,
+    handleServiceDragStart,
+    handleServiceDragOver,
+    handleServiceDrop,
+    handleServiceDragEnd,
+    handleUpdateService,
+    handleDeleteService,
+  } = useServiceManagement({
+    businessId,
+    projectId,
+    isAdmin,
+    services,
+    setServices,
+    loadServices,
+    refetchAll,
+    patchProject,
+    loadProject,
+    projectPrestationsText: project?.prestationsText,
+    onBillingInfo: setBillingInfo,
+    onBillingError: setBillingError,
+  });
 
   async function handleMarkCompleted() {
     if (!project) return;
@@ -647,143 +536,6 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
       setActionError(getErrorMessage(err));
     } finally {
       setMarkingCompleted(false);
-    }
-  }
-
-  async function handleUpdateService(serviceId: string) {
-    if (!isAdmin) {
-      setLineErrors((prev) => ({ ...prev, [serviceId]: 'Réservé aux admins/owners.' }));
-      return;
-    }
-    const draft = serviceDrafts[serviceId];
-    const existing = services.find((svc) => svc.id === serviceId);
-    if (!draft || !existing) return;
-
-    const quantityNum = Number(draft.quantity);
-    if (!Number.isFinite(quantityNum) || quantityNum <= 0) {
-      setLineErrors((prev) => ({ ...prev, [serviceId]: 'Quantité invalide.' }));
-      return;
-    }
-
-    const priceCents = draft.price.trim() ? parseEuroInputCents(draft.price) : null;
-    if (draft.price.trim() && priceCents == null) {
-      setLineErrors((prev) => ({ ...prev, [serviceId]: 'Prix invalide.' }));
-      return;
-    }
-
-    const payload: Record<string, unknown> = {};
-    const quantity = Math.max(1, Math.trunc(quantityNum));
-    if (quantity !== existing.quantity) payload.quantity = quantity;
-
-    const existingPrice = parseCents(existing.priceCents);
-    if (priceCents !== null && priceCents !== existingPrice) {
-      payload.priceCents = priceCents;
-    }
-
-    const description = draft.description ?? '';
-    if ((existing.description ?? existing.notes ?? '') !== description) {
-      payload.description = description;
-    }
-
-    const title = draft.title?.trim() ?? '';
-    if ((existing.titleOverride ?? '') !== title) {
-      payload.titleOverride = title || null;
-    }
-
-    const discountType = draft.discountType ?? 'NONE';
-    const discountValue =
-      discountType === 'AMOUNT'
-        ? (draft.discountValue ? parseEuroInputCents(draft.discountValue) : null)
-        : (() => {
-            const raw = draft.discountValue ? Number(draft.discountValue) : null;
-            return Number.isFinite(raw ?? NaN) ? Math.trunc(raw ?? 0) : null;
-          })();
-    if ((existing.discountType ?? 'NONE') !== discountType || (existing.discountValue ?? null) !== (discountValue ?? null)) {
-      payload.discountType = discountType;
-      payload.discountValue = discountValue ?? null;
-    }
-
-    const billingUnit = draft.billingUnit ?? 'ONE_OFF';
-    if ((existing.billingUnit ?? 'ONE_OFF') !== billingUnit) {
-      payload.billingUnit = billingUnit;
-    }
-
-    let unitLabel = draft.unitLabel?.trim() ?? '';
-    if (billingUnit === 'MONTHLY' && !unitLabel) {
-      unitLabel = '/mois';
-    }
-    if ((existing.unitLabel ?? '') !== unitLabel) {
-      payload.unitLabel = unitLabel || null;
-    }
-
-    if (!Object.keys(payload).length) {
-      setLineErrors((prev) => ({ ...prev, [serviceId]: 'Aucune modification.' }));
-      return;
-    }
-
-    setLineSavingId(serviceId);
-    setLineErrors((prev) => ({ ...prev, [serviceId]: '' }));
-    try {
-      const res = await fetchJson(
-        `/api/pro/businesses/${businessId}/projects/${projectId}/services/${serviceId}`,
-        {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        }
-      );
-      if (!res.ok) {
-        setLineErrors((prev) => ({ ...prev, [serviceId]: res.error ?? 'Mise à jour impossible.' }));
-        return;
-      }
-      setBillingInfo('Service mis à jour.');
-      await refetchAll();
-    } catch (err) {
-      setLineErrors((prev) => ({ ...prev, [serviceId]: getErrorMessage(err) }));
-    } finally {
-      setLineSavingId(null);
-    }
-  }
-
-  async function handleDeleteService(serviceId: string) {
-    if (!isAdmin) {
-      setLineErrors((prev) => ({ ...prev, [serviceId]: 'Réservé aux admins/owners.' }));
-      return;
-    }
-    const existing = services.find((svc) => svc.id === serviceId);
-    if (!existing) return;
-    const label = existing.service?.name ?? 'ce service';
-    const confirmMessage = `Supprimer "${label}" du projet ?`;
-    if (typeof window !== 'undefined' && !window.confirm(confirmMessage)) return;
-
-    setLineSavingId(serviceId);
-    setLineErrors((prev) => ({ ...prev, [serviceId]: '' }));
-    setBillingInfo(null);
-    try {
-      const res = await fetchJson(
-        `/api/pro/businesses/${businessId}/projects/${projectId}/services/${serviceId}`,
-        { method: 'DELETE' }
-      );
-      if (!res.ok) {
-        setLineErrors((prev) => ({ ...prev, [serviceId]: res.error ?? 'Suppression impossible.' }));
-        return;
-      }
-      setBillingInfo('Service supprimé.');
-      setServiceDrafts((prev) => {
-        const next = { ...prev };
-        delete next[serviceId];
-        return next;
-      });
-      setOpenNotes((prev) => {
-        const next = { ...prev };
-        delete next[serviceId];
-        return next;
-      });
-      await refetchAll();
-    } catch (err) {
-      setLineErrors((prev) => ({ ...prev, [serviceId]: getErrorMessage(err) }));
-    } finally {
-      setLineSavingId(null);
     }
   }
 
@@ -987,7 +739,7 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
       }
       return next;
     });
-  }, [services]);
+  }, [services, setServiceDrafts]);
 
   const catalogById = useMemo(() => {
     return new Map(catalogServices.map((svc) => [svc.id, svc]));
