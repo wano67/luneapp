@@ -1,11 +1,8 @@
-import { NextResponse } from 'next/server';
-import type { NextRequest } from 'next/server';
 import { prisma } from '@/server/db/client';
-import { requireAuthAsync } from '@/server/auth/requireAuth';
-import { assertSameOrigin, jsonNoStore } from '@/server/security/csrf';
+import { withPersonalRoute } from '@/server/http/routeHandler';
+import { jsonb } from '@/server/http/json';
+import { badRequest, notFound } from '@/server/http/apiUtils';
 import { rateLimit } from '@/server/security/rateLimit';
-import { getRequestId, withRequestId } from '@/server/http/apiUtils';
-import { withNoStore } from '@/server/security/csrf';
 
 type ParsedRow = {
   rowNumber: number;
@@ -78,7 +75,6 @@ function sanitizeCurrency(raw: unknown, fallback: string) {
 }
 
 function parseCSV(content: string, delimiter: ',' | ';' | '\t') {
-  // Minimal CSV parser with quotes support
   const rows: string[][] = [];
   let cur = '';
   let inQuotes = false;
@@ -90,7 +86,6 @@ function parseCSV(content: string, delimiter: ',' | ';' | '\t') {
   }
 
   function pushRow() {
-    // avoid pushing empty trailing line
     if (row.length === 1 && row[0].trim() === '') return;
     rows.push([...row]);
     row.length = 0;
@@ -151,7 +146,6 @@ function toISODate(input: string) {
   const s = input.trim();
   if (!s) return '';
 
-  // Support: YYYY-MM-DD, DD/MM/YYYY, DD-MM-YYYY, ISO date-time
   if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
     const d = new Date(s.length === 10 ? `${s}T00:00:00` : s);
     return Number.isNaN(d.getTime()) ? '' : d.toISOString();
@@ -171,7 +165,6 @@ function toISODate(input: string) {
 }
 
 function centsFromAmount(amount: string) {
-  // amount like "12,34" or "-12.34"
   const raw = amount.trim().replace(/\s/g, '').replace(',', '.');
   if (!raw) return '';
   if (!/^-?\d+(\.\d{0,2})?$/.test(raw)) return '';
@@ -186,268 +179,224 @@ function centsFromAmount(amount: string) {
   return (neg ? -cents : cents).toString();
 }
 
-export async function POST(req: NextRequest) {
-  const requestId = getRequestId(req);
-  try {
-    const csrf = assertSameOrigin(req);
-    if (csrf) return withNoStore(withRequestId(csrf, requestId));
+export const POST = withPersonalRoute(async (ctx, req) => {
+  const limited = rateLimit(req, {
+    key: `personal:tx:import:${ctx.userId}`,
+    limit: 10,
+    windowMs: 60 * 60 * 1000,
+  });
+  if (limited) return limited;
 
-    const { userId } = await requireAuthAsync(req);
+  const form = await req.formData();
+  const file = form.get('file');
+  const accountId = String(form.get('accountId') ?? '').trim();
+  const dryRun = String(form.get('dryRun') ?? 'false') === 'true';
 
-    const limited = rateLimit(req, {
-      key: `personal:tx:import:${userId}`,
-      limit: 10,
-      windowMs: 60 * 60 * 1000,
-    });
-    if (limited) return withNoStore(withRequestId(limited, requestId));
+  if (!file || typeof file === 'string') return badRequest('Missing file');
 
-    const form = await req.formData();
-    const file = form.get('file');
-    const accountId = String(form.get('accountId') ?? '').trim();
-    const dryRun = String(form.get('dryRun') ?? 'false') === 'true';
+  const fileSize = typeof (file as { size?: unknown }).size === 'number' ? (file as { size: number }).size : null;
+  if (fileSize !== null && fileSize > 2 * 1024 * 1024) return badRequest('File too large (max 2MB)');
 
-    if (!file || typeof file === 'string') {
-      return withNoStore(withRequestId(NextResponse.json({ error: 'Missing file' }, { status: 400 }), requestId));
+  const mime = typeof (file as { type?: unknown }).type === 'string'
+    ? ((file as { type: string }).type.toLowerCase?.() ?? (file as { type: string }).type.toLowerCase())
+    : undefined;
+  if (mime && mime !== 'text/csv' && mime !== 'application/vnd.ms-excel') {
+    return badRequest('Invalid file type');
+  }
+
+  if (!accountId || !/^\d+$/.test(accountId)) return badRequest('Missing or invalid accountId');
+
+  // ensure account belongs to user
+  const acc = await prisma.personalAccount.findFirst({
+    where: { id: BigInt(accountId), userId: ctx.userId },
+    select: { id: true, currency: true },
+  });
+  if (!acc) return notFound('Account not found');
+
+  const text = await file.text();
+  const delimiter = guessDelimiter(text);
+  const table = parseCSV(text, delimiter);
+
+  if (table.length < 2) return badRequest('CSV seems empty');
+  if (table.length - 1 > 5000) return badRequest('Too many rows (max 5000)');
+
+  const headers = table[0].map((h) => normalizeHeader(h));
+  const idx = (name: string) => headers.indexOf(name);
+
+  const iDate = idx('date');
+  const iLabel = idx('label');
+  const iAmount = idx('amount');
+  const iCurrency = idx('currency');
+  const iNote = idx('note');
+  const iCategory = idx('category');
+
+  if (iDate === -1 || iLabel === -1 || iAmount === -1) {
+    return badRequest('Invalid headers. Required: date,label,amount. Optional: currency,note,category.');
+  }
+
+  const parsed: ParsedRow[] = [];
+  const errors: RowError[] = [];
+
+  for (let r = 1; r < table.length; r++) {
+    const row = table[r];
+
+    const dateIso = toISODate(String(row[iDate] ?? ''));
+    const labelResult = sanitizeLabel(row[iLabel]);
+    if (labelResult.error) {
+      errors.push({ row: r + 1, reason: labelResult.error.reason, data: labelResult.error.data });
+      continue;
     }
-    const fileSize = typeof (file as { size?: unknown }).size === 'number' ? (file as { size: number }).size : null;
-    if (fileSize !== null && fileSize > 2 * 1024 * 1024) {
-      return withNoStore(
-        withRequestId(NextResponse.json({ error: 'File too large (max 2MB)' }, { status: 400 }), requestId)
-      );
+    const label = labelResult.value;
+    const amountCents = centsFromAmount(String(row[iAmount] ?? ''));
+
+    const noteResult = sanitizeNote(iNote !== -1 ? row[iNote] : null);
+    if (noteResult.error) {
+      errors.push({ row: r + 1, reason: noteResult.error.reason, data: noteResult.error.data });
+      continue;
     }
-    const mime = typeof (file as { type?: unknown }).type === 'string'
-      ? ((file as { type: string }).type.toLowerCase?.() ?? (file as { type: string }).type.toLowerCase())
-      : undefined;
-    if (mime && mime !== 'text/csv' && mime !== 'application/vnd.ms-excel') {
-      return withNoStore(
-        withRequestId(NextResponse.json({ error: 'Invalid file type' }, { status: 400 }), requestId)
-      );
-    }
-    if (!accountId || !/^\d+$/.test(accountId)) {
-      return withNoStore(
-        withRequestId(NextResponse.json({ error: 'Missing or invalid accountId' }, { status: 400 }), requestId)
-      );
-    }
+    const note = noteResult.value;
 
-    // ensure account belongs to user
-    const acc = await prisma.personalAccount.findFirst({
-      where: { id: BigInt(accountId), userId: BigInt(userId) },
-      select: { id: true, currency: true },
-    });
-    if (!acc)
-      return withNoStore(withRequestId(NextResponse.json({ error: 'Account not found' }, { status: 404 }), requestId));
-
-    const text = await file.text();
-    const delimiter = guessDelimiter(text);
-    const table = parseCSV(text, delimiter);
-
-    if (table.length < 2) {
-      return withNoStore(withRequestId(NextResponse.json({ error: 'CSV seems empty' }, { status: 400 }), requestId));
-    }
-    if (table.length - 1 > 5000) {
-      return withNoStore(
-        withRequestId(NextResponse.json({ error: 'Too many rows (max 5000)' }, { status: 400 }), requestId)
-      );
-    }
-
-    const headers = table[0].map((h) => normalizeHeader(h));
-    const idx = (name: string) => headers.indexOf(name);
-
-    // Required: date,label,amount. Optional: currency,note,category
-    const iDate = idx('date');
-    const iLabel = idx('label');
-    const iAmount = idx('amount');
-    const iCurrency = idx('currency');
-    const iNote = idx('note');
-    const iCategory = idx('category');
-
-    if (iDate === -1 || iLabel === -1 || iAmount === -1) {
-      return withNoStore(
-        withRequestId(
-          NextResponse.json(
-            {
-              error: 'Invalid headers. Required: date,label,amount. Optional: currency,note,category.',
-              got: table[0],
-              delimiter,
-            },
-            { status: 400 }
-          ),
-          requestId
-        )
-      );
-    }
-
-    const parsed: ParsedRow[] = [];
-    const errors: RowError[] = [];
-
-    for (let r = 1; r < table.length; r++) {
-      const row = table[r];
-
-      const dateIso = toISODate(String(row[iDate] ?? ''));
-      const labelResult = sanitizeLabel(row[iLabel]);
-      if (labelResult.error) {
-        errors.push({ row: r + 1, reason: labelResult.error.reason, data: labelResult.error.data });
-        continue;
-      }
-      const label = labelResult.value;
-      const amountCents = centsFromAmount(String(row[iAmount] ?? ''));
-
-      const noteResult = sanitizeNote(iNote !== -1 ? row[iNote] : null);
-      if (noteResult.error) {
-        errors.push({ row: r + 1, reason: noteResult.error.reason, data: noteResult.error.data });
-        continue;
-      }
-      const note = noteResult.value;
-
-      const currencyResult = sanitizeCurrency(iCurrency !== -1 ? row[iCurrency] : acc.currency, acc.currency);
-      if (currencyResult.error) {
-        errors.push({
-          row: r + 1,
-          reason: currencyResult.error.reason,
-          data: currencyResult.error.data,
-        });
-        continue;
-      }
-      const currency = currencyResult.value;
-      const rawCategory = iCategory !== -1 ? String(row[iCategory] ?? '') : '';
-      const categoryName = rawCategory ? sanitizeCategoryLabel(rawCategory) || null : null;
-
-      if (!dateIso || !label || !amountCents) {
-        errors.push({
-          row: r + 1,
-          reason: 'Missing/invalid date, label or amount',
-          data: { date: row[iDate], label: row[iLabel], amount: row[iAmount] },
-        });
-        continue;
-      }
-
-      parsed.push({ rowNumber: r + 1, dateIso, label, amountCents, currency, note, categoryName });
-    }
-
-    if (dryRun) {
-      return withRequestId(
-        jsonNoStore({
-          delimiter,
-          totalRows: table.length - 1,
-          validRows: parsed.length,
-          invalidRows: errors.length,
-          errors: errors.slice(0, 25),
-          preview: parsed.slice(0, 10),
-        }),
-        requestId
-      );
-    }
-
-    const parsedWithType: ParsedValid[] = [];
-    for (const p of parsed) {
-      const amount = BigInt(p.amountCents);
-      if (amount === BigInt(0)) {
-        errors.push({ row: p.rowNumber, reason: 'Zero amount not allowed' });
-        continue;
-      }
-      const type: ParsedValid['type'] = amount < BigInt(0) ? 'EXPENSE' : 'INCOME';
-      parsedWithType.push({ ...p, type, amountCents: amount.toString() });
-    }
-
-    // categories (unique per user)
-    const catKeyToLabel = new Map<string, string>();
-    for (const p of parsedWithType) {
-      if (!p.categoryName) continue;
-      const label = sanitizeCategoryLabel(p.categoryName);
-      if (!label) continue;
-      const key = normalizeCategoryName(label);
-      if (!catKeyToLabel.has(key)) catKeyToLabel.set(key, label);
-    }
-
-    const uniqueCatKeys = Array.from(catKeyToLabel.keys());
-    const catMap = new Map<string, bigint>();
-
-    if (uniqueCatKeys.length) {
-      const orFilters = uniqueCatKeys.map((key) => {
-        const label = catKeyToLabel.get(key) ?? key;
-        return { name: { equals: label, mode: 'insensitive' as const } };
+    const currencyResult = sanitizeCurrency(iCurrency !== -1 ? row[iCurrency] : acc.currency, acc.currency);
+    if (currencyResult.error) {
+      errors.push({
+        row: r + 1,
+        reason: currencyResult.error.reason,
+        data: currencyResult.error.data,
       });
+      continue;
+    }
+    const currency = currencyResult.value;
+    const rawCategory = iCategory !== -1 ? String(row[iCategory] ?? '') : '';
+    const categoryName = rawCategory ? sanitizeCategoryLabel(rawCategory) || null : null;
 
-      const existing = await prisma.personalCategory.findMany({
-        where: { userId: BigInt(userId), OR: orFilters },
-        select: { id: true, name: true },
+    if (!dateIso || !label || !amountCents) {
+      errors.push({
+        row: r + 1,
+        reason: 'Missing/invalid date, label or amount',
+        data: { date: row[iDate], label: row[iLabel], amount: row[iAmount] },
       });
-      existing.forEach((c) => catMap.set(normalizeCategoryName(c.name), c.id));
-
-      const missing = uniqueCatKeys.filter((k) => !catMap.has(k));
-      for (const key of missing) {
-        const label = catKeyToLabel.get(key) ?? key;
-        const created = await prisma.personalCategory.create({
-          data: { userId: BigInt(userId), name: label },
-          select: { id: true, name: true },
-        });
-        catMap.set(normalizeCategoryName(created.name), created.id);
-      }
+      continue;
     }
 
-    // ---- stats + build data (done in clear loops => no TS "never")
-    let minDate: Date | null = null;
-    let maxDate: Date | null = null;
-    let sumPos = BigInt(0);
-    let sumNegAbs = BigInt(0);
+    parsed.push({ rowNumber: r + 1, dateIso, label, amountCents, currency, note, categoryName });
+  }
 
-    const txData = [];
-
-    for (const p of parsedWithType) {
-      const d = new Date(p.dateIso);
-      if (!Number.isNaN(d.getTime())) {
-        if (minDate === null || d < minDate) minDate = d;
-        if (maxDate === null || d > maxDate) maxDate = d;
-      }
-
-      const amt = BigInt(p.amountCents);
-      if (amt > BigInt(0)) sumPos += amt;
-      if (amt < BigInt(0)) sumNegAbs += -amt;
-
-      const catKey = p.categoryName ? normalizeCategoryName(p.categoryName) : null;
-
-      txData.push({
-        userId: BigInt(userId),
-        accountId: BigInt(accountId),
-        categoryId: catKey ? catMap.get(catKey) ?? null : null,
-        type: p.type,
-        date: d,
-        amountCents: amt,
-        currency: p.currency || acc.currency,
-        label: p.label,
-        note: p.note,
-      });
-    }
-
-    const CHUNK = 1000;
-    let createdCount = 0;
-
-    for (let i = 0; i < txData.length; i += CHUNK) {
-      const chunk = txData.slice(i, i + CHUNK);
-      const r = await prisma.personalTransaction.createMany({ data: chunk });
-      createdCount += r.count;
-    }
-
-    return withRequestId(
-      jsonNoStore({
-        imported: createdCount,
+  if (dryRun) {
+    return jsonb(
+      {
+        delimiter,
+        totalRows: table.length - 1,
+        validRows: parsed.length,
         invalidRows: errors.length,
         errors: errors.slice(0, 25),
-        summary: {
-          accountId: accountId, // already string
-          fromDateIso: minDate ? minDate.toISOString() : null,
-          toDateIso: maxDate ? maxDate.toISOString() : null,
-          incomeCents: sumPos.toString(),
-          expenseAbsCents: sumNegAbs.toString(),
-        },
-      }),
-      requestId
+        preview: parsed.slice(0, 10),
+      },
+      ctx.requestId
     );
-  } catch (e: unknown) {
-    if (e instanceof Error && e.message === 'UNAUTHORIZED') {
-      return withNoStore(withRequestId(NextResponse.json({ error: 'Unauthorized' }, { status: 401 }), requestId));
-    }
-    console.error(e);
-    return withNoStore(withRequestId(NextResponse.json({ error: 'Failed' }, { status: 500 }), requestId));
   }
-}
+
+  const parsedWithType: ParsedValid[] = [];
+  for (const p of parsed) {
+    const amount = BigInt(p.amountCents);
+    if (amount === 0n) {
+      errors.push({ row: p.rowNumber, reason: 'Zero amount not allowed' });
+      continue;
+    }
+    const type: ParsedValid['type'] = amount < 0n ? 'EXPENSE' : 'INCOME';
+    parsedWithType.push({ ...p, type, amountCents: amount.toString() });
+  }
+
+  // categories (unique per user)
+  const catKeyToLabel = new Map<string, string>();
+  for (const p of parsedWithType) {
+    if (!p.categoryName) continue;
+    const label = sanitizeCategoryLabel(p.categoryName);
+    if (!label) continue;
+    const key = normalizeCategoryName(label);
+    if (!catKeyToLabel.has(key)) catKeyToLabel.set(key, label);
+  }
+
+  const uniqueCatKeys = Array.from(catKeyToLabel.keys());
+  const catMap = new Map<string, bigint>();
+
+  if (uniqueCatKeys.length) {
+    const orFilters = uniqueCatKeys.map((key) => {
+      const label = catKeyToLabel.get(key) ?? key;
+      return { name: { equals: label, mode: 'insensitive' as const } };
+    });
+
+    const existing = await prisma.personalCategory.findMany({
+      where: { userId: ctx.userId, OR: orFilters },
+      select: { id: true, name: true },
+    });
+    existing.forEach((c) => catMap.set(normalizeCategoryName(c.name), c.id));
+
+    const missing = uniqueCatKeys.filter((k) => !catMap.has(k));
+    for (const key of missing) {
+      const label = catKeyToLabel.get(key) ?? key;
+      const created = await prisma.personalCategory.create({
+        data: { userId: ctx.userId, name: label },
+        select: { id: true, name: true },
+      });
+      catMap.set(normalizeCategoryName(created.name), created.id);
+    }
+  }
+
+  let minDate: Date | null = null;
+  let maxDate: Date | null = null;
+  let sumPos = 0n;
+  let sumNegAbs = 0n;
+
+  const txData = [];
+
+  for (const p of parsedWithType) {
+    const d = new Date(p.dateIso);
+    if (!Number.isNaN(d.getTime())) {
+      if (minDate === null || d < minDate) minDate = d;
+      if (maxDate === null || d > maxDate) maxDate = d;
+    }
+
+    const amt = BigInt(p.amountCents);
+    if (amt > 0n) sumPos += amt;
+    if (amt < 0n) sumNegAbs += -amt;
+
+    const catKey = p.categoryName ? normalizeCategoryName(p.categoryName) : null;
+
+    txData.push({
+      userId: ctx.userId,
+      accountId: BigInt(accountId),
+      categoryId: catKey ? catMap.get(catKey) ?? null : null,
+      type: p.type,
+      date: d,
+      amountCents: amt,
+      currency: p.currency || acc.currency,
+      label: p.label,
+      note: p.note,
+    });
+  }
+
+  const CHUNK = 1000;
+  let createdCount = 0;
+
+  for (let i = 0; i < txData.length; i += CHUNK) {
+    const chunk = txData.slice(i, i + CHUNK);
+    const r = await prisma.personalTransaction.createMany({ data: chunk });
+    createdCount += r.count;
+  }
+
+  return jsonb(
+    {
+      imported: createdCount,
+      invalidRows: errors.length,
+      errors: errors.slice(0, 25),
+      summary: {
+        accountId,
+        fromDateIso: minDate ? minDate.toISOString() : null,
+        toDateIso: maxDate ? maxDate.toISOString() : null,
+        incomeCents: sumPos,
+        expenseAbsCents: sumNegAbs,
+      },
+    },
+    ctx.requestId
+  );
+});

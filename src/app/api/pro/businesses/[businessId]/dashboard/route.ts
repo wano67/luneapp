@@ -1,20 +1,8 @@
-import { NextRequest } from 'next/server';
 import { prisma } from '@/server/db/client';
 import { TaskStatus, FinanceType } from '@/generated/prisma';
-import { requireAuthPro } from '@/server/auth/requireAuthPro';
-import { requireBusinessRole } from '@/server/auth/businessRole';
-import { getRequestId, badRequest, notFound, unauthorized, forbidden, withRequestId } from '@/server/http/apiUtils';
-import { jsonNoStore, withNoStore } from '@/server/security/csrf';
+import { withBusinessRoute } from '@/server/http/routeHandler';
+import { jsonb } from '@/server/http/json';
 import { getProjectCounts } from '@/server/queries/projects';
-
-function parseId(param: string | undefined) {
-  if (!param || !/^\d+$/.test(param)) return null;
-  try {
-    return BigInt(param);
-  } catch {
-    return null;
-  }
-}
 
 function startOfMonth(date: Date) {
   const d = new Date(date);
@@ -36,38 +24,7 @@ function monthKey(date: Date) {
 }
 
 // GET /api/pro/businesses/{businessId}/dashboard
-export async function GET(
-  request: NextRequest,
-  context: { params: Promise<{ businessId: string }> }
-) {
-  const requestId = getRequestId(request);
-  const { businessId } = await context.params;
-
-  let userId: string;
-  try {
-    ({ userId } = await requireAuthPro(request));
-  } catch {
-    return withRequestId(unauthorized(), requestId);
-  }
-
-  const businessIdBigInt = parseId(businessId);
-  if (!businessIdBigInt) {
-    return withNoStore(withRequestId(badRequest('businessId invalide.'), requestId));
-  }
-
-  const business = await prisma.business.findUnique({
-    where: { id: businessIdBigInt },
-    select: { id: true },
-  });
-  if (!business) {
-    return withNoStore(withRequestId(notFound('Entreprise introuvable.'), requestId));
-  }
-
-  const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'VIEWER');
-  if (!membership) {
-    return withNoStore(withRequestId(forbidden(), requestId));
-  }
-
+export const GET = withBusinessRoute({ minRole: 'VIEWER' }, async (ctx) => {
   const now = new Date();
   const monthStart = startOfMonth(now);
   const nextMonthStart = addMonths(monthStart, 1);
@@ -84,17 +41,17 @@ export async function GET(
     upcomingInteractions,
     financeRows,
   ] = await Promise.all([
-    prisma.client.count({ where: { businessId: businessIdBigInt } }),
-    getProjectCounts({ businessId: businessIdBigInt.toString() }),
+    prisma.client.count({ where: { businessId: ctx.businessId } }),
+    getProjectCounts({ businessId: ctx.businessId.toString() }),
     prisma.task.count({
       where: {
-        businessId: businessIdBigInt,
+        businessId: ctx.businessId,
         status: { in: [TaskStatus.TODO, TaskStatus.IN_PROGRESS] },
       },
     }),
     prisma.task.findMany({
       where: {
-        businessId: businessIdBigInt,
+        businessId: ctx.businessId,
         status: { not: TaskStatus.DONE },
         dueDate: { gte: now, lte: horizon },
       },
@@ -112,7 +69,7 @@ export async function GET(
     }),
     prisma.interaction.findMany({
       where: {
-        businessId: businessIdBigInt,
+        businessId: ctx.businessId,
         nextActionDate: { gte: now, lte: horizon },
       },
       orderBy: [{ nextActionDate: 'asc' }, { createdAt: 'asc' }],
@@ -126,7 +83,7 @@ export async function GET(
       },
     }),
     prisma.finance.findMany({
-      where: { businessId: businessIdBigInt, deletedAt: null, date: { gte: seriesStart } },
+      where: { businessId: ctx.businessId, deletedAt: null, date: { gte: seriesStart } },
       select: { date: true, type: true, amountCents: true },
     }),
   ]);
@@ -158,23 +115,23 @@ export async function GET(
 
   const monthlySeries = Array.from(monthBuckets.entries()).map(([month, values]) => ({
     month,
-    incomeCents: values.income.toString(),
-    expenseCents: values.expense.toString(),
+    incomeCents: values.income,
+    expenseCents: values.expense,
   }));
 
   const monthFinance = {
-    income: { amountCents: mtdIncome.toString(), amount: Number(mtdIncome) / 100 },
-    expense: { amountCents: mtdExpense.toString(), amount: Number(mtdExpense) / 100 },
-    period: { start: monthStart.toISOString(), end: nextMonthStart.toISOString() },
+    income: { amountCents: mtdIncome, amount: Number(mtdIncome) / 100 },
+    expense: { amountCents: mtdExpense, amount: Number(mtdExpense) / 100 },
+    period: { start: monthStart, end: nextMonthStart },
   };
 
   const latestTasks = upcomingTasks.map((t) => ({
-    id: t.id.toString(),
+    id: t.id,
     title: t.title,
     status: t.status,
-    dueDate: t.dueDate ? t.dueDate.toISOString() : null,
-    createdAt: t.createdAt ? t.createdAt.toISOString() : null,
-    projectId: t.projectId ? t.projectId.toString() : null,
+    dueDate: t.dueDate,
+    createdAt: t.createdAt,
+    projectId: t.projectId,
     projectName: t.project?.name ?? null,
   }));
 
@@ -186,9 +143,9 @@ export async function GET(
       projectsActiveCount,
       projectsCompletedCount,
       openTasksCount,
-      mtdIncomeCents: mtdIncome.toString(),
-      mtdExpenseCents: mtdExpense.toString(),
-      mtdNetCents: (mtdIncome - mtdExpense).toString(),
+      mtdIncomeCents: mtdIncome,
+      mtdExpenseCents: mtdExpense,
+      mtdNetCents: mtdIncome - mtdExpense,
     },
     projects: {
       activeCount: projectCounts.active,
@@ -197,7 +154,7 @@ export async function GET(
       archivedCount: projectCounts.archived,
       totalCount: projectCounts.total,
     },
-    // Compatibilité avec l’ancien contrat UI
+    // Compatibilité avec l'ancien contrat UI
     clientsCount,
     projectsActiveCount,
     activeProjectsCount: projectsActiveCount,
@@ -208,15 +165,15 @@ export async function GET(
     nextActions: {
       tasks: latestTasks,
       interactions: upcomingInteractions.map((i) => ({
-        id: i.id.toString(),
+        id: i.id,
         type: i.type,
-        nextActionDate: i.nextActionDate ? i.nextActionDate.toISOString() : null,
-        clientId: i.clientId ? i.clientId.toString() : null,
-        projectId: i.projectId ? i.projectId.toString() : null,
+        nextActionDate: i.nextActionDate,
+        clientId: i.clientId,
+        projectId: i.projectId,
       })),
     },
     monthlySeries,
   };
 
-  return withNoStore(withRequestId(jsonNoStore(payload), requestId));
-}
+  return jsonb(payload, ctx.requestId);
+});

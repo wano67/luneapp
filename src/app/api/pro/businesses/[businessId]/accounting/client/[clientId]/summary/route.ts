@@ -1,31 +1,10 @@
-import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/server/db/client';
-import { requireAuthPro } from '@/server/auth/requireAuthPro';
-import { requireBusinessRole } from '@/server/auth/businessRole';
-import {
-  badRequest,
-  forbidden,
-  getRequestId,
-  notFound,
-  unauthorized,
-  withRequestId,
-} from '@/server/http/apiUtils';
-import { jsonNoStore, withNoStore } from '@/server/security/csrf';
 import { InvoiceStatus, Prisma } from '@/generated/prisma';
+import { withBusinessRoute } from '@/server/http/routeHandler';
+import { jsonb } from '@/server/http/json';
+import { notFound } from '@/server/http/apiUtils';
+import { parseId } from '@/server/http/parsers';
 import { computeOutstanding } from '@/lib/accounting';
-
-function parseId(param: string | undefined) {
-  if (!param || !/^\d+$/.test(param)) return null;
-  try {
-    return BigInt(param);
-  } catch {
-    return null;
-  }
-}
-
-function withIdNoStore(res: NextResponse, requestId: string) {
-  return withNoStore(withRequestId(res, requestId));
-}
 
 function toNumber(value: bigint | null | undefined) {
   if (typeof value === 'bigint') return Number(value);
@@ -33,103 +12,86 @@ function toNumber(value: bigint | null | undefined) {
 }
 
 // GET /api/pro/businesses/:businessId/accounting/client/:clientId/summary
-export async function GET(
-  request: NextRequest,
-  context: { params: Promise<{ businessId: string; clientId: string }> },
-) {
-  const requestId = getRequestId(request);
-  const { businessId, clientId } = await context.params;
+export const GET = withBusinessRoute<{ businessId: string; clientId: string }>(
+  { minRole: 'VIEWER' },
+  async (ctx, _req, params) => {
+    const clientId = parseId(params.clientId);
 
-  let userId: string;
-  try {
-    ({ userId } = await requireAuthPro(request));
-  } catch {
-    return withIdNoStore(unauthorized(), requestId);
-  }
+    const client = await prisma.client.findFirst({
+      where: { id: clientId, businessId: ctx.businessId },
+      select: { id: true },
+    });
+    if (!client) return notFound('Client introuvable');
 
-  const businessIdBigInt = parseId(businessId);
-  const clientIdBigInt = parseId(clientId);
-  if (!businessIdBigInt || !clientIdBigInt) {
-    return withIdNoStore(badRequest('businessId ou clientId invalide.'), requestId);
-  }
+    const twelveMonthsAgo = new Date();
+    twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 12);
 
-  const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'VIEWER');
-  if (!membership) return withIdNoStore(forbidden(), requestId);
+    const baseWhere: Prisma.InvoiceWhereInput = {
+      businessId: ctx.businessId,
+      clientId,
+      status: { not: InvoiceStatus.CANCELLED },
+      OR: [{ issuedAt: { gte: twelveMonthsAgo } }, { issuedAt: null, createdAt: { gte: twelveMonthsAgo } }],
+    };
 
-  const client = await prisma.client.findFirst({
-    where: { id: clientIdBigInt, businessId: businessIdBigInt },
-    select: { id: true },
-  });
-  if (!client) return withIdNoStore(notFound('Client introuvable'), requestId);
+    const [agg, paidAgg, invoices, payments] = await Promise.all([
+      prisma.invoice.aggregate({
+        where: baseWhere,
+        _sum: { totalCents: true },
+      }),
+      prisma.payment.aggregate({
+        where: {
+          businessId: ctx.businessId,
+          clientId,
+          deletedAt: null,
+          paidAt: { gte: twelveMonthsAgo },
+        },
+        _sum: { amountCents: true },
+      }),
+      prisma.invoice.findMany({
+        where: baseWhere,
+        orderBy: [{ issuedAt: 'desc' }, { createdAt: 'desc' }],
+        take: 10,
+        include: { project: { select: { name: true } } },
+      }),
+      prisma.payment.findMany({
+        where: {
+          businessId: ctx.businessId,
+          clientId,
+          deletedAt: null,
+          paidAt: { gte: twelveMonthsAgo },
+        },
+        orderBy: [{ paidAt: 'desc' }, { createdAt: 'desc' }],
+        take: 10,
+        include: { invoice: { select: { number: true, currency: true } } },
+      }),
+    ]);
 
-  const twelveMonthsAgo = new Date();
-  twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 12);
+    const invoicedCents = toNumber(agg._sum?.totalCents);
+    const paidCents = toNumber(paidAgg._sum?.amountCents);
+    const outstandingCents = computeOutstanding(invoicedCents, paidCents);
 
-  const baseWhere: Prisma.InvoiceWhereInput = {
-    businessId: businessIdBigInt,
-    clientId: clientIdBigInt,
-    status: { not: InvoiceStatus.CANCELLED },
-    OR: [{ issuedAt: { gte: twelveMonthsAgo } }, { issuedAt: null, createdAt: { gte: twelveMonthsAgo } }],
-  };
-
-  const [agg, paidAgg, invoices, payments] = await Promise.all([
-    prisma.invoice.aggregate({
-      where: baseWhere,
-      _sum: { totalCents: true },
-    }),
-    prisma.payment.aggregate({
-      where: {
-        businessId: businessIdBigInt,
-        clientId: clientIdBigInt,
-        deletedAt: null,
-        paidAt: { gte: twelveMonthsAgo },
+    return jsonb(
+      {
+        totals: { invoicedCents, paidCents, outstandingCents },
+        invoices: invoices.map((inv) => ({
+          id: inv.id,
+          number: inv.number ?? `INV-${inv.id}`,
+          status: inv.status,
+          totalCents: Number(inv.totalCents),
+          currency: inv.currency,
+          issuedAt: inv.issuedAt,
+          dueAt: inv.dueAt,
+          projectName: (inv as typeof inv & { project?: { name: string | null } | null }).project?.name ?? null,
+        })),
+        payments: payments.map((p) => ({
+          id: p.id,
+          amountCents: Number(p.amountCents),
+          currency: p.invoice?.currency ?? 'EUR',
+          paidAt: p.paidAt,
+          reference: p.reference ?? p.invoice?.number ?? `PAY-${p.id}`,
+        })),
       },
-      _sum: { amountCents: true },
-    }),
-    prisma.invoice.findMany({
-      where: baseWhere,
-      orderBy: [{ issuedAt: 'desc' }, { createdAt: 'desc' }],
-      take: 10,
-      include: { project: { select: { name: true } } },
-    }),
-    prisma.payment.findMany({
-      where: {
-        businessId: businessIdBigInt,
-        clientId: clientIdBigInt,
-        deletedAt: null,
-        paidAt: { gte: twelveMonthsAgo },
-      },
-      orderBy: [{ paidAt: 'desc' }, { createdAt: 'desc' }],
-      take: 10,
-      include: { invoice: { select: { number: true, currency: true } } },
-    }),
-  ]);
-
-  const invoicedCents = toNumber(agg._sum?.totalCents);
-  const paidCents = toNumber(paidAgg._sum?.amountCents);
-  const outstandingCents = computeOutstanding(invoicedCents, paidCents);
-
-  return withIdNoStore(
-    jsonNoStore({
-      totals: { invoicedCents, paidCents, outstandingCents },
-      invoices: invoices.map((inv) => ({
-        id: inv.id.toString(),
-        number: inv.number ?? `INV-${inv.id}`,
-        status: inv.status,
-        totalCents: Number(inv.totalCents),
-        currency: inv.currency,
-        issuedAt: inv.issuedAt ? inv.issuedAt.toISOString() : null,
-        dueAt: inv.dueAt ? inv.dueAt.toISOString() : null,
-        projectName: (inv as typeof inv & { project?: { name: string | null } | null }).project?.name ?? null,
-      })),
-      payments: payments.map((p) => ({
-        id: p.id.toString(),
-        amountCents: Number(p.amountCents),
-        currency: p.invoice?.currency ?? 'EUR',
-        paidAt: p.paidAt.toISOString(),
-        reference: p.reference ?? p.invoice?.number ?? `PAY-${p.id}`,
-      })),
-    }),
-    requestId,
-  );
-}
+      ctx.requestId
+    );
+  }
+);

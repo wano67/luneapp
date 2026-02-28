@@ -1,123 +1,79 @@
-import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/server/db/client';
-import { requireAuthPro } from '@/server/auth/requireAuthPro';
-import { requireBusinessRole } from '@/server/auth/businessRole';
-import { assertSameOrigin, jsonNoStore, withNoStore } from '@/server/security/csrf';
-import { rateLimit } from '@/server/security/rateLimit';
-import { badRequest, getRequestId, unauthorized, withRequestId } from '@/server/http/apiUtils';
+import { withBusinessRoute } from '@/server/http/routeHandler';
+import { jsonb } from '@/server/http/json';
+import { badRequest, readJson } from '@/server/http/apiUtils';
+import { parseId } from '@/server/http/parsers';
 import { applyServiceProcessTemplateToProjectService } from '@/server/services/process/applyServiceProcessTemplate';
 import { applyServiceTaskTemplatesToProjectService } from '@/server/services/process/applyServiceTaskTemplates';
 
-function parseId(param: string | undefined) {
-  if (!param || !/^\d+$/.test(param)) return null;
-  try {
-    return BigInt(param);
-  } catch {
-    return null;
-  }
-}
-
-function withIdNoStore(res: NextResponse, requestId: string) {
-  return withNoStore(withRequestId(res, requestId));
-}
-
-function forbidden(requestId: string) {
-  return withIdNoStore(NextResponse.json({ error: 'Forbidden' }, { status: 403 }), requestId);
-}
-
 // POST /api/pro/businesses/{businessId}/projects/{projectId}/services/{itemId}/tasks
-export async function POST(
-  request: NextRequest,
-  context: { params: Promise<{ businessId: string; projectId: string; itemId: string }> }
-) {
-  const requestId = getRequestId(request);
-  const csrf = assertSameOrigin(request);
-  if (csrf) return withIdNoStore(csrf, requestId);
+export const POST = withBusinessRoute<{ businessId: string; projectId: string; itemId: string }>(
+  {
+    minRole: 'ADMIN',
+    rateLimit: {
+      key: (ctx) => `pro:project-services:tasks:${ctx.businessId}:${ctx.userId}`,
+      limit: 120,
+      windowMs: 60 * 60 * 1000,
+    },
+  },
+  async (ctx, req, params) => {
+    const projectId = parseId(params.projectId);
+    const itemId = parseId(params.itemId);
 
-  let userId: string;
-  try {
-    ({ userId } = await requireAuthPro(request));
-  } catch {
-    return withIdNoStore(unauthorized(), requestId);
-  }
-
-  const { businessId, projectId, itemId } = await context.params;
-  const businessIdBigInt = parseId(businessId);
-  const projectIdBigInt = parseId(projectId);
-  const itemIdBigInt = parseId(itemId);
-  if (!businessIdBigInt || !projectIdBigInt || !itemIdBigInt) {
-    return withIdNoStore(badRequest('Ids invalides.'), requestId);
-  }
-
-  const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'ADMIN');
-  if (!membership) return forbidden(requestId);
-
-  const limited = rateLimit(request, {
-    key: `pro:project-services:tasks:${businessIdBigInt}:${userId}`,
-    limit: 120,
-    windowMs: 60 * 60 * 1000,
-  });
-  if (limited) return withIdNoStore(limited, requestId);
-
-  const body = await request.json().catch(() => null);
-  const taskAssigneeRaw = (body as { taskAssigneeUserId?: unknown })?.taskAssigneeUserId;
-  let taskAssigneeUserId: bigint | null = null;
-  if (taskAssigneeRaw !== undefined && taskAssigneeRaw !== null && taskAssigneeRaw !== '') {
-    if (typeof taskAssigneeRaw !== 'string' || !/^\d+$/.test(taskAssigneeRaw)) {
-      return withIdNoStore(badRequest('taskAssigneeUserId invalide.'), requestId);
-    }
-    const assigneeId = BigInt(taskAssigneeRaw);
-    const membershipAssignee = await prisma.businessMembership.findUnique({
-      where: { businessId_userId: { businessId: businessIdBigInt, userId: assigneeId } },
-    });
-    if (!membershipAssignee) {
-      return withIdNoStore(badRequest('taskAssigneeUserId doit être membre du business.'), requestId);
-    }
-    taskAssigneeUserId = assigneeId;
-  }
-
-  const dueOffsetRaw = (body as { taskDueOffsetDays?: unknown })?.taskDueOffsetDays;
-  let taskDueOffsetDays: number | null = null;
-  if (dueOffsetRaw !== undefined) {
-    if (dueOffsetRaw === null) {
-      taskDueOffsetDays = null;
-    } else if (typeof dueOffsetRaw === 'number' && Number.isFinite(dueOffsetRaw)) {
-      taskDueOffsetDays = Math.trunc(dueOffsetRaw);
-      if (taskDueOffsetDays < 0 || taskDueOffsetDays > 365) {
-        return withIdNoStore(badRequest('taskDueOffsetDays invalide (0-365).'), requestId);
+    const body = await readJson(req) as Record<string, unknown> | null;
+    const taskAssigneeRaw = body?.taskAssigneeUserId;
+    let taskAssigneeUserId: bigint | null = null;
+    if (taskAssigneeRaw !== undefined && taskAssigneeRaw !== null && taskAssigneeRaw !== '') {
+      if (typeof taskAssigneeRaw !== 'string' || !/^\d+$/.test(taskAssigneeRaw)) {
+        return badRequest('taskAssigneeUserId invalide.');
       }
-    } else {
-      return withIdNoStore(badRequest('taskDueOffsetDays invalide.'), requestId);
+      const assigneeId = BigInt(taskAssigneeRaw);
+      const membershipAssignee = await prisma.businessMembership.findUnique({
+        where: { businessId_userId: { businessId: ctx.businessId, userId: assigneeId } },
+      });
+      if (!membershipAssignee) {
+        return badRequest('taskAssigneeUserId doit être membre du business.');
+      }
+      taskAssigneeUserId = assigneeId;
     }
-  }
 
-  const generated = await applyServiceProcessTemplateToProjectService({
-    businessId: businessIdBigInt,
-    projectId: projectIdBigInt,
-    projectServiceId: itemIdBigInt,
-    assigneeUserId: taskAssigneeUserId ?? undefined,
-    dueOffsetDaysOverride: taskDueOffsetDays ?? undefined,
-  });
+    const dueOffsetRaw = body?.taskDueOffsetDays;
+    let taskDueOffsetDays: number | null = null;
+    if (dueOffsetRaw !== undefined) {
+      if (dueOffsetRaw === null) {
+        taskDueOffsetDays = null;
+      } else if (typeof dueOffsetRaw === 'number' && Number.isFinite(dueOffsetRaw)) {
+        taskDueOffsetDays = Math.trunc(dueOffsetRaw);
+        if (taskDueOffsetDays < 0 || taskDueOffsetDays > 365) {
+          return badRequest('taskDueOffsetDays invalide (0-365).');
+        }
+      } else {
+        return badRequest('taskDueOffsetDays invalide.');
+      }
+    }
 
-  let generatedTasksCount = generated.createdTasksCount;
-  let generatedStepsCount = generated.createdStepsCount;
-  if (!generated.templateFound) {
-    const fallback = await applyServiceTaskTemplatesToProjectService({
-      businessId: businessIdBigInt,
-      projectId: projectIdBigInt,
-      projectServiceId: itemIdBigInt,
+    const generated = await applyServiceProcessTemplateToProjectService({
+      businessId: ctx.businessId,
+      projectId,
+      projectServiceId: itemId,
       assigneeUserId: taskAssigneeUserId ?? undefined,
       dueOffsetDaysOverride: taskDueOffsetDays ?? undefined,
     });
-    generatedTasksCount = fallback.createdTasksCount;
-    generatedStepsCount = 0;
-  }
 
-  return withIdNoStore(
-    jsonNoStore({
-      generatedStepsCount,
-      generatedTasksCount,
-    }),
-    requestId
-  );
-}
+    let generatedTasksCount = generated.createdTasksCount;
+    let generatedStepsCount = generated.createdStepsCount;
+    if (!generated.templateFound) {
+      const fallback = await applyServiceTaskTemplatesToProjectService({
+        businessId: ctx.businessId,
+        projectId,
+        projectServiceId: itemId,
+        assigneeUserId: taskAssigneeUserId ?? undefined,
+        dueOffsetDaysOverride: taskDueOffsetDays ?? undefined,
+      });
+      generatedTasksCount = fallback.createdTasksCount;
+      generatedStepsCount = 0;
+    }
+
+    return jsonb({ generatedStepsCount, generatedTasksCount }, ctx.requestId);
+  }
+);

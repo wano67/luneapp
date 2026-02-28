@@ -1,38 +1,14 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { prisma } from '@/server/db/client';
 import { BusinessRole, BusinessInviteStatus } from '@/generated/prisma';
-import { requireBusinessRole } from '@/server/auth/businessRole';
-import { assertSameOrigin, getAllowedOrigins, jsonNoStore, withNoStore } from '@/server/security/csrf';
+import { withBusinessRoute } from '@/server/http/routeHandler';
+import { jsonb, jsonbCreated } from '@/server/http/json';
+import { badRequest, notFound, readJson, serverError } from '@/server/http/apiUtils';
+import { getAllowedOrigins } from '@/server/security/csrf';
 import crypto from 'crypto';
-import { rateLimit, makeIpKey } from '@/server/security/rateLimit';
-import { requireAuthPro } from '@/server/auth/requireAuthPro';
-import {
-  badRequest,
-  forbidden,
-  getRequestId,
-  notFound,
-  serverError,
-  unauthorized,
-  withRequestId,
-} from '@/server/http/apiUtils';
-
-function parseId(param: string | undefined) {
-  if (!param || !/^\d+$/.test(param)) {
-    return null;
-  }
-  try {
-    return BigInt(param);
-  } catch {
-    return null;
-  }
-}
 
 function isValidEmail(email: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-}
-
-function withIdNoStore(res: NextResponse, requestId: string) {
-  return withNoStore(withRequestId(res, requestId));
 }
 
 function hashToken(raw: string) {
@@ -71,230 +47,164 @@ function buildBaseUrl(request: NextRequest) {
 }
 
 // GET /api/pro/businesses/{businessId}/invites
-export async function GET(
-  request: NextRequest,
-  context: { params: Promise<{ businessId: string }> }
-) {
-  const requestId = getRequestId(request);
-  const { businessId } = await context.params;
+export const GET = withBusinessRoute(
+  { minRole: 'ADMIN' },
+  async (ctx, req) => {
+    const business = await prisma.business.findUnique({ where: { id: ctx.businessId } });
+    if (!business) return notFound('Entreprise introuvable.');
 
-  let userId: string;
-  try {
-    ({ userId } = await requireAuthPro(request));
-  } catch {
-    return withIdNoStore(unauthorized(), requestId);
-  }
+    const invites = await prisma.businessInvite.findMany({
+      where: { businessId: ctx.businessId },
+      orderBy: { createdAt: 'desc' },
+    });
 
-  const businessIdBigInt = parseId(businessId);
-  if (!businessIdBigInt) {
-    return withIdNoStore(badRequest('businessId invalide.'), requestId);
-  }
+    const baseUrl = buildBaseUrl(req);
+    const now = Date.now();
+    const expiredIds: bigint[] = [];
+    const items = invites.map((inv) => {
+      const expired = inv.expiresAt ? inv.expiresAt.getTime() < now : false;
+      const status =
+        expired && inv.status === BusinessInviteStatus.PENDING ? BusinessInviteStatus.EXPIRED : inv.status;
 
-  const business = await prisma.business.findUnique({ where: { id: businessIdBigInt } });
-  if (!business) return withIdNoStore(notFound('Entreprise introuvable.'), requestId);
+      if (status === BusinessInviteStatus.EXPIRED && inv.status !== BusinessInviteStatus.EXPIRED) {
+        expiredIds.push(inv.id);
+      }
 
-  const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'ADMIN');
-  if (!membership) return withIdNoStore(forbidden(), requestId);
+      const inviteLink =
+        status === BusinessInviteStatus.PENDING || status === BusinessInviteStatus.ACCEPTED
+          ? `${baseUrl}/app/invites/accept?token=${encodeURIComponent(inv.token)}`
+          : undefined;
 
-  const invites = await prisma.businessInvite.findMany({
-    where: { businessId: businessIdBigInt },
-    orderBy: { createdAt: 'desc' },
-  });
+      return {
+        id: inv.id,
+        businessId: inv.businessId,
+        email: inv.email,
+        role: inv.role,
+        status,
+        createdAt: inv.createdAt,
+        expiresAt: inv.expiresAt,
+        ...(inviteLink ? { inviteLink, tokenPreview: inv.token.slice(-6) } : {}),
+      };
+    });
 
-  const baseUrl = buildBaseUrl(request);
-  const now = Date.now();
-  const expiredIds: bigint[] = [];
-  const items = invites.map((inv) => {
-    const expired = inv.expiresAt ? inv.expiresAt.getTime() < now : false;
-    const status =
-      expired && inv.status === BusinessInviteStatus.PENDING ? BusinessInviteStatus.EXPIRED : inv.status;
-
-    if (status === BusinessInviteStatus.EXPIRED && inv.status !== BusinessInviteStatus.EXPIRED) {
-      expiredIds.push(inv.id);
+    if (expiredIds.length > 0) {
+      await prisma.businessInvite.updateMany({
+        where: { id: { in: expiredIds } },
+        data: { status: BusinessInviteStatus.EXPIRED },
+      });
     }
 
-    const inviteLink =
-      status === BusinessInviteStatus.PENDING || status === BusinessInviteStatus.ACCEPTED
-        ? `${baseUrl}/app/invites/accept?token=${encodeURIComponent(inv.token)}`
-        : undefined;
-
-    return {
-      id: inv.id.toString(),
-      businessId: inv.businessId.toString(),
-      email: inv.email,
-      role: inv.role,
-      status,
-      createdAt: inv.createdAt.toISOString(),
-      expiresAt: inv.expiresAt ? inv.expiresAt.toISOString() : null,
-      ...(inviteLink ? { inviteLink, tokenPreview: inv.token.slice(-6) } : {}),
-    };
-  });
-
-  if (expiredIds.length > 0) {
-    await prisma.businessInvite.updateMany({
-      where: { id: { in: expiredIds } },
-      data: { status: BusinessInviteStatus.EXPIRED },
-    });
+    return jsonb({ items }, ctx.requestId);
   }
-
-  return withIdNoStore(
-    jsonNoStore({ items }),
-    requestId
-  );
-}
+);
 
 // POST /api/pro/businesses/{businessId}/invites
-export async function POST(
-  request: NextRequest,
-  context: { params: Promise<{ businessId: string }> }
-) {
-  const requestId = getRequestId(request);
-  const { businessId } = await context.params;
+export const POST = withBusinessRoute(
+  {
+    minRole: 'ADMIN',
+    rateLimit: { key: (ctx) => `pro:invites:create:${ctx.businessId}:${ctx.userId}`, limit: 60, windowMs: 60 * 60 * 1000 },
+  },
+  async (ctx, req) => {
+    const business = await prisma.business.findUnique({ where: { id: ctx.businessId } });
+    if (!business) return notFound('Entreprise introuvable.');
 
-  const csrf = assertSameOrigin(request);
-  if (csrf) return withIdNoStore(csrf, requestId);
+    const body = await readJson(req);
+    if (!body || typeof (body as Record<string, unknown>).email !== 'string' || typeof (body as Record<string, unknown>).role !== 'string') {
+      return badRequest('Email et rôle sont requis.');
+    }
 
-  let userIdForRate: string | null = null;
-  try {
-    const auth = await requireAuthPro(request);
-    userIdForRate = auth.userId;
-  } catch {
-    userIdForRate = null;
-  }
-  const limited = rateLimit(request, {
-    key: userIdForRate
-      ? `pro:invites:create:${businessId}:${userIdForRate.toString()}`
-      : makeIpKey(request, `pro:invites:create:${businessId}`),
-    limit: 60,
-    windowMs: 60 * 60 * 1000,
-  });
-  if (limited) return withIdNoStore(limited, requestId);
+    const b = body as Record<string, unknown>;
+    const email = (b.email as string).trim().toLowerCase();
+    if (!email) return badRequest("L'email ne peut pas être vide.");
 
-  let userId: string;
-  try {
-    ({ userId } = await requireAuthPro(request));
-  } catch {
-    return withIdNoStore(unauthorized(), requestId);
-  }
+    const role = b.role as BusinessRole;
+    if (!['ADMIN', 'MEMBER', 'VIEWER'].includes(role)) {
+      return badRequest('Rôle invalide.');
+    }
 
-  const businessIdBigInt = parseId(businessId);
-  if (!businessIdBigInt) {
-    return withIdNoStore(badRequest('businessId invalide.'), requestId);
-  }
-  const business = await prisma.business.findUnique({ where: { id: businessIdBigInt } });
-  if (!business) {
-    return withIdNoStore(notFound('Entreprise introuvable.'), requestId);
-  }
+    if (email.length > 254 || !isValidEmail(email)) {
+      return badRequest('Email invalide.');
+    }
 
-  const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'ADMIN');
-  if (!membership) return withIdNoStore(forbidden(), requestId);
+    // Refuse si l'utilisateur est déjà membre
+    const existingUser = await prisma.user.findUnique({ where: { email } });
+    if (existingUser) {
+      const existingMembership = await prisma.businessMembership.findUnique({
+        where: {
+          businessId_userId: {
+            businessId: ctx.businessId,
+            userId: existingUser.id,
+          },
+        },
+      });
+      if (existingMembership) {
+        return jsonb({ error: 'Cet utilisateur est déjà membre de ce business.' }, ctx.requestId, { status: 409 });
+      }
+    }
 
-  const body = await request.json().catch(() => null);
-  if (!body || typeof body.email !== 'string' || typeof body.role !== 'string') {
-    return withIdNoStore(badRequest('Email et rôle sont requis.'), requestId);
-  }
+    const rawToken = crypto.randomBytes(32).toString('base64url');
+    const tokenHash = hashToken(rawToken);
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 7); // 7 jours
+    const baseUrl = buildBaseUrl(req);
 
-  const email = body.email.trim().toLowerCase();
-  if (!email) return withIdNoStore(badRequest("L'email ne peut pas être vide."), requestId);
-
-  const role = body.role as BusinessRole;
-  if (!['ADMIN', 'MEMBER', 'VIEWER'].includes(role)) {
-    return withIdNoStore(badRequest('Rôle invalide.'), requestId);
-  }
-
-  if (email.length > 254 || !isValidEmail(email)) {
-    return withIdNoStore(badRequest('Email invalide.'), requestId);
-  }
-
-  // Refuse si l'utilisateur est déjà membre
-  const existingUser = await prisma.user.findUnique({ where: { email } });
-  if (existingUser) {
-    const existingMembership = await prisma.businessMembership.findUnique({
+    const existingInvite = await prisma.businessInvite.findFirst({
       where: {
-        businessId_userId: {
-          businessId: businessIdBigInt,
-          userId: existingUser.id,
-        },
+        businessId: ctx.businessId,
+        email,
+        status: BusinessInviteStatus.PENDING,
       },
     });
-    if (existingMembership) {
-      return withIdNoStore(
-        jsonNoStore({ error: 'Cet utilisateur est déjà membre de ce business.' }, { status: 409 }),
-        requestId
-      );
-    }
-  }
 
-  const rawToken = crypto.randomBytes(32).toString('base64url');
-  const tokenHash = hashToken(rawToken);
-  const expiresAt = new Date();
-  expiresAt.setDate(expiresAt.getDate() + 7); // 7 jours
-  const baseUrl = buildBaseUrl(request);
-
-  const existingInvite = await prisma.businessInvite.findFirst({
-    where: {
-      businessId: businessIdBigInt,
-      email,
-      status: BusinessInviteStatus.PENDING,
-    },
-  });
-
-  const now = new Date();
-  if (existingInvite && existingInvite.expiresAt && existingInvite.expiresAt < now) {
-    await prisma.businessInvite.update({
-      where: { id: existingInvite.id },
-      data: { status: BusinessInviteStatus.EXPIRED },
-    });
-  }
-
-  let invite;
-  try {
-    if (existingInvite && existingInvite.status === BusinessInviteStatus.PENDING) {
-      invite = await prisma.businessInvite.update({
+    const now = new Date();
+    if (existingInvite && existingInvite.expiresAt && existingInvite.expiresAt < now) {
+      await prisma.businessInvite.update({
         where: { id: existingInvite.id },
-        data: {
-          role,
-          token: tokenHash,
-          expiresAt,
-          status: BusinessInviteStatus.PENDING,
-        },
-      });
-    } else {
-      invite = await prisma.businessInvite.create({
-        data: {
-          businessId: businessIdBigInt,
-          email,
-          role,
-          token: tokenHash,
-          status: BusinessInviteStatus.PENDING,
-          expiresAt,
-        },
+        data: { status: BusinessInviteStatus.EXPIRED },
       });
     }
-  } catch (error) {
-    console.error({ requestId, route: '/api/pro/businesses/[businessId]/invites', error });
-    return withIdNoStore(serverError(), requestId);
-  }
 
-  // TODO: envoyer un email avec le lien d'invitation
+    let invite;
+    try {
+      if (existingInvite && existingInvite.status === BusinessInviteStatus.PENDING) {
+        invite = await prisma.businessInvite.update({
+          where: { id: existingInvite.id },
+          data: {
+            role,
+            token: tokenHash,
+            expiresAt,
+            status: BusinessInviteStatus.PENDING,
+          },
+        });
+      } else {
+        invite = await prisma.businessInvite.create({
+          data: {
+            businessId: ctx.businessId,
+            email,
+            role,
+            token: tokenHash,
+            status: BusinessInviteStatus.PENDING,
+            expiresAt,
+          },
+        });
+      }
+    } catch {
+      return serverError();
+    }
 
-  const inviteLink = `${baseUrl}/app/invites/accept?token=${encodeURIComponent(tokenHash)}`;
+    // TODO: envoyer un email avec le lien d'invitation
 
-  return withIdNoStore(
-    jsonNoStore(
+    const inviteLink = `${baseUrl}/app/invites/accept?token=${encodeURIComponent(tokenHash)}`;
+
+    return jsonbCreated(
       {
-        id: invite.id.toString(),
-        businessId: invite.businessId.toString(),
-        email: invite.email,
-        role: invite.role,
-        status: invite.status,
-        createdAt: invite.createdAt.toISOString(),
-        expiresAt: invite.expiresAt ? invite.expiresAt.toISOString() : null,
-        inviteLink,
-        tokenPreview: rawToken.slice(-6),
+        item: {
+          ...invite,
+          inviteLink,
+          tokenPreview: rawToken.slice(-6),
+        },
       },
-      { status: 201 }
-    ),
-    requestId
-  );
-}
+      ctx.requestId
+    );
+  }
+);

@@ -1,35 +1,22 @@
-import { NextRequest } from 'next/server';
 import { prisma } from '@/server/db/client';
 import { TaskStatus, FinanceType } from '@/generated/prisma';
-import { requireAuthPro } from '@/server/auth/requireAuthPro';
-import { getRequestId, unauthorized, withRequestId } from '@/server/http/apiUtils';
-import { jsonNoStore, withNoStore } from '@/server/security/csrf';
+import { withPersonalRoute } from '@/server/http/routeHandler';
+import { jsonb } from '@/server/http/json';
 import { buildProjectScopeWhere } from '@/server/queries/projects';
 
-export async function GET(request: NextRequest) {
-  const requestId = getRequestId(request);
-
-  let userId: string;
-  try {
-    ({ userId } = await requireAuthPro(request));
-  } catch {
-    return withNoStore(withRequestId(unauthorized(), requestId));
-  }
-
+export const GET = withPersonalRoute(async (ctx) => {
   const memberships = await prisma.businessMembership.findMany({
-    where: { userId: BigInt(userId) },
+    where: { userId: ctx.userId },
     include: { business: true },
   });
 
   if (!memberships.length) {
-    return withNoStore(
-      withRequestId(
-        jsonNoStore({
-          totals: { businessesCount: 0, projectsActiveCount: 0, totalNetCents: '0' },
-          upcomingTasks: [],
-        }),
-        requestId
-      )
+    return jsonb(
+      {
+        totals: { businessesCount: 0, projectsActiveCount: 0, totalNetCents: '0' },
+        upcomingTasks: [],
+      },
+      ctx.requestId
     );
   }
 
@@ -74,25 +61,23 @@ export async function GET(request: NextRequest) {
   const now = new Date();
   const tasksFiltered = upcomingTasks.filter((t) => t.dueDate && t.dueDate <= horizon && t.dueDate >= now);
 
-  return withNoStore(
-    withRequestId(
-      jsonNoStore({
-        totals: {
-          businessesCount: memberships.length,
-          projectsActiveCount,
-          totalNetCents: (incomeTotal - expenseTotal).toString(),
-        },
-        upcomingTasks: tasksFiltered.map((t) => ({
-          id: t.id.toString(),
-          title: t.title,
-          status: t.status,
-          dueDate: t.dueDate ? t.dueDate.toISOString() : null,
-          businessId: t.businessId.toString(),
-          businessName: t.business?.name ?? null,
-          websiteUrl: t.business?.websiteUrl ?? null,
-        })),
-      }),
-      requestId
-    )
+  return jsonb(
+    {
+      totals: {
+        businessesCount: memberships.length,
+        projectsActiveCount,
+        totalNetCents: (incomeTotal - expenseTotal).toString(),
+      },
+      upcomingTasks: tasksFiltered.map((t) => ({
+        id: t.id,
+        title: t.title,
+        status: t.status,
+        dueDate: t.dueDate,
+        businessId: t.businessId,
+        businessName: t.business?.name ?? null,
+        websiteUrl: t.business?.websiteUrl ?? null,
+      })),
+    },
+    ctx.requestId
   );
-}
+});

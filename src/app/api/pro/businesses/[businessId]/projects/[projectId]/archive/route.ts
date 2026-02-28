@@ -1,74 +1,38 @@
-import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/server/db/client';
-import { requireAuthPro } from '@/server/auth/requireAuthPro';
-import { requireBusinessRole } from '@/server/auth/businessRole';
-import { assertSameOrigin, withNoStore } from '@/server/security/csrf';
-import { rateLimit } from '@/server/security/rateLimit';
-import { badRequest, forbidden, getRequestId, notFound, unauthorized, withIdNoStore, withRequestId } from '@/server/http/apiUtils';
+import { withBusinessRoute } from '@/server/http/routeHandler';
+import { jsonb } from '@/server/http/json';
+import { notFound } from '@/server/http/apiUtils';
+import { parseId } from '@/server/http/parsers';
 
-function parseId(param: string | undefined) {
-  if (!param || !/^\d+$/.test(param)) return null;
-  try {
-    return BigInt(param);
-  } catch {
-    return null;
+// POST /api/pro/businesses/{businessId}/projects/{projectId}/archive
+export const POST = withBusinessRoute<{ businessId: string; projectId: string }>(
+  {
+    minRole: 'ADMIN',
+    rateLimit: {
+      key: (ctx) => `pro:projects:archive:${ctx.businessId}:${ctx.userId}`,
+      limit: 60,
+      windowMs: 60 * 60 * 1000,
+    },
+  },
+  async (ctx, _req, params) => {
+    const projectId = parseId(params.projectId);
+
+    const project = await prisma.project.findFirst({
+      where: { id: projectId, businessId: ctx.businessId },
+    });
+    if (!project) return notFound('Projet introuvable.');
+
+    const updated = await prisma.project.update({
+      where: { id: projectId },
+      data: { archivedAt: new Date() },
+    });
+
+    return jsonb(
+      {
+        id: updated.id,
+        archivedAt: updated.archivedAt,
+      },
+      ctx.requestId
+    );
   }
-}
-
-export async function POST(
-  request: NextRequest,
-  context: { params: Promise<{ businessId: string; projectId: string }> }
-) {
-  const requestId = getRequestId(request);
-  const csrf = assertSameOrigin(request);
-  if (csrf) return withIdNoStore(csrf, requestId);
-
-  let userId: string;
-  try {
-    ({ userId } = await requireAuthPro(request));
-  } catch {
-    return withIdNoStore(unauthorized(), requestId);
-  }
-
-  const { businessId, projectId } = await context.params;
-  const businessIdBigInt = parseId(businessId);
-  const projectIdBigInt = parseId(projectId);
-  if (!businessIdBigInt || !projectIdBigInt) {
-    return withIdNoStore(badRequest('Ids invalides.'), requestId);
-  }
-
-  const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'ADMIN');
-  if (!membership) return withIdNoStore(forbidden(), requestId);
-
-  const limited = rateLimit(request, {
-    key: `pro:projects:archive:${businessIdBigInt}:${userId}`,
-    limit: 60,
-    windowMs: 60 * 60 * 1000,
-  });
-  if (limited) return withIdNoStore(limited, requestId);
-
-  const project = await prisma.project.findFirst({
-    where: { id: projectIdBigInt, businessId: businessIdBigInt },
-  });
-  if (!project) {
-    return withIdNoStore(notFound('Projet introuvable.'), requestId);
-  }
-
-  const updated = await prisma.project.update({
-    where: { id: projectIdBigInt },
-    data: { archivedAt: new Date() },
-  });
-
-  return withNoStore(
-    withRequestId(
-      NextResponse.json(
-        {
-          id: updated.id.toString(),
-          archivedAt: updated.archivedAt?.toISOString() ?? null,
-        },
-        { status: 200 }
-      ),
-      requestId
-    )
-  );
-}
+);

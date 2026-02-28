@@ -1,159 +1,133 @@
-// src/app/api/personal/summary/route.ts
-import { NextResponse } from 'next/server';
-import type { NextRequest } from 'next/server';
 import { prisma } from '@/server/db/client';
-import { requireAuthAsync } from '@/server/auth/requireAuth';
-import { jsonNoStore, withNoStore } from '@/server/security/csrf';
-import { getRequestId, withRequestId } from '@/server/http/apiUtils';
+import { withPersonalRoute } from '@/server/http/routeHandler';
+import { jsonb } from '@/server/http/json';
 
-function toStrId(v: bigint) {
-  return v.toString();
-}
+export const GET = withPersonalRoute(async (ctx) => {
+  const now = new Date();
+  const startOfMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 0, 0, 0));
+  const startOfNextMonth = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1, 0, 0, 0)
+  );
 
-function withIdNoStore(res: NextResponse, requestId: string) {
-  return withNoStore(withRequestId(res, requestId));
-}
+  // 1) Accounts
+  const accounts = await prisma.personalAccount.findMany({
+    where: { userId: ctx.userId },
+    orderBy: { createdAt: 'desc' },
+    select: {
+      id: true,
+      name: true,
+      type: true,
+      currency: true,
+      institution: true,
+      iban: true,
+      initialCents: true,
+      createdAt: true,
+      updatedAt: true,
+    },
+  });
 
-export async function GET(req: NextRequest) {
-  const requestId = getRequestId(req);
-  try {
-    const { userId } = await requireAuthAsync(req);
+  const accountIds = accounts.map((a) => a.id);
 
+  // 2) Sum transactions by account
+  const sumsByAccount = accountIds.length
+    ? await prisma.personalTransaction.groupBy({
+        by: ['accountId'],
+        where: {
+          userId: ctx.userId,
+          accountId: { in: accountIds },
+        },
+        _sum: { amountCents: true },
+      })
+    : [];
 
-    const now = new Date();
-    const startOfMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 0, 0, 0));
-    const startOfNextMonth = new Date(
-      Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1, 0, 0, 0)
-    );
+  const sumMap = new Map<bigint, bigint>();
+  for (const row of sumsByAccount) {
+    sumMap.set(row.accountId, row._sum.amountCents ?? 0n);
+  }
 
-    // 1) Accounts
-    const accounts = await prisma.personalAccount.findMany({
-      where: { userId: BigInt(userId) },
-      orderBy: { createdAt: 'desc' },
-      select: {
-        id: true,
-        name: true,
-        type: true,
-        currency: true,
-        institution: true,
-        iban: true,
-        initialCents: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-    });
+  const accountsWithBalance = accounts.map((a) => {
+    const txSum = sumMap.get(a.id) ?? 0n;
+    const balanceCents = a.initialCents + txSum;
 
-    const accountIds = accounts.map((a) => a.id);
+    return {
+      id: a.id,
+      name: a.name,
+      type: a.type,
+      currency: a.currency,
+      institution: a.institution,
+      iban: a.iban,
+      initialCents: a.initialCents,
+      balanceCents,
+      createdAt: a.createdAt,
+      updatedAt: a.updatedAt,
+    };
+  });
 
-    // 2) Sum transactions by account
-    const sumsByAccount = accountIds.length
-      ? await prisma.personalTransaction.groupBy({
-          by: ['accountId'],
-          where: {
-            userId: BigInt(userId),
-            accountId: { in: accountIds },
-          },
-          _sum: { amountCents: true },
-        })
-      : [];
+  const totalBalanceCents = accountsWithBalance.reduce(
+    (acc, a) => acc + a.balanceCents,
+    0n
+  );
 
-    const sumMap = new Map<string, bigint>();
-    for (const row of sumsByAccount) {
-      sumMap.set(toStrId(row.accountId), row._sum.amountCents ?? BigInt(0));
-    }
-
-    const accountsWithBalance = accounts.map((a) => {
-      const txSum = sumMap.get(toStrId(a.id)) ?? BigInt(0);
-      const balanceCents = a.initialCents + txSum;
-
-      return {
-        id: toStrId(a.id),
-        name: a.name,
-        type: a.type,
-        currency: a.currency,
-        institution: a.institution,
-        iban: a.iban,
-        initialCents: a.initialCents.toString(),
-        balanceCents: balanceCents.toString(),
-        createdAt: a.createdAt.toISOString(),
-        updatedAt: a.updatedAt.toISOString(),
-      };
-    });
-
-    const totalBalanceCents = accountsWithBalance.reduce(
-      (acc, a) => acc + BigInt(a.balanceCents),
-      BigInt(0)
-    );
-
-    // 3) Month income/expense
-    const monthAgg = await prisma.personalTransaction.aggregate({
+  // 3) Month income/expense
+  const [monthAgg, incomeAgg, expenseAgg] = await Promise.all([
+    prisma.personalTransaction.aggregate({
       where: {
-        userId: BigInt(userId),
+        userId: ctx.userId,
         date: { gte: startOfMonth, lt: startOfNextMonth },
       },
       _sum: { amountCents: true },
-    });
+    }),
+    prisma.personalTransaction.aggregate({
+      where: {
+        userId: ctx.userId,
+        date: { gte: startOfMonth, lt: startOfNextMonth },
+        amountCents: { gt: 0n },
+      },
+      _sum: { amountCents: true },
+    }),
+    prisma.personalTransaction.aggregate({
+      where: {
+        userId: ctx.userId,
+        date: { gte: startOfMonth, lt: startOfNextMonth },
+        amountCents: { lt: 0n },
+      },
+      _sum: { amountCents: true },
+    }),
+  ]);
 
-    // On veut aussi séparer revenus/dépenses
-    const [incomeAgg, expenseAgg] = await Promise.all([
-      prisma.personalTransaction.aggregate({
-        where: {
-          userId: BigInt(userId),
-          date: { gte: startOfMonth, lt: startOfNextMonth },
-          amountCents: { gt: BigInt(0) },
-        },
-        _sum: { amountCents: true },
-      }),
-      prisma.personalTransaction.aggregate({
-        where: {
-          userId: BigInt(userId),
-          date: { gte: startOfMonth, lt: startOfNextMonth },
-          amountCents: { lt: BigInt(0) },
-        },
-        _sum: { amountCents: true },
-      }),
-    ]);
+  const monthNetCents = monthAgg._sum.amountCents ?? 0n;
+  const monthIncomeCents = incomeAgg._sum.amountCents ?? 0n;
+  const monthExpenseCents = expenseAgg._sum.amountCents ?? 0n;
 
-    const monthNetCents = monthAgg._sum.amountCents ?? BigInt(0);
-    const monthIncomeCents = incomeAgg._sum.amountCents ?? BigInt(0);
-    const monthExpenseCents = expenseAgg._sum.amountCents ?? BigInt(0); // négatif
+  // 4) Latest transactions
+  const latest = await prisma.personalTransaction.findMany({
+    where: { userId: ctx.userId },
+    orderBy: { date: 'desc' },
+    take: 12,
+    include: { account: true, category: true },
+  });
 
-    // 4) Latest transactions
-    const latest = await prisma.personalTransaction.findMany({
-      where: { userId: BigInt(userId) },
-      orderBy: { date: 'desc' },
-      take: 12,
-      include: { account: true, category: true },
-    });
-
-    return withRequestId(
-      jsonNoStore({
-        kpis: {
-          totalBalanceCents: totalBalanceCents.toString(),
-          monthNetCents: monthNetCents.toString(),
-          monthIncomeCents: monthIncomeCents.toString(),
-          monthExpenseCents: monthExpenseCents.toString(),
-        },
-        accounts: accountsWithBalance,
-        latestTransactions: latest.map((t) => ({
-          id: toStrId(t.id),
-          type: t.type,
-          date: t.date.toISOString(),
-          amountCents: t.amountCents.toString(),
-          currency: t.currency,
-          label: t.label,
-          note: t.note,
-          account: { id: toStrId(t.accountId), name: t.account.name },
-          category: t.category ? { id: toStrId(t.categoryId!), name: t.category.name } : null,
-        })),
-      }),
-      requestId
-    );
-  } catch (e: unknown) {
-    if (e instanceof Error && e.message === 'UNAUTHORIZED') {
-      return withIdNoStore(NextResponse.json({ error: 'Unauthorized' }, { status: 401 }), requestId);
-    }
-    console.error(e);
-    return withIdNoStore(NextResponse.json({ error: 'Failed' }, { status: 500 }), requestId);
-  }
-}
+  return jsonb(
+    {
+      kpis: {
+        totalBalanceCents,
+        monthNetCents,
+        monthIncomeCents,
+        monthExpenseCents,
+      },
+      accounts: accountsWithBalance,
+      latestTransactions: latest.map((t) => ({
+        id: t.id,
+        type: t.type,
+        date: t.date,
+        amountCents: t.amountCents,
+        currency: t.currency,
+        label: t.label,
+        note: t.note,
+        account: { id: t.accountId, name: t.account.name },
+        category: t.category ? { id: t.categoryId, name: t.category.name } : null,
+      })),
+    },
+    ctx.requestId
+  );
+});

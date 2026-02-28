@@ -1,12 +1,9 @@
-// src/app/api/personal/transactions/route.ts
-import { NextResponse } from 'next/server';
-import type { NextRequest } from 'next/server';
 import type { Prisma } from '@/generated/prisma';
 import { prisma } from '@/server/db/client';
-import { requireAuthAsync } from '@/server/auth/requireAuth';
-import { assertSameOrigin, withNoStore } from '@/server/security/csrf';
+import { withPersonalRoute } from '@/server/http/routeHandler';
+import { jsonb, jsonbCreated } from '@/server/http/json';
+import { badRequest, notFound, readJson, isRecord } from '@/server/http/apiUtils';
 import { rateLimit } from '@/server/security/rateLimit';
-import { getRequestId, withRequestId, badRequest, unauthorized } from '@/server/http/apiUtils';
 
 type TxType = 'INCOME' | 'EXPENSE' | 'TRANSFER';
 
@@ -14,20 +11,8 @@ function isTxnType(v: unknown): v is TxType {
   return v === 'INCOME' || v === 'EXPENSE' || v === 'TRANSFER';
 }
 
-function isRecord(x: unknown): x is Record<string, unknown> {
-  return !!x && typeof x === 'object';
-}
-
-function getErrorMessage(e: unknown): string {
-  return e instanceof Error ? e.message : String(e);
-}
-
 function isNumericId(v: string) {
   return /^\d+$/.test(v);
-}
-
-function toStrId(v: bigint) {
-  return v.toString();
 }
 
 function parseBigIntLike(v: unknown, field: string): bigint {
@@ -54,7 +39,6 @@ function parseDateISO(v: unknown, field: string): Date {
 }
 
 function parseCursor(cursor: string): { date: Date; id: bigint } | null {
-  // format: `${dateISO}|${id}`
   const [dateStr, idStr] = cursor.split('|');
   if (!dateStr || !idStr) return null;
   const d = new Date(dateStr);
@@ -67,238 +51,197 @@ function makeCursor(t: { date: Date; id: bigint }) {
   return `${t.date.toISOString()}|${t.id.toString()}`;
 }
 
-function withIdNoStore(res: NextResponse, requestId: string) {
-  return withNoStore(withRequestId(res, requestId));
-}
+export const GET = withPersonalRoute(async (ctx, req) => {
+  const url = new URL(req.url);
 
-export async function GET(req: NextRequest) {
-  const requestId = getRequestId(req);
-  try {
-    const { userId } = await requireAuthAsync(req);
+  const accountId = url.searchParams.get('accountId') ?? undefined;
+  const limitRaw = url.searchParams.get('limit');
+  const typeRaw = url.searchParams.get('type') ?? undefined;
+  const q = (url.searchParams.get('q') ?? '').trim();
+  const fromRaw = url.searchParams.get('from');
+  const toRaw = url.searchParams.get('to');
+  const cursorRaw = url.searchParams.get('cursor');
 
-    const url = new URL(req.url);
+  const limit = Math.min(200, Math.max(1, Number(limitRaw ?? 50) || 50));
 
-    const accountId = url.searchParams.get('accountId') ?? undefined;
-    const limitRaw = url.searchParams.get('limit');
-    const typeRaw = url.searchParams.get('type') ?? undefined;
-    const q = (url.searchParams.get('q') ?? '').trim();
-    const fromRaw = url.searchParams.get('from');
-    const toRaw = url.searchParams.get('to');
-    const cursorRaw = url.searchParams.get('cursor');
+  if (accountId && !isNumericId(accountId)) return badRequest('Invalid accountId');
 
-    const limit = Math.min(200, Math.max(1, Number(limitRaw ?? 50) || 50));
+  const type: TxType | undefined = typeRaw ? (isTxnType(typeRaw) ? typeRaw : undefined) : undefined;
+  if (typeRaw && !type) return badRequest('Invalid type');
 
-    if (accountId && !isNumericId(accountId)) return withIdNoStore(badRequest('Invalid accountId'), requestId);
+  const from = fromRaw ? new Date(fromRaw) : undefined;
+  const to = toRaw ? new Date(toRaw) : undefined;
+  if (fromRaw && Number.isNaN(from!.getTime())) return badRequest('Invalid from');
+  if (toRaw && Number.isNaN(to!.getTime())) return badRequest('Invalid to');
 
-    const type: TxType | undefined = typeRaw ? (isTxnType(typeRaw) ? typeRaw : undefined) : undefined;
-    if (typeRaw && !type) return withIdNoStore(badRequest('Invalid type'), requestId);
+  const cursor = cursorRaw ? parseCursor(cursorRaw) : null;
+  if (cursorRaw && !cursor) return badRequest('Invalid cursor');
 
-    const from = fromRaw ? new Date(fromRaw) : undefined;
-    const to = toRaw ? new Date(toRaw) : undefined;
-    if (fromRaw && Number.isNaN(from!.getTime())) return withIdNoStore(badRequest('Invalid from'), requestId);
-    if (toRaw && Number.isNaN(to!.getTime())) return withIdNoStore(badRequest('Invalid to'), requestId);
+  const cursorWhere: Prisma.PersonalTransactionWhereInput =
+    cursor
+      ? {
+          OR: [{ date: { lt: cursor.date } }, { date: cursor.date, id: { lt: cursor.id } }],
+        }
+      : {};
 
-    const cursor = cursorRaw ? parseCursor(cursorRaw) : null;
-    if (cursorRaw && !cursor) return withIdNoStore(badRequest('Invalid cursor'), requestId);
-
-    // Pagination stable: order by date desc, id desc
-    const cursorWhere: Prisma.PersonalTransactionWhereInput =
-      cursor
+  const items = await prisma.personalTransaction.findMany({
+    where: {
+      userId: ctx.userId,
+      ...(accountId ? { accountId: BigInt(accountId) } : {}),
+      ...(type ? { type } : {}),
+      ...(from || to ? { date: { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) } } : {}),
+      ...(q
         ? {
-            OR: [{ date: { lt: cursor.date } }, { date: cursor.date, id: { lt: cursor.id } }],
+            OR: [
+              { label: { contains: q, mode: 'insensitive' } },
+              { note: { contains: q, mode: 'insensitive' } },
+            ],
           }
-        : {};
+        : {}),
+      ...cursorWhere,
+    },
+    orderBy: [{ date: 'desc' }, { id: 'desc' }],
+    take: limit + 1,
+    include: { account: true, category: true },
+  });
 
-    const items = await prisma.personalTransaction.findMany({
-      where: {
-        userId: BigInt(userId),
-        ...(accountId ? { accountId: BigInt(accountId) } : {}),
-        ...(type ? { type } : {}),
-        ...(from || to ? { date: { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) } } : {}),
-        ...(q
-          ? {
-              OR: [
-                { label: { contains: q, mode: 'insensitive' } },
-                { note: { contains: q, mode: 'insensitive' } },
-              ],
-            }
-          : {}),
-        ...cursorWhere,
-      },
-      orderBy: [{ date: 'desc' }, { id: 'desc' }],
-      take: limit + 1,
-      include: { account: true, category: true },
-    });
+  const hasMore = items.length > limit;
+  const page = hasMore ? items.slice(0, limit) : items;
 
-    const hasMore = items.length > limit;
-    const page = hasMore ? items.slice(0, limit) : items;
+  const nextCursor =
+    hasMore && page.length
+      ? makeCursor({ date: page[page.length - 1].date, id: page[page.length - 1].id })
+      : null;
 
-    const nextCursor =
-      hasMore && page.length
-        ? makeCursor({ date: page[page.length - 1].date, id: page[page.length - 1].id })
-        : null;
+  return jsonb(
+    {
+      items: page.map((t) => ({
+        id: t.id,
+        type: t.type,
+        date: t.date,
+        amountCents: t.amountCents,
+        currency: t.currency,
+        label: t.label,
+        note: t.note,
+        account: { id: t.accountId, name: t.account.name },
+        category: t.category ? { id: t.categoryId, name: t.category.name } : null,
+      })),
+      nextCursor,
+    },
+    ctx.requestId
+  );
+});
 
-    return withRequestId(
-      withNoStore(
-        NextResponse.json({
-          items: page.map((t) => ({
-            id: toStrId(t.id),
-            type: t.type,
-            date: t.date.toISOString(),
-            amountCents: t.amountCents.toString(),
-            currency: t.currency,
-            label: t.label,
-            note: t.note,
-            account: { id: toStrId(t.accountId), name: t.account.name },
-            category: t.category ? { id: toStrId(t.categoryId!), name: t.category.name } : null,
-          })),
-          nextCursor,
-        })
-      ),
-      requestId
-    );
-  } catch (e: unknown) {
-    if (getErrorMessage(e) === 'UNAUTHORIZED') {
-      return withIdNoStore(unauthorized(), requestId);
-    }
-    console.error(e);
-    return withIdNoStore(NextResponse.json({ error: 'Failed' }, { status: 500 }), requestId);
-  }
-}
+export const POST = withPersonalRoute(async (ctx, req) => {
+  const limited = rateLimit(req, {
+    key: `personal:tx:create:${ctx.userId}`,
+    limit: 120,
+    windowMs: 10 * 60 * 1000,
+  });
+  if (limited) return limited;
 
-export async function POST(req: NextRequest) {
-  const requestId = getRequestId(req);
-  const csrf = assertSameOrigin(req);
-  if (csrf) return withIdNoStore(csrf, requestId);
+  const body = await readJson(req);
+  if (!isRecord(body)) return badRequest('Invalid JSON');
 
+  const accountIdRaw = body.accountId;
+  const categoryIdRaw = body.categoryId;
+  const typeRaw = body.type;
+  const dateRaw = body.date;
+  const amountRaw = body.amountCents;
+  const currencyRaw = body.currency;
+  const labelRaw = body.label;
+  const noteRaw = body.note;
+
+  // accountId
+  const accountIdStr = String(accountIdRaw ?? '').trim();
+  if (!isNumericId(accountIdStr)) return badRequest('Invalid accountId');
+  const accountId = BigInt(accountIdStr);
+
+  // type
+  if (!isTxnType(typeRaw)) return badRequest('Invalid type');
+  const type: TxType = typeRaw;
+
+  // date
+  const date = parseDateISO(dateRaw, 'date');
+
+  // amountCents (BigInt)
+  let amountCents: bigint;
   try {
-    const { userId } = await requireAuthAsync(req);
-
-    const limited = rateLimit(req, {
-      key: `personal:tx:create:${userId}`,
-      limit: 120,
-      windowMs: 10 * 60 * 1000,
-    });
-    if (limited) return withIdNoStore(limited, requestId);
-
-    const body: unknown = await req.json().catch(() => null);
-    if (!isRecord(body)) return withIdNoStore(badRequest('Invalid JSON'), requestId);
-
-    const accountIdRaw = body.accountId;
-    const categoryIdRaw = body.categoryId;
-    const typeRaw = body.type;
-    const dateRaw = body.date;
-    const amountRaw = body.amountCents;
-    const currencyRaw = body.currency;
-    const labelRaw = body.label;
-    const noteRaw = body.note;
-
-    // accountId
-    const accountIdStr = String(accountIdRaw ?? '').trim();
-    if (!isNumericId(accountIdStr)) return withIdNoStore(badRequest('Invalid accountId'), requestId);
-    const accountId = BigInt(accountIdStr);
-
-    // type
-    if (!isTxnType(typeRaw)) return withIdNoStore(badRequest('Invalid type'), requestId);
-    const type: TxType = typeRaw;
-
-    // date
-    const date = parseDateISO(dateRaw, 'date');
-
-    // amountCents (BigInt)
-    let amountCents: bigint;
-    try {
-      amountCents = parseBigIntLike(amountRaw, 'amountCents');
-    } catch {
-      return withIdNoStore(badRequest('Invalid amountCents'), requestId);
-    }
-
-    // label
-    const label = String(labelRaw ?? '').trim();
-    if (!label) return withIdNoStore(badRequest('Invalid label'), requestId);
-    if (label.length > 160) return withIdNoStore(badRequest('Label too long'), requestId);
-
-    // note
-    const note =
-      noteRaw === null || noteRaw === undefined ? null : String(noteRaw).trim().slice(0, 2000) || null;
-
-    // Ensure account belongs to user
-    const account = await prisma.personalAccount.findFirst({
-      where: { id: accountId, userId: BigInt(userId) },
-      select: { id: true, name: true, currency: true },
-    });
-    if (!account) return withIdNoStore(NextResponse.json({ error: 'Account not found' }, { status: 404 }), requestId);
-
-    // category (optional) must belong to user
-    let categoryId: bigint | null = null;
-    if (categoryIdRaw !== null && categoryIdRaw !== undefined && String(categoryIdRaw).trim() !== '') {
-      const catStr = String(categoryIdRaw).trim();
-      if (!isNumericId(catStr)) return withIdNoStore(badRequest('Invalid categoryId'), requestId);
-      const catId = BigInt(catStr);
-
-      const category = await prisma.personalCategory.findFirst({
-        where: { id: catId, userId: BigInt(userId) },
-        select: { id: true },
-      });
-      if (!category)
-        return withIdNoStore(NextResponse.json({ error: 'Category not found' }, { status: 404 }), requestId);
-
-      categoryId = catId;
-    }
-
-    // currency: prefer body, else account.currency, else EUR
-    const currency =
-      typeof currencyRaw === 'string' && currencyRaw.trim()
-        ? currencyRaw.trim()
-        : account.currency || 'EUR';
-    if (currency.length > 8) return withIdNoStore(badRequest('Invalid currency'), requestId);
-
-    const created = await prisma.personalTransaction.create({
-      data: {
-        userId: BigInt(userId),
-        accountId,
-        categoryId,
-        type,
-        date,
-        amountCents,
-        currency,
-        label,
-        note,
-      },
-      include: { account: true, category: true },
-    });
-
-    return withRequestId(
-      withNoStore(
-        NextResponse.json({
-          item: {
-            id: toStrId(created.id),
-            type: created.type,
-            date: created.date.toISOString(),
-            amountCents: created.amountCents.toString(),
-            currency: created.currency,
-            label: created.label,
-            note: created.note,
-            account: { id: toStrId(created.accountId), name: created.account.name },
-            category: created.category
-              ? { id: toStrId(created.categoryId!), name: created.category.name }
-              : null,
-          },
-        })
-      ),
-      requestId
-    );
-  } catch (e: unknown) {
-    const msg = getErrorMessage(e);
-
-    if (msg === 'UNAUTHORIZED') {
-      return withIdNoStore(unauthorized(), requestId);
-    }
-    if (msg.startsWith('INVALID_')) {
-      return withIdNoStore(NextResponse.json({ error: 'Invalid payload' }, { status: 400 }), requestId);
-    }
-
-    console.error(e);
-    return withIdNoStore(NextResponse.json({ error: 'Failed' }, { status: 500 }), requestId);
+    amountCents = parseBigIntLike(amountRaw, 'amountCents');
+  } catch {
+    return badRequest('Invalid amountCents');
   }
-}
+
+  // label
+  const label = String(labelRaw ?? '').trim();
+  if (!label) return badRequest('Invalid label');
+  if (label.length > 160) return badRequest('Label too long');
+
+  // note
+  const note =
+    noteRaw === null || noteRaw === undefined ? null : String(noteRaw).trim().slice(0, 2000) || null;
+
+  // Ensure account belongs to user
+  const account = await prisma.personalAccount.findFirst({
+    where: { id: accountId, userId: ctx.userId },
+    select: { id: true, name: true, currency: true },
+  });
+  if (!account) return notFound('Account not found');
+
+  // category (optional) must belong to user
+  let categoryId: bigint | null = null;
+  if (categoryIdRaw !== null && categoryIdRaw !== undefined && String(categoryIdRaw).trim() !== '') {
+    const catStr = String(categoryIdRaw).trim();
+    if (!isNumericId(catStr)) return badRequest('Invalid categoryId');
+    const catId = BigInt(catStr);
+
+    const category = await prisma.personalCategory.findFirst({
+      where: { id: catId, userId: ctx.userId },
+      select: { id: true },
+    });
+    if (!category) return notFound('Category not found');
+
+    categoryId = catId;
+  }
+
+  // currency: prefer body, else account.currency, else EUR
+  const currency =
+    typeof currencyRaw === 'string' && currencyRaw.trim()
+      ? currencyRaw.trim()
+      : account.currency || 'EUR';
+  if (currency.length > 8) return badRequest('Invalid currency');
+
+  const created = await prisma.personalTransaction.create({
+    data: {
+      userId: ctx.userId,
+      accountId,
+      categoryId,
+      type,
+      date,
+      amountCents,
+      currency,
+      label,
+      note,
+    },
+    include: { account: true, category: true },
+  });
+
+  return jsonbCreated(
+    {
+      item: {
+        id: created.id,
+        type: created.type,
+        date: created.date,
+        amountCents: created.amountCents,
+        currency: created.currency,
+        label: created.label,
+        note: created.note,
+        account: { id: created.accountId, name: created.account.name },
+        category: created.category
+          ? { id: created.categoryId, name: created.category.name }
+          : null,
+      },
+    },
+    ctx.requestId
+  );
+});

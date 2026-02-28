@@ -1,28 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/server/db/client';
-import { requireAuthPro } from '@/server/auth/requireAuthPro';
-import { requireBusinessRole } from '@/server/auth/businessRole';
-import { assertSameOrigin, jsonNoStore, withNoStore } from '@/server/security/csrf';
-import { rateLimit } from '@/server/security/rateLimit';
-import { badRequest, getRequestId, unauthorized, withRequestId } from '@/server/http/apiUtils';
+import { withBusinessRoute } from '@/server/http/routeHandler';
+import { jsonb, jsonbNoContent } from '@/server/http/json';
+import { badRequest, notFound, readJson } from '@/server/http/apiUtils';
+import { parseId } from '@/server/http/parsers';
 import { TaskPhase } from '@/generated/prisma';
-
-function parseId(param: string | undefined) {
-  if (!param || !/^\d+$/.test(param)) return null;
-  try {
-    return BigInt(param);
-  } catch {
-    return null;
-  }
-}
-
-function withIdNoStore(res: NextResponse, requestId: string) {
-  return withNoStore(withRequestId(res, requestId));
-}
-
-function forbidden(requestId: string) {
-  return withIdNoStore(NextResponse.json({ error: 'Forbidden' }, { status: 403 }), requestId);
-}
 
 function normalizeStr(value: unknown) {
   return String(value ?? '').trim();
@@ -92,144 +73,82 @@ async function getTemplate(businessId: bigint, serviceId: bigint, templateId: bi
   });
 }
 
-function serializeTemplate(tpl: {
-  id: bigint;
-  serviceId: bigint;
-  phase: TaskPhase | null;
-  title: string;
-  defaultAssigneeRole: string | null;
-  defaultDueOffsetDays: number | null;
-  createdAt: Date;
-}) {
-  return {
-    id: tpl.id.toString(),
-    serviceId: tpl.serviceId.toString(),
-    phase: tpl.phase,
-    title: tpl.title,
-    defaultAssigneeRole: tpl.defaultAssigneeRole,
-    defaultDueOffsetDays: tpl.defaultDueOffsetDays,
-    createdAt: tpl.createdAt.toISOString(),
-  };
-}
-
 // PATCH /api/pro/businesses/{businessId}/services/{serviceId}/templates/{templateId}
-export async function PATCH(
-  request: NextRequest,
-  context: { params: Promise<{ businessId: string; serviceId: string; templateId: string }> }
-) {
-  const requestId = getRequestId(request);
-  const csrf = assertSameOrigin(request);
-  if (csrf) return withIdNoStore(csrf, requestId);
+export const PATCH = withBusinessRoute<{ businessId: string; serviceId: string; templateId: string }>(
+  {
+    minRole: 'ADMIN',
+    rateLimit: {
+      key: (ctx) => `pro:services:templates:update:${ctx.businessId}:${ctx.userId}`,
+      limit: 300,
+      windowMs: 60 * 60 * 1000,
+    },
+  },
+  async (ctx, req, params) => {
+    const serviceId = parseId(params.serviceId);
+    const templateId = parseId(params.templateId);
 
-  let userId: string;
-  try {
-    ({ userId } = await requireAuthPro(request));
-  } catch {
-    return withIdNoStore(unauthorized(), requestId);
-  }
+    const existing = await getTemplate(ctx.businessId, serviceId, templateId);
+    if (!existing) return notFound('Template introuvable.');
 
-  const { businessId, serviceId, templateId } = await context.params;
-  const businessIdBigInt = parseId(businessId);
-  const serviceIdBigInt = parseId(serviceId);
-  const templateIdBigInt = parseId(templateId);
-  if (!businessIdBigInt || !serviceIdBigInt || !templateIdBigInt) {
-    return withIdNoStore(badRequest('Ids invalides.'), requestId);
-  }
+    const body = await readJson(req);
+    const updates = validateUpdate(body);
+    if ('error' in updates) return badRequest(updates.error);
 
-  const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'ADMIN');
-  if (!membership) return forbidden(requestId);
+    const nextTitle = 'title' in updates ? updates.title ?? existing.title : existing.title;
+    const nextPhase = 'phase' in updates ? updates.phase : existing.phase;
 
-  const existing = await getTemplate(businessIdBigInt, serviceIdBigInt, templateIdBigInt);
-  if (!existing) {
-    return withIdNoStore(NextResponse.json({ error: 'Template introuvable.' }, { status: 404 }), requestId);
-  }
+    if ('title' in updates || 'phase' in updates) {
+      const duplicate = await prisma.serviceTaskTemplate.findFirst({
+        where: {
+          serviceId,
+          service: { businessId: ctx.businessId },
+          title: nextTitle,
+          phase: nextPhase,
+          NOT: { id: templateId },
+        },
+      });
+      if (duplicate) {
+        return badRequest('Un template avec ce titre et cette phase existe déjà.');
+      }
+    }
 
-  const limited = rateLimit(request, {
-    key: `pro:services:templates:update:${businessIdBigInt}:${serviceIdBigInt}:${templateIdBigInt}`,
-    limit: 300,
-    windowMs: 60 * 60 * 1000,
-  });
-  if (limited) return withIdNoStore(limited, requestId);
-
-  const body = await request.json().catch(() => null);
-  const updates = validateUpdate(body);
-  if ('error' in updates) return withIdNoStore(badRequest(updates.error), requestId);
-
-  const nextTitle = 'title' in updates ? updates.title ?? existing.title : existing.title;
-  const nextPhase = 'phase' in updates ? updates.phase : existing.phase;
-
-  if ('title' in updates || 'phase' in updates) {
-    const duplicate = await prisma.serviceTaskTemplate.findFirst({
-      where: {
-        serviceId: serviceIdBigInt,
-        service: { businessId: businessIdBigInt },
-        title: nextTitle,
-        phase: nextPhase,
-        NOT: { id: templateIdBigInt },
+    const updated = await prisma.serviceTaskTemplate.update({
+      where: { id: templateId },
+      data: {
+        ...(updates.title !== undefined ? { title: updates.title } : {}),
+        ...('phase' in updates ? { phase: updates.phase ?? null } : {}),
+        ...('defaultAssigneeRole' in updates
+          ? { defaultAssigneeRole: updates.defaultAssigneeRole ?? null }
+          : {}),
+        ...('defaultDueOffsetDays' in updates
+          ? { defaultDueOffsetDays: updates.defaultDueOffsetDays ?? null }
+          : {}),
       },
     });
-    if (duplicate) {
-      return withIdNoStore(badRequest('Un template avec ce titre et cette phase existe déjà.'), requestId);
-    }
+
+    return jsonb({ item: updated }, ctx.requestId);
   }
-
-  const updated = await prisma.serviceTaskTemplate.update({
-    where: { id: templateIdBigInt },
-    data: {
-      ...(updates.title !== undefined ? { title: updates.title } : {}),
-      ...('phase' in updates ? { phase: updates.phase ?? null } : {}),
-      ...('defaultAssigneeRole' in updates
-        ? { defaultAssigneeRole: updates.defaultAssigneeRole ?? null }
-        : {}),
-      ...('defaultDueOffsetDays' in updates
-        ? { defaultDueOffsetDays: updates.defaultDueOffsetDays ?? null }
-        : {}),
-    },
-  });
-
-  return withIdNoStore(jsonNoStore(serializeTemplate(updated)), requestId);
-}
+);
 
 // DELETE /api/pro/businesses/{businessId}/services/{serviceId}/templates/{templateId}
-export async function DELETE(
-  request: NextRequest,
-  context: { params: Promise<{ businessId: string; serviceId: string; templateId: string }> }
-) {
-  const requestId = getRequestId(request);
-  const csrf = assertSameOrigin(request);
-  if (csrf) return withIdNoStore(csrf, requestId);
+export const DELETE = withBusinessRoute<{ businessId: string; serviceId: string; templateId: string }>(
+  {
+    minRole: 'ADMIN',
+    rateLimit: {
+      key: (ctx) => `pro:services:templates:delete:${ctx.businessId}:${ctx.userId}`,
+      limit: 200,
+      windowMs: 60 * 60 * 1000,
+    },
+  },
+  async (ctx, _req, params) => {
+    const serviceId = parseId(params.serviceId);
+    const templateId = parseId(params.templateId);
 
-  let userId: string;
-  try {
-    ({ userId } = await requireAuthPro(request));
-  } catch {
-    return withIdNoStore(unauthorized(), requestId);
+    const existing = await getTemplate(ctx.businessId, serviceId, templateId);
+    if (!existing) return notFound('Template introuvable.');
+
+    await prisma.serviceTaskTemplate.delete({ where: { id: templateId } });
+
+    return jsonbNoContent(ctx.requestId);
   }
-
-  const { businessId, serviceId, templateId } = await context.params;
-  const businessIdBigInt = parseId(businessId);
-  const serviceIdBigInt = parseId(serviceId);
-  const templateIdBigInt = parseId(templateId);
-  if (!businessIdBigInt || !serviceIdBigInt || !templateIdBigInt) {
-    return withIdNoStore(badRequest('Ids invalides.'), requestId);
-  }
-
-  const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'ADMIN');
-  if (!membership) return forbidden(requestId);
-
-  const existing = await getTemplate(businessIdBigInt, serviceIdBigInt, templateIdBigInt);
-  if (!existing) {
-    return withIdNoStore(NextResponse.json({ error: 'Template introuvable.' }, { status: 404 }), requestId);
-  }
-
-  const limited = rateLimit(request, {
-    key: `pro:services:templates:delete:${businessIdBigInt}:${serviceIdBigInt}:${templateIdBigInt}`,
-    limit: 200,
-    windowMs: 60 * 60 * 1000,
-  });
-  if (limited) return withIdNoStore(limited, requestId);
-
-  await prisma.serviceTaskTemplate.delete({ where: { id: templateIdBigInt } });
-
-  return withIdNoStore(jsonNoStore({ ok: true }), requestId);
-}
+);

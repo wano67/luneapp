@@ -1,53 +1,12 @@
-import { NextRequest, NextResponse } from 'next/server';
 import { InventoryReservationStatus } from '@/generated/prisma';
 import { prisma } from '@/server/db/client';
-import { requireAuthPro } from '@/server/auth/requireAuthPro';
-import { requireBusinessRole } from '@/server/auth/businessRole';
-import { jsonNoStore, withNoStore } from '@/server/security/csrf';
-import {
-  badRequest,
-  forbidden,
-  getRequestId,
-  unauthorized,
-  withRequestId,
-} from '@/server/http/apiUtils';
-
-function parseId(param: string | undefined) {
-  if (!param || !/^\d+$/.test(param)) return null;
-  try {
-    return BigInt(param);
-  } catch {
-    return null;
-  }
-}
-
-function withIdNoStore(res: NextResponse, requestId: string) {
-  return withNoStore(withRequestId(res, requestId));
-}
+import { withBusinessRoute } from '@/server/http/routeHandler';
+import { jsonb } from '@/server/http/json';
 
 // GET /api/pro/businesses/{businessId}/inventory/summary
-export async function GET(
-  request: NextRequest,
-  context: { params: Promise<{ businessId: string }> }
-) {
-  const requestId = getRequestId(request);
-  const { businessId } = await context.params;
-
-  let userId: string;
-  try {
-    ({ userId } = await requireAuthPro(request));
-  } catch {
-    return withIdNoStore(unauthorized(), requestId);
-  }
-
-  const businessIdBigInt = parseId(businessId);
-  if (!businessIdBigInt) return withIdNoStore(badRequest('businessId invalide.'), requestId);
-
-  const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'VIEWER');
-  if (!membership) return withIdNoStore(forbidden(), requestId);
-
+export const GET = withBusinessRoute({ minRole: 'VIEWER' }, async (ctx) => {
   const products = await prisma.product.findMany({
-    where: { businessId: businessIdBigInt, isArchived: false },
+    where: { businessId: ctx.businessId, isArchived: false },
     select: {
       id: true,
       sku: true,
@@ -65,7 +24,7 @@ export async function GET(
   });
 
   const reservations = await prisma.inventoryReservationItem.findMany({
-    where: { reservation: { businessId: businessIdBigInt, status: InventoryReservationStatus.ACTIVE } },
+    where: { reservation: { businessId: ctx.businessId, status: InventoryReservationStatus.ACTIVE } },
     select: { productId: true, quantity: true },
   });
   const reservedByProduct = new Map<bigint, number>();
@@ -85,7 +44,7 @@ export async function GET(
     const reserved = reservedByProduct.get(p.id) ?? 0;
     const available = onHand - reserved;
     return {
-      productId: p.id.toString(),
+      productId: p.id,
       sku: p.sku,
       name: p.name,
       unit: p.unit,
@@ -93,11 +52,11 @@ export async function GET(
       onHand,
       reserved,
       available,
-      salePriceCents: p.salePriceCents ? p.salePriceCents.toString() : null,
-      purchasePriceCents: p.purchasePriceCents ? p.purchasePriceCents.toString() : null,
-      lastMovementAt: lastMovementAt ? lastMovementAt.toISOString() : null,
+      salePriceCents: p.salePriceCents,
+      purchasePriceCents: p.purchasePriceCents,
+      lastMovementAt,
     };
   });
 
-  return withIdNoStore(jsonNoStore({ items: rows }), requestId);
-}
+  return jsonb({ items: rows }, ctx.requestId);
+});

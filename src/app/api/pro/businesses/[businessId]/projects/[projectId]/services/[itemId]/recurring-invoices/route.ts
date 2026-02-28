@@ -1,33 +1,12 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { prisma } from '@/server/db/client';
 import { DiscountType, InvoiceStatus, RecurringUnit } from '@/generated/prisma';
-import { requireAuthPro } from '@/server/auth/requireAuthPro';
-import { requireBusinessRole } from '@/server/auth/businessRole';
-import { assertSameOrigin, jsonNoStore, withNoStore } from '@/server/security/csrf';
-import { rateLimit } from '@/server/security/rateLimit';
-import {
-  badRequest,
-  forbidden,
-  getRequestId,
-  notFound,
-  unauthorized,
-  withRequestId,
-} from '@/server/http/apiUtils';
+import { withBusinessRoute } from '@/server/http/routeHandler';
+import { jsonbCreated } from '@/server/http/json';
+import { badRequest, notFound } from '@/server/http/apiUtils';
+import { parseId } from '@/server/http/parsers';
 import { resolveServiceUnitPriceCents } from '@/server/services/pricing';
 import { computeProjectBillingSummary } from '@/server/billing/summary';
-
-function withIdNoStore(res: NextResponse, requestId: string) {
-  return withNoStore(withRequestId(res, requestId));
-}
-
-function parseId(param: string | undefined) {
-  if (!param || !/^\d+$/.test(param)) return null;
-  try {
-    return BigInt(param);
-  } catch {
-    return null;
-  }
-}
 
 function clampDayOfMonth(year: number, month: number, day: number) {
   const lastDay = new Date(year, month + 1, 0).getDate();
@@ -57,167 +36,145 @@ function applyDiscount(params: { unitPriceCents: bigint; discountType?: Discount
 }
 
 // POST /api/pro/businesses/{businessId}/projects/{projectId}/services/{itemId}/recurring-invoices
-export async function POST(
-  request: NextRequest,
-  context: { params: Promise<{ businessId: string; projectId: string; itemId: string }> }
-) {
-  const requestId = getRequestId(request);
-  const csrf = assertSameOrigin(request);
-  if (csrf) return withIdNoStore(csrf, requestId);
+export const POST = withBusinessRoute<{ businessId: string; projectId: string; itemId: string }>(
+  {
+    minRole: 'ADMIN',
+    rateLimit: {
+      key: (ctx) => `pro:project-services:recurring-invoice:${ctx.businessId}:${ctx.userId}`,
+      limit: 60,
+      windowMs: 60 * 60 * 1000,
+    },
+  },
+  async (ctx, _req, params) => {
+    const projectId = parseId(params.projectId);
+    const itemId = parseId(params.itemId);
 
-  let userId: string;
-  try {
-    ({ userId } = await requireAuthPro(request));
-  } catch {
-    return withIdNoStore(unauthorized(), requestId);
-  }
+    const projectService = await prisma.projectService.findFirst({
+      where: { id: itemId, projectId, project: { businessId: ctx.businessId } },
+      include: { service: true, project: true },
+    });
+    if (!projectService) return notFound('Service introuvable.');
 
-  const { businessId, projectId, itemId } = await context.params;
-  const businessIdBigInt = parseId(businessId);
-  const projectIdBigInt = parseId(projectId);
-  const itemIdBigInt = parseId(itemId);
-  if (!businessIdBigInt || !projectIdBigInt || !itemIdBigInt) {
-    return withIdNoStore(badRequest('Ids invalides.'), requestId);
-  }
+    if (projectService.billingUnit !== 'MONTHLY') {
+      return badRequest('Ce service n\u2019est pas un abonnement mensuel.');
+    }
 
-  const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'ADMIN');
-  if (!membership) return withIdNoStore(forbidden(), requestId);
+    const pricing = resolveServiceUnitPriceCents({
+      projectPriceCents: projectService.priceCents ?? null,
+      defaultPriceCents: projectService.service?.defaultPriceCents ?? null,
+      tjmCents: projectService.service?.tjmCents ?? null,
+    });
+    if (pricing.missingPrice) {
+      return badRequest('Prix manquant pour ce service.');
+    }
 
-  const limited = rateLimit(request, {
-    key: `pro:project-services:recurring-invoice:${businessIdBigInt}:${userId}`,
-    limit: 60,
-    windowMs: 60 * 60 * 1000,
-  });
-  if (limited) return withIdNoStore(limited, requestId);
+    const quantity = projectService.quantity && projectService.quantity > 0 ? projectService.quantity : 1;
+    const unitPriceCents = applyDiscount({
+      unitPriceCents: pricing.unitPriceCents,
+      discountType: projectService.discountType ?? 'NONE',
+      discountValue: projectService.discountValue ?? null,
+    });
+    const totalCents = unitPriceCents * BigInt(quantity);
 
-  const projectService = await prisma.projectService.findFirst({
-    where: { id: itemIdBigInt, projectId: projectIdBigInt, project: { businessId: businessIdBigInt } },
-    include: { service: true, project: true },
-  });
-  if (!projectService) return withIdNoStore(notFound('Service introuvable.'), requestId);
+    const label =
+      projectService.titleOverride?.trim() ||
+      projectService.service?.name ||
+      projectService.service?.code ||
+      `Service ${projectService.serviceId.toString()}`;
+    const description = projectService.description ?? projectService.notes ?? null;
+    const unitLabel = projectService.unitLabel ?? '/mois';
 
-  if (projectService.billingUnit !== 'MONTHLY') {
-    return withIdNoStore(badRequest('Ce service n’est pas un abonnement mensuel.'), requestId);
-  }
+    const now = new Date();
 
-  const pricing = resolveServiceUnitPriceCents({
-    projectPriceCents: projectService.priceCents ?? null,
-    defaultPriceCents: projectService.service?.defaultPriceCents ?? null,
-    tjmCents: projectService.service?.tjmCents ?? null,
-  });
-  if (pricing.missingPrice) {
-    return withIdNoStore(badRequest('Prix manquant pour ce service.'), requestId);
-  }
+    try {
+      const result = await prisma.$transaction(async (tx) => {
+        let rule = await tx.projectServiceRecurringRule.findFirst({
+          where: { projectServiceId: itemId },
+        });
 
-  const quantity = projectService.quantity && projectService.quantity > 0 ? projectService.quantity : 1;
-  const unitPriceCents = applyDiscount({
-    unitPriceCents: pricing.unitPriceCents,
-    discountType: projectService.discountType ?? 'NONE',
-    discountValue: projectService.discountValue ?? null,
-  });
-  const totalCents = unitPriceCents * BigInt(quantity);
+        const dayOfMonth = rule?.dayOfMonth ?? now.getDate();
+        const targetDate = rule?.nextRunAt ?? addMonth(now, 1, dayOfMonth);
 
-  const label =
-    projectService.titleOverride?.trim() ||
-    projectService.service?.name ||
-    projectService.service?.code ||
-    `Service ${projectService.serviceId.toString()}`;
-  const description = projectService.description ?? projectService.notes ?? null;
-  const unitLabel = projectService.unitLabel ?? '/mois';
-
-  const now = new Date();
-
-  try {
-    const result = await prisma.$transaction(async (tx) => {
-      let rule = await tx.projectServiceRecurringRule.findFirst({
-        where: { projectServiceId: itemIdBigInt },
-      });
-
-      const dayOfMonth = rule?.dayOfMonth ?? now.getDate();
-      const targetDate = rule?.nextRunAt ?? addMonth(now, 1, dayOfMonth);
-
-      if (rule?.lastInvoicedAt) {
-        const last = rule.lastInvoicedAt;
-        if (last.getFullYear() === targetDate.getFullYear() && last.getMonth() === targetDate.getMonth()) {
-          throw new Error('Une facture est déjà planifiée pour ce mois.');
+        if (rule?.lastInvoicedAt) {
+          const last = rule.lastInvoicedAt;
+          if (last.getFullYear() === targetDate.getFullYear() && last.getMonth() === targetDate.getMonth()) {
+            throw new Error('Une facture est déjà planifiée pour ce mois.');
+          }
         }
-      }
 
-      if (!rule) {
-        rule = await tx.projectServiceRecurringRule.create({
+        if (!rule) {
+          rule = await tx.projectServiceRecurringRule.create({
+            data: {
+              businessId: ctx.businessId,
+              projectId,
+              projectServiceId: itemId,
+              startDate: now,
+              dayOfMonth,
+              frequency: RecurringUnit.MONTHLY,
+              nextRunAt: targetDate,
+              isActive: true,
+            },
+          });
+        }
+
+        const currency = (await computeProjectBillingSummary(ctx.businessId, projectId))?.currency ?? 'EUR';
+
+        const invoice = await tx.invoice.create({
           data: {
-            businessId: businessIdBigInt,
-            projectId: projectIdBigInt,
-            projectServiceId: itemIdBigInt,
-            startDate: now,
-            dayOfMonth,
-            frequency: RecurringUnit.MONTHLY,
-            nextRunAt: targetDate,
-            isActive: true,
+            businessId: ctx.businessId,
+            projectId,
+            clientId: projectService.project.clientId ?? null,
+            createdByUserId: ctx.userId,
+            status: InvoiceStatus.DRAFT,
+            number: null,
+            depositPercent: 0,
+            currency,
+            totalCents,
+            depositCents: BigInt(0),
+            balanceCents: totalCents,
+            issuedAt: targetDate,
           },
         });
-      }
 
-      const currency = (await computeProjectBillingSummary(businessIdBigInt, projectIdBigInt))?.currency ?? 'EUR';
+        await tx.invoiceItem.create({
+          data: {
+            invoiceId: invoice.id,
+            serviceId: projectService.serviceId,
+            label,
+            description,
+            quantity,
+            unitPriceCents,
+            originalUnitPriceCents: projectService.discountType === 'NONE' ? null : pricing.unitPriceCents,
+            discountType: projectService.discountType ?? 'NONE',
+            discountValue: projectService.discountValue ?? null,
+            billingUnit: projectService.billingUnit ?? 'MONTHLY',
+            unitLabel,
+            totalCents,
+          },
+        });
 
-      const invoice = await tx.invoice.create({
-        data: {
-          businessId: businessIdBigInt,
-          projectId: projectIdBigInt,
-          clientId: projectService.project.clientId ?? null,
-          createdByUserId: BigInt(userId),
-          status: InvoiceStatus.DRAFT,
-          number: null,
-          depositPercent: 0,
-          currency,
-          totalCents,
-          depositCents: BigInt(0),
-          balanceCents: totalCents,
-          issuedAt: targetDate,
-        },
+        const nextRunAt = addMonth(targetDate, 1, dayOfMonth);
+        await tx.projectServiceRecurringRule.update({
+          where: { id: rule.id },
+          data: { lastInvoicedAt: targetDate, nextRunAt },
+        });
+
+        return invoice;
       });
 
-      await tx.invoiceItem.create({
-        data: {
-          invoiceId: invoice.id,
-          serviceId: projectService.serviceId,
-          label,
-          description,
-          quantity,
-          unitPriceCents,
-          originalUnitPriceCents: projectService.discountType === 'NONE' ? null : pricing.unitPriceCents,
-          discountType: projectService.discountType ?? 'NONE',
-          discountValue: projectService.discountValue ?? null,
-          billingUnit: projectService.billingUnit ?? 'MONTHLY',
-          unitLabel,
-          totalCents,
-        },
-      });
-
-      const nextRunAt = addMonth(targetDate, 1, dayOfMonth);
-      await tx.projectServiceRecurringRule.update({
-        where: { id: rule.id },
-        data: { lastInvoicedAt: targetDate, nextRunAt },
-      });
-
-      return invoice;
-    });
-
-    return withIdNoStore(
-      jsonNoStore(
+      return jsonbCreated(
         {
           invoice: {
-            id: result.id.toString(),
+            id: result.id,
             status: result.status,
-            issuedAt: result.issuedAt ? result.issuedAt.toISOString() : null,
+            issuedAt: result.issuedAt,
           },
         },
-        { status: 201 }
-      ),
-      requestId
-    );
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Impossible de générer la facture.';
-    return withIdNoStore(NextResponse.json({ error: message }, { status: 409 }), requestId);
+        ctx.requestId
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Impossible de générer la facture.';
+      return NextResponse.json({ error: message }, { status: 409 });
+    }
   }
-}
+);

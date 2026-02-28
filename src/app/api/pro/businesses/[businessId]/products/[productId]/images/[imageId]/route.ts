@@ -1,24 +1,10 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { prisma } from '@/server/db/client';
-import { requireAuthPro } from '@/server/auth/requireAuthPro';
-import { requireBusinessRole } from '@/server/auth/businessRole';
-import { assertSameOrigin, withNoStore } from '@/server/security/csrf';
-import { rateLimit } from '@/server/security/rateLimit';
-import { badRequest, forbidden, getRequestId, notFound, unauthorized, withRequestId } from '@/server/http/apiUtils';
+import { withBusinessRoute } from '@/server/http/routeHandler';
+import { jsonb, jsonbNoContent } from '@/server/http/json';
+import { badRequest, notFound, readJson } from '@/server/http/apiUtils';
+import { parseId } from '@/server/http/parsers';
 import { readLocalFile, deleteLocalFile } from '@/server/storage/local';
-
-function parseId(param: string | undefined) {
-  if (!param || !/^\d+$/.test(param)) return null;
-  try {
-    return BigInt(param);
-  } catch {
-    return null;
-  }
-}
-
-function withIdNoStore(res: NextResponse, requestId: string) {
-  return withNoStore(withRequestId(res, requestId));
-}
 
 async function getImage(businessId: bigint, productId: bigint, imageId: bigint) {
   return prisma.productImage.findFirst({
@@ -26,132 +12,89 @@ async function getImage(businessId: bigint, productId: bigint, imageId: bigint) 
   });
 }
 
-// GET serve image
-export async function GET(
-  request: NextRequest,
-  context: { params: Promise<{ businessId: string; productId: string; imageId: string }> }
-) {
-  const requestId = getRequestId(request);
-  const { businessId, productId, imageId } = await context.params;
-  const b = parseId(businessId);
-  const p = parseId(productId);
-  const imgId = parseId(imageId);
-  if (!b || !p || !imgId) return withIdNoStore(badRequest('Ids invalides.'), requestId);
+// GET serve image (binary response)
+export const GET = withBusinessRoute<{ businessId: string; productId: string; imageId: string }>(
+  { minRole: 'VIEWER' },
+  async (ctx, _req, params) => {
+    const productId = parseId(params.productId);
+    const imageId = parseId(params.imageId);
 
-  let userId: string;
-  try {
-    ({ userId } = await requireAuthPro(request));
-  } catch {
-    return withIdNoStore(unauthorized(), requestId);
+    const image = await getImage(ctx.businessId, productId, imageId);
+    if (!image) return notFound('Image introuvable.');
+    const buffer = await readLocalFile(image.storageKey).catch(() => null);
+    if (!buffer) return notFound('Fichier introuvable.');
+
+    const res = new NextResponse(buffer, {
+      status: 200,
+      headers: {
+        'Content-Type': image.mimeType || 'application/octet-stream',
+        'Cache-Control': 'public, max-age=31536000, immutable',
+      },
+    });
+    res.headers.set('x-request-id', ctx.requestId);
+    return res;
   }
-  const membership = await requireBusinessRole(b, BigInt(userId), 'VIEWER');
-  if (!membership) return withIdNoStore(forbidden(), requestId);
-
-  const image = await getImage(b, p, imgId);
-  if (!image) return withIdNoStore(notFound('Image introuvable.'), requestId);
-  const buffer = await readLocalFile(image.storageKey).catch(() => null);
-  if (!buffer) return withIdNoStore(notFound('Fichier introuvable.'), requestId);
-
-  return new NextResponse(buffer, {
-    status: 200,
-    headers: {
-      'Content-Type': image.mimeType || 'application/octet-stream',
-      'Cache-Control': 'public, max-age=31536000, immutable',
-    },
-  });
-}
+);
 
 // DELETE image
-export async function DELETE(
-  request: NextRequest,
-  context: { params: Promise<{ businessId: string; productId: string; imageId: string }> }
-) {
-  const requestId = getRequestId(request);
-  const csrf = assertSameOrigin(request);
-  if (csrf) return withIdNoStore(csrf, requestId);
+export const DELETE = withBusinessRoute<{ businessId: string; productId: string; imageId: string }>(
+  {
+    minRole: 'ADMIN',
+    rateLimit: {
+      key: (ctx) => `pro:products:images:delete:${ctx.businessId}:${ctx.userId}`,
+      limit: 200,
+      windowMs: 60 * 60 * 1000,
+    },
+  },
+  async (ctx, _req, params) => {
+    const productId = parseId(params.productId);
+    const imageId = parseId(params.imageId);
 
-  const { businessId, productId, imageId } = await context.params;
-  const b = parseId(businessId);
-  const p = parseId(productId);
-  const imgId = parseId(imageId);
-  if (!b || !p || !imgId) return withIdNoStore(badRequest('Ids invalides.'), requestId);
+    const image = await getImage(ctx.businessId, productId, imageId);
+    if (!image) return notFound('Image introuvable.');
 
-  let userId: string;
-  try {
-    ({ userId } = await requireAuthPro(request));
-  } catch {
-    return withIdNoStore(unauthorized(), requestId);
+    await prisma.productImage.delete({ where: { id: imageId } });
+    await deleteLocalFile(image.storageKey).catch(() => null);
+
+    return jsonbNoContent(ctx.requestId);
   }
-  const membership = await requireBusinessRole(b, BigInt(userId), 'ADMIN');
-  if (!membership) return withIdNoStore(forbidden(), requestId);
-
-  const limited = rateLimit(request, {
-    key: `pro:products:images:delete:${b}:${p}:${imgId}:${userId}`,
-    limit: 200,
-    windowMs: 60 * 60 * 1000,
-  });
-  if (limited) return withIdNoStore(limited, requestId);
-
-  const image = await getImage(b, p, imgId);
-  if (!image) return withIdNoStore(notFound('Image introuvable.'), requestId);
-
-  await prisma.productImage.delete({ where: { id: imgId } });
-  await deleteLocalFile(image.storageKey).catch(() => null);
-
-  return withIdNoStore(new NextResponse(null, { status: 204 }), requestId);
-}
+);
 
 // PATCH alt/position
-export async function PATCH(
-  request: NextRequest,
-  context: { params: Promise<{ businessId: string; productId: string; imageId: string }> }
-) {
-  const requestId = getRequestId(request);
-  const csrf = assertSameOrigin(request);
-  if (csrf) return withIdNoStore(csrf, requestId);
+export const PATCH = withBusinessRoute<{ businessId: string; productId: string; imageId: string }>(
+  { minRole: 'ADMIN' },
+  async (ctx, req, params) => {
+    const productId = parseId(params.productId);
+    const imageId = parseId(params.imageId);
 
-  const { businessId, productId, imageId } = await context.params;
-  const b = parseId(businessId);
-  const p = parseId(productId);
-  const imgId = parseId(imageId);
-  if (!b || !p || !imgId) return withIdNoStore(badRequest('Ids invalides.'), requestId);
+    const body = await readJson(req);
+    if (!body || typeof body !== 'object') return badRequest('Payload invalide.');
 
-  let userId: string;
-  try {
-    ({ userId } = await requireAuthPro(request));
-  } catch {
-    return withIdNoStore(unauthorized(), requestId);
+    const updates: Record<string, unknown> = {};
+    if ('alt' in body) {
+      if ((body as Record<string, unknown>).alt === null) updates.alt = null;
+      else if (typeof (body as Record<string, unknown>).alt === 'string') updates.alt = ((body as Record<string, unknown>).alt as string).trim();
+      else return badRequest('alt invalide.');
+    }
+    if ('position' in body) {
+      const pos = (body as Record<string, unknown>).position;
+      if (pos === null) updates.position = 0;
+      else if (typeof pos === 'number' && Number.isFinite(pos)) updates.position = Math.trunc(pos);
+      else return badRequest('position invalide.');
+    }
+    if (Object.keys(updates).length === 0) return badRequest('Aucune mise à jour.');
+
+    const image = await getImage(ctx.businessId, productId, imageId);
+    if (!image) return notFound('Image introuvable.');
+
+    const updated = await prisma.productImage.update({ where: { id: imageId }, data: updates });
+
+    return jsonb({
+      item: {
+        id: updated.id,
+        alt: updated.alt,
+        position: updated.position,
+      },
+    }, ctx.requestId);
   }
-  const membership = await requireBusinessRole(b, BigInt(userId), 'ADMIN');
-  if (!membership) return withIdNoStore(forbidden(), requestId);
-
-  const body = await request.json().catch(() => null);
-  if (!body || typeof body !== 'object') return withIdNoStore(badRequest('Payload invalide.'), requestId);
-
-  const updates: Record<string, unknown> = {};
-  if ('alt' in body) {
-    if (body.alt === null) updates.alt = null;
-    else if (typeof body.alt === 'string') updates.alt = body.alt.trim();
-    else return withIdNoStore(badRequest('alt invalide.'), requestId);
-  }
-  if ('position' in body) {
-    if (body.position === null) updates.position = 0;
-    else if (typeof body.position === 'number' && Number.isFinite(body.position)) updates.position = Math.trunc(body.position);
-    else return withIdNoStore(badRequest('position invalide.'), requestId);
-  }
-  if (Object.keys(updates).length === 0) return withIdNoStore(badRequest('Aucune mise à jour.'), requestId);
-
-  const image = await getImage(b, p, imgId);
-  if (!image) return withIdNoStore(notFound('Image introuvable.'), requestId);
-
-  const updated = await prisma.productImage.update({ where: { id: imgId }, data: updates });
-
-  return withIdNoStore(
-    NextResponse.json({
-      id: updated.id.toString(),
-      alt: updated.alt,
-      position: updated.position,
-    }),
-    requestId
-  );
-}
+);

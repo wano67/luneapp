@@ -1,156 +1,84 @@
-import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/server/db/client';
-import { requireAuthPro } from '@/server/auth/requireAuthPro';
-import { requireBusinessRole } from '@/server/auth/businessRole';
-import { assertSameOrigin, jsonNoStore, withNoStore } from '@/server/security/csrf';
-import {
-  badRequest,
-  forbidden,
-  getRequestId,
-  notFound,
-  unauthorized,
-  withRequestId,
-} from '@/server/http/apiUtils';
-
-function parseId(param: string | undefined) {
-  if (!param || !/^\d+$/.test(param)) return null;
-  try {
-    return BigInt(param);
-  } catch {
-    return null;
-  }
-}
-
-function withIdNoStore(res: NextResponse, requestId: string) {
-  return withNoStore(withRequestId(res, requestId));
-}
+import { withBusinessRoute } from '@/server/http/routeHandler';
+import { jsonb, jsonbNoContent } from '@/server/http/json';
+import { badRequest, notFound } from '@/server/http/apiUtils';
+import { parseId } from '@/server/http/parsers';
 
 // PATCH /api/pro/businesses/{businessId}/organization/units/{unitId}
-export async function PATCH(
-  request: NextRequest,
-  context: { params: Promise<{ businessId: string; unitId: string }> }
-) {
-  const requestId = getRequestId(request);
-  const csrf = assertSameOrigin(request);
-  if (csrf) return withIdNoStore(csrf, requestId);
+export const PATCH = withBusinessRoute<{ businessId: string; unitId: string }>(
+  { minRole: 'ADMIN' },
+  async (ctx, req, params) => {
+    const unitId = parseId(params.unitId);
 
-  const { businessId, unitId } = await context.params;
-
-  let userId: string;
-  try {
-    ({ userId } = await requireAuthPro(request));
-  } catch {
-    return withIdNoStore(unauthorized(), requestId);
-  }
-
-  const businessIdBigInt = parseId(businessId);
-  const unitIdBigInt = parseId(unitId);
-  if (!businessIdBigInt || !unitIdBigInt) {
-    return withIdNoStore(badRequest('businessId ou unitId invalide.'), requestId);
-  }
-
-  const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'ADMIN');
-  if (!membership) return withIdNoStore(forbidden(), requestId);
-
-  const unit = await prisma.organizationUnit.findFirst({
-    where: { id: unitIdBigInt, businessId: businessIdBigInt },
-  });
-  if (!unit) return withIdNoStore(notFound('Pôle introuvable.'), requestId);
-
-  const body = await request.json().catch(() => null);
-  if (!body || typeof body !== 'object') {
-    return withIdNoStore(badRequest('Payload invalide.'), requestId);
-  }
-
-  const data: { name?: string; order?: number } = {};
-  if ('name' in body) {
-    const nameRaw = (body as { name?: unknown }).name;
-    if (typeof nameRaw !== 'string') return withIdNoStore(badRequest('name invalide.'), requestId);
-    const name = nameRaw.trim();
-    if (!name) return withIdNoStore(badRequest('name requis.'), requestId);
-    if (name.length > 80) return withIdNoStore(badRequest('name trop long (80 max).'), requestId);
-    const existing = await prisma.organizationUnit.findFirst({
-      where: { businessId: businessIdBigInt, name, NOT: { id: unitIdBigInt } },
-      select: { id: true },
+    const unit = await prisma.organizationUnit.findFirst({
+      where: { id: unitId, businessId: ctx.businessId },
     });
-    if (existing) {
-      return withIdNoStore(badRequest('Un pôle avec ce nom existe déjà.'), requestId);
+    if (!unit) return notFound('Pôle introuvable.');
+
+    const body = await req.json().catch(() => null);
+    if (!body || typeof body !== 'object') {
+      return badRequest('Payload invalide.');
     }
-    data.name = name;
-  }
 
-  if ('order' in body) {
-    const orderRaw = (body as { order?: unknown }).order;
-    if (typeof orderRaw !== 'number' || !Number.isFinite(orderRaw)) {
-      return withIdNoStore(badRequest('order invalide.'), requestId);
+    const data: { name?: string; order?: number } = {};
+    if ('name' in body) {
+      const nameRaw = (body as { name?: unknown }).name;
+      if (typeof nameRaw !== 'string') return badRequest('name invalide.');
+      const name = nameRaw.trim();
+      if (!name) return badRequest('name requis.');
+      if (name.length > 80) return badRequest('name trop long (80 max).');
+      const existing = await prisma.organizationUnit.findFirst({
+        where: { businessId: ctx.businessId, name, NOT: { id: unitId } },
+        select: { id: true },
+      });
+      if (existing) {
+        return badRequest('Un pôle avec ce nom existe déjà.');
+      }
+      data.name = name;
     }
-    data.order = Math.trunc(orderRaw);
+
+    if ('order' in body) {
+      const orderRaw = (body as { order?: unknown }).order;
+      if (typeof orderRaw !== 'number' || !Number.isFinite(orderRaw)) {
+        return badRequest('order invalide.');
+      }
+      data.order = Math.trunc(orderRaw);
+    }
+
+    if (Object.keys(data).length === 0) {
+      return badRequest('Aucune modification.');
+    }
+
+    const updated = await prisma.organizationUnit.update({
+      where: { id: unitId },
+      data,
+    });
+
+    return jsonb({ item: updated }, ctx.requestId);
   }
-
-  if (Object.keys(data).length === 0) {
-    return withIdNoStore(badRequest('Aucune modification.'), requestId);
-  }
-
-  const updated = await prisma.organizationUnit.update({
-    where: { id: unitIdBigInt },
-    data,
-  });
-
-  return withIdNoStore(
-    jsonNoStore({
-      item: {
-        id: updated.id.toString(),
-        name: updated.name,
-        order: updated.order,
-        createdAt: updated.createdAt.toISOString(),
-        updatedAt: updated.updatedAt.toISOString(),
-      },
-    }),
-    requestId
-  );
-}
+);
 
 // DELETE /api/pro/businesses/{businessId}/organization/units/{unitId}
-export async function DELETE(
-  request: NextRequest,
-  context: { params: Promise<{ businessId: string; unitId: string }> }
-) {
-  const requestId = getRequestId(request);
-  const csrf = assertSameOrigin(request);
-  if (csrf) return withIdNoStore(csrf, requestId);
+export const DELETE = withBusinessRoute<{ businessId: string; unitId: string }>(
+  { minRole: 'ADMIN' },
+  async (ctx, _req, params) => {
+    const unitId = parseId(params.unitId);
 
-  const { businessId, unitId } = await context.params;
+    const unit = await prisma.organizationUnit.findFirst({
+      where: { id: unitId, businessId: ctx.businessId },
+      select: { id: true },
+    });
+    if (!unit) return notFound('Pôle introuvable.');
 
-  let userId: string;
-  try {
-    ({ userId } = await requireAuthPro(request));
-  } catch {
-    return withIdNoStore(unauthorized(), requestId);
+    const assignedCount = await prisma.businessMembership.count({
+      where: { organizationUnitId: unitId, businessId: ctx.businessId },
+    });
+    if (assignedCount > 0) {
+      return badRequest('Des membres sont assignés à ce pôle.');
+    }
+
+    await prisma.organizationUnit.delete({ where: { id: unitId } });
+
+    return jsonbNoContent(ctx.requestId);
   }
-
-  const businessIdBigInt = parseId(businessId);
-  const unitIdBigInt = parseId(unitId);
-  if (!businessIdBigInt || !unitIdBigInt) {
-    return withIdNoStore(badRequest('businessId ou unitId invalide.'), requestId);
-  }
-
-  const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'ADMIN');
-  if (!membership) return withIdNoStore(forbidden(), requestId);
-
-  const unit = await prisma.organizationUnit.findFirst({
-    where: { id: unitIdBigInt, businessId: businessIdBigInt },
-    select: { id: true },
-  });
-  if (!unit) return withIdNoStore(notFound('Pôle introuvable.'), requestId);
-
-  const assignedCount = await prisma.businessMembership.count({
-    where: { organizationUnitId: unitIdBigInt, businessId: businessIdBigInt },
-  });
-  if (assignedCount > 0) {
-    return withIdNoStore(badRequest('Des membres sont assignés à ce pôle.'), requestId);
-  }
-
-  await prisma.organizationUnit.delete({ where: { id: unitIdBigInt } });
-
-  return withIdNoStore(new NextResponse(null, { status: 204 }), requestId);
-}
+);

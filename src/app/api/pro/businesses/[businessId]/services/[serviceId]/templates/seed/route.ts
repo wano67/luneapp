@@ -1,28 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/server/db/client';
-import { requireAuthPro } from '@/server/auth/requireAuthPro';
-import { requireBusinessRole } from '@/server/auth/businessRole';
-import { assertSameOrigin, jsonNoStore, withNoStore } from '@/server/security/csrf';
-import { rateLimit } from '@/server/security/rateLimit';
-import { badRequest, getRequestId, unauthorized, withRequestId } from '@/server/http/apiUtils';
+import { withBusinessRoute } from '@/server/http/routeHandler';
+import { jsonb } from '@/server/http/json';
+import { notFound } from '@/server/http/apiUtils';
+import { parseId } from '@/server/http/parsers';
 import { TaskPhase } from '@/generated/prisma';
-
-function parseId(param: string | undefined) {
-  if (!param || !/^\d+$/.test(param)) return null;
-  try {
-    return BigInt(param);
-  } catch {
-    return null;
-  }
-}
-
-function withIdNoStore(res: NextResponse, requestId: string) {
-  return withNoStore(withRequestId(res, requestId));
-}
-
-function forbidden(requestId: string) {
-  return withIdNoStore(NextResponse.json({ error: 'Forbidden' }, { status: 403 }), requestId);
-}
 
 async function ensureService(businessId: bigint, serviceId: bigint) {
   return prisma.service.findFirst({ where: { id: serviceId, businessId }, select: { id: true } });
@@ -46,69 +27,48 @@ const STANDARD_PACK: SeedTemplate[] = [
 ];
 
 // POST /api/pro/businesses/{businessId}/services/{serviceId}/templates/seed
-export async function POST(
-  request: NextRequest,
-  context: { params: Promise<{ businessId: string; serviceId: string }> }
-) {
-  const requestId = getRequestId(request);
-  const csrf = assertSameOrigin(request);
-  if (csrf) return withIdNoStore(csrf, requestId);
+export const POST = withBusinessRoute<{ businessId: string; serviceId: string }>(
+  {
+    minRole: 'ADMIN',
+    rateLimit: {
+      key: (ctx) => `pro:services:templates:seed:${ctx.businessId}:${ctx.userId}`,
+      limit: 50,
+      windowMs: 60 * 60 * 1000,
+    },
+  },
+  async (ctx, _req, params) => {
+    const serviceId = parseId(params.serviceId);
 
-  let userId: string;
-  try {
-    ({ userId } = await requireAuthPro(request));
-  } catch {
-    return withIdNoStore(unauthorized(), requestId);
-  }
+    const service = await ensureService(ctx.businessId, serviceId);
+    if (!service) return notFound('Service introuvable.');
 
-  const { businessId, serviceId } = await context.params;
-  const businessIdBigInt = parseId(businessId);
-  const serviceIdBigInt = parseId(serviceId);
-  if (!businessIdBigInt || !serviceIdBigInt) {
-    return withIdNoStore(badRequest('Ids invalides.'), requestId);
-  }
+    const result = await prisma.$transaction(async (tx) => {
+      const existing = await tx.serviceTaskTemplate.findMany({
+        where: { serviceId, service: { businessId: ctx.businessId } },
+        select: { title: true, phase: true },
+      });
+      const existingKeys = new Set(existing.map((tpl) => `${tpl.phase ?? ''}|${tpl.title.toLowerCase()}`));
 
-  const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'ADMIN');
-  if (!membership) return forbidden(requestId);
+      const toCreate = STANDARD_PACK.filter((tpl) => {
+        const key = `${tpl.phase ?? ''}|${tpl.title.toLowerCase()}`;
+        if (existingKeys.has(key)) return false;
+        existingKeys.add(key);
+        return true;
+      }).map((tpl) => ({
+        serviceId,
+        phase: tpl.phase,
+        title: tpl.title,
+        defaultAssigneeRole: tpl.defaultAssigneeRole ?? undefined,
+        defaultDueOffsetDays: tpl.defaultDueOffsetDays ?? undefined,
+      }));
 
-  const service = await ensureService(businessIdBigInt, serviceIdBigInt);
-  if (!service) {
-    return withIdNoStore(NextResponse.json({ error: 'Service introuvable.' }, { status: 404 }), requestId);
-  }
+      if (toCreate.length) {
+        await tx.serviceTaskTemplate.createMany({ data: toCreate, skipDuplicates: true });
+      }
 
-  const limited = rateLimit(request, {
-    key: `pro:services:templates:seed:${businessIdBigInt}:${serviceIdBigInt}`,
-    limit: 50,
-    windowMs: 60 * 60 * 1000,
-  });
-  if (limited) return withIdNoStore(limited, requestId);
-
-  const result = await prisma.$transaction(async (tx) => {
-    const existing = await tx.serviceTaskTemplate.findMany({
-      where: { serviceId: serviceIdBigInt, service: { businessId: businessIdBigInt } },
-      select: { title: true, phase: true },
+      return { createdCount: toCreate.length, skippedCount: STANDARD_PACK.length - toCreate.length };
     });
-    const existingKeys = new Set(existing.map((tpl) => `${tpl.phase ?? ''}|${tpl.title.toLowerCase()}`));
 
-    const toCreate = STANDARD_PACK.filter((tpl) => {
-      const key = `${tpl.phase ?? ''}|${tpl.title.toLowerCase()}`;
-      if (existingKeys.has(key)) return false;
-      existingKeys.add(key);
-      return true;
-    }).map((tpl) => ({
-      serviceId: serviceIdBigInt,
-      phase: tpl.phase,
-      title: tpl.title,
-      defaultAssigneeRole: tpl.defaultAssigneeRole ?? undefined,
-      defaultDueOffsetDays: tpl.defaultDueOffsetDays ?? undefined,
-    }));
-
-    if (toCreate.length) {
-      await tx.serviceTaskTemplate.createMany({ data: toCreate, skipDuplicates: true });
-    }
-
-    return { createdCount: toCreate.length, skippedCount: STANDARD_PACK.length - toCreate.length };
-  });
-
-  return withIdNoStore(jsonNoStore(result), requestId);
-}
+    return jsonb(result, ctx.requestId);
+  }
+);
