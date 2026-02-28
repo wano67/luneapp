@@ -45,6 +45,7 @@ import { TeamTab } from '@/components/pro/projects/tabs/TeamTab';
 import { SetupModals } from '@/components/pro/projects/modals/SetupModals';
 import { useQuoteWizard } from '@/components/pro/projects/hooks/useQuoteWizard';
 import { usePaymentModal } from '@/components/pro/projects/hooks/usePaymentModal';
+import { useProjectDataLoaders } from '@/components/pro/projects/hooks/useProjectDataLoaders';
 
 type ProjectDetail = {
   id: string;
@@ -91,24 +92,6 @@ type ServiceItem = {
   service: { id: string; code: string; name: string; type: string | null };
 };
 
-type CatalogService = {
-  id: string;
-  code: string;
-  name: string;
-  type: string | null;
-  defaultPriceCents: string | null;
-  tjmCents: string | null;
-  durationHours: number | null;
-};
-
-type ServiceTemplate = {
-  id: string;
-  title: string;
-  phase: string | null;
-  defaultAssigneeRole: string | null;
-  defaultDueOffsetDays: number | null;
-};
-
 type TaskItem = {
   id: string;
   title: string;
@@ -133,35 +116,6 @@ type MemberItem = {
   name?: string | null;
   role: string;
   organizationUnit?: { id: string; name: string } | null;
-};
-type ClientDocument = { id: string; title: string };
-type ClientLite = { id: string; name: string; email: string | null };
-
-type ProjectAccessMember = {
-  membershipId: string;
-  user: { id: string; name: string | null; email: string | null };
-  role: string;
-  organizationUnit: { id: string; name: string } | null;
-  createdAt: string;
-  implicit?: boolean;
-};
-
-type OrganizationUnitItem = {
-  id: string;
-  name: string;
-  order: number;
-  createdAt: string;
-  updatedAt: string;
-};
-
-type ActivityItem = {
-  type: 'TASK_STATUS_UPDATED';
-  taskId: string;
-  title: string;
-  status: string;
-  serviceName?: string | null;
-  occurredAt: string | null;
-  actor: { id: string; name: string | null; email: string | null } | null;
 };
 
 type BillingSummary = {
@@ -334,29 +288,6 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
   const searchParams = useSearchParams();
   const activeCtx = useActiveBusiness({ optional: true });
   const isAdmin = activeCtx?.isAdmin ?? false;
-  const [project, setProject] = useState<ProjectDetail | null>(null);
-  const [services, setServices] = useState<ServiceItem[]>([]);
-  const [tasks, setTasks] = useState<TaskItem[]>([]);
-  const [members, setMembers] = useState<MemberItem[]>([]);
-  const [projectMembers, setProjectMembers] = useState<ProjectAccessMember[]>([]);
-  const [organizationUnits, setOrganizationUnits] = useState<OrganizationUnitItem[]>([]);
-  const [activityItems, setActivityItems] = useState<ActivityItem[]>([]);
-  const [documents, setDocuments] = useState<ClientDocument[]>([]);
-  const [quotes, setQuotes] = useState<QuoteItem[]>([]);
-  const [invoices, setInvoices] = useState<InvoiceItem[]>([]);
-  const [billingSettings, setBillingSettings] = useState<{
-    defaultDepositPercent: number;
-    vatEnabled: boolean;
-    vatRatePercent: number;
-    paymentTermsDays: number;
-    cgvText?: string | null;
-    paymentTermsText?: string | null;
-    lateFeesText?: string | null;
-    fixedIndemnityText?: string | null;
-    legalMentionsText?: string | null;
-  } | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [billingError, setBillingError] = useState<string | null>(null);
   const [billingInfo, setBillingInfo] = useState<string | null>(null);
   const [quoteEditor, setQuoteEditor] = useState<QuoteEditorState | null>(null);
@@ -387,9 +318,6 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
   const [activeSetupModal, setActiveSetupModal] = useState<
     null | 'client' | 'deadline' | 'services' | 'tasks' | 'team' | 'documents'
   >(null);
-  const [clients, setClients] = useState<ClientLite[]>([]);
-  const [catalogServices, setCatalogServices] = useState<CatalogService[]>([]);
-  const [catalogSearchResults, setCatalogSearchResults] = useState<CatalogService[]>([]);
   const [saving, setSaving] = useState(false);
   const [markingCompleted, setMarkingCompleted] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -429,8 +357,6 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
   const [invoiceActionId, setInvoiceActionId] = useState<string | null>(null);
   const [recurringInvoiceActionId, setRecurringInvoiceActionId] = useState<string | null>(null);
   const [taskAssignments, setTaskAssignments] = useState<Record<string, string>>({});
-  const [serviceTemplates, setServiceTemplates] = useState<Record<string, ServiceTemplate[]>>({});
-  const [templatesLoading, setTemplatesLoading] = useState<Record<string, boolean>>({});
   const [generateTasksOnAdd, setGenerateTasksOnAdd] = useState(true);
   const [taskAssigneeId, setTaskAssigneeId] = useState('');
   const [taskDueOffsetDays, setTaskDueOffsetDays] = useState('');
@@ -517,16 +443,47 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
     }
   };
 
-  const loadProject = useCallback(async (): Promise<string | null> => {
-    const res = await fetchJson<{ item: ProjectDetail }>(`/api/pro/businesses/${businessId}/projects/${projectId}`);
-    if (!res.ok || !res.data) {
-      setProject(null);
-      setError(res.error ?? 'Projet introuvable');
-      return null;
-    }
-    setProject(res.data.item);
-    return res.data.item.clientId ?? null;
-  }, [businessId, projectId]);
+  const {
+    project,
+    services,
+    setServices,
+    tasks,
+    members,
+    setMembers,
+    projectMembers,
+    organizationUnits,
+    activityItems,
+    documents,
+    quotes,
+    invoices,
+    billingSettings,
+    loading,
+    error,
+    clients,
+    catalogServices,
+    catalogSearchResults,
+    serviceTemplates,
+    templatesLoading,
+    loadProject,
+    loadServices,
+    loadTasks,
+    loadMembers,
+    loadProjectMembers,
+    loadOrganizationUnits,
+    loadActivity,
+    loadDocuments,
+    loadQuotes,
+    loadInvoices,
+    loadClients,
+    loadCatalogServices,
+    loadServiceTemplates,
+    refetchAll,
+  } = useProjectDataLoaders({
+    businessId,
+    projectId,
+    onBillingError: setBillingError,
+  });
+
 
   useEffect(() => {
     if (!project) return;
@@ -539,106 +496,12 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
     setDepositPaidDraft(project.depositPaidAt ? project.depositPaidAt.slice(0, 10) : '');
   }, [project?.depositPaidAt, project]);
 
-  const loadServices = useCallback(async () => {
-    const res = await fetchJson<{ items: ServiceItem[] }>(
-      `/api/pro/businesses/${businessId}/projects/${projectId}/services`
-    );
-    if (res.ok && res.data) setServices(res.data.items);
-  }, [businessId, projectId]);
 
-  const loadTasks = useCallback(async () => {
-    const res = await fetchJson<{ items: TaskItem[] }>(
-      `/api/pro/businesses/${businessId}/tasks?projectId=${projectId}`
-    );
-    if (res.ok && res.data) setTasks(res.data.items);
-  }, [businessId, projectId]);
 
-  const loadMembers = useCallback(async () => {
-    const res = await fetchJson<{ items: MemberItem[] }>(`/api/pro/businesses/${businessId}/members`);
-    if (res.ok && res.data) setMembers(res.data.items);
-  }, [businessId]);
 
-  const loadProjectMembers = useCallback(async () => {
-    const res = await fetchJson<{ items: ProjectAccessMember[] }>(
-      `/api/pro/businesses/${businessId}/projects/${projectId}/members`
-    );
-    if (res.ok && res.data) setProjectMembers(res.data.items);
-  }, [businessId, projectId]);
 
-  const loadOrganizationUnits = useCallback(async () => {
-    const res = await fetchJson<{ items: OrganizationUnitItem[] }>(
-      `/api/pro/businesses/${businessId}/organization/units`
-    );
-    if (res.ok && res.data) setOrganizationUnits(res.data.items);
-  }, [businessId]);
 
-  const loadActivity = useCallback(async () => {
-    const res = await fetchJson<{ items: ActivityItem[] }>(
-      `/api/pro/businesses/${businessId}/projects/${projectId}/activity?limit=20`
-    );
-    if (res.ok && res.data) setActivityItems(res.data.items);
-  }, [businessId, projectId]);
 
-  const loadDocuments = useCallback(async (clientIdOverride?: string | null) => {
-    const clientId = clientIdOverride ?? project?.clientId;
-    if (!clientId) {
-      setDocuments([]);
-      return;
-    }
-    const res = await fetchJson<{ uploads: ClientDocument[] }>(
-      `/api/pro/businesses/${businessId}/clients/${clientId}/documents`
-    );
-    if (res.ok && res.data) setDocuments(res.data.uploads);
-  }, [businessId, project?.clientId]);
-
-  const loadBillingSettings = useCallback(async () => {
-    const res = await fetchJson<{
-      item: {
-        defaultDepositPercent: number;
-        vatEnabled: boolean;
-        vatRatePercent: number;
-        paymentTermsDays: number;
-        cgvText?: string | null;
-        paymentTermsText?: string | null;
-        lateFeesText?: string | null;
-        fixedIndemnityText?: string | null;
-        legalMentionsText?: string | null;
-      };
-    }>(`/api/pro/businesses/${businessId}/settings`, { cache: 'no-store' });
-    if (!res.ok || !res.data) {
-      setBillingSettings(null);
-      return;
-    }
-    setBillingSettings(res.data.item);
-  }, [businessId]);
-
-  const loadQuotes = useCallback(async () => {
-    const res = await fetchJson<{ items: QuoteItem[] }>(
-      `/api/pro/businesses/${businessId}/projects/${projectId}/quotes`,
-      { cache: 'no-store' }
-    );
-    if (!res.ok || !res.data) {
-      setBillingError(res.error ?? 'Devis indisponibles.');
-      setQuotes([]);
-      return;
-    }
-    setBillingError(null);
-    setQuotes(res.data.items ?? []);
-  }, [businessId, projectId]);
-
-  const loadInvoices = useCallback(async () => {
-    const res = await fetchJson<{ items: InvoiceItem[] }>(
-      `/api/pro/businesses/${businessId}/projects/${projectId}/invoices`,
-      { cache: 'no-store' }
-    );
-    if (!res.ok || !res.data) {
-      setBillingError(res.error ?? 'Factures indisponibles.');
-      setInvoices([]);
-      return;
-    }
-    setBillingError(null);
-    setInvoices(res.data.items ?? []);
-  }, [businessId, projectId]);
 
   const {
     paymentModal,
@@ -668,77 +531,9 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
     onBillingError: setBillingError,
   });
 
-  const loadClients = useCallback(async (q?: string) => {
-    const query = q ? `?q=${encodeURIComponent(q)}` : '';
-    const res = await fetchJson<{ items: ClientLite[] }>(
-      `/api/pro/businesses/${businessId}/clients${query}`
-    );
-    if (res.ok && res.data) setClients(res.data.items);
-  }, [businessId]);
 
-  const loadCatalogServices = useCallback(
-    async (q?: string) => {
-      const query = q ? `?q=${encodeURIComponent(q)}` : '';
-      const res = await fetchJson<{ items: CatalogService[] }>(
-        `/api/pro/businesses/${businessId}/services${query}`
-      );
-      if (res.ok && res.data) {
-        if (q) {
-          setCatalogSearchResults(res.data.items);
-        } else {
-          setCatalogServices(res.data.items);
-          setCatalogSearchResults(res.data.items);
-        }
-      }
-    },
-    [businessId]
-  );
 
-  const loadServiceTemplates = useCallback(
-    async (serviceId: string) => {
-      if (!serviceId) return;
-      setTemplatesLoading((prev) => ({ ...prev, [serviceId]: true }));
-      const res = await fetchJson<{ items: ServiceTemplate[] }>(
-        `/api/pro/businesses/${businessId}/services/${serviceId}/templates`
-      );
-      if (res.ok) {
-        const items = res.data?.items ?? [];
-        setServiceTemplates((prev) => ({ ...prev, [serviceId]: items }));
-      }
-      setTemplatesLoading((prev) => ({ ...prev, [serviceId]: false }));
-    },
-    [businessId]
-  );
 
-  const refetchAll = useCallback(async () => {
-    const cid = await loadProject();
-    await Promise.all([
-      loadServices(),
-      loadTasks(),
-      loadMembers(),
-      loadProjectMembers(),
-      loadOrganizationUnits(),
-      loadActivity(),
-      loadDocuments(cid),
-      loadQuotes(),
-      loadInvoices(),
-      loadBillingSettings(),
-      loadCatalogServices(),
-    ]);
-  }, [
-    loadBillingSettings,
-    loadCatalogServices,
-    loadDocuments,
-    loadInvoices,
-    loadMembers,
-    loadProjectMembers,
-    loadOrganizationUnits,
-    loadActivity,
-    loadProject,
-    loadQuotes,
-    loadServices,
-    loadTasks,
-  ]);
 
   const {
     quoteWizardOpen,
@@ -1780,24 +1575,6 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
     }
   }
 
-  useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      setLoading(true);
-      setError(null);
-      try {
-        await refetchAll();
-      } catch (err) {
-        if (!cancelled) setError(getErrorMessage(err));
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-    void load();
-    return () => {
-      cancelled = true;
-    };
-  }, [businessId, projectId, refetchAll]);
 
   const statusLabel = useMemo(() => {
     return getProjectStatusLabelFR(project?.status ?? null);
