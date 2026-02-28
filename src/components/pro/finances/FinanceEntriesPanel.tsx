@@ -5,7 +5,6 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableEmpty, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { Modal } from '@/components/ui/modal';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
@@ -15,68 +14,14 @@ import { PageHeader } from '@/app/app/components/PageHeader';
 import { Plus } from 'lucide-react';
 import { useRowSelection } from '@/app/app/components/selection/useRowSelection';
 import { BulkActionBar } from '@/app/app/components/selection/BulkActionBar';
-import { sanitizeEuroInput } from '@/lib/money';
 import { useRecurringRule } from '@/components/pro/finances/hooks/useRecurringRule';
 import { useFinanceForm } from '@/components/pro/finances/hooks/useFinanceForm';
-
-type FinanceType = 'INCOME' | 'EXPENSE';
-type PaymentMethod = 'WIRE' | 'CARD' | 'CHECK' | 'CASH' | 'OTHER';
-type RecurringUnit = 'MONTHLY' | 'YEARLY';
-
-type Finance = {
-  id: string;
-  businessId: string;
-  projectId: string | null;
-  projectName: string | null;
-  categoryReferenceId: string | null;
-  categoryReferenceName: string | null;
-  tagReferences: { id: string; name: string }[];
-  type: FinanceType;
-  amountCents: string;
-  amount: number;
-  category: string;
-  vendor: string | null;
-  method: PaymentMethod | null;
-  isRecurring: boolean;
-  recurringUnit: RecurringUnit | null;
-  recurringRuleId: string | null;
-  isRuleOverride: boolean;
-  lockedFromRule: boolean;
-  date: string;
-  note: string | null;
-  createdAt: string;
-  updatedAt: string;
-};
+import { FinanceFormModal } from '@/components/pro/finances/modals/FinanceFormModal';
+import { RecurringRuleModal } from '@/components/pro/finances/modals/RecurringRuleModal';
+import type { Finance, FinanceType } from '@/components/pro/finances/finance-types';
+import { TYPE_OPTIONS, METHOD_OPTIONS, formatFinanceDate } from '@/components/pro/finances/finance-types';
 
 type FinanceListResponse = { items: Finance[] };
-
-
-const TYPE_OPTIONS: { value: FinanceType; label: string }[] = [
-  { value: 'INCOME', label: 'Revenu' },
-  { value: 'EXPENSE', label: 'Dépense' },
-];
-
-const METHOD_OPTIONS: { value: PaymentMethod; label: string }[] = [
-  { value: 'WIRE', label: 'Virement' },
-  { value: 'CARD', label: 'Carte' },
-  { value: 'CHECK', label: 'Chèque' },
-  { value: 'CASH', label: 'Espèces' },
-  { value: 'OTHER', label: 'Autre' },
-];
-
-const RECURRING_OPTIONS: { value: RecurringUnit; label: string }[] = [
-  { value: 'MONTHLY', label: 'Mensuel' },
-  { value: 'YEARLY', label: 'Annuel' },
-];
-
-function formatDate(value: string | null | undefined) {
-  if (!value) return '—';
-  try {
-    return new Intl.DateTimeFormat('fr-FR').format(new Date(value));
-  } catch {
-    return value;
-  }
-}
 
 type Props = {
   businessId: string;
@@ -439,7 +384,7 @@ export function FinanceEntriesPanel({ businessId }: Props) {
                   </TableCell>
                   <TableCell>{item.projectName ?? '—'}</TableCell>
                   <TableCell className="font-semibold">{formatCurrency(Number(item.amountCents) / 100)}</TableCell>
-                  <TableCell>{formatDate(item.date)}</TableCell>
+                  <TableCell>{formatFinanceDate(item.date)}</TableCell>
                   <TableCell>
                     <div className="flex flex-wrap gap-2">
                       <Button size="sm" variant="outline" onClick={() => setSelectedId(item.id)}>
@@ -485,7 +430,7 @@ export function FinanceEntriesPanel({ businessId }: Props) {
                 {selected.category} · {formatCurrency(Number(selected.amountCents) / 100)}
               </p>
               <p className="text-xs text-[var(--text-secondary)]">
-                {selected.type === 'INCOME' ? 'Revenu' : 'Dépense'} · {formatDate(selected.date)}
+                {selected.type === 'INCOME' ? 'Revenu' : 'Dépense'} · {formatFinanceDate(selected.date)}
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -530,196 +475,22 @@ export function FinanceEntriesPanel({ businessId }: Props) {
         </Card>
       ) : null}
 
-      <Modal
+      <FinanceFormModal
         open={modalOpen}
-        onCloseAction={() => setModalOpen(false)}
-        title={editing ? 'Modifier écriture' : 'Nouvelle charge'}
-        description="Montant, libellé et date sont requis."
-      >
-        <form className="space-y-3" onSubmit={handleSubmit}>
-          <div className="grid gap-2 md:grid-cols-2">
-            <label className="text-sm text-[var(--text-primary)]">
-              <span className="text-xs text-[var(--text-secondary)]">Type</span>
-              <Select name="type" value={form.type} onChange={onFieldChange}>
-                {TYPE_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </Select>
-            </label>
-            <label className="text-sm text-[var(--text-primary)]">
-              <span className="text-xs text-[var(--text-secondary)]">Montant (€)</span>
-              <Input
-                name="amount"
-                type="text"
-                inputMode="decimal"
-                value={form.amount}
-                onChange={onFieldChange}
-                required
-              />
-            </label>
-            <label className="text-sm text-[var(--text-primary)]">
-              <span className="text-xs text-[var(--text-secondary)]">Libellé</span>
-              <Input name="category" value={form.category} onChange={onFieldChange} required />
-            </label>
-            <label className="text-sm text-[var(--text-primary)]">
-              <span className="text-xs text-[var(--text-secondary)]">Date</span>
-              <Input name="date" type="date" value={form.date} onChange={onFieldChange} required />
-            </label>
-            <label className="text-sm text-[var(--text-primary)]">
-              <span className="text-xs text-[var(--text-secondary)]">Projet (optionnel)</span>
-              <Input name="projectId" value={form.projectId} onChange={onFieldChange} />
-            </label>
-          </div>
-
-          <details className="rounded-2xl border border-[var(--border)]/60 bg-[var(--surface)]/40 px-3 py-2">
-            <summary className="cursor-pointer text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
-              Options avancées
-            </summary>
-            <div className="mt-3 grid gap-2 md:grid-cols-2">
-              <label className="text-sm text-[var(--text-primary)]">
-                <span className="text-xs text-[var(--text-secondary)]">Fournisseur</span>
-                <Input name="vendor" value={form.vendor} onChange={onFieldChange} />
-              </label>
-              <label className="text-sm text-[var(--text-primary)]">
-                <span className="text-xs text-[var(--text-secondary)]">Mode de paiement</span>
-                <Select name="method" value={form.method} onChange={onFieldChange}>
-                  {METHOD_OPTIONS.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </Select>
-              </label>
-              <label className="flex items-center gap-2 text-sm text-[var(--text-primary)]">
-                <input
-                  type="checkbox"
-                  name="isRecurring"
-                  checked={form.isRecurring}
-                  onChange={onFieldChange}
-                  className="h-4 w-4 rounded border border-[var(--border)]"
-                />
-                <span>Récurrent</span>
-              </label>
-              <label className="text-sm text-[var(--text-primary)]">
-                <span className="text-xs text-[var(--text-secondary)]">Fréquence</span>
-                <Select
-                  name="recurringUnit"
-                  value={form.recurringUnit}
-                  onChange={onFieldChange}
-                  disabled={!form.isRecurring}
-                >
-                  {RECURRING_OPTIONS.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </Select>
-              </label>
-              {form.isRecurring && form.recurringUnit === 'MONTHLY' ? (
-                <>
-                  <label className="text-sm text-[var(--text-primary)]">
-                    <span className="text-xs text-[var(--text-secondary)]">Créer sur (mois)</span>
-                    <Input
-                      name="recurringMonths"
-                      value={form.recurringMonths}
-                      onChange={onFieldChange}
-                      type="number"
-                      min={1}
-                      max={36}
-                    />
-                  </label>
-                  <label className="text-sm text-[var(--text-primary)]">
-                    <span className="text-xs text-[var(--text-secondary)]">Jour de facturation</span>
-                    <Input
-                      name="recurringDayOfMonth"
-                      value={form.recurringDayOfMonth}
-                      onChange={onFieldChange}
-                      type="number"
-                      min={1}
-                      max={31}
-                      placeholder="Auto"
-                    />
-                  </label>
-                  <label className="text-sm text-[var(--text-primary)]">
-                    <span className="text-xs text-[var(--text-secondary)]">Fin de récurrence</span>
-                    <Input
-                      name="recurringEndDate"
-                      type="date"
-                      value={form.recurringEndDate}
-                      onChange={onFieldChange}
-                    />
-                  </label>
-                  <label className="flex items-center gap-2 text-sm text-[var(--text-primary)]">
-                    <input
-                      type="checkbox"
-                      name="recurringRetroactive"
-                      checked={form.recurringRetroactive}
-                      onChange={onFieldChange}
-                      className="h-4 w-4 rounded border border-[var(--border)]"
-                    />
-                    <span>Créer rétroactivement depuis la date de début</span>
-                  </label>
-                  {recurringPreview ? (
-                    <div className="text-xs text-[var(--text-secondary)] md:col-span-2">
-                      +{recurringPreview.pastCount} occurrences passées · +{recurringPreview.futureCount} occurrences futures
-                    </div>
-                  ) : null}
-                </>
-              ) : null}
-              <label className="text-sm text-[var(--text-primary)] md:col-span-2">
-                <span className="text-xs text-[var(--text-secondary)]">Note</span>
-                <Input name="note" value={form.note} onChange={onFieldChange} />
-              </label>
-              <label className="text-sm text-[var(--text-primary)] md:col-span-2">
-                <span className="text-xs text-[var(--text-secondary)]">Catégorie de référence</span>
-                <Select
-                  value={form.categoryReferenceId}
-                  onChange={(e) => setForm((prev) => ({ ...prev, categoryReferenceId: e.target.value }))}
-                >
-                  <option value="">Aucune</option>
-                  {categoryOptions.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </Select>
-              </label>
-              <label className="text-sm text-[var(--text-primary)] md:col-span-2">
-                <span className="text-xs text-[var(--text-secondary)]">Tags</span>
-                <Select
-                  multiple
-                  value={form.tagReferenceIds}
-                  onChange={(e) =>
-                    setForm((prev) => ({
-                      ...prev,
-                      tagReferenceIds: Array.from(e.target.selectedOptions).map((o) => o.value),
-                    }))
-                  }
-                >
-                  {tagOptions.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name}
-                    </option>
-                  ))}
-                </Select>
-              </label>
-            </div>
-          </details>
-          {actionError ? <p className="text-xs text-rose-500">{actionError}</p> : null}
-
-          <div className="flex justify-end gap-2">
-            <Button type="button" variant="outline" onClick={() => setModalOpen(false)}>
-              Annuler
-            </Button>
-            <Button type="submit" disabled={creating}>
-              {creating ? 'Enregistrement…' : editing ? 'Mettre à jour' : 'Créer'}
-            </Button>
-          </div>
-          {!isAdmin ? <p className="text-xs text-[var(--text-secondary)]">{readOnlyMessage}</p> : null}
-        </form>
-      </Modal>
+        onClose={() => setModalOpen(false)}
+        editing={editing}
+        form={form}
+        setForm={setForm}
+        onFieldChange={onFieldChange}
+        onSubmit={handleSubmit}
+        creating={creating}
+        actionError={actionError}
+        isAdmin={isAdmin}
+        readOnlyMessage={readOnlyMessage}
+        categoryOptions={categoryOptions}
+        tagOptions={tagOptions}
+        recurringPreview={recurringPreview}
+      />
 
       <Modal
         open={!!deleteModal}
@@ -743,180 +514,27 @@ export function FinanceEntriesPanel({ businessId }: Props) {
         </div>
       </Modal>
 
-      <Modal
+      <RecurringRuleModal
         open={recurringModalOpen}
-        onCloseAction={() => setRecurringModalOpen(false)}
-        title="Règle de récurrence"
-        description="Modifie la règle et les occurrences futures."
-      >
-        <div className="space-y-4">
-          {recurringRuleLoading ? <p className="text-xs text-[var(--text-secondary)]">Chargement…</p> : null}
-          {recurringRuleError ? <p className="text-xs text-rose-500">{recurringRuleError}</p> : null}
-          {recurringRule ? (
-            <>
-              <div className="grid gap-2 md:grid-cols-2">
-                <label className="text-sm text-[var(--text-primary)]">
-                  <span className="text-xs text-[var(--text-secondary)]">Montant (€)</span>
-                  <Input
-                    value={recurringRuleForm.amount}
-                    onChange={(e) =>
-                      setRecurringRuleForm((prev) => ({ ...prev, amount: sanitizeEuroInput(e.target.value) }))
-                    }
-                  />
-                </label>
-                <label className="text-sm text-[var(--text-primary)]">
-                  <span className="text-xs text-[var(--text-secondary)]">Libellé</span>
-                  <Input
-                    value={recurringRuleForm.category}
-                    onChange={(e) => setRecurringRuleForm((prev) => ({ ...prev, category: e.target.value }))}
-                  />
-                </label>
-                <label className="text-sm text-[var(--text-primary)]">
-                  <span className="text-xs text-[var(--text-secondary)]">Fournisseur</span>
-                  <Input
-                    value={recurringRuleForm.vendor}
-                    onChange={(e) => setRecurringRuleForm((prev) => ({ ...prev, vendor: e.target.value }))}
-                  />
-                </label>
-                <label className="text-sm text-[var(--text-primary)]">
-                  <span className="text-xs text-[var(--text-secondary)]">Mode</span>
-                  <Select
-                    value={recurringRuleForm.method}
-                    onChange={(e) => setRecurringRuleForm((prev) => ({ ...prev, method: e.target.value as PaymentMethod }))}
-                  >
-                    {METHOD_OPTIONS.map((opt) => (
-                      <option key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </Select>
-                </label>
-                <label className="text-sm text-[var(--text-primary)]">
-                  <span className="text-xs text-[var(--text-secondary)]">Date de début</span>
-                  <Input
-                    type="date"
-                    value={recurringRuleForm.startDate}
-                    onChange={(e) => setRecurringRuleForm((prev) => ({ ...prev, startDate: e.target.value }))}
-                  />
-                </label>
-                <label className="text-sm text-[var(--text-primary)]">
-                  <span className="text-xs text-[var(--text-secondary)]">Date de fin</span>
-                  <Input
-                    type="date"
-                    value={recurringRuleForm.endDate}
-                    onChange={(e) => setRecurringRuleForm((prev) => ({ ...prev, endDate: e.target.value }))}
-                  />
-                </label>
-                <label className="text-sm text-[var(--text-primary)]">
-                  <span className="text-xs text-[var(--text-secondary)]">Jour de facturation</span>
-                  <Input
-                    type="number"
-                    min={1}
-                    max={31}
-                    value={recurringRuleForm.dayOfMonth}
-                    onChange={(e) => setRecurringRuleForm((prev) => ({ ...prev, dayOfMonth: e.target.value }))}
-                  />
-                </label>
-                <label className="flex items-center gap-2 text-sm text-[var(--text-primary)]">
-                  <input
-                    type="checkbox"
-                    checked={recurringRuleForm.isActive}
-                    onChange={(e) => setRecurringRuleForm((prev) => ({ ...prev, isActive: e.target.checked }))}
-                    className="h-4 w-4 rounded border border-[var(--border)]"
-                  />
-                  <span>Règle active</span>
-                </label>
-              </div>
-
-              <div className="rounded-2xl border border-[var(--border)]/60 bg-[var(--surface)]/40 p-3 text-xs text-[var(--text-secondary)]">
-                <div className="flex flex-wrap items-center gap-3">
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={recurringApplyFuture}
-                      onChange={(e) => setRecurringApplyFuture(e.target.checked)}
-                      className="h-4 w-4 rounded border border-[var(--border)]"
-                    />
-                    <span>Appliquer aux occurrences futures</span>
-                  </label>
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={recurringRecalculate}
-                      onChange={(e) => setRecurringRecalculate(e.target.checked)}
-                      className="h-4 w-4 rounded border border-[var(--border)]"
-                    />
-                    <span>Recalculer (re-générer)</span>
-                  </label>
-                  <label className="flex items-center gap-2">
-                    <span>Horizon</span>
-                    <Input
-                      className="w-20"
-                      value={recurringHorizonMonths}
-                      onChange={(e) => setRecurringHorizonMonths(e.target.value)}
-                      type="number"
-                      min={1}
-                      max={36}
-                    />
-                  </label>
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setRecurringModalOpen(false)}
-                >
-                  Fermer
-                </Button>
-                <Button size="sm" onClick={handleSaveRecurringRule} disabled={recurringRuleLoading}>
-                  {recurringRuleLoading ? 'Enregistrement…' : 'Enregistrer'}
-                </Button>
-              </div>
-
-              <div className="rounded-2xl border border-[var(--border)]/60 bg-[var(--surface)]/40 p-3">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
-                  Occurrences
-                </p>
-                <div className="mt-2 max-h-64 space-y-2 overflow-auto">
-                  {recurringOccurrences.length ? (
-                    recurringOccurrences.map((occ) => (
-                      <div
-                        key={occ.id}
-                        className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[var(--border)]/60 bg-[var(--surface)] px-3 py-2 text-xs"
-                      >
-                        <div>
-                          <p className="text-[var(--text-primary)]">
-                            {formatDate(occ.date)} · {formatCurrency(Number(occ.amountCents) / 100)}
-                          </p>
-                          <p className="text-[11px] text-[var(--text-secondary)]">
-                            {occ.isRuleOverride ? 'Modifiée' : 'Automatique'}
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              setRecurringModalOpen(false);
-                              openEdit(occ);
-                            }}
-                          >
-                            Modifier
-                          </Button>
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-xs text-[var(--text-secondary)]">Aucune occurrence.</p>
-                  )}
-                </div>
-              </div>
-            </>
-          ) : null}
-        </div>
-      </Modal>
+        onClose={() => setRecurringModalOpen(false)}
+        rule={recurringRule}
+        occurrences={recurringOccurrences}
+        form={recurringRuleForm}
+        setForm={setRecurringRuleForm}
+        applyFuture={recurringApplyFuture}
+        setApplyFuture={setRecurringApplyFuture}
+        recalculate={recurringRecalculate}
+        setRecalculate={setRecurringRecalculate}
+        horizonMonths={recurringHorizonMonths}
+        setHorizonMonths={setRecurringHorizonMonths}
+        loading={recurringRuleLoading}
+        error={recurringRuleError}
+        onSave={handleSaveRecurringRule}
+        onEditOccurrence={(occ) => {
+          setRecurringModalOpen(false);
+          openEdit(occ);
+        }}
+      />
     </div>
   );
 }

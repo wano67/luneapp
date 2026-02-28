@@ -3,18 +3,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { ArrowLeft } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
 import { TabsPills } from '@/components/pro/TabsPills';
 import {
   UI,
   formatDate,
-  SectionCard,
-  StatCard,
-  MetaItem,
-  StickyHeaderActions,
 } from '@/components/pro/projects/workspace-ui';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import { formatCurrencyEUR } from '@/lib/formatCurrency';
@@ -29,7 +23,7 @@ import {
   isProjectOverdue,
   shouldWarnProjectCompletion,
 } from '@/lib/projectStatusUi';
-import { formatCentsToEuroInput, parseEuroToCents, sanitizeEuroInput } from '@/lib/money';
+import { parseEuroToCents, sanitizeEuroInput } from '@/lib/money';
 import { QuoteWizardModal } from '@/components/pro/projects/modals/QuoteWizardModal';
 import { QuoteDateModal } from '@/components/pro/projects/modals/QuoteDateModal';
 import { CancelQuoteModal } from '@/components/pro/projects/modals/CancelQuoteModal';
@@ -51,6 +45,8 @@ import { useTeamManagement } from '@/components/pro/projects/hooks/useTeamManage
 import { useServiceManagement } from '@/components/pro/projects/hooks/useServiceManagement';
 import { useProjectSetupModals } from '@/components/pro/projects/hooks/useProjectSetupModals';
 import { useTaskHandlers } from '@/components/pro/projects/hooks/useTaskHandlers';
+import { usePricingEngine } from '@/components/pro/projects/hooks/usePricingEngine';
+import { ProjectHeaderSection } from '@/components/pro/projects/ProjectHeaderSection';
 
 type ProjectDetail = {
   id: string;
@@ -177,18 +173,6 @@ const tabs = [
 ];
 
 
-
-function parseCents(value?: string | null): number | null {
-  if (!value) return null;
-  const num = Number(value);
-  if (!Number.isFinite(num)) return null;
-  return num;
-}
-
-function parseEuroInputCents(value: string): number | null {
-  const cents = parseEuroToCents(value);
-  return Number.isFinite(cents) ? cents : null;
-}
 
 function getInvoicePaidCents(invoice: InvoiceItem): number {
   const paid = invoice.paidCents != null ? Number(invoice.paidCents) : NaN;
@@ -715,133 +699,22 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
     return new Map(servicesWithTasks.map((entry) => [entry.service.id, entry.tasks]));
   }, [servicesWithTasks]);
 
-  useEffect(() => {
-    setServiceDrafts((prev) => {
-      const next = { ...prev };
-      const ids = new Set(services.map((svc) => svc.id));
-      for (const svc of services) {
-        if (!next[svc.id]) {
-          next[svc.id] = {
-            quantity: String(svc.quantity ?? 1),
-            price: formatCentsToEuroInput(svc.priceCents),
-            title: svc.titleOverride ?? '',
-            description: svc.description ?? svc.notes ?? '',
-            discountType: svc.discountType ?? 'NONE',
-            discountValue:
-              svc.discountType === 'AMOUNT'
-                ? formatCentsToEuroInput(svc.discountValue)
-                : svc.discountValue != null
-                  ? String(svc.discountValue)
-                  : '',
-            billingUnit: svc.billingUnit ?? 'ONE_OFF',
-            unitLabel: svc.unitLabel ?? '',
-          };
-        }
-      }
-      for (const id of Object.keys(next)) {
-        if (!ids.has(id)) delete next[id];
-      }
-      return next;
-    });
-  }, [services, setServiceDrafts]);
-
-  const catalogById = useMemo(() => {
-    return new Map(catalogServices.map((svc) => [svc.id, svc]));
-  }, [catalogServices]);
-
-  const catalogDurationById = useMemo(
-    () => new Map(catalogServices.map((svc) => [svc.id, svc.durationHours])),
-    [catalogServices]
-  );
-
-  const pricingLines = useMemo(() => {
-    return services.map((svc) => {
-      const draft = serviceDrafts[svc.id];
-      const quantityRaw = draft?.quantity ?? String(svc.quantity ?? 1);
-      const quantityNum = Number(quantityRaw);
-      const quantity =
-        Number.isFinite(quantityNum) && quantityNum > 0 ? Math.max(1, Math.trunc(quantityNum)) : svc.quantity ?? 1;
-      const draftPriceCents = draft?.price ? parseEuroInputCents(draft.price) : null;
-      const projectPriceCents = draftPriceCents ?? parseCents(svc.priceCents);
-      const catalog = catalogById.get(svc.serviceId);
-      const defaultPriceCents = parseCents(catalog?.defaultPriceCents ?? null);
-      const tjmCents = parseCents(catalog?.tjmCents ?? null);
-      const resolvedUnitCents = projectPriceCents ?? defaultPriceCents ?? tjmCents;
-      const missingPrice = resolvedUnitCents == null;
-      const discountType = draft?.discountType ?? svc.discountType ?? 'NONE';
-      const discountValueRaw = draft?.discountValue ?? (svc.discountValue != null ? String(svc.discountValue) : '');
-      const discountValue =
-        discountType === 'AMOUNT'
-          ? (discountValueRaw ? parseEuroInputCents(discountValueRaw) : null)
-          : (() => {
-              const num = discountValueRaw ? Number(discountValueRaw) : null;
-              return Number.isFinite(num ?? NaN) ? Math.trunc(num ?? 0) : null;
-            })();
-      const applyDiscount = () => {
-        if (resolvedUnitCents == null) return { final: null, original: null };
-        if (discountType === 'PERCENT' && discountValue != null) {
-          const bounded = Math.min(100, Math.max(0, discountValue));
-          const final = Math.round(resolvedUnitCents * ((100 - bounded) / 100));
-          return { final, original: resolvedUnitCents };
-        }
-        if (discountType === 'AMOUNT' && discountValue != null) {
-          const bounded = Math.max(0, discountValue);
-          const final = Math.max(0, resolvedUnitCents - bounded);
-          return { final, original: resolvedUnitCents };
-        }
-        return { final: resolvedUnitCents, original: null };
-      };
-      const discounted = applyDiscount();
-      const unitPriceCents = discounted.final;
-      const totalCents = missingPrice || unitPriceCents == null ? 0 : unitPriceCents * quantity;
-      const billingUnit = draft?.billingUnit ?? svc.billingUnit ?? 'ONE_OFF';
-      let unitLabel = draft?.unitLabel ?? svc.unitLabel ?? '';
-      if (billingUnit === 'MONTHLY' && !unitLabel) unitLabel = '/mois';
-      return {
-        id: svc.id,
-        serviceId: svc.serviceId,
-        quantity,
-        unitPriceCents: unitPriceCents,
-        originalUnitPriceCents: discounted.original,
-        discountType,
-        discountValue: discountValue,
-        billingUnit,
-        unitLabel,
-        totalCents,
-        missingPrice,
-        priceSource: projectPriceCents
-          ? 'project'
-          : defaultPriceCents
-            ? 'default'
-            : tjmCents
-              ? 'tjm'
-              : 'missing',
-      };
-    });
-  }, [catalogById, serviceDrafts, services]);
-
-  const depositPercent = billingSettings?.defaultDepositPercent;
-  const effectiveDepositPercent = Number.isFinite(depositPercent) ? Number(depositPercent) : 0;
-  const vatEnabled = billingSettings?.vatEnabled ?? false;
-  const vatRatePercent = billingSettings?.vatRatePercent ?? 0;
-
-  const pricingTotals = useMemo(() => {
-    const totalCents = pricingLines.reduce((sum, line) => sum + (line.totalCents || 0), 0);
-    const vatCents = vatEnabled ? Math.round(totalCents * (vatRatePercent / 100)) : 0;
-    const totalTtcCents = totalCents + vatCents;
-    const depositCents = Math.round(totalCents * (effectiveDepositPercent / 100));
-    const balanceCents = totalCents - depositCents;
-    const missingCount = pricingLines.filter((line) => line.missingPrice).length;
-    return { totalCents, vatCents, totalTtcCents, depositCents, balanceCents, missingCount };
-  }, [effectiveDepositPercent, pricingLines, vatEnabled, vatRatePercent]);
-
-  const isBillingEmpty = services.length === 0;
-
-  const missingPriceNames = useMemo(() => {
-    return pricingLines
-      .filter((line) => line.missingPrice)
-      .map((line) => services.find((svc) => svc.id === line.id)?.service.name ?? 'Service');
-  }, [pricingLines, services]);
+  const {
+    catalogDurationById,
+    pricingLines,
+    pricingTotals,
+    isBillingEmpty,
+    missingPriceNames,
+    effectiveDepositPercent,
+    vatEnabled,
+    vatRatePercent,
+  } = usePricingEngine({
+    services,
+    serviceDrafts,
+    setServiceDrafts,
+    catalogServices,
+    billingSettings,
+  });
 
   const billingSummary = project?.billingSummary ?? null;
   const billingReferenceId = billingSummary?.referenceQuoteId ?? project?.billingQuoteId ?? null;
@@ -1067,7 +940,7 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
   const stagedPercentValue =
     stagedMode === 'PERCENT' ? Number(stagedInvoiceModal?.value ?? '') : null;
   const stagedAmountValue =
-    stagedMode === 'AMOUNT' ? parseEuroInputCents(stagedInvoiceModal?.value ?? '') : null;
+    stagedMode === 'AMOUNT' ? (() => { const c = parseEuroToCents(stagedInvoiceModal?.value ?? ''); return Number.isFinite(c) ? c : null; })() : null;
   const stagedPreviewCents =
     stagedMode === 'FINAL'
       ? remainingToInvoiceCents
@@ -1148,117 +1021,36 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
 
   return (
     <div className={UI.page}>
-      <SectionCard>
-        <div className="flex flex-col gap-5">
-          <StickyHeaderActions>
-            <Button asChild variant="outline" size="sm" className="gap-2">
-              <Link href={`/app/pro/${businessId}/projects`}>
-                <ArrowLeft size={16} />
-                Retour
-              </Link>
-            </Button>
-            <div className="flex flex-wrap items-center gap-2">
-              <Button asChild variant="outline" size="sm">
-                <Link href={`/app/pro/${businessId}/projects/${projectId}/edit`}>Modifier</Link>
-              </Button>
-              <Button asChild size="sm">
-                <Link href={`/app/pro/${businessId}/projects/${projectId}?tab=billing`}>Facturation</Link>
-              </Button>
-              {latestPdf ? (
-                <Button asChild size="sm" variant="outline">
-                  <a href={latestPdf.url} target="_blank" rel="noreferrer">
-                    Dernier PDF
-                  </a>
-                </Button>
-              ) : null}
-            </div>
-          </StickyHeaderActions>
-
-          <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
-            <div className="space-y-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-2xl font-semibold text-[var(--text-primary)]">
-                  {project.name ?? `Projet #${projectId}`}
-                </h1>
-                <Badge variant="neutral">{statusLabel}</Badge>
-                {showScopeBadge ? <Badge variant={scopeVariant}>{scopeLabel}</Badge> : null}
-                {project.archivedAt ? <Badge variant="performance">Archivé</Badge> : null}
-              </div>
-              <div className="flex flex-wrap gap-4">
-                <MetaItem
-                  label="Client"
-                  value={
-                    project.clientName && project.clientId ? (
-                      <Link
-                        href={`/app/pro/${businessId}/clients/${project.clientId}`}
-                        className="font-medium text-[var(--text-primary)] hover:underline"
-                      >
-                        {project.clientName}
-                      </Link>
-                    ) : (
-                      project.clientName ?? 'Non renseigné'
-                    )
-                  }
-                />
-                <MetaItem
-                  label="Dates"
-                  value={`${formatDate(project.startDate)} → ${formatDate(project.endDate)}`}
-                />
-                <MetaItem label="Dernière mise à jour" value={formatDate(project.updatedAt)} />
-              </div>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-3">
-              {kpis.map((item) => (
-                <StatCard key={item.label} label={item.label} value={String(item.value)} />
-              ))}
-            </div>
-          </div>
-        </div>
-      </SectionCard>
-
-      {isOverdue ? (
-        <SectionCard className="border-rose-200/70 bg-rose-50/40">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="space-y-1">
-              <p className="text-sm font-semibold text-[var(--text-primary)]">Date de fin dépassée</p>
-              <p className="text-xs text-[var(--text-secondary)]">
-                Terminer le projet ou repousser la fin.
-              </p>
-            </div>
-            <Badge variant="performance">En retard</Badge>
-          </div>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <Button
-              type="button"
-              size="sm"
-              onClick={handleMarkCompleted}
-              disabled={!isAdmin || markingCompleted}
-            >
-              {markingCompleted ? 'Traitement…' : 'Marquer terminé'}
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                if (!isAdmin) {
-                  setActionError('Réservé aux admins/owners.');
-                  return;
-                }
-                setActionError(null);
-                setActiveSetupModal('deadline');
-              }}
-              disabled={!isAdmin || markingCompleted}
-            >
-              Repousser
-            </Button>
-          </div>
-          {!isAdmin ? (
-            <p className="mt-2 text-xs text-[var(--text-secondary)]">Réservé aux admins/owners.</p>
-          ) : null}
-          {actionError ? <p className="mt-2 text-xs text-rose-500">{actionError}</p> : null}
-        </SectionCard>
-      ) : null}
+      <ProjectHeaderSection
+        businessId={businessId}
+        projectId={projectId}
+        projectName={project.name}
+        clientId={project.clientId}
+        clientName={project.clientName}
+        startDate={project.startDate}
+        endDate={project.endDate}
+        updatedAt={project.updatedAt}
+        archivedAt={project.archivedAt ?? null}
+        statusLabel={statusLabel}
+        scopeLabel={scopeLabel}
+        scopeVariant={scopeVariant}
+        showScopeBadge={showScopeBadge}
+        isOverdue={isOverdue}
+        isAdmin={isAdmin}
+        markingCompleted={markingCompleted}
+        actionError={actionError}
+        kpis={kpis}
+        latestPdf={latestPdf}
+        onMarkCompleted={handleMarkCompleted}
+        onPostpone={() => {
+          if (!isAdmin) {
+            setActionError('Réservé aux admins/owners.');
+            return;
+          }
+          setActionError(null);
+          setActiveSetupModal('deadline');
+        }}
+      />
 
       <TabsPills
         items={tabs}
