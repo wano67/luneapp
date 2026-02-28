@@ -31,11 +31,11 @@ import {
 } from '@/lib/projectStatusUi';
 import { formatCentsToEuroInput, parseEuroToCents, sanitizeEuroInput } from '@/lib/money';
 import { QuoteWizardModal } from '@/components/pro/projects/modals/QuoteWizardModal';
-import { QuoteDateModal, type QuoteDateEditorState } from '@/components/pro/projects/modals/QuoteDateModal';
-import { CancelQuoteModal, type CancelQuoteEditorState } from '@/components/pro/projects/modals/CancelQuoteModal';
-import { InvoiceDateModal, type InvoiceDateEditorState } from '@/components/pro/projects/modals/InvoiceDateModal';
+import { QuoteDateModal } from '@/components/pro/projects/modals/QuoteDateModal';
+import { CancelQuoteModal } from '@/components/pro/projects/modals/CancelQuoteModal';
+import { InvoiceDateModal } from '@/components/pro/projects/modals/InvoiceDateModal';
 import { DepositDateModal } from '@/components/pro/projects/modals/DepositDateModal';
-import { StagedInvoiceModal, type StagedInvoiceModalState } from '@/components/pro/projects/modals/StagedInvoiceModal';
+import { StagedInvoiceModal } from '@/components/pro/projects/modals/StagedInvoiceModal';
 import { PaymentModal } from '@/components/pro/projects/modals/PaymentModal';
 import { QuoteEditorModal } from '@/components/pro/projects/modals/QuoteEditorModal';
 import { InvoiceEditorModal } from '@/components/pro/projects/modals/InvoiceEditorModal';
@@ -46,6 +46,8 @@ import { SetupModals } from '@/components/pro/projects/modals/SetupModals';
 import { useQuoteWizard } from '@/components/pro/projects/hooks/useQuoteWizard';
 import { usePaymentModal } from '@/components/pro/projects/hooks/usePaymentModal';
 import { useProjectDataLoaders } from '@/components/pro/projects/hooks/useProjectDataLoaders';
+import { useBillingHandlers } from '@/components/pro/projects/hooks/useBillingHandlers';
+import { useTeamManagement } from '@/components/pro/projects/hooks/useTeamManagement';
 
 type ProjectDetail = {
   id: string;
@@ -178,52 +180,6 @@ type InvoiceItem = {
   quoteId: string | null;
 };
 
-type EditableLine = {
-  id: string;
-  label: string;
-  description: string;
-  quantity: string;
-  unitPrice: string;
-  serviceId?: string | null;
-  productId?: string | null;
-};
-
-type InvoiceLineItem = {
-  id: string;
-  serviceId: string | null;
-  productId: string | null;
-  label: string;
-  description?: string | null;
-  quantity: number;
-  unitPriceCents: string;
-  totalCents: string;
-};
-
-
-type QuoteEditorState = {
-  quoteId: string;
-  status: string;
-  number: string | null;
-  issuedAt: string;
-  expiresAt: string;
-  note: string;
-  lines: EditableLine[];
-};
-
-type InvoiceEditorState = {
-  invoiceId: string;
-  status: string;
-  number: string | null;
-  issuedAt: string;
-  dueAt: string;
-  note: string;
-  lines: EditableLine[];
-};
-
-type InvoiceDetail = InvoiceItem & {
-  note: string | null;
-  items: InvoiceLineItem[];
-};
 
 const tabs = [
   { key: 'overview', label: "Vue d\u2019ensemble" },
@@ -233,13 +189,6 @@ const tabs = [
   { key: 'files', label: 'Documents' },
 ];
 
-
-function toDateInput(value?: string | null) {
-  if (!value) return '';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '';
-  return date.toISOString().slice(0, 10);
-}
 
 function parseCents(value?: string | null): number | null {
   if (!value) return null;
@@ -260,26 +209,6 @@ function getInvoicePaidCents(invoice: InvoiceItem): number {
 }
 
 
-function toEditableLine(item: {
-  id: string;
-  label: string;
-  description?: string | null;
-  quantity: number;
-  unitPriceCents: string;
-  serviceId?: string | null;
-  productId?: string | null;
-}): EditableLine {
-  return {
-    id: item.id,
-    label: item.label,
-    description: item.description ?? '',
-    quantity: String(item.quantity),
-    unitPrice: formatCentsToEuroInput(item.unitPriceCents),
-    serviceId: item.serviceId ?? null,
-    productId: item.productId ?? null,
-  };
-}
-
 const OVERVIEW_PREVIEW_COUNT = 3;
 const OVERVIEW_ACTIVITY_COUNT = 5;
 const OVERVIEW_MEMBERS_COUNT = 6;
@@ -290,29 +219,14 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
   const isAdmin = activeCtx?.isAdmin ?? false;
   const [billingError, setBillingError] = useState<string | null>(null);
   const [billingInfo, setBillingInfo] = useState<string | null>(null);
-  const [quoteEditor, setQuoteEditor] = useState<QuoteEditorState | null>(null);
-  const [invoiceEditor, setInvoiceEditor] = useState<InvoiceEditorState | null>(null);
-  const [quoteEditError, setQuoteEditError] = useState<string | null>(null);
-  const [invoiceEditError, setInvoiceEditError] = useState<string | null>(null);
-  const [quoteEditing, setQuoteEditing] = useState(false);
-  const [invoiceEditing, setInvoiceEditing] = useState(false);
-  const [stagedInvoiceModal, setStagedInvoiceModal] = useState<StagedInvoiceModalState | null>(null);
-  const [stagedInvoiceError, setStagedInvoiceError] = useState<string | null>(null);
-  const [stagedInvoiceLoading, setStagedInvoiceLoading] = useState(false);
+
   const [activeTab, setActiveTab] = useState<'overview' | 'work' | 'team' | 'billing' | 'files'>('overview');
   const [statusFilter, setStatusFilter] = useState<'TODO' | 'IN_PROGRESS' | 'DONE' | 'all'>('all');
   const [showAllServicesOverview, setShowAllServicesOverview] = useState(false);
   const [showAllActionsOverview, setShowAllActionsOverview] = useState(false);
   const [showAllActivity, setShowAllActivity] = useState(false);
   const [showSummaryDetails, setShowSummaryDetails] = useState(false);
-  const [accessModalOpen, setAccessModalOpen] = useState(false);
-  const [unitsModalOpen, setUnitsModalOpen] = useState(false);
-  const [unitDraftName, setUnitDraftName] = useState('');
-  const [unitDraftOrder, setUnitDraftOrder] = useState('0');
-  const [unitErrors, setUnitErrors] = useState<string | null>(null);
-  const [unitDrafts, setUnitDrafts] = useState<Record<string, { name: string; order: string }>>({});
-  const [accessInfo, setAccessInfo] = useState<string | null>(null);
-  const [teamInfo, setTeamInfo] = useState<string | null>(null);
+
   const [taskGroupExpanded, setTaskGroupExpanded] = useState<Record<string, boolean>>({});
   const [taskRowExpanded, setTaskRowExpanded] = useState<Record<string, boolean>>({});
   const [activeSetupModal, setActiveSetupModal] = useState<
@@ -352,10 +266,7 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
   const [lineSavingId, setLineSavingId] = useState<string | null>(null);
   const [lineErrors, setLineErrors] = useState<Record<string, string>>({});
   const [openNotes, setOpenNotes] = useState<Record<string, boolean>>({});
-  const [creatingQuote, setCreatingQuote] = useState(false);
-  const [quoteActionId, setQuoteActionId] = useState<string | null>(null);
-  const [invoiceActionId, setInvoiceActionId] = useState<string | null>(null);
-  const [recurringInvoiceActionId, setRecurringInvoiceActionId] = useState<string | null>(null);
+
   const [taskAssignments, setTaskAssignments] = useState<Record<string, string>>({});
   const [generateTasksOnAdd, setGenerateTasksOnAdd] = useState(true);
   const [taskAssigneeId, setTaskAssigneeId] = useState('');
@@ -363,16 +274,7 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
   const [openServiceTasks, setOpenServiceTasks] = useState<Record<string, boolean>>({});
   const [taskUpdating, setTaskUpdating] = useState<Record<string, boolean>>({});
   const [templatesApplying, setTemplatesApplying] = useState<Record<string, boolean>>({});
-  const [quoteDateEditor, setQuoteDateEditor] = useState<QuoteDateEditorState | null>(null);
-  const [cancelQuoteEditor, setCancelQuoteEditor] = useState<CancelQuoteEditorState | null>(null);
-  const [cancelQuoteError, setCancelQuoteError] = useState<string | null>(null);
-  const [cancelQuoteSaving, setCancelQuoteSaving] = useState(false);
-  const [invoiceDateEditor, setInvoiceDateEditor] = useState<InvoiceDateEditorState | null>(null);
-  const [depositDateEditorOpen, setDepositDateEditorOpen] = useState(false);
-  const [depositPaidDraft, setDepositPaidDraft] = useState('');
-  const [dateModalError, setDateModalError] = useState<string | null>(null);
-  const [dateModalSaving, setDateModalSaving] = useState(false);
-  const [referenceUpdatingId, setReferenceUpdatingId] = useState<string | null>(null);
+
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState('MEMBER');
   const [documentFile, setDocumentFile] = useState<File | null>(null);
@@ -491,10 +393,7 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
     setPrestationsError(null);
   }, [project]);
 
-  useEffect(() => {
-    if (!project) return;
-    setDepositPaidDraft(project.depositPaidAt ? project.depositPaidAt.slice(0, 10) : '');
-  }, [project?.depositPaidAt, project]);
+
 
 
 
@@ -572,6 +471,36 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
     loadServiceTemplates,
     refetchAll,
     onBillingInfo: setBillingInfo,
+  });
+
+  const {
+    accessModalOpen,
+    setAccessModalOpen,
+    accessInfo,
+    unitsModalOpen,
+    setUnitsModalOpen,
+    unitErrors,
+    teamInfo,
+    unitDraftName,
+    setUnitDraftName,
+    unitDraftOrder,
+    setUnitDraftOrder,
+    unitDrafts,
+    setUnitDrafts,
+    handleAddProjectMember,
+    handleRemoveProjectMember,
+    handleCreateUnit,
+    handleUpdateUnit,
+    handleDeleteUnit,
+    handleAssignMemberToUnit,
+  } = useTeamManagement({
+    businessId,
+    projectId,
+    isAdmin,
+    organizationUnits,
+    loadMembers,
+    loadProjectMembers,
+    loadOrganizationUnits,
   });
 
   const patchProject = async (body: Record<string, unknown>) => {
@@ -857,724 +786,6 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
       setLineSavingId(null);
     }
   }
-
-  async function handleCreateQuote() {
-    if (!isAdmin) {
-      setBillingError('Réservé aux admins/owners.');
-      return;
-    }
-    if (!services.length) {
-      setBillingError('Ajoute au moins un service avant de créer un devis.');
-      return;
-    }
-    if (pricingTotals.missingCount > 0) {
-      setBillingError('Renseigne les tarifs manquants avant de créer un devis.');
-      return;
-    }
-    setCreatingQuote(true);
-    setBillingError(null);
-    setBillingInfo(null);
-    try {
-      const res = await fetchJson<{ quote: { id: string } }>(
-        `/api/pro/businesses/${businessId}/projects/${projectId}/quotes`,
-        { method: 'POST' }
-      );
-      if (!res.ok) {
-        setBillingError(res.error ?? 'Création du devis impossible.');
-        return;
-      }
-      setBillingInfo('Devis créé.');
-      await Promise.all([loadQuotes(), loadInvoices()]);
-    } catch (err) {
-      setBillingError(getErrorMessage(err));
-    } finally {
-      setCreatingQuote(false);
-    }
-  }
-
-  function openCancelQuoteModal(quote: QuoteItem) {
-    if (!isAdmin) {
-      setBillingError('Réservé aux admins/owners.');
-      return;
-    }
-    setCancelQuoteError(null);
-    setCancelQuoteEditor({
-      quoteId: quote.id,
-      number: quote.number ?? null,
-      status: quote.status,
-      reason: '',
-    });
-  }
-
-  async function handleCancelQuote() {
-    if (!cancelQuoteEditor) return;
-    if (!isAdmin) {
-      setCancelQuoteError('Réservé aux admins/owners.');
-      return;
-    }
-    const reason = cancelQuoteEditor.reason.trim();
-    if (!reason) {
-      setCancelQuoteError('La raison est requise.');
-      return;
-    }
-    if (cancelQuoteSaving) return;
-    setCancelQuoteSaving(true);
-    setCancelQuoteError(null);
-    setBillingError(null);
-    setBillingInfo(null);
-    try {
-      const res = await fetchJson<{ quote: QuoteItem }>(
-        `/api/pro/businesses/${businessId}/quotes/${cancelQuoteEditor.quoteId}`,
-        {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ status: 'CANCELLED', cancelReason: reason }),
-        }
-      );
-      if (!res.ok) {
-        setCancelQuoteError(res.error ?? 'Annulation impossible.');
-        return;
-      }
-      setCancelQuoteEditor(null);
-      await refetchAll();
-    } catch (err) {
-      setCancelQuoteError(getErrorMessage(err));
-    } finally {
-      setCancelQuoteSaving(false);
-    }
-  }
-
-  async function handleSetBillingReference(quoteId: string) {
-    if (!isAdmin) {
-      setBillingError('Réservé aux admins/owners.');
-      return;
-    }
-    setReferenceUpdatingId(quoteId);
-    setBillingError(null);
-    setBillingInfo(null);
-    try {
-      const res = await patchProject({ billingQuoteId: quoteId });
-      if (!res.ok) {
-        setBillingError(res.error ?? 'Impossible de définir le devis de référence.');
-        return;
-      }
-      setBillingInfo('Devis de référence mis à jour.');
-      await loadProject();
-    } catch (err) {
-      setBillingError(getErrorMessage(err));
-    } finally {
-      setReferenceUpdatingId(null);
-    }
-  }
-
-  async function handleQuoteStatus(quoteId: string, nextStatus: 'SENT' | 'SIGNED' | 'EXPIRED') {
-    if (!isAdmin) {
-      setBillingError('Réservé aux admins/owners.');
-      return;
-    }
-    setQuoteActionId(quoteId);
-    setBillingError(null);
-    setBillingInfo(null);
-    try {
-      const res = await fetchJson<{ quote: QuoteItem }>(
-        `/api/pro/businesses/${businessId}/quotes/${quoteId}`,
-        {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ status: nextStatus }),
-        }
-      );
-      if (!res.ok) {
-        setBillingError(res.error ?? 'Mise à jour du devis impossible.');
-        return;
-      }
-      await Promise.all([loadQuotes(), loadProject()]);
-    } catch (err) {
-      setBillingError(getErrorMessage(err));
-    } finally {
-      setQuoteActionId(null);
-    }
-  }
-
-  async function handleCreateInvoice(quoteId: string) {
-    if (!isAdmin) {
-      setBillingError('Réservé aux admins/owners.');
-      return;
-    }
-    setInvoiceActionId(quoteId);
-    setBillingError(null);
-    setBillingInfo(null);
-    try {
-      const res = await fetchJson<{ item: { id: string } }>(
-        `/api/pro/businesses/${businessId}/quotes/${quoteId}/invoices`,
-        { method: 'POST' }
-      );
-      if (!res.ok) {
-        setBillingError(res.error ?? 'Création de la facture impossible.');
-        return;
-      }
-      setBillingInfo('Facture créée.');
-      await loadInvoices();
-    } catch (err) {
-      setBillingError(getErrorMessage(err));
-    } finally {
-      setInvoiceActionId(null);
-    }
-  }
-
-  async function handleGenerateRecurringInvoice(projectServiceId: string) {
-    if (!isAdmin) {
-      setBillingError('Réservé aux admins/owners.');
-      return;
-    }
-    setRecurringInvoiceActionId(projectServiceId);
-    setBillingError(null);
-    setBillingInfo(null);
-    try {
-      const res = await fetchJson<{ invoice: { id: string } }>(
-        `/api/pro/businesses/${businessId}/projects/${projectId}/services/${projectServiceId}/recurring-invoices`,
-        { method: 'POST' }
-      );
-      if (!res.ok) {
-        setBillingError(res.error ?? 'Création de la facture mensuelle impossible.');
-        return;
-      }
-      setBillingInfo('Facture mensuelle créée.');
-      await loadInvoices();
-    } catch (err) {
-      setBillingError(getErrorMessage(err));
-    } finally {
-      setRecurringInvoiceActionId(null);
-    }
-  }
-
-  function openStagedInvoiceModal(kind: 'DEPOSIT' | 'MID' | 'FINAL') {
-    if (!isAdmin) {
-      setBillingError('Réservé aux admins/owners.');
-      return;
-    }
-    const defaultValue =
-      kind === 'DEPOSIT' && Number.isFinite(summaryTotals.depositPercent)
-        ? String(summaryTotals.depositPercent)
-        : '';
-    setStagedInvoiceModal({ kind, mode: 'PERCENT', value: defaultValue });
-    setStagedInvoiceError(null);
-  }
-
-  function closeStagedInvoiceModal() {
-    setStagedInvoiceModal(null);
-    setStagedInvoiceError(null);
-  }
-
-  async function handleCreateStagedInvoice() {
-    if (!stagedInvoiceModal) return;
-    if (!isAdmin) {
-      setStagedInvoiceError('Réservé aux admins/owners.');
-      return;
-    }
-    if (remainingToInvoiceCents <= 0) {
-      setStagedInvoiceError('Aucun montant restant à facturer.');
-      return;
-    }
-
-    const mode = stagedInvoiceModal.kind === 'FINAL' ? 'FINAL' : stagedInvoiceModal.mode;
-    let value: number | undefined;
-    if (mode === 'PERCENT') {
-      const percent = Number(stagedInvoiceModal.value);
-      if (!Number.isFinite(percent) || percent <= 0 || percent > 100) {
-        setStagedInvoiceError('Pourcentage invalide.');
-        return;
-      }
-      value = percent;
-    } else if (mode === 'AMOUNT') {
-      const cents = parseEuroInputCents(stagedInvoiceModal.value);
-      if (cents == null || cents <= 0) {
-        setStagedInvoiceError('Montant invalide.');
-        return;
-      }
-      value = cents;
-    }
-
-    const previewAmount =
-      mode === 'FINAL'
-        ? remainingToInvoiceCents
-        : mode === 'PERCENT' && value != null
-          ? Math.round(summaryTotals.totalCents * (value / 100))
-          : value ?? 0;
-
-    if (previewAmount > remainingToInvoiceCents) {
-      setStagedInvoiceError('Le montant dépasse le reste à facturer.');
-      return;
-    }
-
-    setStagedInvoiceLoading(true);
-    setStagedInvoiceError(null);
-    setBillingInfo(null);
-    try {
-      const res = await fetchJson<{ invoice: { id: string } }>(
-        `/api/pro/businesses/${businessId}/projects/${projectId}/invoices/staged`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(mode === 'FINAL' ? { mode } : { mode, value }),
-        }
-      );
-      if (!res.ok) {
-        setStagedInvoiceError(res.error ?? 'Création de la facture impossible.');
-        return;
-      }
-      setBillingInfo('Facture créée.');
-      closeStagedInvoiceModal();
-      await loadInvoices();
-    } catch (err) {
-      setStagedInvoiceError(getErrorMessage(err));
-    } finally {
-      setStagedInvoiceLoading(false);
-    }
-  }
-
-  async function handleInvoiceStatus(invoiceId: string, nextStatus: 'SENT' | 'CANCELLED') {
-    if (!isAdmin) {
-      setBillingError('Réservé aux admins/owners.');
-      return;
-    }
-    setInvoiceActionId(invoiceId);
-    setBillingError(null);
-    setBillingInfo(null);
-    try {
-      const res = await fetchJson<{ item: InvoiceItem }>(
-        `/api/pro/businesses/${businessId}/invoices/${invoiceId}`,
-        {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ status: nextStatus }),
-        }
-      );
-      if (!res.ok) {
-        setBillingError(res.error ?? 'Mise à jour de la facture impossible.');
-        return;
-      }
-      await loadInvoices();
-    } catch (err) {
-      setBillingError(getErrorMessage(err));
-    } finally {
-      setInvoiceActionId(null);
-    }
-  }
-
-  function openQuoteDateModal(quote: QuoteItem) {
-    if (!isAdmin) {
-      setBillingError('Réservé aux admins/owners.');
-      return;
-    }
-    setDateModalError(null);
-    setQuoteDateEditor({
-      quoteId: quote.id,
-      number: quote.number ?? null,
-      status: quote.status,
-      signedAt: quote.signedAt ? quote.signedAt.slice(0, 10) : '',
-    });
-  }
-
-  function openInvoiceDateModal(invoice: InvoiceItem) {
-    if (!isAdmin) {
-      setBillingError('Réservé aux admins/owners.');
-      return;
-    }
-    setDateModalError(null);
-    setInvoiceDateEditor({
-      invoiceId: invoice.id,
-      number: invoice.number ?? null,
-      status: invoice.status,
-      paidAt: invoice.paidAt ? invoice.paidAt.slice(0, 10) : '',
-    });
-  }
-
-  async function handleSaveQuoteDate() {
-    if (!quoteDateEditor) return;
-    setDateModalSaving(true);
-    setDateModalError(null);
-    try {
-      const res = await fetchJson<{ quote: QuoteItem }>(
-        `/api/pro/businesses/${businessId}/quotes/${quoteDateEditor.quoteId}`,
-        {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            signedAt: quoteDateEditor.signedAt ? new Date(quoteDateEditor.signedAt).toISOString() : null,
-          }),
-        }
-      );
-      if (!res.ok) {
-        setDateModalError(res.error ?? 'Mise à jour impossible.');
-        return;
-      }
-      await loadQuotes();
-      setQuoteDateEditor(null);
-    } catch (err) {
-      setDateModalError(getErrorMessage(err));
-    } finally {
-      setDateModalSaving(false);
-    }
-  }
-
-  async function handleSaveInvoiceDate() {
-    if (!invoiceDateEditor) return;
-    setDateModalSaving(true);
-    setDateModalError(null);
-    try {
-      const res = await fetchJson<{ item: InvoiceItem }>(
-        `/api/pro/businesses/${businessId}/invoices/${invoiceDateEditor.invoiceId}`,
-        {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            paidAt: invoiceDateEditor.paidAt ? new Date(invoiceDateEditor.paidAt).toISOString() : null,
-          }),
-        }
-      );
-      if (!res.ok) {
-        setDateModalError(res.error ?? 'Mise à jour impossible.');
-        return;
-      }
-      await loadInvoices();
-      setInvoiceDateEditor(null);
-    } catch (err) {
-      setDateModalError(getErrorMessage(err));
-    } finally {
-      setDateModalSaving(false);
-    }
-  }
-
-  async function handleSaveDepositDate() {
-    if (!project) return;
-    setDateModalSaving(true);
-    setDateModalError(null);
-    try {
-      const res = await patchProject({
-        depositPaidAt: depositPaidDraft ? new Date(depositPaidDraft).toISOString() : null,
-      });
-      if (!res.ok) {
-        setDateModalError(res.error ?? 'Mise à jour impossible.');
-        return;
-      }
-      await refetchAll();
-      setDepositDateEditorOpen(false);
-    } catch (err) {
-      setDateModalError(getErrorMessage(err));
-    } finally {
-      setDateModalSaving(false);
-    }
-  }
-
-  function openQuoteEditor(quote: QuoteItem) {
-    if (!isAdmin) {
-      setBillingError('Réservé aux admins/owners.');
-      return;
-    }
-    const lines = (quote.items ?? []).map(toEditableLine);
-    setQuoteEditError(null);
-    setQuoteEditor({
-      quoteId: quote.id,
-      status: quote.status,
-      number: quote.number ?? null,
-      issuedAt: toDateInput(quote.issuedAt ?? quote.createdAt),
-      expiresAt: toDateInput(quote.expiresAt),
-      note: quote.note ?? '',
-      lines,
-    });
-  }
-
-  function closeQuoteEditor() {
-    setQuoteEditor(null);
-    setQuoteEditError(null);
-  }
-
-  function addQuoteLine() {
-    if (!quoteEditor) return;
-    const nextLine: EditableLine = {
-      id: `new-${Date.now()}`,
-      label: '',
-      description: '',
-      quantity: '1',
-      unitPrice: '',
-      serviceId: null,
-      productId: null,
-    };
-    setQuoteEditor({ ...quoteEditor, lines: [...quoteEditor.lines, nextLine] });
-  }
-
-  function removeQuoteLine(lineId: string) {
-    if (!quoteEditor) return;
-    setQuoteEditor({ ...quoteEditor, lines: quoteEditor.lines.filter((line) => line.id !== lineId) });
-  }
-
-  async function handleSaveQuoteEdit() {
-    if (!quoteEditor) return;
-    if (!isAdmin) {
-      setQuoteEditError('Réservé aux admins/owners.');
-      return;
-    }
-    if (quoteEditing) return;
-
-    const editableStatus = quoteEditor.status === 'DRAFT' || quoteEditor.status === 'SENT';
-    const canEditLines = quoteEditor.status === 'DRAFT';
-    if (!editableStatus) {
-      setQuoteEditError('Devis signé/annulé: modification interdite.');
-      return;
-    }
-
-    const payload: Record<string, unknown> = {};
-    const issuedAt = quoteEditor.issuedAt ? new Date(quoteEditor.issuedAt).toISOString() : null;
-    const expiresAt = quoteEditor.expiresAt ? new Date(quoteEditor.expiresAt).toISOString() : null;
-    payload.issuedAt = issuedAt;
-    payload.expiresAt = expiresAt;
-    payload.note = quoteEditor.note.trim() || null;
-
-    if (canEditLines) {
-      if (!quoteEditor.lines.length) {
-        setQuoteEditError('Ajoute au moins une ligne.');
-        return;
-      }
-      const items = [];
-      for (const line of quoteEditor.lines) {
-        const label = line.label.trim();
-        if (!label) {
-          setQuoteEditError('Chaque ligne doit avoir un libellé.');
-          return;
-        }
-        const description = line.description.trim();
-        const qty = Number(line.quantity);
-        if (!Number.isFinite(qty) || qty <= 0) {
-          setQuoteEditError('Quantité invalide.');
-          return;
-        }
-        const unitPriceCents = parseEuroInputCents(line.unitPrice);
-        if (unitPriceCents == null) {
-          setQuoteEditError('Prix unitaire invalide.');
-          return;
-        }
-        items.push({
-          id: line.id,
-          label,
-          description: description || null,
-          quantity: Math.max(1, Math.trunc(qty)),
-          unitPriceCents,
-          serviceId: line.serviceId ?? null,
-        });
-      }
-      payload.items = items;
-    }
-
-    setQuoteEditing(true);
-    setQuoteEditError(null);
-    try {
-      const res = await fetchJson<{ quote: QuoteItem }>(`/api/pro/businesses/${businessId}/quotes/${quoteEditor.quoteId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) {
-        setQuoteEditError(res.error ?? 'Mise à jour impossible.');
-        return;
-      }
-      await loadQuotes();
-      setBillingInfo('Devis mis à jour.');
-      closeQuoteEditor();
-    } catch (err) {
-      setQuoteEditError(getErrorMessage(err));
-    } finally {
-      setQuoteEditing(false);
-    }
-  }
-
-  async function handleDeleteQuote(quoteId: string) {
-    if (!isAdmin) {
-      setBillingError('Réservé aux admins/owners.');
-      return;
-    }
-    if (typeof window !== 'undefined' && !window.confirm('Supprimer ce devis ? Cette action est irréversible.')) {
-      return;
-    }
-    setBillingError(null);
-    setBillingInfo(null);
-    setQuoteActionId(quoteId);
-    try {
-      const res = await fetchJson(`/api/pro/businesses/${businessId}/quotes/${quoteId}`, { method: 'DELETE' });
-      if (!res.ok) {
-        setBillingError(res.error ?? 'Suppression impossible.');
-        return;
-      }
-      await loadQuotes();
-      setBillingInfo('Devis supprimé.');
-    } catch (err) {
-      setBillingError(getErrorMessage(err));
-    } finally {
-      setQuoteActionId(null);
-    }
-  }
-
-  async function openInvoiceEditor(invoiceId: string) {
-    if (!isAdmin) {
-      setBillingError('Réservé aux admins/owners.');
-      return;
-    }
-    setInvoiceEditError(null);
-    setInvoiceEditor(null);
-    try {
-      const res = await fetchJson<{ item: InvoiceDetail }>(`/api/pro/businesses/${businessId}/invoices/${invoiceId}`, {
-        cache: 'no-store',
-      });
-      if (!res.ok || !res.data) {
-        setInvoiceEditError(res.error ?? 'Facture introuvable.');
-        return;
-      }
-      const invoice = res.data.item;
-      setInvoiceEditor({
-        invoiceId: invoice.id,
-        status: invoice.status,
-        number: invoice.number ?? null,
-        issuedAt: toDateInput(invoice.issuedAt ?? invoice.createdAt),
-        dueAt: toDateInput(invoice.dueAt),
-        note: invoice.note ?? '',
-        lines: invoice.items.map(toEditableLine),
-      });
-    } catch (err) {
-      setInvoiceEditError(getErrorMessage(err));
-    }
-  }
-
-  function closeInvoiceEditor() {
-    setInvoiceEditor(null);
-    setInvoiceEditError(null);
-  }
-
-  function addInvoiceLine() {
-    if (!invoiceEditor) return;
-    const nextLine: EditableLine = {
-      id: `new-${Date.now()}`,
-      label: '',
-      description: '',
-      quantity: '1',
-      unitPrice: '',
-      productId: null,
-      serviceId: null,
-    };
-    setInvoiceEditor({ ...invoiceEditor, lines: [...invoiceEditor.lines, nextLine] });
-  }
-
-  function removeInvoiceLine(lineId: string) {
-    if (!invoiceEditor) return;
-    setInvoiceEditor({ ...invoiceEditor, lines: invoiceEditor.lines.filter((line) => line.id !== lineId) });
-  }
-
-  async function handleSaveInvoiceEdit() {
-    if (!invoiceEditor) return;
-    if (!isAdmin) {
-      setInvoiceEditError('Réservé aux admins/owners.');
-      return;
-    }
-    if (invoiceEditing) return;
-
-    const canEditLines = invoiceEditor.status === 'DRAFT';
-    const editableStatus = invoiceEditor.status === 'DRAFT' || invoiceEditor.status === 'SENT';
-    if (!editableStatus) {
-      setInvoiceEditError('Facture payée/annulée: modification interdite.');
-      return;
-    }
-
-    const payload: Record<string, unknown> = {};
-    payload.issuedAt = invoiceEditor.issuedAt ? new Date(invoiceEditor.issuedAt).toISOString() : null;
-    payload.dueAt = invoiceEditor.dueAt ? new Date(invoiceEditor.dueAt).toISOString() : null;
-    payload.note = invoiceEditor.note.trim() || null;
-
-    if (canEditLines) {
-      if (!invoiceEditor.lines.length) {
-        setInvoiceEditError('Ajoute au moins une ligne.');
-        return;
-      }
-      const lineItems = [];
-      for (const line of invoiceEditor.lines) {
-        const label = line.label.trim();
-        if (!label) {
-          setInvoiceEditError('Chaque ligne doit avoir un libellé.');
-          return;
-        }
-        const description = line.description.trim();
-        const qty = Number(line.quantity);
-        if (!Number.isFinite(qty) || qty <= 0) {
-          setInvoiceEditError('Quantité invalide.');
-          return;
-        }
-        const unitPriceCents = parseEuroInputCents(line.unitPrice);
-        if (unitPriceCents == null) {
-          setInvoiceEditError('Prix unitaire invalide.');
-          return;
-        }
-        lineItems.push({
-          id: line.id,
-          label,
-          description: description || null,
-          quantity: Math.max(1, Math.trunc(qty)),
-          unitPriceCents,
-          productId: line.productId ?? null,
-          serviceId: line.serviceId ?? null,
-        });
-      }
-      payload.lineItems = lineItems;
-    }
-
-    setInvoiceEditing(true);
-    setInvoiceEditError(null);
-    try {
-      const res = await fetchJson<{ item: InvoiceItem }>(
-        `/api/pro/businesses/${businessId}/invoices/${invoiceEditor.invoiceId}`,
-        {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        }
-      );
-      if (!res.ok) {
-        setInvoiceEditError(res.error ?? 'Mise à jour impossible.');
-        return;
-      }
-      await loadInvoices();
-      setBillingInfo('Facture mise à jour.');
-      closeInvoiceEditor();
-    } catch (err) {
-      setInvoiceEditError(getErrorMessage(err));
-    } finally {
-      setInvoiceEditing(false);
-    }
-  }
-
-  async function handleDeleteInvoice(invoiceId: string) {
-    if (!isAdmin) {
-      setBillingError('Réservé aux admins/owners.');
-      return;
-    }
-    if (typeof window !== 'undefined' && !window.confirm('Supprimer cette facture ? Cette action est irréversible.')) {
-      return;
-    }
-    setBillingError(null);
-    setBillingInfo(null);
-    setInvoiceActionId(invoiceId);
-    try {
-      const res = await fetchJson(`/api/pro/businesses/${businessId}/invoices/${invoiceId}`, { method: 'DELETE' });
-      if (!res.ok) {
-        setBillingError(res.error ?? 'Suppression impossible.');
-        return;
-      }
-      await loadInvoices();
-      setBillingInfo('Facture supprimée.');
-    } catch (err) {
-      setBillingError(getErrorMessage(err));
-    } finally {
-      setInvoiceActionId(null);
-    }
-  }
-
 
   const statusLabel = useMemo(() => {
     return getProjectStatusLabelFR(project?.status ?? null);
@@ -1960,6 +1171,84 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
     ? Number(billingSummary.remainingCents)
     : Math.max(0, summaryTotals.totalCents - alreadyInvoicedCents);
 
+  const {
+    quoteEditor,
+    setQuoteEditor,
+    invoiceEditor,
+    setInvoiceEditor,
+    quoteEditError,
+    invoiceEditError,
+    quoteEditing,
+    invoiceEditing,
+    stagedInvoiceModal,
+    setStagedInvoiceModal,
+    stagedInvoiceError,
+    stagedInvoiceLoading,
+    creatingQuote,
+    quoteActionId,
+    invoiceActionId,
+    recurringInvoiceActionId,
+    referenceUpdatingId,
+    quoteDateEditor,
+    setQuoteDateEditor,
+    cancelQuoteEditor,
+    setCancelQuoteEditor,
+    cancelQuoteError,
+    cancelQuoteSaving,
+    invoiceDateEditor,
+    setInvoiceDateEditor,
+    depositDateEditorOpen,
+    setDepositDateEditorOpen,
+    depositPaidDraft,
+    setDepositPaidDraft,
+    dateModalError,
+    setDateModalError,
+    dateModalSaving,
+    handleCreateQuote,
+    openCancelQuoteModal,
+    handleCancelQuote,
+    handleSetBillingReference,
+    handleQuoteStatus,
+    handleCreateInvoice,
+    handleGenerateRecurringInvoice,
+    openStagedInvoiceModal,
+    closeStagedInvoiceModal,
+    handleCreateStagedInvoice,
+    handleInvoiceStatus,
+    openQuoteDateModal,
+    openInvoiceDateModal,
+    handleSaveQuoteDate,
+    handleSaveInvoiceDate,
+    handleSaveDepositDate,
+    openQuoteEditor,
+    closeQuoteEditor,
+    addQuoteLine,
+    removeQuoteLine,
+    handleSaveQuoteEdit,
+    handleDeleteQuote,
+    openInvoiceEditor,
+    closeInvoiceEditor,
+    addInvoiceLine,
+    removeInvoiceLine,
+    handleSaveInvoiceEdit,
+    handleDeleteInvoice,
+  } = useBillingHandlers({
+    businessId,
+    projectId,
+    isAdmin,
+    projectDepositPaidAt: project?.depositPaidAt,
+    servicesLength: services.length,
+    pricingMissingCount: pricingTotals.missingCount,
+    summaryTotals,
+    remainingToInvoiceCents,
+    loadQuotes,
+    loadInvoices,
+    loadProject,
+    refetchAll,
+    onBillingError: setBillingError,
+    onBillingInfo: setBillingInfo,
+  });
+
   const latestQuote = useMemo(() => {
     return quotes.reduce<QuoteItem | null>((acc, quote) => {
       if (!acc) return quote;
@@ -2118,30 +1407,6 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
       }
     }
   }, [activeSetupModal, loadClients, loadCatalogServices, loadMembers, loadTasks, loadDocuments, project?.clientId]);
-
-  useEffect(() => {
-    if (!accessModalOpen) return;
-    setAccessInfo(null);
-    void loadMembers();
-    void loadProjectMembers();
-  }, [accessModalOpen, loadMembers, loadProjectMembers]);
-
-  useEffect(() => {
-    if (!unitsModalOpen) return;
-    setUnitErrors(null);
-    void loadOrganizationUnits();
-    void loadMembers();
-  }, [unitsModalOpen, loadOrganizationUnits, loadMembers]);
-
-  useEffect(() => {
-    if (!unitsModalOpen) return;
-    setUnitDrafts(
-      organizationUnits.reduce<Record<string, { name: string; order: string }>>((acc, unit) => {
-        acc[unit.id] = { name: unit.name, order: String(unit.order ?? 0) };
-        return acc;
-      }, {})
-    );
-  }, [organizationUnits, unitsModalOpen]);
 
   useEffect(() => {
     if (!generateTasksOnAdd) return;
@@ -2398,155 +1663,6 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
     ]);
     await refetchAll();
     closeModal();
-  }
-
-  async function handleAddProjectMember(membershipId: string) {
-    if (!isAdmin) {
-      setAccessInfo('Réservé aux admins/owners.');
-      return;
-    }
-    setAccessInfo(null);
-    const res = await fetchJson(
-      `/api/pro/businesses/${businessId}/projects/${projectId}/members`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ membershipId }),
-      }
-    );
-    if (!res.ok) {
-      setAccessInfo(res.error ?? "Impossible d'ajouter l'acc\u00e8s.");
-      return;
-    }
-    await loadProjectMembers();
-    setAccessInfo('Accès mis à jour.');
-  }
-
-  async function handleRemoveProjectMember(membershipId: string) {
-    if (!isAdmin) {
-      setAccessInfo('Réservé aux admins/owners.');
-      return;
-    }
-    setAccessInfo(null);
-    const res = await fetchJson(
-      `/api/pro/businesses/${businessId}/projects/${projectId}/members/${membershipId}`,
-      { method: 'DELETE' }
-    );
-    if (!res.ok) {
-      setAccessInfo(res.error ?? "Impossible de retirer l'acc\u00e8s.");
-      return;
-    }
-    await loadProjectMembers();
-    setAccessInfo('Accès mis à jour.');
-  }
-
-  async function handleCreateUnit() {
-    if (!isAdmin) {
-      setUnitErrors('Réservé aux admins/owners.');
-      return;
-    }
-    const name = unitDraftName.trim();
-    if (!name) {
-      setUnitErrors('Nom requis.');
-      return;
-    }
-    const order = unitDraftOrder.trim() === '' ? 0 : Number(unitDraftOrder);
-    if (!Number.isFinite(order)) {
-      setUnitErrors('Ordre invalide.');
-      return;
-    }
-    setUnitErrors(null);
-    const res = await fetchJson(
-      `/api/pro/businesses/${businessId}/organization/units`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, order: Math.trunc(order) }),
-      }
-    );
-    if (!res.ok) {
-      setUnitErrors(res.error ?? 'Création impossible.');
-      return;
-    }
-    setUnitDraftName('');
-    setUnitDraftOrder('0');
-    await loadOrganizationUnits();
-    setTeamInfo('Pôle créé.');
-  }
-
-  async function handleUpdateUnit(unitId: string) {
-    if (!isAdmin) {
-      setUnitErrors('Réservé aux admins/owners.');
-      return;
-    }
-    const draft = unitDrafts[unitId];
-    if (!draft) return;
-    const name = draft.name.trim();
-    if (!name) {
-      setUnitErrors('Nom requis.');
-      return;
-    }
-    const order = draft.order.trim() === '' ? 0 : Number(draft.order);
-    if (!Number.isFinite(order)) {
-      setUnitErrors('Ordre invalide.');
-      return;
-    }
-    setUnitErrors(null);
-    const res = await fetchJson(
-      `/api/pro/businesses/${businessId}/organization/units/${unitId}`,
-      {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, order: Math.trunc(order) }),
-      }
-    );
-    if (!res.ok) {
-      setUnitErrors(res.error ?? 'Mise à jour impossible.');
-      return;
-    }
-    await loadOrganizationUnits();
-    setTeamInfo('Pôle mis à jour.');
-  }
-
-  async function handleDeleteUnit(unitId: string) {
-    if (!isAdmin) {
-      setUnitErrors('Réservé aux admins/owners.');
-      return;
-    }
-    setUnitErrors(null);
-    const res = await fetchJson(
-      `/api/pro/businesses/${businessId}/organization/units/${unitId}`,
-      { method: 'DELETE' }
-    );
-    if (!res.ok) {
-      setUnitErrors(res.error ?? 'Suppression impossible.');
-      return;
-    }
-    await loadOrganizationUnits();
-    setTeamInfo('Pôle supprimé.');
-  }
-
-  async function handleAssignMemberToUnit(membershipId: string, unitId: string | null) {
-    if (!isAdmin) {
-      setUnitErrors('Réservé aux admins/owners.');
-      return;
-    }
-    setUnitErrors(null);
-    const res = await fetchJson(
-      `/api/pro/businesses/${businessId}/memberships/${membershipId}`,
-      {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ organizationUnitId: unitId }),
-      }
-    );
-    if (!res.ok) {
-      setUnitErrors(res.error ?? 'Assignation impossible.');
-      return;
-    }
-    await loadMembers();
-    await loadProjectMembers();
-    setTeamInfo('Membre mis à jour.');
   }
 
   async function handleUploadDocument() {

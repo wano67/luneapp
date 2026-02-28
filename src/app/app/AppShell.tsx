@@ -6,6 +6,7 @@ import React, { useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import AppSidebar, { type Space, getActiveSidebarMeta } from './AppSidebar';
+import { Banknote, FileText, Wallet2 } from 'lucide-react';
 import { IconFocus, IconHome, IconStudio, IconWallet, IconUser } from '@/components/icons';
 import { useBodyScrollLock } from '@/lib/scrollLock';
 import { LogoMark } from '@/components/marketing/LogoMark';
@@ -45,6 +46,25 @@ export default function AppShell({ children }: { children: ReactNode }) {
       { key: 'wallet', label: 'Wallet', href: '/app/personal', icon: <IconWallet size={18} /> },
       { key: 'studio', label: 'Studio', href: '/app/pro', icon: <IconStudio size={18} /> },
       { key: 'focus', label: 'Focus', href: '/app/focus', icon: <IconFocus size={18} /> },
+    ],
+    []
+  );
+
+  const walletBottomNav = useMemo(
+    () => [
+      { key: 'wallet-home', label: 'Wallet', href: '/app/personal', icon: <Wallet2 size={18} /> },
+      {
+        key: 'wallet-accounts',
+        label: 'Comptes',
+        href: '/app/personal/comptes',
+        icon: <Banknote size={18} />,
+      },
+      {
+        key: 'wallet-transactions',
+        label: 'Transactions',
+        href: '/app/personal/transactions',
+        icon: <FileText size={18} />,
+      },
     ],
     []
   );
@@ -528,8 +548,49 @@ export default function AppShell({ children }: { children: ReactNode }) {
         className="min-h-screen md:pl-[264px]"
         style={{ paddingTop: `${HEADER_H}px` }}
       >
-        <div className="px-4 py-4 md:px-6 md:py-6">{children}</div>
+        <div
+          className={
+            space === 'perso'
+              ? 'px-4 pt-4 pb-24 md:px-6 md:py-6'
+              : 'px-4 py-4 md:px-6 md:py-6'
+          }
+        >
+          {children}
+        </div>
       </main>
+
+      {space === 'perso' ? (
+        <nav
+          className="fixed inset-x-0 bottom-0 border-t border-[var(--border)] bg-[var(--background-alt)]/95 backdrop-blur-md md:hidden"
+          style={{ zIndex: 58, paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+          aria-label="Navigation Wallet mobile"
+        >
+          <div className="grid grid-cols-3 gap-1 px-2 py-2">
+            {walletBottomNav.map((item) => {
+              const active =
+                item.key === 'wallet-home'
+                  ? pathname === item.href
+                  : pathname === item.href || pathname.startsWith(`${item.href}/`);
+              return (
+                <Link
+                  key={item.key}
+                  href={item.href}
+                  className={[
+                    'flex flex-col items-center gap-1 rounded-xl border px-2 py-2 text-[11px] font-semibold transition-colors',
+                    active
+                      ? 'border-[var(--border)] bg-[var(--surface)] text-[var(--text-primary)]'
+                      : 'border-[var(--border)] bg-[var(--background)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]',
+                  ].join(' ')}
+                  aria-current={active ? 'page' : undefined}
+                >
+                  {item.icon}
+                  <span>{item.label}</span>
+                </Link>
+              );
+            })}
+          </div>
+        </nav>
+      ) : null}
     </div>
     </FileDropProvider>
   );

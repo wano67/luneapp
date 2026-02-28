@@ -547,6 +547,7 @@ export default function CsvImportModal({
                   accept=".csv,text/csv"
                   onFiles={onSelectFiles}
                   disabled={loadingPreview || loadingImport}
+                  dataAutofocus
                 />
                 <p className="text-xs text-slate-500">Format: date,label,amount,currency,note,category</p>
                 {fileName ? (

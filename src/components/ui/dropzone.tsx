@@ -11,9 +11,19 @@ type DropzoneProps = {
   onFiles: (files: FileList | File[]) => void;
   fileName?: string | null;
   error?: string | null;
+  dataAutofocus?: boolean;
 };
 
-export function Dropzone({ label, hint, accept, disabled, onFiles, fileName, error }: DropzoneProps) {
+export function Dropzone({
+  label,
+  hint,
+  accept,
+  disabled,
+  onFiles,
+  fileName,
+  error,
+  dataAutofocus,
+}: DropzoneProps) {
   const [dragOver, setDragOver] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
@@ -69,6 +79,7 @@ export function Dropzone({ label, hint, accept, disabled, onFiles, fileName, err
       <div
         role="button"
         tabIndex={disabled ? -1 : 0}
+        data-autofocus={dataAutofocus ? 'true' : undefined}
         onClick={openPicker}
         onKeyDown={(e: KeyboardEvent<HTMLDivElement>) => {
           if (disabled) return;

@@ -1,8 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,6 +11,7 @@ import Modal from '@/components/ui/modal';
 import CsvImportModal from '@/components/CsvImportModal';
 import { useFileDropHandler } from '@/components/file-drop/FileDropProvider';
 import { parseEuroToCents, sanitizeEuroInput } from '@/lib/money';
+import { emitWalletRefresh } from '@/lib/personalEvents';
 
 type AccountItem = {
   id: string;
@@ -52,6 +53,76 @@ function centsToEUR(centsStr: string) {
   }
 }
 
+function eurosToCentsBigInt(input: string): bigint | null {
+  const cleaned = String(input ?? '')
+    .trim()
+    .replace(/\s+/g, '')
+    .replace(',', '.');
+  if (!cleaned) return null;
+  const sign = cleaned.startsWith('-') ? -1n : 1n;
+  const unsigned = cleaned.replace(/^[+-]/, '');
+  if (!/^\d+(\.\d{0,2})?$/.test(unsigned)) return null;
+  const [intPartRaw, decPartRaw = ''] = unsigned.split('.');
+  try {
+    const intPart = BigInt(intPartRaw || '0');
+    const decPart = BigInt((decPartRaw + '00').slice(0, 2));
+    return sign * (intPart * 100n + decPart);
+  } catch {
+    return null;
+  }
+}
+
+type AccountFormErrors = {
+  name?: string;
+  initialEuros?: string;
+  institution?: string;
+  iban?: string;
+  form?: string;
+};
+
+function validateAccountForm(values: {
+  name: string;
+  initialEuros: string;
+  institution: string;
+  iban: string;
+}) {
+  const errors: AccountFormErrors = {};
+
+  const name = values.name.trim();
+  if (!name) {
+    errors.name = 'Nom requis.';
+  } else if (name.length < 2) {
+    errors.name = 'Minimum 2 caractères.';
+  }
+
+  const initialCents = eurosToCentsBigInt(values.initialEuros);
+  if (initialCents === null) {
+    errors.initialEuros = 'Montant invalide.';
+  } else if (initialCents < 0n) {
+    errors.initialEuros = 'Le solde initial doit être supérieur ou égal à 0.';
+  }
+
+  const institution = values.institution.trim();
+  if (institution && institution.length > 60) {
+    errors.institution = '60 caractères maximum.';
+  }
+
+  const ibanRaw = values.iban.trim();
+  const ibanCompact = ibanRaw.replace(/\s+/g, '');
+  const ibanUpper = ibanCompact.toUpperCase();
+  if (ibanCompact && (!ibanUpper.startsWith('FR') || ibanUpper.length < 15)) {
+    errors.iban = 'IBAN FR requis (au moins 15 caractères).';
+  }
+
+  return {
+    errors,
+    name,
+    institution: institution || null,
+    iban: ibanCompact ? ibanUpper : null,
+    initialCents,
+  };
+}
+
 function typeLabel(t: AccountItem['type']) {
   if (t === 'CURRENT') return 'Courant';
   if (t === 'SAVINGS') return 'Épargne';
@@ -65,6 +136,8 @@ function isAccountType(v: string): v is AccountItem['type'] {
 
 export default function ComptesPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const importAutoOpenedRef = useRef(false);
 
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<AccountItem[]>([]);
@@ -77,13 +150,26 @@ export default function ComptesPage() {
   const [importError, setImportError] = useState<string | null>(null);
   const [lastImportedFileName, setLastImportedFileName] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
-  const [createError, setCreateError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<AccountFormErrors>({});
 
   const [name, setName] = useState('');
   const [type, setType] = useState<AccountItem['type']>('CURRENT');
   const [initialEuros, setInitialEuros] = useState('0');
   const [institution, setInstitution] = useState('');
   const [iban, setIban] = useState('');
+
+  // edit modal
+  const [editOpen, setEditOpen] = useState(false);
+  const [editingAccount, setEditingAccount] = useState<AccountItem | null>(null);
+  const [editLoading, setEditLoading] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [editErrors, setEditErrors] = useState<AccountFormErrors>({});
+  const [editName, setEditName] = useState('');
+  const [editType, setEditType] = useState<AccountItem['type']>('CURRENT');
+  const [editInitialEuros, setEditInitialEuros] = useState('0.00');
+  const [editInstitution, setEditInstitution] = useState('');
+  const [editIban, setEditIban] = useState('');
 
   async function load() {
     setLoading(true);
@@ -116,6 +202,16 @@ export default function ComptesPage() {
     load();
   }, []);
 
+  useEffect(() => {
+    if (importAutoOpenedRef.current) return;
+    const shouldOpen = searchParams?.get('import') === '1';
+    if (!shouldOpen) return;
+    importAutoOpenedRef.current = true;
+    setImportFile(null);
+    setImportError(null);
+    setOpenImport(true);
+  }, [searchParams]);
+
   const handleCsvFiles = useCallback((files: FileList | File[]) => {
     const list = Array.from(files as ArrayLike<File>);
     if (!list.length) return;
@@ -141,17 +237,12 @@ export default function ComptesPage() {
 
   async function onCreate(e: FormEvent) {
     e.preventDefault();
-    setCreateError(null);
+    setFieldErrors({});
+    setSuccessMessage(null);
 
-    const n = name.trim();
-    if (!n) {
-      setCreateError('Nom requis.');
-      return;
-    }
-
-    const initialCents = parseEuroToCents(initialEuros);
-    if (!Number.isFinite(initialCents)) {
-      setCreateError('Montant invalide.');
+    const validated = validateAccountForm({ name, initialEuros, institution, iban });
+    if (Object.keys(validated.errors).length > 0) {
+      setFieldErrors(validated.errors);
       return;
     }
 
@@ -162,17 +253,23 @@ export default function ComptesPage() {
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({
-          name: n,
+          name: validated.name,
           type,
           currency: 'EUR',
-          institution: institution.trim() || null,
-          iban: iban.trim() || null,
-          initialCents: String(initialCents),
+          institution: validated.institution,
+          iban: validated.iban,
+          initialCents: validated.initialCents!.toString(),
         }),
       });
 
       const json = await safeJson(res);
-      if (!res.ok) throw new Error(getErrorFromJson(json) ?? 'Création impossible');
+      if (!res.ok) {
+        setFieldErrors((prev) => ({
+          ...prev,
+          form: getErrorFromJson(json) ?? 'Création impossible.',
+        }));
+        return;
+      }
 
       setOpen(false);
       setName('');
@@ -180,13 +277,134 @@ export default function ComptesPage() {
       setInitialEuros('0');
       setInstitution('');
       setIban('');
+      setFieldErrors({});
+      setSuccessMessage('Compte créé avec succès.');
 
       await load();
+      emitWalletRefresh();
     } catch (e) {
       console.error(e);
-      setCreateError('Création impossible.');
+      setFieldErrors((prev) => ({ ...prev, form: 'Création impossible.' }));
     } finally {
       setCreating(false);
+    }
+  }
+
+  function openEditModal(account: AccountItem) {
+    setEditingAccount(account);
+    setEditName(account.name);
+    setEditType(account.type);
+    setEditInitialEuros(centsToEUR(account.initialCents));
+    setEditInstitution(account.institution ?? '');
+    setEditIban(account.iban ?? '');
+    setEditErrors({});
+    setSuccessMessage(null);
+    setEditOpen(true);
+  }
+
+  async function onEdit(e: FormEvent) {
+    e.preventDefault();
+    if (!editingAccount) return;
+    setEditErrors({});
+    setSuccessMessage(null);
+
+    const validated = validateAccountForm({
+      name: editName,
+      initialEuros: editInitialEuros,
+      institution: editInstitution,
+      iban: editIban,
+    });
+    if (Object.keys(validated.errors).length > 0) {
+      setEditErrors(validated.errors);
+      return;
+    }
+
+    try {
+      setEditLoading(true);
+      const res = await fetch(`/api/personal/accounts/${encodeURIComponent(editingAccount.id)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          name: validated.name,
+          type: editType,
+          institution: validated.institution,
+          iban: validated.iban,
+          initialCents: validated.initialCents!.toString(),
+        }),
+      });
+
+      if (res.status === 401) {
+        const from = window.location.pathname + window.location.search;
+        window.location.href = `/login?from=${encodeURIComponent(from)}`;
+        return;
+      }
+
+      const json = await safeJson(res);
+      if (!res.ok) {
+        setEditErrors((prev) => ({
+          ...prev,
+          form: getErrorFromJson(json) ?? 'Mise à jour impossible.',
+        }));
+        return;
+      }
+
+      setEditOpen(false);
+      setEditingAccount(null);
+      setEditErrors({});
+      setSuccessMessage('Compte mis à jour.');
+
+      await load();
+      emitWalletRefresh();
+    } catch (e) {
+      console.error(e);
+      setEditErrors((prev) => ({ ...prev, form: 'Mise à jour impossible.' }));
+    } finally {
+      setEditLoading(false);
+    }
+  }
+
+  async function onDeleteAccount() {
+    if (!editingAccount) return;
+    const ok = window.confirm(
+      'Ce compte sera supprimé ainsi que ses transactions associées. Continuer ?'
+    );
+    if (!ok) return;
+
+    try {
+      setDeleteLoading(true);
+      const res = await fetch(`/api/personal/accounts/${encodeURIComponent(editingAccount.id)}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+
+      if (res.status === 401) {
+        const from = window.location.pathname + window.location.search;
+        window.location.href = `/login?from=${encodeURIComponent(from)}`;
+        return;
+      }
+
+      const json = await safeJson(res);
+      if (!res.ok) {
+        setEditErrors((prev) => ({
+          ...prev,
+          form: getErrorFromJson(json) ?? 'Suppression impossible.',
+        }));
+        return;
+      }
+
+      setEditOpen(false);
+      setEditingAccount(null);
+      setEditErrors({});
+      setSuccessMessage('Compte supprimé.');
+
+      await load();
+      emitWalletRefresh();
+    } catch (e) {
+      console.error(e);
+      setEditErrors((prev) => ({ ...prev, form: 'Suppression impossible.' }));
+    } finally {
+      setDeleteLoading(false);
     }
   }
 
@@ -218,7 +436,15 @@ export default function ComptesPage() {
             >
               Importer CSV
             </Button>
-            <Button onClick={() => setOpen(true)}>Créer un compte</Button>
+            <Button
+              onClick={() => {
+                setFieldErrors({});
+                setSuccessMessage(null);
+                setOpen(true);
+              }}
+            >
+              Créer un compte
+            </Button>
           </div>
         </div>
       </Card>
@@ -241,7 +467,15 @@ export default function ComptesPage() {
               Aucun compte. Crée ton premier compte bancaire.
             </p>
             <div className="mt-3">
-              <Button onClick={() => setOpen(true)}>Créer un compte</Button>
+            <Button
+              onClick={() => {
+                setFieldErrors({});
+                setSuccessMessage(null);
+                setOpen(true);
+              }}
+            >
+              Créer un compte
+            </Button>
             </div>
           </Card>
         ) : (
@@ -249,23 +483,35 @@ export default function ComptesPage() {
             const deltaBig = BigInt(a.delta30Cents || '0');
             const deltaTxt = `${centsToEUR(deltaBig.toString())} €`;
             return (
-              <button
+              <Card
                 key={a.id}
-                type="button"
-                onClick={() => router.push(`/app/personal/comptes/${a.id}`)}
-                className="text-left"
+                role="button"
+                tabIndex={0}
+                onClick={(e) => {
+                  const target = e.target as HTMLElement | null;
+                  if (target?.closest('button,a,input,select,textarea')) return;
+                  router.push(`/app/personal/comptes/${a.id}`);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key !== 'Enter' && e.key !== ' ') return;
+                  const target = e.target as HTMLElement | null;
+                  if (target?.closest('button,a,input,select,textarea')) return;
+                  e.preventDefault();
+                  router.push(`/app/personal/comptes/${a.id}`);
+                }}
+                className="p-5 text-left hover:bg-[var(--surface-hover)]"
               >
-                <Card className="p-5 hover:bg-[var(--surface-hover)]">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="truncate text-base font-semibold">{a.name}</p>
-                      <p className="mt-1 text-xs text-[var(--text-secondary)]">
-                        {typeLabel(a.type)} · {a.currency}
-                        {a.institution ? ` · ${a.institution}` : ''}
-                      </p>
-                    </div>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-base font-semibold">{a.name}</p>
+                    <p className="mt-1 text-xs text-[var(--text-secondary)]">
+                      {typeLabel(a.type)} · {a.currency}
+                      {a.institution ? ` · ${a.institution}` : ''}
+                    </p>
+                  </div>
 
-                    <div className="shrink-0 text-right">
+                  <div className="flex flex-col items-end gap-2">
+                    <div className="text-right">
                       <p className="text-base font-semibold">{centsToEUR(a.balanceCents)} €</p>
                       <p
                         className={[
@@ -277,16 +523,31 @@ export default function ComptesPage() {
                         {deltaTxt} · 30j
                       </p>
                     </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openEditModal(a);
+                      }}
+                    >
+                      Modifier
+                    </Button>
                   </div>
+                </div>
 
-                  <div className="mt-4 flex items-center justify-between text-xs text-[var(--text-secondary)]">
-                    <span>Ouvrir le détail →</span>
-                    <span className="underline underline-offset-4">
-                      <Link href="/app/personal/transactions">Transactions</Link>
-                    </span>
-                  </div>
-                </Card>
-              </button>
+                <div className="mt-4 flex items-center justify-between text-xs text-[var(--text-secondary)]">
+                  <span>Ouvrir le détail →</span>
+                  <span className="underline underline-offset-4">
+                    <Link
+                      href="/app/personal/transactions"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      Transactions
+                    </Link>
+                  </span>
+                </div>
+              </Card>
             );
           })
         )}
@@ -294,17 +555,27 @@ export default function ComptesPage() {
 
       <Modal
         open={open}
-        onCloseAction={() => (creating ? null : setOpen(false))}
+        onCloseAction={() => {
+          if (creating) return;
+          setOpen(false);
+          setFieldErrors({});
+        }}
         title="Créer un compte bancaire"
         description="Ajoute un compte (courant, épargne, invest, cash). Le solde est calculé avec les transactions."
       >
         <form onSubmit={onCreate} className="space-y-4">
+          {fieldErrors.form ? (
+            <div className="rounded-2xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+              {fieldErrors.form}
+            </div>
+          ) : null}
           <Input
             label="Nom du compte *"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            error={createError ?? undefined}
+            error={fieldErrors.name}
             placeholder="Ex: Courant Revolut"
+            data-autofocus="true"
           />
 
           <Select
@@ -325,10 +596,9 @@ export default function ComptesPage() {
           <Input
             label="Solde initial (€)"
             value={initialEuros}
-            onChange={(e) => setInitialEuros(sanitizeEuroInput(e.target.value))}
-            placeholder="0"
-            type="text"
-            inputMode="decimal"
+            onChange={(e) => setInitialEuros(e.target.value)}
+            placeholder="0.00"
+            error={fieldErrors.initialEuros}
           />
 
           <Input
@@ -336,6 +606,7 @@ export default function ComptesPage() {
             value={institution}
             onChange={(e) => setInstitution(e.target.value)}
             placeholder="Ex: BNP, Revolut..."
+            error={fieldErrors.institution}
           />
 
           <Input
@@ -343,15 +614,120 @@ export default function ComptesPage() {
             value={iban}
             onChange={(e) => setIban(e.target.value)}
             placeholder="FR76 ..."
+            error={fieldErrors.iban}
           />
 
           <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" type="button" onClick={() => setOpen(false)} disabled={creating}>
+            <Button
+              variant="outline"
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                setFieldErrors({});
+              }}
+              disabled={creating}
+            >
               Annuler
             </Button>
             <Button type="submit" disabled={creating}>
               {creating ? 'Création…' : 'Créer'}
             </Button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal
+        open={editOpen}
+        onCloseAction={() => {
+          if (editLoading || deleteLoading) return;
+          setEditOpen(false);
+          setEditErrors({});
+          setEditingAccount(null);
+        }}
+        title="Modifier un compte"
+        description="Mets à jour les informations du compte."
+      >
+        <form onSubmit={onEdit} className="space-y-4">
+          {editErrors.form ? (
+            <div className="rounded-2xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+              {editErrors.form}
+            </div>
+          ) : null}
+          <Input
+            label="Nom du compte *"
+            value={editName}
+            onChange={(e) => setEditName(e.target.value)}
+            error={editErrors.name}
+            placeholder="Ex: Courant Revolut"
+            data-autofocus="true"
+          />
+
+          <Select
+            label="Type"
+            value={editType}
+            onChange={(e) => {
+              const v = e.target.value;
+              if (isAccountType(v)) setEditType(v);
+            }}
+            disabled={editLoading || deleteLoading}
+          >
+            <option value="CURRENT">Courant</option>
+            <option value="SAVINGS">Épargne</option>
+            <option value="INVEST">Invest</option>
+            <option value="CASH">Cash</option>
+          </Select>
+
+          <Input
+            label="Solde initial (€)"
+            value={editInitialEuros}
+            onChange={(e) => setEditInitialEuros(e.target.value)}
+            placeholder="0.00"
+            error={editErrors.initialEuros}
+          />
+
+          <Input
+            label="Banque / institution"
+            value={editInstitution}
+            onChange={(e) => setEditInstitution(e.target.value)}
+            placeholder="Ex: BNP, Revolut..."
+            error={editErrors.institution}
+          />
+
+          <Input
+            label="IBAN (optionnel)"
+            value={editIban}
+            onChange={(e) => setEditIban(e.target.value)}
+            placeholder="FR76 ..."
+            error={editErrors.iban}
+          />
+
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-2">
+            <Button
+              variant="danger"
+              type="button"
+              onClick={onDeleteAccount}
+              disabled={editLoading || deleteLoading}
+            >
+              {deleteLoading ? 'Suppression…' : 'Supprimer'}
+            </Button>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                type="button"
+                onClick={() => {
+                  if (editLoading || deleteLoading) return;
+                  setEditOpen(false);
+                  setEditErrors({});
+                  setEditingAccount(null);
+                }}
+                disabled={editLoading || deleteLoading}
+              >
+                Annuler
+              </Button>
+              <Button type="submit" disabled={editLoading || deleteLoading}>
+                {editLoading ? 'Enregistrement…' : 'Enregistrer'}
+              </Button>
+            </div>
           </div>
         </form>
       </Modal>
@@ -368,6 +744,7 @@ export default function ComptesPage() {
         defaultAccountId={items[0]?.id}
         onConfirmImport={async () => {
           await load();
+          emitWalletRefresh();
           if (importFile) setLastImportedFileName(importFile.name);
           setImportFile(null);
           setImportError(null);
@@ -379,6 +756,11 @@ export default function ComptesPage() {
       {lastImportedFileName ? (
         <div className="rounded-2xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">
           Import réussi — {lastImportedFileName}
+        </div>
+      ) : null}
+      {successMessage ? (
+        <div className="rounded-2xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">
+          {successMessage}
         </div>
       ) : null}
     </div>

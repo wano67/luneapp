@@ -1,9 +1,10 @@
 // src/app/app/personal/page.tsx
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Card } from '@/components/ui/card';
+import { onWalletRefresh } from '@/lib/personalEvents';
 
 type SummaryResponse = {
   kpis: {
@@ -65,7 +66,7 @@ export default function WalletHomePage() {
   const [data, setData] = useState<SummaryResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
       const res = await fetch('/api/personal/summary', { credentials: 'include' });
@@ -89,11 +90,40 @@ export default function WalletHomePage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
   useEffect(() => {
-    load();
-  }, []);
+    void load();
+  }, [load]);
+
+  useEffect(() => {
+    return onWalletRefresh(() => {
+      void load();
+    });
+  }, [load]);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        void load();
+      }
+    }, 60000);
+    return () => window.clearInterval(interval);
+  }, [load]);
+
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        void load();
+      }
+    };
+    window.addEventListener('focus', handleVisibility);
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      window.removeEventListener('focus', handleVisibility);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [load]);
 
   const kpi = useMemo(() => {
     const s = data?.kpis;

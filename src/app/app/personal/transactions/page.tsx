@@ -7,6 +7,7 @@ import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Modal } from '@/components/ui/modal';
 import { absCents, formatCents, formatCentsToEuroInput, parseEuroToCents, sanitizeEuroInput } from '@/lib/money';
+import { emitWalletRefresh } from '@/lib/personalEvents';
 
 type AccountItem = { id: string; name: string; currency: string };
 type CategoryItem = { id: string; name: string };
@@ -481,6 +482,7 @@ export default function PersoTransactionsPage() {
       setOpenEdit(false);
       setEditing(null);
       await fetchTransactions({ reset: true });
+      emitWalletRefresh();
     } catch (e: unknown) {
       setEditError(getErrorMessage(e) || 'Erreur réseau.');
     } finally {
@@ -519,6 +521,7 @@ export default function PersoTransactionsPage() {
 
       clearSelection();
       await fetchTransactions({ reset: true });
+      emitWalletRefresh();
     } catch (e: unknown) {
       setError(getErrorMessage(e) || 'Suppression impossible');
     }
@@ -609,6 +612,7 @@ export default function PersoTransactionsPage() {
 
       setOpenAdd(false);
       await fetchTransactions({ reset: true });
+      emitWalletRefresh();
     } catch (e: unknown) {
       setCreateError(getErrorMessage(e) || 'Erreur réseau.');
     } finally {
@@ -881,6 +885,7 @@ export default function PersoTransactionsPage() {
                 inputMode="decimal"
                 enterKeyHint="done"
                 autoComplete="off"
+                data-autofocus="true"
               />
               <span className="text-sm text-slate-400">{(fCurrency || 'EUR').toUpperCase()}</span>
             </div>
@@ -1080,6 +1085,7 @@ export default function PersoTransactionsPage() {
                 inputMode="decimal"
                 enterKeyHint="done"
                 autoComplete="off"
+                data-autofocus="true"
               />
               <span className="text-sm text-slate-400">{(eCurrency || 'EUR').toUpperCase()}</span>
             </div>

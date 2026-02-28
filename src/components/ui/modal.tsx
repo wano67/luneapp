@@ -95,18 +95,27 @@ export function Modal({ open, onCloseAction, title, description, children }: Mod
       const root = panelRef.current;
       if (!root) return;
       const focusable = getFocusableElements(root);
+      const auto = root.querySelector<HTMLElement>('[data-autofocus="true"], [autofocus]');
+      if (auto && focusable.includes(auto)) {
+        auto.focus();
+        return;
+      }
       if (focusable[0]) {
         focusable[0].focus();
-      } else {
-        root.focus();
+        return;
       }
+      root.focus();
     };
 
     window.addEventListener('keydown', onKeyDown);
-    focusFirst();
+    const raf = window.requestAnimationFrame(() => focusFirst());
     return () => {
       window.removeEventListener('keydown', onKeyDown);
-      lastActiveRef.current?.focus?.();
+      window.cancelAnimationFrame(raf);
+      const previous = lastActiveRef.current;
+      if (previous && document.contains(previous)) {
+        setTimeout(() => previous.focus(), 0);
+      }
     };
   }, [open]);
 
@@ -162,6 +171,7 @@ export function Modal({ open, onCloseAction, title, description, children }: Mod
       aria-modal="true"
       aria-labelledby={titleId}
       aria-describedby={descId}
+      onKeyDownCapture={handleKeyDown}
     >
       {/* overlay */}
       <div
@@ -182,7 +192,6 @@ export function Modal({ open, onCloseAction, title, description, children }: Mod
       >
         <div
           ref={panelRef}
-          onKeyDown={handleKeyDown}
           onPointerDown={(e) => e.stopPropagation()}
           tabIndex={-1}
           className="flex max-h-[90vh] flex-col overflow-hidden rounded-3xl border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] shadow-2xl shadow-[var(--shadow-float)] backdrop-blur-md focus:outline-none"

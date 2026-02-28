@@ -4,7 +4,7 @@
 import type { ReactNode } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { LayoutDashboard, Wallet2, Building2, Banknote } from 'lucide-react';
+import { LayoutDashboard, Wallet2, Building2, Banknote, FileText } from 'lucide-react';
 import { useActiveBusiness } from './pro/ActiveBusinessProvider';
 import { normalizeWebsiteUrl } from '@/lib/website';
 import { proNavSections, type ProNavSectionConfig } from '@/config/proNav';
@@ -127,6 +127,7 @@ function getWalletSections(): NavSection[] {
       items: [
         { href: `${base}`, label: 'Vue d’accueil', icon: <Wallet2 size={18} />, accent: 'wallet' },
         { href: `${base}/comptes`, label: 'Comptes', icon: <Banknote size={18} /> },
+        { href: `${base}/transactions`, label: 'Transactions', icon: <FileText size={18} /> },
       ],
     },
   ];
