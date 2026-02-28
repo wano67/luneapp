@@ -20,7 +20,7 @@ export default function ReferencesPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold">Référentiels</h1>
-        <p className="text-muted-foreground">
+        <p className="text-[var(--text-faint)]">
           Gérez les catégories, tags, numérotations et automations partagées pour votre entreprise.
         </p>
       </div>
@@ -29,7 +29,7 @@ export default function ReferencesPage() {
           <Card key={link.href} className="p-4 flex flex-col gap-2 justify-between">
             <div>
               <h2 className="text-lg font-semibold">{link.title}</h2>
-              <p className="text-sm text-muted-foreground">{link.desc}</p>
+              <p className="text-sm text-[var(--text-faint)]">{link.desc}</p>
             </div>
             <div className="flex gap-2">
               <Button asChild>

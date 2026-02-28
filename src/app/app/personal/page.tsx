@@ -153,8 +153,8 @@ export default function WalletHomePage() {
 
       {error ? (
         <Card className="p-5">
-          <p className="text-sm font-semibold text-rose-500">Erreur</p>
-          <p className="text-sm text-rose-500/90">{error}</p>
+          <p className="text-sm font-semibold text-[var(--danger)]">Erreur</p>
+          <p className="text-sm text-[var(--danger)]">{error}</p>
         </Card>
       ) : null}
 

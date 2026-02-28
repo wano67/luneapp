@@ -370,10 +370,10 @@ export function ServiceDetailPage({ businessId, serviceId }: { businessId: strin
       {loading ? (
         <Card className="p-4 text-sm text-[var(--text-secondary)]">Chargement…</Card>
       ) : error ? (
-        <Card className="p-4 text-sm text-rose-500">{error}</Card>
+        <Card className="p-4 text-sm text-[var(--danger)]">{error}</Card>
       ) : (
         <div className="space-y-4">
-          {info ? <Card className="p-4 text-sm text-emerald-600">{info}</Card> : null}
+          {info ? <Card className="p-4 text-sm text-[var(--success)]">{info}</Card> : null}
           {currentTab === 'overview' ? overview : null}
           {currentTab === 'templates' ? templatesSection : null}
           {currentTab === 'settings' ? settingsPlaceholder : null}
@@ -410,7 +410,7 @@ export function ServiceDetailPage({ businessId, serviceId }: { businessId: strin
           <p className="text-xs text-[var(--text-secondary)]">
             Les paramètres d’abonnement sont conservés via l’API existante. Les champs non supportés ne sont pas envoyés.
           </p>
-          {formError ? <p className="text-sm text-rose-500">{formError}</p> : null}
+          {formError ? <p className="text-sm text-[var(--danger)]">{formError}</p> : null}
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => setEditOpen(false)}>
               Annuler
@@ -449,7 +449,7 @@ export function ServiceDetailPage({ businessId, serviceId }: { businessId: strin
             value={templateForm.defaultDueOffsetDays}
             onChange={(e) => setTemplateForm((p) => ({ ...p, defaultDueOffsetDays: e.target.value }))}
           />
-          {formError ? <p className="text-sm text-rose-500">{formError}</p> : null}
+          {formError ? <p className="text-sm text-[var(--danger)]">{formError}</p> : null}
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => setTemplateOpen(false)}>
               Annuler

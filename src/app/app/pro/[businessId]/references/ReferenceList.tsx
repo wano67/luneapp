@@ -267,21 +267,21 @@ export function ReferenceList({
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div>
           <h1 className="text-xl font-semibold">{typeLabels.title}</h1>
-          <p className="text-sm text-muted-foreground">{typeLabels.helper}</p>
+          <p className="text-sm text-[var(--text-faint)]">{typeLabels.helper}</p>
         </div>
         <Link href={`/app/pro/${businessId}/references`} className="text-sm text-primary underline">
           Retour aux références
         </Link>
       </div>
 
-      {info && <div className="text-sm text-green-700 bg-green-50 border border-green-200 px-3 py-2 rounded">{info}</div>}
+      {info && <div className="text-sm text-[var(--success)] bg-[var(--success-bg)] border border-[var(--success-border)] px-3 py-2 rounded">{info}</div>}
       {error && (
-        <div className="text-sm text-red-700 bg-red-50 border border-red-200 px-3 py-2 rounded">
+        <div className="text-sm text-[var(--danger)] bg-[var(--danger-bg)] border border-[var(--danger-border)] px-3 py-2 rounded">
           {error}
         </div>
       )}
       {requestId && (
-        <div className="text-xs text-muted-foreground">
+        <div className="text-xs text-[var(--text-faint)]">
           Request ID: <code>{requestId}</code>
         </div>
       )}
@@ -311,10 +311,10 @@ export function ReferenceList({
             <Button type="submit" disabled={saving || !isAdmin} className="w-full">
               {saving ? 'En cours…' : 'Ajouter'}
             </Button>
-            {!isAdmin && <p className="text-xs text-muted-foreground mt-1">{readOnlyMessage}</p>}
+            {!isAdmin && <p className="text-xs text-[var(--text-faint)] mt-1">{readOnlyMessage}</p>}
           </div>
         </form>
-        {formError && <p className="text-sm text-red-600">{formError}</p>}
+        {formError && <p className="text-sm text-[var(--danger)]">{formError}</p>}
       </Card>
 
       <Card className="p-4 space-y-3">
@@ -333,7 +333,7 @@ export function ReferenceList({
             />
             Inclure archivés
           </label>
-          <span className="text-xs text-muted-foreground">Route: {pathname}</span>
+          <span className="text-xs text-[var(--text-faint)]">Route: {pathname}</span>
         </div>
 
         <Table>
@@ -406,7 +406,7 @@ export function ReferenceList({
               ))}
           </TableBody>
         </Table>
-        {editError && <p className="text-sm text-red-600">{editError}</p>}
+        {editError && <p className="text-sm text-[var(--danger)]">{editError}</p>}
       </Card>
     </div>
   );

@@ -88,7 +88,7 @@ export function BillingQuotesSection({
         }
       />
       {missingPriceCount > 0 ? (
-        <p className="mt-2 text-xs text-rose-500">
+        <p className="mt-2 text-xs text-[var(--danger)]">
           Renseigne les tarifs manquants pour créer un devis.
         </p>
       ) : null}
@@ -129,7 +129,7 @@ export function BillingQuotesSection({
                   </p>
                   <p className="text-xs text-[var(--text-secondary)]">{dateLabel}</p>
                   {isReference ? (
-                    <span className="mt-1 inline-flex rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-600">
+                    <span className="mt-1 inline-flex rounded-full bg-[var(--success-bg)] px-2 py-0.5 text-[11px] font-semibold text-[var(--success)]">
                       Référence
                     </span>
                   ) : null}

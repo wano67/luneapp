@@ -96,8 +96,8 @@ export default function BusinessTeamSettingsPage() {
               Les invitations expirent au bout de 7 jours. Rôles autorisés : Admin, Member, Viewer.
             </p>
           </div>
-          {inviteError ? <p className="text-xs text-rose-500">{inviteError}</p> : null}
-          {inviteSuccess ? <p className="text-xs text-emerald-500">{inviteSuccess}</p> : null}
+          {inviteError ? <p className="text-xs text-[var(--danger)]">{inviteError}</p> : null}
+          {inviteSuccess ? <p className="text-xs text-[var(--success)]">{inviteSuccess}</p> : null}
         </div>
 
         {!canInvite ? (
@@ -248,15 +248,15 @@ export default function BusinessTeamSettingsPage() {
               Seuls les Admin/Owner peuvent modifier les rôles ou retirer un membre.
             </p>
           </div>
-          {actionError ? <p className="text-xs text-rose-500">{actionError}</p> : null}
-          {success ? <p className="text-xs text-emerald-500">{success}</p> : null}
+          {actionError ? <p className="text-xs text-[var(--danger)]">{actionError}</p> : null}
+          {success ? <p className="text-xs text-[var(--success)]">{success}</p> : null}
         </div>
 
         {loading ? (
           <p className="text-sm text-[var(--text-secondary)]">Chargement des membres…</p>
         ) : error ? (
           <div className="space-y-2">
-            <p className="text-sm text-rose-400">{error}</p>
+            <p className="text-sm text-[var(--danger)]">{error}</p>
             <Button size="sm" variant="outline" onClick={() => void load()}>
               Réessayer
             </Button>

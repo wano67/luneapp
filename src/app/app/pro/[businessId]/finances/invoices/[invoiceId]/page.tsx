@@ -219,9 +219,9 @@ export default function InvoiceDetailPage() {
           <p className="text-sm text-[var(--text-secondary)]">Chargement de la facture…</p>
         </Card>
       ) : error ? (
-        <Card className="space-y-2 border border-rose-200/60 bg-rose-50/60 p-4">
-          <p className="text-sm font-semibold text-rose-500">{error}</p>
-          <p className="text-xs text-rose-400">Vérifie l&apos;identifiant ou tes droits.</p>
+        <Card className="space-y-2 border border-[var(--danger-border)] bg-[var(--danger-bg)] p-4">
+          <p className="text-sm font-semibold text-[var(--danger)]">{error}</p>
+          <p className="text-xs text-[var(--danger)]">Vérifie l&apos;identifiant ou tes droits.</p>
         </Card>
       ) : invoice ? (
         <div className="space-y-4">
@@ -310,8 +310,8 @@ export default function InvoiceDetailPage() {
                 <Badge variant="neutral">Lecture seule</Badge>
               )}
             </div>
-            {actionError ? <p className="text-sm font-semibold text-rose-500">{actionError}</p> : null}
-            {info ? <p className="text-sm text-emerald-600">{info}</p> : null}
+            {actionError ? <p className="text-sm font-semibold text-[var(--danger)]">{actionError}</p> : null}
+            {info ? <p className="text-sm text-[var(--success)]">{info}</p> : null}
           </Card>
 
           <Card className="space-y-3 p-5">

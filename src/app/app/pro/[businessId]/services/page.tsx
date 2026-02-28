@@ -294,7 +294,7 @@ export default function ServicesPage() {
             ))}
           </Select>
           {referenceError ? (
-            <p className="text-xs text-rose-500">
+            <p className="text-xs text-[var(--danger)]">
               {referenceError}
               {referenceRequestId ? ` (Ref: ${referenceRequestId})` : ''}
             </p>
@@ -305,7 +305,7 @@ export default function ServicesPage() {
         {loading ? (
           <p className="text-sm text-[var(--text-secondary)]">Chargement du catalogue…</p>
         ) : error ? (
-          <p className="text-sm font-semibold text-rose-400">{error}</p>
+          <p className="text-sm font-semibold text-[var(--danger)]">{error}</p>
         ) : filtered.length === 0 ? (
           <Card className="flex flex-col items-start gap-3 border-dashed border-[var(--border)] bg-transparent p-4">
             <p className="text-sm text-[var(--text-secondary)]">
@@ -343,7 +343,7 @@ export default function ServicesPage() {
                         </Badge>
                       ) : null}
                       {service.tagReferences?.map((tag) => (
-                        <Badge key={tag.id} variant="neutral" className="bg-emerald-50 text-emerald-700">
+                        <Badge key={tag.id} variant="neutral" className="bg-[var(--success-bg)] text-[var(--success)]">
                           {tag.name}
                         </Badge>
                       ))}
@@ -384,7 +384,7 @@ export default function ServicesPage() {
           </Table>
         )}
 
-        {info ? <p className="text-sm text-emerald-500">{info}</p> : null}
+        {info ? <p className="text-sm text-[var(--success)]">{info}</p> : null}
         {readOnlyInfo ? <p className="text-xs text-[var(--text-secondary)]">{readOnlyInfo}</p> : null}
         {requestId ? <p className="text-[10px] text-[var(--text-faint)]">Req: {requestId}</p> : null}
       </Card>

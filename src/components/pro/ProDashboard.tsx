@@ -241,7 +241,7 @@ export default function ProDashboard({ businessId }: { businessId: string }) {
         </Card>
       ) : error ? (
         <Card className="space-y-2 p-5">
-          <p className="text-sm font-semibold text-rose-500">{error}</p>
+          <p className="text-sm font-semibold text-[var(--danger)]">{error}</p>
           <p className="text-xs text-[var(--text-secondary)]">Vérifie la connexion ou réessaie.</p>
         </Card>
       ) : (

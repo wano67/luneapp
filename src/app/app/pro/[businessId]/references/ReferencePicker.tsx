@@ -82,7 +82,7 @@ export function ReferencePicker(props: ReferencePickerProps) {
     <Card className="space-y-3 p-3">
       {title ? <p className="text-xs font-semibold uppercase tracking-[0.25em] text-[var(--text-secondary)]">{title}</p> : null}
       {loading ? <p className="text-sm text-[var(--text-secondary)]">Chargement des références…</p> : null}
-      {error ? <p className="text-xs text-rose-500">{error}</p> : null}
+      {error ? <p className="text-xs text-[var(--danger)]">{error}</p> : null}
       {requestId ? (
         <p className="text-[10px] text-[var(--text-secondary)]">Request ID: {requestId}</p>
       ) : null}

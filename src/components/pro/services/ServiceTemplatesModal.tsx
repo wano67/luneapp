@@ -365,8 +365,8 @@ export function ServiceTemplatesModal({
           </div>
         </div>
 
-        {templateError ? <p className="text-xs font-semibold text-rose-500">{templateError}</p> : null}
-        {seedMessage ? <p className="text-xs text-emerald-500">{seedMessage}</p> : null}
+        {templateError ? <p className="text-xs font-semibold text-[var(--danger)]">{templateError}</p> : null}
+        {seedMessage ? <p className="text-xs text-[var(--success)]">{seedMessage}</p> : null}
         {!isAdmin ? (
           <p className="text-[11px] text-[var(--text-secondary)]">
             Lecture seule : modification des templates réservée aux admins/owners.
@@ -472,7 +472,7 @@ export function ServiceTemplatesModal({
               placeholder="0 = le jour du start"
               disabled={!isAdmin}
             />
-            {templateFormError ? <p className="text-xs font-semibold text-rose-500">{templateFormError}</p> : null}
+            {templateFormError ? <p className="text-xs font-semibold text-[var(--danger)]">{templateFormError}</p> : null}
             <div className="flex justify-end gap-2">
               <Button
                 type="button"

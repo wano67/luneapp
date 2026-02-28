@@ -218,7 +218,7 @@ export function FinanceFormModal({
             </label>
           </div>
         </details>
-        {actionError ? <p className="text-xs text-rose-500">{actionError}</p> : null}
+        {actionError ? <p className="text-xs text-[var(--danger)]">{actionError}</p> : null}
 
         <div className="flex justify-end gap-2">
           <Button type="button" variant="outline" onClick={onClose}>

@@ -495,9 +495,9 @@ export default function PersoTransactionsPage() {
   }
 
   const inputBase =
-    'h-12 w-full rounded-2xl border bg-[var(--surface)] px-4 text-base text-slate-50';
+    'h-12 w-full rounded-2xl border bg-[var(--surface)] px-4 text-base text-[var(--text)]';
   const inputOk = 'border-[var(--border)]';
-  const inputBad = 'border-red-500/60 ring-2 ring-red-500/25';
+  const inputBad = 'border-[var(--danger-border)] ring-2 ring-[var(--danger-border)]';
 
   async function deleteMany(ids: string[]) {
     if (!ids.length) return;
@@ -625,8 +625,8 @@ export default function PersoTransactionsPage() {
       {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-lg font-semibold text-slate-50">Transactions</h1>
-          <p className="text-sm text-slate-400">
+          <h1 className="text-lg font-semibold text-[var(--text)]">Transactions</h1>
+          <p className="text-sm text-[var(--text-faint)]">
             Point unique pour filtrer, ajouter et nettoyer tes mouvements.
           </p>
         </div>
@@ -645,11 +645,11 @@ export default function PersoTransactionsPage() {
       <Card>
         <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-6">
           <div className="lg:col-span-2">
-            <label className="mb-1 block text-xs text-slate-400">Compte</label>
+            <label className="mb-1 block text-xs text-[var(--text-faint)]">Compte</label>
             <select
               value={accountId}
               onChange={(e) => setAccountId(e.target.value)}
-              className="h-12 w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 text-base text-slate-50"
+              className="h-12 w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 text-base text-[var(--text)]"
               disabled={loadingAccounts}
             >
               <option value="">Tous les comptes</option>
@@ -662,11 +662,11 @@ export default function PersoTransactionsPage() {
           </div>
 
           <div>
-            <label className="mb-1 block text-xs text-slate-400">Type</label>
+            <label className="mb-1 block text-xs text-[var(--text-faint)]">Type</label>
             <select
               value={type}
               onChange={(e) => setType(e.target.value)}
-              className="h-12 w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 text-base text-slate-50"
+              className="h-12 w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 text-base text-[var(--text)]"
               disabled={loadingAccounts || loadingList}
             >
               <option value="">Tous</option>
@@ -677,29 +677,29 @@ export default function PersoTransactionsPage() {
           </div>
 
           <div>
-            <label className="mb-1 block text-xs text-slate-400">Du</label>
+            <label className="mb-1 block text-xs text-[var(--text-faint)]">Du</label>
             <input
               type="date"
               value={from}
               onChange={(e) => setFrom(e.target.value)}
-              className="h-12 w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 text-base text-slate-50"
+              className="h-12 w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 text-base text-[var(--text)]"
               disabled={loadingAccounts || loadingList}
             />
           </div>
 
           <div>
-            <label className="mb-1 block text-xs text-slate-400">Au</label>
+            <label className="mb-1 block text-xs text-[var(--text-faint)]">Au</label>
             <input
               type="date"
               value={to}
               onChange={(e) => setTo(e.target.value)}
-              className="h-12 w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 text-base text-slate-50"
+              className="h-12 w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 text-base text-[var(--text)]"
               disabled={loadingAccounts || loadingList}
             />
           </div>
 
           <div className="lg:col-span-1">
-            <label className="mb-1 block text-xs text-slate-400">Recherche</label>
+            <label className="mb-1 block text-xs text-[var(--text-faint)]">Recherche</label>
             <Input
               value={q}
               onChange={(e) => setQ(e.target.value)}
@@ -713,7 +713,7 @@ export default function PersoTransactionsPage() {
       {/* Error */}
       {error ? (
         <Card>
-          <div className="p-4 text-sm text-red-300">{error}</div>
+          <div className="p-4 text-sm text-[var(--danger)]">{error}</div>
         </Card>
       ) : null}
 
@@ -721,7 +721,7 @@ export default function PersoTransactionsPage() {
         <div className="sticky top-2 z-20">
           <div className="mx-auto w-fit rounded-2xl border border-[var(--border)] bg-[var(--background-alt)]/70 px-3 py-3 shadow-2xl shadow-black/40 backdrop-blur-lg">
             <div className="flex flex-wrap items-center justify-center gap-2">
-              <span className="px-2 text-sm text-slate-200">
+              <span className="px-2 text-sm text-[var(--text)]">
                 {selectedCount} sélectionnée{selectedCount > 1 ? 's' : ''}
               </span>
 
@@ -745,20 +745,20 @@ export default function PersoTransactionsPage() {
       <Card>
         <div className="border-b border-[var(--border)] p-4">
           <div className="flex items-center justify-between">
-            <p className="text-sm text-slate-300">
+            <p className="text-sm text-[var(--text-faint)]">
               {loadingList ? 'Chargement…' : `${items.length} transaction(s)`}
             </p>
-            <p className="text-xs text-slate-500">{accountLabel}</p>
+            <p className="text-xs text-[var(--text-muted)]">{accountLabel}</p>
           </div>
         </div>
 
         {loadingList ? (
-          <div className="p-4 text-sm text-slate-400">Chargement des transactions…</div>
+          <div className="p-4 text-sm text-[var(--text-faint)]">Chargement des transactions…</div>
         ) : items.length === 0 ? (
           <div className="p-8">
             <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6 text-center">
-              <p className="text-sm font-medium text-slate-50">Aucune transaction</p>
-              <p className="mt-1 text-sm text-slate-400">
+              <p className="text-sm font-medium text-[var(--text)]">Aucune transaction</p>
+              <p className="mt-1 text-sm text-[var(--text-faint)]">
                 Ajoute ta première transaction pour commencer à suivre tes finances.
               </p>
               <div className="mt-4 flex justify-center">
@@ -788,24 +788,24 @@ export default function PersoTransactionsPage() {
 
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
-                        <p className="truncate text-sm font-medium text-slate-50">{t.label}</p>
+                        <p className="truncate text-sm font-medium text-[var(--text)]">{t.label}</p>
 
-                        <span className="rounded-full border border-[var(--border)] px-2 py-0.5 text-[11px] text-slate-300">
+                        <span className="rounded-full border border-[var(--border)] px-2 py-0.5 text-[11px] text-[var(--text-faint)]">
                           {t.account?.name || 'Compte'}
                         </span>
 
                         {t.category ? (
-                          <span className="rounded-full border border-[var(--border)] px-2 py-0.5 text-[11px] text-slate-300">
+                          <span className="rounded-full border border-[var(--border)] px-2 py-0.5 text-[11px] text-[var(--text-faint)]">
                             {t.category.name}
                           </span>
                         ) : null}
 
-                        <span className="rounded-full border border-[var(--border)] px-2 py-0.5 text-[11px] text-slate-400">
+                        <span className="rounded-full border border-[var(--border)] px-2 py-0.5 text-[11px] text-[var(--text-faint)]">
                           {t.type}
                         </span>
                       </div>
 
-                      <p className="text-xs text-slate-500">
+                      <p className="text-xs text-[var(--text-muted)]">
                         {formatDateFR(t.date)}
                         {t.note ? ` • ${t.note}` : ''}
                       </p>
@@ -813,7 +813,7 @@ export default function PersoTransactionsPage() {
                   </div>
 
                   <div className="flex items-center justify-between gap-2 sm:justify-end">
-                    <p className={`text-sm font-semibold ${neg ? 'text-red-300' : 'text-emerald-300'}`}>
+                    <p className={`text-sm font-semibold ${neg ? 'text-[var(--danger)]' : 'text-[var(--success)]'}`}>
                       {neg ? '-' : '+'}
                       {formatCents(absCents(t.amountCents), t.currency)}
                     </p>
@@ -843,7 +843,7 @@ export default function PersoTransactionsPage() {
 
         <div className="border-t border-[var(--border)] p-4">
           <div className="flex items-center justify-between">
-            <p className="text-xs text-slate-500">{nextCursor ? 'Plus de résultats disponibles' : 'Fin de liste'}</p>
+            <p className="text-xs text-[var(--text-muted)]">{nextCursor ? 'Plus de résultats disponibles' : 'Fin de liste'}</p>
             <Button
               variant="outline"
               onClick={() => fetchTransactions({ reset: false })}
@@ -865,7 +865,7 @@ export default function PersoTransactionsPage() {
         <div className="space-y-5">
           {/* Montant — grand, tap-to-edit */}
           <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)]/40 p-4">
-            <p className="text-xs text-slate-400">Montant</p>
+            <p className="text-xs text-[var(--text-faint)]">Montant</p>
 
             <div
               className={[
@@ -881,20 +881,20 @@ export default function PersoTransactionsPage() {
                 value={fAmountEuro}
                 onChange={(e) => setFAmountEuro(sanitizeEuroInput(e.target.value))}
                 placeholder="0,00"
-                className="w-full bg-transparent text-4xl font-semibold tracking-tight text-slate-50 outline-none"
+                className="w-full bg-transparent text-4xl font-semibold tracking-tight text-[var(--text)] outline-none"
                 inputMode="decimal"
                 enterKeyHint="done"
                 autoComplete="off"
                 data-autofocus="true"
               />
-              <span className="text-sm text-slate-400">{(fCurrency || 'EUR').toUpperCase()}</span>
+              <span className="text-sm text-[var(--text-faint)]">{(fCurrency || 'EUR').toUpperCase()}</span>
             </div>
 
             <div className="mt-2 flex items-center justify-between">
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-[var(--text-muted)]">
                 Saisie rapide. Clavier numérique sur mobile.
               </p>
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-[var(--text-muted)]">
                 Aperçu: {amountCentsRaw ? formatCents(absCents(amountCentsRaw), fCurrency || 'EUR') : '—'}
               </p>
             </div>
@@ -902,7 +902,7 @@ export default function PersoTransactionsPage() {
 
           {/* Type — segmented control */}
           <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)]/40 p-4">
-            <p className="text-sm font-semibold text-slate-50">Type</p>
+            <p className="text-sm font-semibold text-[var(--text)]">Type</p>
             <div className="mt-3 grid grid-cols-3 gap-2">
               {(['EXPENSE', 'INCOME', 'TRANSFER'] as const).map((t) => {
                 const active = fType === t;
@@ -914,9 +914,9 @@ export default function PersoTransactionsPage() {
                     className={[
                       'h-12 rounded-2xl border px-3 text-sm font-medium',
                       active
-                        ? 'border-[var(--border)] bg-[var(--surface)] text-slate-50'
-                        : 'border-[var(--border)] bg-transparent text-slate-300 hover:bg-[var(--surface)]/60',
-                      fieldError(required.type) ? 'ring-2 ring-red-500/25 border-red-500/60' : '',
+                        ? 'border-[var(--border)] bg-[var(--surface)] text-[var(--text)]'
+                        : 'border-[var(--border)] bg-transparent text-[var(--text-faint)] hover:bg-[var(--surface)]/60',
+                      fieldError(required.type) ? 'ring-2 ring-[var(--danger-border)] border-[var(--danger-border)]' : '',
                     ].join(' ')}
                   >
                     {t === 'EXPENSE' ? 'Dépense' : t === 'INCOME' ? 'Revenu' : 'Virement'}
@@ -924,18 +924,18 @@ export default function PersoTransactionsPage() {
                 );
               })}
             </div>
-            <p className="mt-2 text-xs text-slate-500">
+            <p className="mt-2 text-xs text-[var(--text-muted)]">
               Dépense = enregistré en négatif, Revenu = positif.
             </p>
           </div>
 
           {/* Infos principales */}
           <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)]/40 p-4">
-            <p className="text-sm font-semibold text-slate-50">Infos</p>
+            <p className="text-sm font-semibold text-[var(--text)]">Infos</p>
 
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
               <div>
-                <label className="mb-1.5 block text-sm text-slate-300">Compte</label>
+                <label className="mb-1.5 block text-sm text-[var(--text-faint)]">Compte</label>
                 <select
                   value={fAccountId}
                   onChange={(e) => setFAccountId(e.target.value)}
@@ -951,7 +951,7 @@ export default function PersoTransactionsPage() {
               </div>
 
               <div>
-                <label className="mb-1.5 block text-sm text-slate-300">Date</label>
+                <label className="mb-1.5 block text-sm text-[var(--text-faint)]">Date</label>
                 <input
                   type="date"
                   value={fDate}
@@ -962,7 +962,7 @@ export default function PersoTransactionsPage() {
               </div>
 
               <div className="sm:col-span-2">
-                <label className="mb-1.5 block text-sm text-slate-300">Libellé</label>
+                <label className="mb-1.5 block text-sm text-[var(--text-faint)]">Libellé</label>
                 <input
                   value={fLabel}
                   onChange={(e) => setFLabel(e.target.value)}
@@ -970,13 +970,13 @@ export default function PersoTransactionsPage() {
                   className={[inputBase, fieldError(required.label) ? inputBad : inputOk].join(' ')}
                   disabled={createLoading}
                 />
-                <p className="mt-1 text-xs text-slate-500">
+                <p className="mt-1 text-xs text-[var(--text-muted)]">
                   Recommandé : une phrase courte et stable (“Courses”, “Salaire”, “Loyer”…)
                 </p>
               </div>
 
               <div>
-                <label className="mb-1.5 block text-sm text-slate-300">Devise</label>
+                <label className="mb-1.5 block text-sm text-[var(--text-faint)]">Devise</label>
                 <input
                   value={fCurrency}
                   onChange={(e) => setFCurrency(e.target.value.toUpperCase())}
@@ -986,7 +986,7 @@ export default function PersoTransactionsPage() {
               </div>
 
               <div>
-                <label className="mb-1.5 block text-sm text-slate-300">Catégorie (optionnel)</label>
+                <label className="mb-1.5 block text-sm text-[var(--text-faint)]">Catégorie (optionnel)</label>
                 <select
                   value={fCategoryId}
                   onChange={(e) => setFCategoryId(e.target.value)}
@@ -1000,25 +1000,25 @@ export default function PersoTransactionsPage() {
                     </option>
                   ))}
                 </select>
-                <p className="mt-1 text-xs text-slate-500">
+                <p className="mt-1 text-xs text-[var(--text-muted)]">
                   {loadingCategories ? 'Chargement des catégories…' : 'Optionnel'}
                 </p>
               </div>
 
               <div className="sm:col-span-2">
-                <label className="mb-1.5 block text-sm text-slate-300">Note (optionnel)</label>
+                <label className="mb-1.5 block text-sm text-[var(--text-faint)]">Note (optionnel)</label>
                 <textarea
                   value={fNote}
                   onChange={(e) => setFNote(e.target.value)}
                   placeholder="Détails…"
-                  className="min-h-[110px] w-full resize-none rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 text-base text-slate-50 outline-none"
+                  className="min-h-[110px] w-full resize-none rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 text-base text-[var(--text)] outline-none"
                   disabled={createLoading}
                 />
               </div>
 
               {/* Erreur serveur uniquement (pas validation) */}
               {createError ? (
-                <div className="sm:col-span-2 rounded-2xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">
+                <div className="sm:col-span-2 rounded-2xl border border-[var(--danger-border)] bg-[var(--danger-bg)] p-3 text-sm text-[var(--danger)]">
                   {createError}
                 </div>
               ) : null}
@@ -1065,7 +1065,7 @@ export default function PersoTransactionsPage() {
       >
         <div className="space-y-5">
           <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)]/40 p-4">
-            <p className="text-xs text-slate-400">Montant</p>
+            <p className="text-xs text-[var(--text-faint)]">Montant</p>
 
             <div
               className={[
@@ -1081,18 +1081,18 @@ export default function PersoTransactionsPage() {
                 value={eAmountEuro}
                 onChange={(e) => setEAmountEuro(sanitizeEuroInput(e.target.value))}
                 placeholder="0,00"
-                className="w-full bg-transparent text-4xl font-semibold tracking-tight text-slate-50 outline-none"
+                className="w-full bg-transparent text-4xl font-semibold tracking-tight text-[var(--text)] outline-none"
                 inputMode="decimal"
                 enterKeyHint="done"
                 autoComplete="off"
                 data-autofocus="true"
               />
-              <span className="text-sm text-slate-400">{(eCurrency || 'EUR').toUpperCase()}</span>
+              <span className="text-sm text-[var(--text-faint)]">{(eCurrency || 'EUR').toUpperCase()}</span>
             </div>
           </div>
 
           <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)]/40 p-4">
-            <p className="text-sm font-semibold text-slate-50">Type</p>
+            <p className="text-sm font-semibold text-[var(--text)]">Type</p>
             <div className="mt-3 grid grid-cols-3 gap-2">
               {(['EXPENSE', 'INCOME', 'TRANSFER'] as const).map((t) => {
                 const active = eType === t;
@@ -1104,9 +1104,9 @@ export default function PersoTransactionsPage() {
                     className={[
                       'h-12 rounded-2xl border px-3 text-sm font-medium',
                       active
-                        ? 'border-[var(--border)] bg-[var(--surface)] text-slate-50'
-                        : 'border-[var(--border)] bg-transparent text-slate-300 hover:bg-[var(--surface)]/60',
-                      eFieldError(eRequired.type) ? 'ring-2 ring-red-500/25 border-red-500/60' : '',
+                        ? 'border-[var(--border)] bg-[var(--surface)] text-[var(--text)]'
+                        : 'border-[var(--border)] bg-transparent text-[var(--text-faint)] hover:bg-[var(--surface)]/60',
+                      eFieldError(eRequired.type) ? 'ring-2 ring-[var(--danger-border)] border-[var(--danger-border)]' : '',
                     ].join(' ')}
                   >
                     {t === 'EXPENSE' ? 'Dépense' : t === 'INCOME' ? 'Revenu' : 'Virement'}
@@ -1117,11 +1117,11 @@ export default function PersoTransactionsPage() {
           </div>
 
           <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)]/40 p-4">
-            <p className="text-sm font-semibold text-slate-50">Infos</p>
+            <p className="text-sm font-semibold text-[var(--text)]">Infos</p>
 
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
               <div>
-                <label className="mb-1.5 block text-sm text-slate-300">Compte</label>
+                <label className="mb-1.5 block text-sm text-[var(--text-faint)]">Compte</label>
                 <select
                   value={eAccountId}
                   onChange={(e) => setEAccountId(e.target.value)}
@@ -1137,7 +1137,7 @@ export default function PersoTransactionsPage() {
               </div>
 
               <div>
-                <label className="mb-1.5 block text-sm text-slate-300">Date</label>
+                <label className="mb-1.5 block text-sm text-[var(--text-faint)]">Date</label>
                 <input
                   type="date"
                   value={eDate}
@@ -1148,7 +1148,7 @@ export default function PersoTransactionsPage() {
               </div>
 
               <div className="sm:col-span-2">
-                <label className="mb-1.5 block text-sm text-slate-300">Libellé</label>
+                <label className="mb-1.5 block text-sm text-[var(--text-faint)]">Libellé</label>
                 <input
                   value={eLabel}
                   onChange={(e) => setELabel(e.target.value)}
@@ -1158,7 +1158,7 @@ export default function PersoTransactionsPage() {
               </div>
 
               <div>
-                <label className="mb-1.5 block text-sm text-slate-300">Devise</label>
+                <label className="mb-1.5 block text-sm text-[var(--text-faint)]">Devise</label>
                 <input
                   value={eCurrency}
                   onChange={(e) => setECurrency(e.target.value.toUpperCase())}
@@ -1168,7 +1168,7 @@ export default function PersoTransactionsPage() {
               </div>
 
               <div>
-                <label className="mb-1.5 block text-sm text-slate-300">Catégorie (optionnel)</label>
+                <label className="mb-1.5 block text-sm text-[var(--text-faint)]">Catégorie (optionnel)</label>
                 <select
                   value={eCategoryId}
                   onChange={(e) => setECategoryId(e.target.value)}
@@ -1182,23 +1182,23 @@ export default function PersoTransactionsPage() {
                     </option>
                   ))}
                 </select>
-                <p className="mt-1 text-xs text-slate-500">
+                <p className="mt-1 text-xs text-[var(--text-muted)]">
                   {loadingCategories ? 'Chargement des catégories…' : 'Optionnel'}
                 </p>
               </div>
 
               <div className="sm:col-span-2">
-                <label className="mb-1.5 block text-sm text-slate-300">Note</label>
+                <label className="mb-1.5 block text-sm text-[var(--text-faint)]">Note</label>
                 <textarea
                   value={eNote}
                   onChange={(e) => setENote(e.target.value)}
-                  className="min-h-[110px] w-full resize-none rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 text-base text-slate-50 outline-none"
+                  className="min-h-[110px] w-full resize-none rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 text-base text-[var(--text)] outline-none"
                   disabled={editLoading}
                 />
               </div>
 
               {editError ? (
-                <div className="sm:col-span-2 rounded-2xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">
+                <div className="sm:col-span-2 rounded-2xl border border-[var(--danger-border)] bg-[var(--danger-bg)] p-3 text-sm text-[var(--danger)]">
                   {editError}
                 </div>
               ) : null}

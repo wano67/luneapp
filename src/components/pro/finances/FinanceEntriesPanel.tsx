@@ -260,7 +260,7 @@ export function FinanceEntriesPanel({ businessId }: Props) {
         }}
       />
 
-      {info ? <p className="text-sm text-emerald-500">{info}</p> : null}
+      {info ? <p className="text-sm text-[var(--success)]">{info}</p> : null}
 
       <Card className="p-4 space-y-3">
         <div className="grid gap-2 md:grid-cols-4">
@@ -303,16 +303,16 @@ export function FinanceEntriesPanel({ businessId }: Props) {
         </div>
 
         {loading ? <p className="text-xs text-[var(--text-secondary)]">Chargement…</p> : null}
-        {error ? <p className="text-xs text-rose-500">{error}</p> : null}
+        {error ? <p className="text-xs text-[var(--danger)]">{error}</p> : null}
         {requestId ? <p className="text-[10px] text-[var(--text-secondary)]">Req: {requestId}</p> : null}
 
         {referenceError ? (
-          <p className="text-xs text-rose-500">
+          <p className="text-xs text-[var(--danger)]">
             {referenceError} {referenceRequestId ? `(Ref: ${referenceRequestId})` : null}
           </p>
         ) : null}
 
-        {bulkError ? <p className="text-xs text-rose-500">{bulkError}</p> : null}
+        {bulkError ? <p className="text-xs text-[var(--danger)]">{bulkError}</p> : null}
         {selectedCount > 0 ? (
           <BulkActionBar
             count={selectedCount}
@@ -460,7 +460,7 @@ export function FinanceEntriesPanel({ businessId }: Props) {
               {selected.isRecurring ? (
                 <p>Récurrence : {selected.recurringUnit === 'YEARLY' ? 'Annuelle' : 'Mensuelle'}</p>
               ) : null}
-              {selected.isRuleOverride ? <p className="text-amber-600">Occurrence modifiée manuellement.</p> : null}
+              {selected.isRuleOverride ? <p className="text-[var(--warning)]">Occurrence modifiée manuellement.</p> : null}
             </div>
           ) : null}
           {selected.tagReferences?.length ? (
@@ -502,7 +502,7 @@ export function FinanceEntriesPanel({ businessId }: Props) {
           <p className="text-sm text-[var(--text-secondary)]">
             Cette action est irréversible. Assurez-vous d’avoir exporté les données si nécessaire.
           </p>
-          {deleteError ? <p className="text-xs text-rose-500">{deleteError}</p> : null}
+          {deleteError ? <p className="text-xs text-[var(--danger)]">{deleteError}</p> : null}
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => setDeleteModal(null)}>
               Annuler

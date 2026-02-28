@@ -309,7 +309,7 @@ export default function ProjectEditPage() {
     return (
       <div className="mx-auto max-w-4xl px-4 py-6">
         <Card className="rounded-3xl border border-[var(--border)] bg-[var(--surface)] p-5 shadow-sm">
-          <p className="text-sm font-semibold text-rose-500">Projet introuvable</p>
+          <p className="text-sm font-semibold text-[var(--danger)]">Projet introuvable</p>
           <p className="text-xs text-[var(--text-secondary)]">{error ?? 'Ce projet est indisponible.'}</p>
           <div className="mt-4">
             <Button asChild variant="outline" size="sm">
@@ -355,8 +355,8 @@ export default function ProjectEditPage() {
         </p>
       </div>
 
-      {error ? <p className="text-sm text-rose-500">{error}</p> : null}
-      {info ? <p className="text-sm text-emerald-500">{info}</p> : null}
+      {error ? <p className="text-sm text-[var(--danger)]">{error}</p> : null}
+      {info ? <p className="text-sm text-[var(--success)]">{info}</p> : null}
       {isReadOnly ? (
         <Card className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 text-sm text-[var(--text-secondary)]">
           Lecture seule : réservé aux admins/owners.

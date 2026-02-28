@@ -64,9 +64,9 @@ export function VatPanel({ businessId }: { businessId: string }) {
         subtitle="Synthèse TVA collectée/déductible basée sur vos écritures."
       />
 
-      {error && <div className="text-sm text-red-700 bg-red-50 border border-red-200 px-3 py-2 rounded">{error}</div>}
+      {error && <div className="text-sm text-[var(--danger)] bg-[var(--danger-bg)] border border-[var(--danger-border)] px-3 py-2 rounded">{error}</div>}
       {requestId && (
-        <div className="text-xs text-muted-foreground">
+        <div className="text-xs text-[var(--text-faint)]">
           Request ID: <code>{requestId}</code>
         </div>
       )}
@@ -77,23 +77,23 @@ export function VatPanel({ businessId }: { businessId: string }) {
           <Card className="p-4 space-y-2">
             <div className="flex gap-6 flex-wrap">
               <div>
-                <div className="text-sm text-muted-foreground">Collectée</div>
+                <div className="text-sm text-[var(--text-faint)]">Collectée</div>
                 <div className="text-lg font-semibold">{formatMoney(data.totals.collectedCents)}</div>
               </div>
               <div>
-                <div className="text-sm text-muted-foreground">Déductible</div>
+                <div className="text-sm text-[var(--text-faint)]">Déductible</div>
                 <div className="text-lg font-semibold">{formatMoney(data.totals.deductibleCents)}</div>
               </div>
               <div>
-                <div className="text-sm text-muted-foreground">Balance</div>
+                <div className="text-sm text-[var(--text-faint)]">Balance</div>
                 <div className="text-lg font-semibold">{formatMoney(data.totals.balanceCents)}</div>
               </div>
             </div>
-            <div className="text-xs text-muted-foreground">
+            <div className="text-xs text-[var(--text-faint)]">
               Période : {new Date(data.range.from).toLocaleDateString()} → {new Date(data.range.to).toLocaleDateString()}
             </div>
             {!data.isConfigured && (
-              <div className="text-sm text-amber-700 bg-amber-50 border border-amber-200 px-3 py-2 rounded">
+              <div className="text-sm text-[var(--warning)] bg-[var(--warning-bg)] border border-[var(--warning-border)] px-3 py-2 rounded">
                 {data.message || 'Aucune écriture TVA détectée (categories VAT_COLLECTED / VAT_PAID).'}
               </div>
             )}

@@ -211,7 +211,7 @@ export function ProductDetailPage({ businessId, productId }: { businessId: strin
       {imagesLoading ? (
         <p className="text-sm text-[var(--text-secondary)]">Chargement des images…</p>
       ) : imageError ? (
-        <p className="text-sm text-rose-500">{imageError}</p>
+        <p className="text-sm text-[var(--danger)]">{imageError}</p>
       ) : images.length === 0 ? (
         <div className="space-y-2 rounded-xl border border-dashed border-[var(--border)] p-4 text-sm text-[var(--text-secondary)]">
           <p>Aucune image. Ajoutez vos visuels produit.</p>
@@ -323,7 +323,7 @@ export function ProductDetailPage({ businessId, productId }: { businessId: strin
       {loading ? (
         <Card className="p-4 text-sm text-[var(--text-secondary)]">Chargement…</Card>
       ) : error ? (
-        <Card className="p-4 text-sm text-rose-500">{error}</Card>
+        <Card className="p-4 text-sm text-[var(--danger)]">{error}</Card>
       ) : (
         <div className="space-y-4">
           <KpiCirclesBlock
@@ -393,7 +393,7 @@ export function ProductDetailPage({ businessId, productId }: { businessId: strin
                 }
               />
               <Input label="Unité" value={form.unit} onChange={(e) => setForm((p) => ({ ...p, unit: e.target.value }))} />
-              {formError ? <p className="text-sm text-rose-500">{formError}</p> : null}
+              {formError ? <p className="text-sm text-[var(--danger)]">{formError}</p> : null}
               <div className="flex justify-end gap-2">
                 <Button variant="outline" onClick={() => void loadProduct()}>
                   Réinitialiser

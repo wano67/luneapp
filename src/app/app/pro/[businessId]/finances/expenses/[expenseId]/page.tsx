@@ -120,9 +120,9 @@ export default function ExpenseDetailPage() {
           <p className="text-sm text-[var(--text-secondary)]">Chargement de la dépense…</p>
         </Card>
       ) : error ? (
-        <Card className="space-y-2 border border-rose-200/60 bg-rose-50/60 p-4">
-          <p className="text-sm font-semibold text-rose-500">{error}</p>
-          <p className="text-xs text-rose-400">Vérifie l&apos;identifiant ou tes droits.</p>
+        <Card className="space-y-2 border border-[var(--danger-border)] bg-[var(--danger-bg)] p-4">
+          <p className="text-sm font-semibold text-[var(--danger)]">{error}</p>
+          <p className="text-xs text-[var(--danger)]">Vérifie l&apos;identifiant ou tes droits.</p>
         </Card>
       ) : expense ? (
         <div className="space-y-4">

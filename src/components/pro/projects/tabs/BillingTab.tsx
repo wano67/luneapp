@@ -330,11 +330,11 @@ export function BillingTab({
   return (
     <div className="space-y-5">
       {billingError ? (
-        <SectionCard className="border-rose-200/60 bg-rose-50/70 text-sm text-rose-500">
+        <SectionCard className="border-[var(--danger-border)] bg-[var(--danger-bg)] text-sm text-[var(--danger)]">
           {billingError}
         </SectionCard>
       ) : null}
-      {billingInfo ? <p className="text-sm text-emerald-500">{billingInfo}</p> : null}
+      {billingInfo ? <p className="text-sm text-[var(--success)]">{billingInfo}</p> : null}
       {!isAdmin ? (
         <div className={cn(UI.sectionSoft, 'text-xs text-[var(--text-secondary)]')}>
           Lecture seule : réservée aux admins/owners.
@@ -467,7 +467,7 @@ export function BillingTab({
             onChange={(e) => onPrestationsDraftChange(e.target.value)}
             disabled={!isAdmin || prestationsSaving}
           />
-          {prestationsError ? <p className="text-xs text-rose-500">{prestationsError}</p> : null}
+          {prestationsError ? <p className="text-xs text-[var(--danger)]">{prestationsError}</p> : null}
           <div className="flex flex-wrap items-center gap-2">
             <Button
               size="sm"
@@ -508,7 +508,7 @@ export function BillingTab({
         />
 
         {pricingTotals.missingCount > 0 ? (
-          <div className="mt-4 rounded-2xl border border-rose-200/60 bg-rose-50/60 p-3 text-xs text-rose-500">
+          <div className="mt-4 rounded-2xl border border-[var(--danger-border)] bg-[var(--danger-bg)] p-3 text-xs text-[var(--danger)]">
             Prix manquant pour {pricingTotals.missingCount} service(s)
             {missingPriceNames.length ? ` : ${missingPriceNames.join(', ')}.` : '.'}
           </div>
@@ -585,7 +585,7 @@ export function BillingTab({
                           {priceSourceLabel}
                         </p>
                         {line?.missingPrice ? (
-                          <p className="text-xs text-rose-500">Prix manquant</p>
+                          <p className="text-xs text-[var(--danger)]">Prix manquant</p>
                         ) : null}
                       </div>
                     </div>
@@ -844,7 +844,7 @@ export function BillingTab({
                     </div>
                   ) : null}
 
-                  {lineError ? <p className="mt-2 text-xs text-rose-500">{lineError}</p> : null}
+                  {lineError ? <p className="mt-2 text-xs text-[var(--danger)]">{lineError}</p> : null}
                 </div>
               );
             })}

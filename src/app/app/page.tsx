@@ -243,8 +243,8 @@ export default function AppHomePage() {
             Choisir ton espace
           </h2>
           <div className="flex gap-3">
-            {errorPersonal ? <span className="text-xs text-rose-400">{errorPersonal}</span> : null}
-            {errorPro ? <span className="text-xs text-rose-400">{errorPro}</span> : null}
+            {errorPersonal ? <span className="text-xs text-[var(--danger)]">{errorPersonal}</span> : null}
+            {errorPro ? <span className="text-xs text-[var(--danger)]">{errorPro}</span> : null}
           </div>
         </div>
         <div className="grid gap-3 md:grid-cols-2">

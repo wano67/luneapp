@@ -204,7 +204,7 @@ export default function StockListPage() {
             <p className="text-xs text-[var(--text-secondary)]">Liste des produits actifs et stock courant.</p>
           </div>
           <div className="flex items-center gap-2">
-            {actionError ? <p className="text-xs text-rose-500">{actionError}</p> : null}
+            {actionError ? <p className="text-xs text-[var(--danger)]">{actionError}</p> : null}
             <Button size="sm" onClick={() => setModalOpen(true)}>
               Nouveau produit
             </Button>
@@ -215,7 +215,7 @@ export default function StockListPage() {
           <p className="text-sm text-[var(--text-secondary)]">Chargement…</p>
         ) : error ? (
           <div className="space-y-2">
-            <p className="text-sm text-rose-500">{error}</p>
+            <p className="text-sm text-[var(--danger)]">{error}</p>
             <Button size="sm" variant="outline" onClick={() => load()}>
               Réessayer
             </Button>
@@ -224,8 +224,8 @@ export default function StockListPage() {
           <p className="text-sm text-[var(--text-secondary)]">Aucun produit.</p>
         ) : (
           <div className="space-y-3">
-            {bulkInfo ? <p className="text-xs font-semibold text-emerald-500">{bulkInfo}</p> : null}
-            {bulkError ? <p className="text-xs font-semibold text-rose-500">{bulkError}</p> : null}
+            {bulkInfo ? <p className="text-xs font-semibold text-[var(--success)]">{bulkInfo}</p> : null}
+            {bulkError ? <p className="text-xs font-semibold text-[var(--danger)]">{bulkError}</p> : null}
             <div className="flex flex-wrap items-center justify-between gap-2">
               <label className="flex items-center gap-2 text-xs text-[var(--text-secondary)]">
                 <input

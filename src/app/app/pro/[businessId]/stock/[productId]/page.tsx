@@ -231,7 +231,7 @@ export default function ProductDetailPage() {
   }
 
   if (!product) {
-    return loading ? <p className="text-sm text-[var(--text-secondary)]">Chargement…</p> : <p className="text-sm text-rose-500">{error ?? 'Produit introuvable.'}</p>;
+    return loading ? <p className="text-sm text-[var(--text-secondary)]">Chargement…</p> : <p className="text-sm text-[var(--danger)]">{error ?? 'Produit introuvable.'}</p>;
   }
 
   return (
@@ -250,8 +250,8 @@ export default function ProductDetailPage() {
             </Button>
           </Link>
         </div>
-        {actionError ? <p className="text-xs text-rose-500">{actionError}</p> : null}
-        {success ? <p className="text-xs text-emerald-500">{success}</p> : null}
+        {actionError ? <p className="text-xs text-[var(--danger)]">{actionError}</p> : null}
+        {success ? <p className="text-xs text-[var(--success)]">{success}</p> : null}
         <p className="text-sm text-[var(--text-secondary)]">
           Stock courant: {product.stock ?? 0} {product.unit.toLowerCase()}
         </p>

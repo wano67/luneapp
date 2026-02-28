@@ -48,7 +48,7 @@ export default function SwitchBusinessModal() {
         </div>
 
         {businessesError ? (
-          <p className="text-sm text-rose-400">{businessesError}</p>
+          <p className="text-sm text-[var(--danger)]">{businessesError}</p>
         ) : null}
 
         {loadingBusinesses ? (

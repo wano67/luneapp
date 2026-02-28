@@ -293,7 +293,7 @@ export function SetupModals({
               </label>
             ))}
           </div>
-          {modalError ? <p className="text-sm text-rose-500">{modalError}</p> : null}
+          {modalError ? <p className="text-sm text-[var(--danger)]">{modalError}</p> : null}
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={onCloseModal}>
               Annuler
@@ -325,7 +325,7 @@ export function SetupModals({
             value={endDateInput}
             onChange={(e) => setEndDateInput(e.target.value)}
           />
-          {modalError ? <p className="text-sm text-rose-500">{modalError}</p> : null}
+          {modalError ? <p className="text-sm text-[var(--danger)]">{modalError}</p> : null}
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={onCloseModal}>
               Annuler
@@ -383,7 +383,7 @@ export function SetupModals({
                 <option value="MONTHLY">Mensuel</option>
               </Select>
             </div>
-            {quickServiceError ? <p className="mt-2 text-xs text-rose-500">{quickServiceError}</p> : null}
+            {quickServiceError ? <p className="mt-2 text-xs text-[var(--danger)]">{quickServiceError}</p> : null}
             <div className="mt-3 flex justify-end gap-2">
               <Button
                 size="sm"
@@ -533,7 +533,7 @@ export function SetupModals({
               </p>
             )}
           </div>
-          {modalError ? <p className="text-sm text-rose-500">{modalError}</p> : null}
+          {modalError ? <p className="text-sm text-[var(--danger)]">{modalError}</p> : null}
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={onCloseModal}>
               Annuler
@@ -596,7 +596,7 @@ export function SetupModals({
               <p className="text-sm text-[var(--text-secondary)]">Aucune tâche.</p>
             ) : null}
           </div>
-          {modalError ? <p className="text-sm text-rose-500">{modalError}</p> : null}
+          {modalError ? <p className="text-sm text-[var(--danger)]">{modalError}</p> : null}
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={onCloseModal}>
               Annuler
@@ -627,7 +627,7 @@ export function SetupModals({
             <option value="VIEWER">Viewer</option>
             <option value="ADMIN">Admin</option>
           </Select>
-          {modalError ? <p className="text-sm text-rose-500">{modalError}</p> : null}
+          {modalError ? <p className="text-sm text-[var(--danger)]">{modalError}</p> : null}
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={onCloseModal}>
               Annuler
@@ -660,7 +660,7 @@ export function SetupModals({
             onChange={(e) => setDocumentFile(e.target.files?.[0] ?? null)}
             className="text-sm text-[var(--text-secondary)]"
           />
-          {modalError ? <p className="text-sm text-rose-500">{modalError}</p> : null}
+          {modalError ? <p className="text-sm text-[var(--danger)]">{modalError}</p> : null}
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={onCloseModal}>
               Annuler
@@ -753,7 +753,7 @@ export function SetupModals({
               <p className="text-sm text-[var(--text-secondary)]">Tous les membres sont déjà associés.</p>
             )}
           </div>
-          {accessInfo ? <p className="text-sm text-emerald-600">{accessInfo}</p> : null}
+          {accessInfo ? <p className="text-sm text-[var(--success)]">{accessInfo}</p> : null}
           <div className="flex justify-end">
             <Button variant="outline" onClick={onCloseAccessModal}>
               Fermer
@@ -876,8 +876,8 @@ export function SetupModals({
             ))}
           </div>
 
-          {unitErrors ? <p className="text-sm text-rose-500">{unitErrors}</p> : null}
-          {teamInfo ? <p className="text-sm text-emerald-600">{teamInfo}</p> : null}
+          {unitErrors ? <p className="text-sm text-[var(--danger)]">{unitErrors}</p> : null}
+          {teamInfo ? <p className="text-sm text-[var(--success)]">{teamInfo}</p> : null}
           <div className="flex justify-end">
             <Button variant="outline" onClick={onCloseUnitsModal}>
               Fermer

@@ -256,7 +256,7 @@ export function ServiceFormModal({ open, editing, businessId, isAdmin, onClose, 
           title="Références (catégorie + tags)"
         />
 
-        {formError ? <p className="text-sm font-semibold text-rose-500">{formError}</p> : null}
+        {formError ? <p className="text-sm font-semibold text-[var(--danger)]">{formError}</p> : null}
         {!isAdmin ? (
           <p className="text-xs text-[var(--text-secondary)]">
             Lecture seule : passe en ADMIN/OWNER pour créer ou modifier un service.

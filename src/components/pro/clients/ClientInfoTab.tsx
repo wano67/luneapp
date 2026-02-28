@@ -277,9 +277,9 @@ export function ClientInfoTab({ businessId, clientId, client, onUpdated }: Props
           )}
         </div>
       </div>
-      {error ? <p className="text-sm text-rose-500">{error}</p> : null}
+      {error ? <p className="text-sm text-[var(--danger)]">{error}</p> : null}
       {!isAdmin ? <p className="text-xs text-[var(--text-secondary)]">{readOnlyMessage}</p> : null}
-      {referenceError ? <p className="text-xs text-rose-500">{referenceError}</p> : null}
+      {referenceError ? <p className="text-xs text-[var(--danger)]">{referenceError}</p> : null}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card className="rounded-3xl border border-[var(--border)]/60 bg-[var(--surface)] p-4 sm:p-6 shadow-sm space-y-3">

@@ -257,8 +257,8 @@ export function ServiceImportModal({ open, businessId, isAdmin, onClose, onAfter
           </div>
         ) : null}
 
-        {importInfo ? <p className="text-xs text-emerald-600">{importInfo}</p> : null}
-        {importError ? <p className="text-xs font-semibold text-rose-600">{importError}</p> : null}
+        {importInfo ? <p className="text-xs text-[var(--success)]">{importInfo}</p> : null}
+        {importError ? <p className="text-xs font-semibold text-[var(--danger)]">{importError}</p> : null}
 
         <div className="flex justify-end gap-2">
           <Button type="button" variant="outline" onClick={handleClose} disabled={importing}>

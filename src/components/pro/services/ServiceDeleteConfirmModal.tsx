@@ -49,7 +49,7 @@ export function ServiceDeleteConfirmModal({ target, businessId, isAdmin, onClose
         <p className="text-sm text-[var(--text-secondary)]">
           {target ? `${target.name} (${target.code})` : ''}
         </p>
-        {deleteError ? <p className="text-sm font-semibold text-rose-500">{deleteError}</p> : null}
+        {deleteError ? <p className="text-sm font-semibold text-[var(--danger)]">{deleteError}</p> : null}
         {!isAdmin ? (
           <p className="text-xs text-[var(--text-secondary)]">
             Suppression réservée aux rôles ADMIN/OWNER.

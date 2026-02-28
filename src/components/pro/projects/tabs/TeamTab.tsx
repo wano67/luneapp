@@ -47,7 +47,7 @@ export function TeamTab({
             ) : null
           }
         />
-        {teamInfo ? <p className="mt-2 text-sm text-emerald-600">{teamInfo}</p> : null}
+        {teamInfo ? <p className="mt-2 text-sm text-[var(--success)]">{teamInfo}</p> : null}
       </SectionCard>
 
       {membersByUnit.length ? (

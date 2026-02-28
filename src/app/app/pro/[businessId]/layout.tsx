@@ -89,7 +89,7 @@ function LayoutContent({
 }) {
   return (
     <div className="space-y-3">
-      {error ? <p className="text-xs text-rose-400">{error}</p> : null}
+      {error ? <p className="text-xs text-[var(--danger)]">{error}</p> : null}
       <div>{children}</div>
       <SwitchBusinessModal />
     </div>

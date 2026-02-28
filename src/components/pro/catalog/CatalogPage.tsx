@@ -421,7 +421,7 @@ export function CatalogPage({
             onChange={(e) => setSearch(e.target.value)}
             className="max-w-sm"
           />
-          {error ? <p className="text-sm text-rose-500">{error}</p> : null}
+          {error ? <p className="text-sm text-[var(--danger)]">{error}</p> : null}
         </div>
 
         {loading ? (
@@ -568,7 +568,7 @@ export function CatalogPage({
               />
             </>
           )}
-          {modalError ? <p className="text-sm text-rose-500">{modalError}</p> : null}
+          {modalError ? <p className="text-sm text-[var(--danger)]">{modalError}</p> : null}
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => setModalOpen(false)}>
               Annuler

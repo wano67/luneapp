@@ -210,7 +210,7 @@ export function PaymentsPanel({ businessId }: { businessId: string }) {
         </div>
 
         {loading ? <p className="text-xs text-[var(--text-secondary)]">Chargement…</p> : null}
-        {error ? <p className="text-xs text-rose-500">{error}</p> : null}
+        {error ? <p className="text-xs text-[var(--danger)]">{error}</p> : null}
 
         <Table>
           <TableHeader>
@@ -241,7 +241,7 @@ export function PaymentsPanel({ businessId }: { businessId: string }) {
                       {isIncome ? '↑ Entrée' : '↓ Sortie'}
                     </Badge>
                   </TableCell>
-                  <TableCell className={`text-right font-semibold tabular-nums ${isIncome ? 'text-emerald-700' : 'text-rose-600'}`}>
+                  <TableCell className={`text-right font-semibold tabular-nums ${isIncome ? 'text-[var(--success)]' : 'text-[var(--danger)]'}`}>
                     {isIncome ? '+' : '−'}{formatCurrency(amount)}
                   </TableCell>
                   <TableCell className="text-xs">
@@ -289,7 +289,7 @@ export function PaymentsPanel({ businessId }: { businessId: string }) {
                 {selected.projectName ? ` · ${selected.projectName}` : ''}
               </p>
             </div>
-            <p className={`text-sm font-semibold ${selected.type === 'INCOME' ? 'text-emerald-700' : 'text-rose-600'}`}>
+            <p className={`text-sm font-semibold ${selected.type === 'INCOME' ? 'text-[var(--success)]' : 'text-[var(--danger)]'}`}>
               {selected.type === 'INCOME' ? '+' : '−'}{formatCurrency(centsToEuro(selected.amountCents))}
             </p>
           </div>

@@ -258,7 +258,7 @@ export function CreateBusinessWizard({ open, loading, error, draft, onChangeDraf
           </div>
         )}
 
-        {error ? <p className="text-sm text-rose-500">{error}</p> : null}
+        {error ? <p className="text-sm text-[var(--danger)]">{error}</p> : null}
 
         <div className="flex justify-between gap-2 pt-2">
           <Button

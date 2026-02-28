@@ -200,8 +200,8 @@ export default function ProcessPage() {
             <Button size="sm" variant="outline" onClick={() => setIncludeArchived((v) => !v)}>
               {includeArchived ? 'Afficher actifs' : 'Afficher archivés'}
             </Button>
-            {info ? <span className="text-xs text-emerald-500">{info}</span> : null}
-            {error ? <span className="text-xs text-rose-500">{error}</span> : null}
+            {info ? <span className="text-xs text-[var(--success)]">{info}</span> : null}
+            {error ? <span className="text-xs text-[var(--danger)]">{error}</span> : null}
             {readOnlyInfo ? <span className="text-xs text-[var(--text-secondary)]">{readOnlyInfo}</span> : null}
           </div>
         </div>
@@ -240,8 +240,8 @@ export default function ProcessPage() {
                         variant="neutral"
                         className={
                           process.status === 'ACTIVE'
-                            ? 'bg-emerald-100 text-emerald-700'
-                            : 'bg-slate-100 text-slate-700'
+                            ? 'bg-[var(--success-bg)] text-[var(--success)]'
+                            : 'bg-[var(--surface-2)] text-[var(--text)]'
                         }
                       >
                         {STATUS_LABELS[process.status]}
@@ -292,7 +292,7 @@ export default function ProcessPage() {
             />
           </label>
           <div className="flex items-center justify-between">
-            {actionError ? <p className="text-xs text-rose-500">{actionError}</p> : null}
+            {actionError ? <p className="text-xs text-[var(--danger)]">{actionError}</p> : null}
             {!isAdmin ? (
               <p className="text-[11px] text-[var(--text-secondary)]">Lecture seule : création bloquée.</p>
             ) : null}

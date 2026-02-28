@@ -172,12 +172,12 @@ export function ClientAccountingTab({ businessId, clientId, initialData, already
   return (
     <div className="space-y-4">
       {summaryError ? (
-        <Card className="rounded-3xl border border-[var(--border)]/60 bg-[var(--surface)] p-4 text-sm text-rose-500 shadow-sm">
+        <Card className="rounded-3xl border border-[var(--border)]/60 bg-[var(--surface)] p-4 text-sm text-[var(--danger)] shadow-sm">
           {summaryError}
         </Card>
       ) : null}
       {documentsError ? (
-        <Card className="rounded-3xl border border-[var(--border)]/60 bg-[var(--surface)] p-4 text-sm text-rose-500 shadow-sm">
+        <Card className="rounded-3xl border border-[var(--border)]/60 bg-[var(--surface)] p-4 text-sm text-[var(--danger)] shadow-sm">
           {documentsError}
         </Card>
       ) : null}

@@ -68,9 +68,9 @@ export function ForecastingPanel({ businessId }: { businessId: string }) {
         subtitle="Projection simple basée sur la moyenne des 3 derniers mois."
       />
 
-      {error && <div className="text-sm text-red-700 bg-red-50 border border-red-200 px-3 py-2 rounded">{error}</div>}
+      {error && <div className="text-sm text-[var(--danger)] bg-[var(--danger-bg)] border border-[var(--danger-border)] px-3 py-2 rounded">{error}</div>}
       {requestId && (
-        <div className="text-xs text-muted-foreground">
+        <div className="text-xs text-[var(--text-faint)]">
           Request ID: <code>{requestId}</code>
         </div>
       )}
@@ -79,11 +79,11 @@ export function ForecastingPanel({ businessId }: { businessId: string }) {
       {!loading && data && (
         <>
           <Card className="p-4 space-y-1">
-            <div className="text-sm text-muted-foreground">
+            <div className="text-sm text-[var(--text-faint)]">
               Historique: {new Date(data.historyRange.from).toLocaleDateString()} →{' '}
               {new Date(data.historyRange.to).toLocaleDateString()}
             </div>
-            <div className="text-sm text-muted-foreground">
+            <div className="text-sm text-[var(--text-faint)]">
               Hypothèses: {data.assumptions.note} (moyenne sur {data.assumptions.monthsAveraged} mois)
             </div>
           </Card>

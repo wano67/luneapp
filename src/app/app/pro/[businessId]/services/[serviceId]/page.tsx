@@ -254,9 +254,9 @@ export default function ServiceDetailPage() {
           <p className="text-sm text-[var(--text-secondary)]">Chargement du service…</p>
         </Card>
       ) : error ? (
-        <Card className="space-y-2 border border-rose-200/60 bg-rose-50/60 p-4">
-          <p className="text-sm font-semibold text-rose-500">{error}</p>
-          <p className="text-xs text-rose-400">Vérifie l&apos;identifiant ou tes droits.</p>
+        <Card className="space-y-2 border border-[var(--danger-border)] bg-[var(--danger-bg)] p-4">
+          <p className="text-sm font-semibold text-[var(--danger)]">{error}</p>
+          <p className="text-xs text-[var(--danger)]">Vérifie l&apos;identifiant ou tes droits.</p>
         </Card>
       ) : service ? (
         <div className="space-y-4">
@@ -407,8 +407,8 @@ export default function ServiceDetailPage() {
                 />
               </div>
               <div className="md:col-span-2 flex flex-col gap-2">
-                {formError ? <p className="text-sm font-semibold text-rose-500">{formError}</p> : null}
-                {info ? <p className="text-sm text-emerald-600">{info}</p> : null}
+                {formError ? <p className="text-sm font-semibold text-[var(--danger)]">{formError}</p> : null}
+                {info ? <p className="text-sm text-[var(--success)]">{info}</p> : null}
                 <div className="flex items-center gap-3">
                   <Button type="submit" disabled={!isAdmin || saving}>
                     {saving ? 'Sauvegarde…' : 'Enregistrer'}

@@ -415,12 +415,12 @@ function openEdit(task: Task) {
               ))}
             </select>
           </div>
-          {info ? <span className="text-xs text-emerald-500">{info}</span> : null}
-          {error ? <span className="text-xs text-rose-500">{error}</span> : null}
+          {info ? <span className="text-xs text-[var(--success)]">{info}</span> : null}
+          {error ? <span className="text-xs text-[var(--danger)]">{error}</span> : null}
           {readOnlyInfo ? <span className="text-xs text-[var(--text-secondary)]">{readOnlyInfo}</span> : null}
         </div>
         {referenceError ? (
-          <p className="text-xs text-rose-500">
+          <p className="text-xs text-[var(--danger)]">
             {referenceError}
             {referenceRequestId ? ` (Ref: ${referenceRequestId})` : ''}
           </p>
@@ -432,7 +432,7 @@ function openEdit(task: Task) {
           <p className="text-sm text-[var(--text-secondary)]">Chargement des tâches…</p>
         ) : (
           <div className="space-y-2">
-            {bulkError ? <p className="text-xs font-semibold text-rose-500">{bulkError}</p> : null}
+            {bulkError ? <p className="text-xs font-semibold text-[var(--danger)]">{bulkError}</p> : null}
             <BulkActionBar
               count={selectedCount}
               onClear={clear}
@@ -500,7 +500,7 @@ function openEdit(task: Task) {
                             </Badge>
                           ) : null}
                           {task.tagReferences?.map((tag) => (
-                            <Badge key={tag.id} variant="neutral" className="bg-emerald-50 text-emerald-700">
+                            <Badge key={tag.id} variant="neutral" className="bg-[var(--success-bg)] text-[var(--success)]">
                               {tag.name}
                             </Badge>
                           ))}
@@ -512,10 +512,10 @@ function openEdit(task: Task) {
                           variant="neutral"
                           className={
                             task.status === 'DONE'
-                              ? 'bg-emerald-100 text-emerald-700'
+                              ? 'bg-[var(--success-bg)] text-[var(--success)]'
                               : task.status === 'IN_PROGRESS'
                                 ? 'bg-blue-100 text-blue-700'
-                                : 'bg-amber-100 text-amber-700'
+                                : 'bg-[var(--warning-bg)] text-[var(--warning)]'
                           }
                         >
                           {STATUS_OPTIONS.find((s) => s.value === task.status)?.label ?? task.status}
@@ -623,7 +623,7 @@ function openEdit(task: Task) {
             title="Références"
           />
           <div className="flex items-center justify-between">
-            {actionError ? <p className="text-xs text-rose-500">{actionError}</p> : null}
+            {actionError ? <p className="text-xs text-[var(--danger)]">{actionError}</p> : null}
             {!isAdmin ? (
               <p className="text-[11px] text-[var(--text-secondary)]">Lecture seule : création/édition bloquée.</p>
             ) : null}
@@ -649,7 +649,7 @@ function openEdit(task: Task) {
           <p className="text-sm text-[var(--text-secondary)]">
             Action définitive. Les liens projet/assignee seront perdus.
           </p>
-          {deleteError ? <p className="text-xs text-rose-500">{deleteError}</p> : null}
+          {deleteError ? <p className="text-xs text-[var(--danger)]">{deleteError}</p> : null}
           {!isAdmin ? (
             <p className="text-[11px] text-[var(--text-secondary)]">Suppression réservée aux admins/owners.</p>
           ) : null}

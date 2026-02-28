@@ -148,7 +148,7 @@ export function ClientInteractionsTab({ businessId, clientId, initialItems, alre
             ))}
           </div>
         ) : error ? (
-          <p className="text-sm text-rose-500">{error}</p>
+          <p className="text-sm text-[var(--danger)]">{error}</p>
         ) : items.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-[var(--border)] bg-[var(--surface-hover)]/40 p-4 text-sm text-[var(--text-secondary)]">
             Aucune interaction enregistrée.
@@ -194,7 +194,7 @@ export function ClientInteractionsTab({ businessId, clientId, initialItems, alre
               className="w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
             />
           </label>
-          {formError ? <p className="text-xs text-rose-500">{formError}</p> : null}
+          {formError ? <p className="text-xs text-[var(--danger)]">{formError}</p> : null}
           <div className="flex justify-end gap-2">
             <Button type="button" variant="outline" onClick={() => setModalOpen(false)} disabled={saving}>
               Annuler

@@ -153,7 +153,7 @@ export default function AccountDetailPage() {
                 </p>
                 <p className="text-sm text-[var(--text-secondary)]">
                   Solde : {centsToEUR(account.balanceCents)} € · 30j:{' '}
-                  <span className={BigInt(account.delta30Cents) >= 0n ? 'text-emerald-400' : 'text-rose-400'}>
+                  <span className={BigInt(account.delta30Cents) >= 0n ? 'text-[var(--success)]' : 'text-[var(--danger)]'}>
                     {BigInt(account.delta30Cents) >= 0n ? '+' : ''}
                     {centsToEUR(account.delta30Cents)} €
                   </span>
@@ -191,8 +191,8 @@ export default function AccountDetailPage() {
 
       {error ? (
         <Card className="p-5">
-          <p className="text-sm font-semibold text-rose-500">Erreur</p>
-          <p className="text-sm text-rose-500/90">{error}</p>
+          <p className="text-sm font-semibold text-[var(--danger)]">Erreur</p>
+          <p className="text-sm text-[var(--danger)]">{error}</p>
         </Card>
       ) : null}
 

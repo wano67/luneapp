@@ -47,9 +47,9 @@ function formatStatus(status: string) {
 }
 
 const STATUS_BADGE_STYLES: Record<string, string> = {
-  DONE: 'border-emerald-200 bg-emerald-50 text-emerald-700',
-  IN_PROGRESS: 'border-amber-200 bg-amber-50 text-amber-700',
-  TODO: 'border-slate-200 bg-slate-50 text-slate-700',
+  DONE: 'border-[var(--success-border)] bg-[var(--success-bg)] text-[var(--success)]',
+  IN_PROGRESS: 'border-[var(--warning-border)] bg-[var(--warning-bg)] text-[var(--warning)]',
+  TODO: 'border-[var(--border)] bg-[var(--surface-2)] text-[var(--text)]',
 };
 
 function getStatusBadgeClasses(status: string) {

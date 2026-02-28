@@ -265,8 +265,8 @@ export default function InvitesPage() {
               </div>
             </div>
 
-            {formError ? <p className="text-xs text-rose-500">{formError}</p> : null}
-            {success ? <p className="text-xs text-emerald-500">{success}</p> : null}
+            {formError ? <p className="text-xs text-[var(--danger)]">{formError}</p> : null}
+            {success ? <p className="text-xs text-[var(--success)]">{success}</p> : null}
             {lastInviteLink ? (
               <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)]/70 p-3">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-[var(--text-secondary)]">
@@ -297,7 +297,7 @@ export default function InvitesPage() {
           <p className="text-sm text-[var(--text-secondary)]">Chargement des invitations…</p>
         ) : error ? (
           <div className="space-y-2">
-            <p className="text-sm text-rose-400">{error}</p>
+            <p className="text-sm text-[var(--danger)]">{error}</p>
             <div className="flex gap-2">
               <Button size="sm" variant="outline" onClick={() => loadInvites()}>
                 Réessayer
@@ -310,7 +310,7 @@ export default function InvitesPage() {
               <p className="text-sm font-semibold text-[var(--text-primary)]">
                 Invitations en attente ({pendingInvites.length})
               </p>
-              {actionError ? <p className="text-xs text-rose-500">{actionError}</p> : null}
+              {actionError ? <p className="text-xs text-[var(--danger)]">{actionError}</p> : null}
             </div>
 
             {invites.length === 0 ? (

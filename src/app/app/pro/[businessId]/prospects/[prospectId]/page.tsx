@@ -277,7 +277,7 @@ export default function ProspectDetailPage() {
         >
           ← Retour aux prospects
         </Link>
-        <Card className="p-4 text-sm text-rose-500">{error ?? 'Prospect introuvable'}</Card>
+        <Card className="p-4 text-sm text-[var(--danger)]">{error ?? 'Prospect introuvable'}</Card>
       </div>
     );
   }
@@ -396,8 +396,8 @@ export default function ProspectDetailPage() {
             </div>
           </div>
 
-          {saveError ? <p className="text-sm text-rose-500">{saveError}</p> : null}
-          {saveInfo ? <p className="text-sm text-emerald-500">{saveInfo}</p> : null}
+          {saveError ? <p className="text-sm text-[var(--danger)]">{saveError}</p> : null}
+          {saveInfo ? <p className="text-sm text-[var(--success)]">{saveInfo}</p> : null}
           {!isAdmin ? <p className="text-xs text-[var(--text-secondary)]">{readOnlyMessage}</p> : null}
 
           <div className="grid gap-4 lg:grid-cols-2">
@@ -577,9 +577,9 @@ export default function ProspectDetailPage() {
             onChange={(e) => setConvertName(e.target.value)}
             disabled={!isAdmin || convertLoading}
           />
-          {convertError ? <p className="text-xs text-rose-500">{convertError}</p> : null}
+          {convertError ? <p className="text-xs text-[var(--danger)]">{convertError}</p> : null}
           {convertResult ? (
-            <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 p-3 text-xs text-emerald-700">
+            <div className="rounded-lg border border-[var(--success-border)] bg-[var(--success-bg)] p-3 text-xs text-[var(--success)]">
               Conversion réussie.
               <div className="mt-2 flex flex-wrap gap-2">
                 <Link

@@ -331,7 +331,7 @@ export default function TaskDetailPage() {
   if (!task) {
     return (
       <Card className="space-y-2 p-5">
-        <p className="text-sm font-semibold text-rose-400">{error ?? 'Tâche introuvable.'}</p>
+        <p className="text-sm font-semibold text-[var(--danger)]">{error ?? 'Tâche introuvable.'}</p>
         <Button variant="outline" size="sm" asChild>
           <Link href={`/app/pro/${businessId}/tasks`}>Retour à la liste</Link>
         </Button>
@@ -371,7 +371,7 @@ export default function TaskDetailPage() {
               </Badge>
             ) : null}
             {task.tagReferences?.map((tag) => (
-              <Badge key={tag.id} variant="neutral" className="bg-emerald-50 text-emerald-700">
+              <Badge key={tag.id} variant="neutral" className="bg-[var(--success-bg)] text-[var(--success)]">
                 {tag.name}
               </Badge>
             ))}
@@ -472,7 +472,7 @@ export default function TaskDetailPage() {
                 </Button>
               </div>
             ) : null}
-            {subtaskInfo ? <p className="text-xs text-emerald-500">{subtaskInfo}</p> : null}
+            {subtaskInfo ? <p className="text-xs text-[var(--success)]">{subtaskInfo}</p> : null}
           </div>
         ) : null}
       </Card>
@@ -544,7 +544,7 @@ export default function TaskDetailPage() {
                 </Button>
               </div>
             ) : null}
-            {checklistInfo ? <p className="text-xs text-emerald-500">{checklistInfo}</p> : null}
+            {checklistInfo ? <p className="text-xs text-[var(--success)]">{checklistInfo}</p> : null}
           </div>
         ) : null}
       </Card>
@@ -566,8 +566,8 @@ export default function TaskDetailPage() {
           disabled={!canEditReferences || referencesSaving}
           title="Références tâche"
         />
-        {referenceError ? <p className="text-xs font-semibold text-rose-500">{referenceError}</p> : null}
-        {referenceInfo ? <p className="text-xs text-emerald-500">{referenceInfo}</p> : null}
+        {referenceError ? <p className="text-xs font-semibold text-[var(--danger)]">{referenceError}</p> : null}
+        {referenceInfo ? <p className="text-xs text-[var(--success)]">{referenceInfo}</p> : null}
         <div className="flex justify-end">
           <Button onClick={() => void saveReferences()} disabled={!canEditReferences || referencesSaving}>
             {referencesSaving ? 'Enregistrement…' : 'Enregistrer'}

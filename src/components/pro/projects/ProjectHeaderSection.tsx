@@ -128,7 +128,7 @@ export function ProjectHeaderSection({
       </SectionCard>
 
       {isOverdue ? (
-        <SectionCard className="border-rose-200/70 bg-rose-50/40">
+        <SectionCard className="border-[var(--danger-border)] bg-[var(--danger-bg)]">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="space-y-1">
               <p className="text-sm font-semibold text-[var(--text-primary)]">Date de fin dépassée</p>
@@ -160,7 +160,7 @@ export function ProjectHeaderSection({
           {!isAdmin ? (
             <p className="mt-2 text-xs text-[var(--text-secondary)]">Réservé aux admins/owners.</p>
           ) : null}
-          {actionError ? <p className="mt-2 text-xs text-rose-500">{actionError}</p> : null}
+          {actionError ? <p className="mt-2 text-xs text-[var(--danger)]">{actionError}</p> : null}
         </SectionCard>
       ) : null}
     </>

@@ -221,7 +221,7 @@ export function OverviewTab({
               Aucun accès configuré pour ce projet.
             </p>
           )}
-          {accessInfo ? <p className="text-xs text-emerald-600">{accessInfo}</p> : null}
+          {accessInfo ? <p className="text-xs text-[var(--success)]">{accessInfo}</p> : null}
         </SectionCard>
 
         <SectionCard className="space-y-3">

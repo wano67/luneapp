@@ -63,9 +63,9 @@ export function TreasuryPanel({ businessId }: { businessId: string }) {
         subtitle="Vue synthétique basée sur les écritures Finance."
       />
 
-      {error && <div className="text-sm text-red-700 bg-red-50 border border-red-200 px-3 py-2 rounded">{error}</div>}
+      {error && <div className="text-sm text-[var(--danger)] bg-[var(--danger-bg)] border border-[var(--danger-border)] px-3 py-2 rounded">{error}</div>}
       {requestId && (
-        <div className="text-xs text-muted-foreground">
+        <div className="text-xs text-[var(--text-faint)]">
           Request ID: <code>{requestId}</code>
         </div>
       )}
@@ -76,19 +76,19 @@ export function TreasuryPanel({ businessId }: { businessId: string }) {
           <Card className="p-4 space-y-2">
             <div className="flex gap-6 flex-wrap">
               <div>
-                <div className="text-sm text-muted-foreground">Revenus</div>
+                <div className="text-sm text-[var(--text-faint)]">Revenus</div>
                 <div className="text-lg font-semibold">{formatMoney(data.totals.incomeCents)}</div>
               </div>
               <div>
-                <div className="text-sm text-muted-foreground">Dépenses</div>
+                <div className="text-sm text-[var(--text-faint)]">Dépenses</div>
                 <div className="text-lg font-semibold">{formatMoney(data.totals.expenseCents)}</div>
               </div>
               <div>
-                <div className="text-sm text-muted-foreground">Net</div>
+                <div className="text-sm text-[var(--text-faint)]">Net</div>
                 <div className="text-lg font-semibold">{formatMoney(data.totals.netCents)}</div>
               </div>
             </div>
-            <div className="text-xs text-muted-foreground">
+            <div className="text-xs text-[var(--text-faint)]">
               Période : {new Date(data.range.from).toLocaleDateString()} → {new Date(data.range.to).toLocaleDateString()}
             </div>
           </Card>
@@ -120,7 +120,7 @@ export function TreasuryPanel({ businessId }: { businessId: string }) {
           <Card className="p-4">
             <h2 className="text-lg font-semibold mb-2">Top catégories (net)</h2>
             {data.byCategory.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Aucune catégorie disponible.</p>
+              <p className="text-sm text-[var(--text-faint)]">Aucune catégorie disponible.</p>
             ) : (
               <Table>
                 <TableHeader>

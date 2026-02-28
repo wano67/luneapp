@@ -128,7 +128,7 @@ export function ProjectsTable({ businessId, items, isLoading, error, onRetry }: 
                       </button>
                       <button
                         type="button"
-                        className="w-full rounded-lg px-3 py-2 text-left text-sm text-amber-700 hover:bg-[var(--surface-hover)]"
+                        className="w-full rounded-lg px-3 py-2 text-left text-sm text-[var(--warning)] hover:bg-[var(--surface-hover)]"
                       >
                         Archiver (TODO)
                       </button>

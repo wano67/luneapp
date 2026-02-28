@@ -40,8 +40,8 @@ function formatDate(value: string | null | undefined) {
 }
 
 const STATUS_BORDER: Record<Props['status'], string> = {
-  active: 'border border-emerald-400/80',
-  inactive: 'border border-rose-400/80',
+  active: 'border border-[var(--success-border)]',
+  inactive: 'border border-[var(--danger-border)]',
   neutral: 'border border-[var(--border)]/60',
 };
 

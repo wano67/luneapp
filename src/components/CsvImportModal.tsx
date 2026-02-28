@@ -519,7 +519,7 @@ export default function CsvImportModal({
     >
       <div className="max-h-[78vh] overflow-hidden">
         {externalError || serverError ? (
-          <div className="mb-3 rounded-2xl border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-200">
+          <div className="mb-3 rounded-2xl border border-[var(--danger-border)] bg-[var(--danger-bg)] p-3 text-sm text-[var(--danger)]">
             {externalError || serverError}
           </div>
         ) : null}
@@ -549,9 +549,9 @@ export default function CsvImportModal({
                   disabled={loadingPreview || loadingImport}
                   dataAutofocus
                 />
-                <p className="text-xs text-slate-500">Format: date,label,amount,currency,note,category</p>
+                <p className="text-xs text-[var(--text-muted)]">Format: date,label,amount,currency,note,category</p>
                 {fileName ? (
-                  <p className="text-xs text-slate-400">Sélectionné : {fileName}</p>
+                  <p className="text-xs text-[var(--text-faint)]">Sélectionné : {fileName}</p>
                 ) : null}
               </div>
             </div>
@@ -559,8 +559,8 @@ export default function CsvImportModal({
             {showPreviewPanel && rawHeaders.length ? (
               <div className="space-y-4 rounded-2xl border border-[var(--border)] bg-[var(--surface)]/40 p-4">
                 <div className="flex items-center justify-between">
-                  <p className="text-sm font-semibold text-slate-50">Associer les colonnes</p>
-                  <p className="text-xs text-slate-400">
+                  <p className="text-sm font-semibold text-[var(--text)]">Associer les colonnes</p>
+                  <p className="text-xs text-[var(--text-faint)]">
                     {totalRows.toLocaleString('fr-FR')} ligne(s) détectée(s)
                   </p>
                 </div>
@@ -568,11 +568,11 @@ export default function CsvImportModal({
                 <div className="grid gap-3 sm:grid-cols-3">
                   {mappingFields.map((f) => (
                     <div key={f.key}>
-                      <label className="mb-1.5 block text-sm text-slate-300">{f.label}</label>
+                      <label className="mb-1.5 block text-sm text-[var(--text-faint)]">{f.label}</label>
                       <select
                         value={mapping[f.key]}
                         onChange={(e) => setMapping((m) => ({ ...m, [f.key]: e.target.value }))}
-                        className="h-12 w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 text-base text-slate-50"
+                        className="h-12 w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 text-base text-[var(--text)]"
                       >
                         <option value="">—</option>
                         {rawHeaders.map((h) => (
@@ -589,7 +589,7 @@ export default function CsvImportModal({
                   <div className="max-h-[360px] overflow-auto">
                     <table className="w-full table-fixed text-sm">
                       <thead className="sticky top-0 z-10 bg-[var(--surface)]">
-                        <tr className="text-left text-xs text-slate-300">
+                        <tr className="text-left text-xs text-[var(--text-faint)]">
                           <th className="sticky left-0 z-20 w-14 border-b border-[var(--border)] bg-[var(--surface)] px-3 py-2">
                             #
                           </th>
@@ -606,16 +606,16 @@ export default function CsvImportModal({
                         </tr>
                       </thead>
 
-                      <tbody className="text-slate-100">
+                      <tbody className="text-[var(--text)]">
                         {rawRows.slice(0, 50).map((r, i) => (
                           <tr key={i} className={i % 2 === 0 ? 'bg-black/0' : 'bg-black/10'}>
-                            <td className="sticky left-0 z-10 w-14 border-b border-[var(--border)] bg-[var(--surface)]/60 px-3 py-2 text-xs text-slate-400">
+                            <td className="sticky left-0 z-10 w-14 border-b border-[var(--border)] bg-[var(--surface)]/60 px-3 py-2 text-xs text-[var(--text-faint)]">
                               {i + 1}
                             </td>
 
                             {rawHeaders.map((_, j) => (
                               <td key={j} className="border-b border-[var(--border)] px-3 py-2 align-top">
-                                <div className="max-w-[360px] whitespace-pre-wrap break-words text-slate-200">
+                                <div className="max-w-[360px] whitespace-pre-wrap break-words text-[var(--text)]">
                                   {r[j] ?? ''}
                                 </div>
                               </td>
@@ -626,7 +626,7 @@ export default function CsvImportModal({
                     </table>
                   </div>
 
-                  <div className="flex items-center justify-between px-3 py-2 text-xs text-slate-500">
+                  <div className="flex items-center justify-between px-3 py-2 text-xs text-[var(--text-muted)]">
                     <span>Aperçu : 50 premières lignes</span>
                     <span>Scroll horizontal + vertical</span>
                   </div>
@@ -637,8 +637,8 @@ export default function CsvImportModal({
             {showPreviewPanel ? (
               <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)]/40 p-4">
                 <div className="flex items-center justify-between gap-2">
-                  <p className="text-sm font-semibold text-slate-50">Prévisualisation</p>
-                  <p className="text-xs text-slate-400">{previewSummary}</p>
+                  <p className="text-sm font-semibold text-[var(--text)]">Prévisualisation</p>
+                  <p className="text-xs text-[var(--text-faint)]">{previewSummary}</p>
                 </div>
 
                 {preview?.errors?.length ? (
@@ -646,7 +646,7 @@ export default function CsvImportModal({
                     {preview.errors.slice(0, 8).map((err, idx) => (
                       <div
                         key={idx}
-                        className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-2 text-xs text-amber-100"
+                        className="rounded-xl border border-[var(--warning-border)] bg-[var(--warning-bg)] p-2 text-xs text-[var(--warning)]"
                       >
                         Ligne {err.row}: {err.reason}
                       </div>
@@ -655,7 +655,7 @@ export default function CsvImportModal({
                 ) : null}
 
                 {preview?.preview?.length ? (
-                  <div className="mt-4 space-y-2 text-xs text-slate-300">
+                  <div className="mt-4 space-y-2 text-xs text-[var(--text-faint)]">
                     {preview.preview.map((p, idx) => {
                       const neg = isNegativeCents(p.amountCents);
                       return (
@@ -664,14 +664,14 @@ export default function CsvImportModal({
                           className="flex flex-wrap items-center gap-2 rounded-xl border border-[var(--border)]/80 bg-[var(--surface)]/70 px-3 py-2"
                         >
                           <span className="font-semibold">{p.label}</span>
-                          <span className="text-slate-400">
+                          <span className="text-[var(--text-faint)]">
                             {new Date(p.dateIso).toLocaleDateString('fr-FR')}
                           </span>
-                          <span className={neg ? 'text-rose-300' : 'text-emerald-300'}>
+                          <span className={neg ? 'text-[var(--danger)]' : 'text-[var(--success)]'}>
                             {formatCents(p.amountCents, p.currency)}
                           </span>
                           {p.categoryName ? (
-                            <span className="rounded-full border border-[var(--border)] px-2 py-[2px] text-[11px] text-slate-300">
+                            <span className="rounded-full border border-[var(--border)] px-2 py-[2px] text-[11px] text-[var(--text-faint)]">
                               {p.categoryName}
                             </span>
                           ) : null}

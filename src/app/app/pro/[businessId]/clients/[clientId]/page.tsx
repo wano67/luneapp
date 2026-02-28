@@ -348,7 +348,7 @@ export default function ClientDetailPage() {
         >
           ← Retour aux clients
         </Link>
-        <Card className="p-4 text-sm text-rose-500">{error ?? 'Client introuvable'}</Card>
+        <Card className="p-4 text-sm text-[var(--danger)]">{error ?? 'Client introuvable'}</Card>
       </div>
     );
   }
@@ -445,8 +445,8 @@ export default function ClientDetailPage() {
 
       <KpiCirclesBlock items={kpis} />
 
-      {saveError ? <p className="text-sm text-rose-500">{saveError}</p> : null}
-      {saveInfo ? <p className="text-sm text-emerald-500">{saveInfo}</p> : null}
+      {saveError ? <p className="text-sm text-[var(--danger)]">{saveError}</p> : null}
+      {saveInfo ? <p className="text-sm text-[var(--success)]">{saveInfo}</p> : null}
 
       <TabsPills
         items={tabs}
@@ -546,7 +546,7 @@ function formatDate(value: string | null | undefined) {
 
 function StatusIndicator({ active }: { active: boolean }) {
   const indicator = active
-    ? { icon: '●', label: 'Actif', className: 'text-emerald-500' }
+    ? { icon: '●', label: 'Actif', className: 'text-[var(--success)]' }
     : { icon: '✕', label: 'Inactif', className: 'text-[var(--text-secondary)]' };
   return (
     <span className={`flex items-center gap-1 text-[12px] font-medium ${indicator.className}`}>

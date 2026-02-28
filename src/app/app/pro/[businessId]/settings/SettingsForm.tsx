@@ -182,13 +182,13 @@ export function SettingsForm({ businessId, title, description, fields }: Props) 
     <div className="space-y-4">
       <div>
         <h1 className="text-2xl font-semibold">{title}</h1>
-        {description && <p className="text-muted-foreground">{description}</p>}
+        {description && <p className="text-[var(--text-faint)]">{description}</p>}
       </div>
 
-      {info && <div className="text-sm text-green-700 bg-green-50 border border-green-200 px-3 py-2 rounded">{info}</div>}
-      {error && <div className="text-sm text-red-700 bg-red-50 border border-red-200 px-3 py-2 rounded">{error}</div>}
+      {info && <div className="text-sm text-[var(--success)] bg-[var(--success-bg)] border border-[var(--success-border)] px-3 py-2 rounded">{info}</div>}
+      {error && <div className="text-sm text-[var(--danger)] bg-[var(--danger-bg)] border border-[var(--danger-border)] px-3 py-2 rounded">{error}</div>}
       {requestId && (
-        <div className="text-xs text-muted-foreground">
+        <div className="text-xs text-[var(--text-faint)]">
           Request ID: <code>{requestId}</code>
         </div>
       )}
@@ -212,7 +212,7 @@ export function SettingsForm({ businessId, title, description, fields }: Props) 
                       />
                       <div>
                         <div className="font-medium">{field.label}</div>
-                        {field.helper && <p className="text-sm text-muted-foreground">{field.helper}</p>}
+                        {field.helper && <p className="text-sm text-[var(--text-faint)]">{field.helper}</p>}
                       </div>
                     </label>
                   );
@@ -239,7 +239,7 @@ export function SettingsForm({ businessId, title, description, fields }: Props) 
                       }
                     />
                     {field.helper && (
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-xs text-[var(--text-faint)]">
                         {field.helper}
                         {field.type === 'number' && field.suffix ? ` (${field.suffix})` : ''}
                       </p>
@@ -252,7 +252,7 @@ export function SettingsForm({ businessId, title, description, fields }: Props) 
               <Button type="submit" disabled={saving || !isAdmin}>
                 {saving ? 'Enregistrement…' : 'Enregistrer'}
               </Button>
-              {!isAdmin && <p className="text-sm text-muted-foreground">{readOnlyMessage}</p>}
+              {!isAdmin && <p className="text-sm text-[var(--text-faint)]">{readOnlyMessage}</p>}
             </div>
           </form>
         )}

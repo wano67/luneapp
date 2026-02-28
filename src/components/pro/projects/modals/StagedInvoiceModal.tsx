@@ -89,10 +89,10 @@ export function StagedInvoiceModal({
           <p className="text-sm font-semibold text-[var(--text-primary)]">
             {formatCurrencyEUR(previewCents, { minimumFractionDigits: 0 })}
           </p>
-          {previewTooHigh ? <p className="text-xs text-rose-500">Le montant dépasse le reste à facturer.</p> : null}
+          {previewTooHigh ? <p className="text-xs text-[var(--danger)]">Le montant dépasse le reste à facturer.</p> : null}
         </div>
 
-        {error ? <p className="text-xs text-rose-500">{error}</p> : null}
+        {error ? <p className="text-xs text-[var(--danger)]">{error}</p> : null}
 
         <div className="flex flex-wrap gap-2">
           <Button type="button" variant="outline" onClick={onClose} disabled={loading}>

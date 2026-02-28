@@ -397,8 +397,8 @@ export default function ProcessDetailPage() {
               variant="neutral"
               className={
                 process?.status === 'ACTIVE'
-                  ? 'bg-emerald-100 text-emerald-700'
-                  : 'bg-slate-100 text-slate-700'
+                  ? 'bg-[var(--success-bg)] text-[var(--success)]'
+                  : 'bg-[var(--surface-2)] text-[var(--text)]'
               }
             >
               {process ? STATUS_LABELS[process.status] : '—'}
@@ -419,9 +419,9 @@ export default function ProcessDetailPage() {
         {requestId ? (
           <p className="text-[10px] text-[var(--text-secondary)]">Request ID: {requestId}</p>
         ) : null}
-        {info ? <p className="text-xs text-emerald-500">{info}</p> : null}
-        {error ? <p className="text-xs text-rose-500">{error}</p> : null}
-        {actionError ? <p className="text-xs text-rose-500">{actionError}</p> : null}
+        {info ? <p className="text-xs text-[var(--success)]">{info}</p> : null}
+        {error ? <p className="text-xs text-[var(--danger)]">{error}</p> : null}
+        {actionError ? <p className="text-xs text-[var(--danger)]">{actionError}</p> : null}
         {readOnlyInfo ? <p className="text-xs text-[var(--text-secondary)]">{readOnlyInfo}</p> : null}
       </Card>
 
@@ -468,7 +468,7 @@ export default function ProcessDetailPage() {
                       <Badge
                         variant="neutral"
                         className={
-                          step.isDone ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
+                          step.isDone ? 'bg-[var(--success-bg)] text-[var(--success)]' : 'bg-[var(--warning-bg)] text-[var(--warning)]'
                         }
                       >
                         {step.isDone ? 'Fait' : 'À faire'}
@@ -550,7 +550,7 @@ export default function ProcessDetailPage() {
             />
           </label>
           <div className="flex items-center justify-between">
-            {actionError ? <p className="text-xs text-rose-500">{actionError}</p> : null}
+            {actionError ? <p className="text-xs text-[var(--danger)]">{actionError}</p> : null}
             {!isAdmin ? (
               <p className="text-[11px] text-[var(--text-secondary)]">Lecture seule : modification bloquée.</p>
             ) : null}
@@ -604,7 +604,7 @@ export default function ProcessDetailPage() {
             </div>
           </div>
           <div className="flex items-center justify-between">
-            {stepError ? <p className="text-xs text-rose-500">{stepError}</p> : null}
+            {stepError ? <p className="text-xs text-[var(--danger)]">{stepError}</p> : null}
             {!isAdmin ? (
               <p className="text-[11px] text-[var(--text-secondary)]">Lecture seule : modification bloquée.</p>
             ) : null}

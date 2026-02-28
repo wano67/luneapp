@@ -84,7 +84,7 @@ export function SearchSelect({ label, placeholder, items, value, onChange, error
         type="button"
         className={cn(
           'flex w-full items-center justify-between rounded-lg border bg-[var(--surface)] px-3 py-2 text-left text-sm text-[var(--text-primary)] transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]',
-          error ? 'border-rose-500' : 'border-[var(--border)]',
+          error ? 'border-[var(--danger-border)]' : 'border-[var(--border)]',
           disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'
         )}
         onClick={() => !disabled && setOpen((v) => !v)}
@@ -95,7 +95,7 @@ export function SearchSelect({ label, placeholder, items, value, onChange, error
         <span className="text-[var(--text-secondary)]">▾</span>
       </button>
       {helper ? <p className="text-xs text-[var(--text-secondary)]">{helper}</p> : null}
-      {error ? <p className="text-xs text-rose-500">{error}</p> : null}
+      {error ? <p className="text-xs text-[var(--danger)]">{error}</p> : null}
 
       {open ? (
         <div className="mt-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] shadow-lg">

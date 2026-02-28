@@ -112,7 +112,7 @@ export function LedgerPanel({ businessId }: { businessId: string }) {
             <p className="text-xs text-[var(--text-secondary)]">Lecture seule. Equilibre débit/crédit requis.</p>
           </div>
           <div className="flex items-center gap-2">
-            {error ? <span className="text-xs text-rose-500">{error}</span> : null}
+            {error ? <span className="text-xs text-[var(--danger)]">{error}</span> : null}
             <Button size="sm" variant="outline" onClick={() => load()} disabled={loading}>
               Recharger
             </Button>
@@ -122,7 +122,7 @@ export function LedgerPanel({ businessId }: { businessId: string }) {
         {loading ? (
           <p className="text-sm text-[var(--text-secondary)]">Chargement…</p>
         ) : error ? (
-          <p className="text-sm text-rose-500">{error}</p>
+          <p className="text-sm text-[var(--danger)]">{error}</p>
         ) : formatted.length === 0 ? (
           <p className="text-sm text-[var(--text-secondary)]">Aucune écriture.</p>
         ) : (

@@ -66,7 +66,7 @@ export function RecurringRuleModal({
     >
       <div className="space-y-4">
         {loading ? <p className="text-xs text-[var(--text-secondary)]">Chargement…</p> : null}
-        {error ? <p className="text-xs text-rose-500">{error}</p> : null}
+        {error ? <p className="text-xs text-[var(--danger)]">{error}</p> : null}
         {rule ? (
           <>
             <div className="grid gap-2 md:grid-cols-2">

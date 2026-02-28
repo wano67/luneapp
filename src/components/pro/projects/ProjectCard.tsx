@@ -32,8 +32,8 @@ function projectStatusToCardStatus(project: ProjectListItem): 'active' | 'inacti
 }
 
 const STATUS_BORDER: Record<'active' | 'inactive' | 'neutral', string> = {
-  active: 'border border-emerald-400/80',
-  inactive: 'border border-rose-400/80',
+  active: 'border border-[var(--success-border)]',
+  inactive: 'border border-[var(--danger-border)]',
   neutral: 'border border-[var(--border)]/60',
 };
 
@@ -207,7 +207,7 @@ export function ProjectCard({ businessId, project, onMutate }: Props) {
                     type="button"
                     className={cn(
                       'flex w-full items-center justify-between rounded-lg px-3 py-2 text-left hover:bg-[var(--surface-hover)]',
-                      !isAdmin ? 'cursor-not-allowed text-[var(--text-secondary)] opacity-60' : 'text-rose-600'
+                      !isAdmin ? 'cursor-not-allowed text-[var(--text-secondary)] opacity-60' : 'text-[var(--danger)]'
                     )}
                     disabled={!isAdmin || actionLoading}
                     onClick={handleArchiveToggle}
@@ -215,7 +215,7 @@ export function ProjectCard({ businessId, project, onMutate }: Props) {
                     {project.archivedAt ? 'Désarchiver' : 'Archiver'}
                   </button>
                   {actionError ? (
-                    <p className="px-3 py-2 text-xs text-rose-500">{actionError}</p>
+                    <p className="px-3 py-2 text-xs text-[var(--danger)]">{actionError}</p>
                   ) : null}
                 </div>
               ) : null}

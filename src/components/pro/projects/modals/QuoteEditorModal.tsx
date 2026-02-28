@@ -150,7 +150,7 @@ export function QuoteEditorModal({
           ))}
         </div>
 
-        {error ? <p className="text-sm text-rose-500">{error}</p> : null}
+        {error ? <p className="text-sm text-[var(--danger)]">{error}</p> : null}
         <div className="flex justify-end gap-2">
           <Button variant="outline" onClick={onClose}>
             Annuler

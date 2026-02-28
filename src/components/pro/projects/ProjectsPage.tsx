@@ -81,7 +81,7 @@ export default function ProjectsPage({ businessId }: Props) {
           ))}
         </div>
       ) : error ? (
-        <Card className="flex items-center justify-between gap-3 rounded-3xl border border-[var(--border)] bg-[var(--surface)] p-4 text-sm text-rose-500">
+        <Card className="flex items-center justify-between gap-3 rounded-3xl border border-[var(--border)] bg-[var(--surface)] p-4 text-sm text-[var(--danger)]">
           <span>{error}</span>
           <button
             type="button"

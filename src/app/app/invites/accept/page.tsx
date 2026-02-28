@@ -79,8 +79,8 @@ export default function AcceptInvitePage() {
         </div>
 
         {loading ? <p className="text-sm text-[var(--text-secondary)]">Validation…</p> : null}
-        {error ? <p className="text-sm text-rose-500">{error}</p> : null}
-        {success ? <p className="text-sm text-emerald-500">{success}</p> : null}
+        {error ? <p className="text-sm text-[var(--danger)]">{error}</p> : null}
+        {success ? <p className="text-sm text-[var(--success)]">{success}</p> : null}
 
         {!token ? (
           <p className="text-sm text-[var(--text-secondary)]">

@@ -146,8 +146,8 @@ export function BusinessInfoForm({ businessId }: Props) {
           Recharger
         </Button>
       </div>
-      {error ? <p className="text-xs font-semibold text-rose-600">{error}</p> : null}
-      {info ? <p className="text-xs text-emerald-600">{info}</p> : null}
+      {error ? <p className="text-xs font-semibold text-[var(--danger)]">{error}</p> : null}
+      {info ? <p className="text-xs text-[var(--success)]">{info}</p> : null}
       {requestId ? <p className="text-[10px] text-[var(--text-faint)]">Req: {requestId}</p> : null}
       <form onSubmit={handleSubmit} className="grid gap-3 md:grid-cols-2">
         <Input

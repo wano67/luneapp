@@ -42,7 +42,7 @@ export function RisksBlock({ overdueTasks, businessId }: { overdueTasks: RiskTas
               <p className="truncate text-[var(--text-primary)] font-medium">{task.title}</p>
               <p className="text-[11px]">{task.assigneeName || task.assigneeEmail || 'Non assigné'}</p>
             </div>
-            <p className="text-[11px] text-rose-500">{formatDate(task.dueDate)}</p>
+            <p className="text-[11px] text-[var(--danger)]">{formatDate(task.dueDate)}</p>
           </div>
         ))}
       </div>

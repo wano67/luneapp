@@ -437,7 +437,7 @@ export default function AgendaPage({ businessId, view = 'agenda' }: Props) {
       ))}
     </div>
   ) : error ? (
-    <Card className="p-4 text-sm text-rose-500">{error}</Card>
+    <Card className="p-4 text-sm text-[var(--danger)]">{error}</Card>
   ) : currentList.length === 0 ? (
     <Card className="flex flex-col gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5">
       <p className="text-sm font-semibold text-[var(--text-primary)]">
@@ -535,7 +535,7 @@ export default function AgendaPage({ businessId, view = 'agenda' }: Props) {
             {followUpsLoading ? <span className="text-xs text-[var(--text-secondary)]">Chargement...</span> : null}
           </div>
           {followUpsError ? (
-            <p className="mt-3 text-xs text-rose-500">{followUpsError}</p>
+            <p className="mt-3 text-xs text-[var(--danger)]">{followUpsError}</p>
           ) : followUpsLoading ? (
             <div className="mt-3 space-y-2">
               {[0, 1, 2].map((key) => (
@@ -644,8 +644,8 @@ export default function AgendaPage({ businessId, view = 'agenda' }: Props) {
               <option value="prospect">Prospect</option>
             </select>
           </label>
-          {createError ? <p className="text-xs text-rose-500">{createError}</p> : null}
-          {createSuccess ? <p className="text-xs text-emerald-500">{createSuccess}</p> : null}
+          {createError ? <p className="text-xs text-[var(--danger)]">{createError}</p> : null}
+          {createSuccess ? <p className="text-xs text-[var(--success)]">{createSuccess}</p> : null}
           {!canWrite ? <p className="text-xs text-[var(--text-secondary)]">{readOnlyMessage}</p> : null}
           <div className="flex justify-end gap-2">
             <button
@@ -686,9 +686,9 @@ export default function AgendaPage({ businessId, view = 'agenda' }: Props) {
             onChange={(event) => setActionName(event.target.value)}
             disabled={!actionTarget || !canWrite || actionLoading}
           />
-          {actionError ? <p className="text-xs text-rose-500">{actionError}</p> : null}
+          {actionError ? <p className="text-xs text-[var(--danger)]">{actionError}</p> : null}
           {actionResult ? (
-            <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 p-3 text-xs text-emerald-700">
+            <div className="rounded-lg border border-[var(--success-border)] bg-[var(--success-bg)] p-3 text-xs text-[var(--success)]">
               {actionTarget?.type === 'client' ? 'Projet créé.' : 'Conversion réussie.'}
               <div className="mt-2 flex flex-wrap gap-2">
                 <Link

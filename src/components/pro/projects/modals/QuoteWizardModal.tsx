@@ -269,7 +269,7 @@ export function QuoteWizardModal({
                           key={line.id}
                           className={cn(
                             'rounded-2xl border border-[var(--border)]/70 bg-[var(--surface-2)]/60 p-4',
-                            errors.length ? 'border-rose-200/70' : ''
+                            errors.length ? 'border-[var(--danger-border)]' : ''
                           )}
                         >
                           <div className="flex flex-wrap items-start justify-between gap-3">
@@ -339,7 +339,7 @@ export function QuoteWizardModal({
                           </div>
 
                           {errors.length ? (
-                            <p className="mt-2 text-xs text-rose-500">{errors.join(' ')}</p>
+                            <p className="mt-2 text-xs text-[var(--danger)]">{errors.join(' ')}</p>
                           ) : null}
                         </div>
                       );
@@ -467,8 +467,8 @@ export function QuoteWizardModal({
               </div>
             ) : null}
 
-            {error ? <p className="text-sm text-rose-500">{error}</p> : null}
-            {info ? <p className="text-sm text-emerald-600">{info}</p> : null}
+            {error ? <p className="text-sm text-[var(--danger)]">{error}</p> : null}
+            {info ? <p className="text-sm text-[var(--success)]">{info}</p> : null}
 
             {/* Navigation */}
             <div className="flex flex-wrap items-center justify-between gap-2">

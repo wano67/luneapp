@@ -35,9 +35,9 @@ export function formatTaskStatus(status: string) {
 }
 
 export const STATUS_BADGE_STYLES: Record<string, string> = {
-  DONE: 'border-emerald-200 bg-emerald-50 text-emerald-700',
-  IN_PROGRESS: 'border-amber-200 bg-amber-50 text-amber-700',
-  TODO: 'border-slate-200 bg-slate-50 text-slate-700',
+  DONE: 'border-[var(--success-border)] bg-[var(--success-bg)] text-[var(--success)]',
+  IN_PROGRESS: 'border-[var(--warning-border)] bg-[var(--warning-bg)] text-[var(--warning)]',
+  TODO: 'border-[var(--border)] bg-[var(--surface-2)] text-[var(--text)]',
 };
 
 export function getStatusBadgeClasses(status: string) {
@@ -194,7 +194,7 @@ export function KebabMenu({ items, ariaLabel }: { items: MenuItem[]; ariaLabel?:
               const baseClass = item.disabled
                 ? 'cursor-not-allowed text-[var(--text-secondary)] opacity-70'
                 : 'text-[var(--text-primary)] hover:bg-[var(--surface-2)]';
-              const toneClass = item.tone === 'danger' ? 'text-rose-500' : '';
+              const toneClass = item.tone === 'danger' ? 'text-[var(--danger)]' : '';
               const cls = `flex w-full items-center justify-start rounded-lg px-3 py-2 text-sm ${baseClass} ${toneClass}`;
 
               if (item.href) {

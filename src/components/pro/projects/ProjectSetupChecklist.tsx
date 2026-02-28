@@ -39,7 +39,7 @@ export function ProjectSetupChecklist({
           >
             <div className="flex items-center gap-2">
               {item.done ? (
-                <CheckCircle2 size={16} className="text-emerald-500" aria-hidden />
+                <CheckCircle2 size={16} className="text-[var(--success)]" aria-hidden />
               ) : (
                 <Circle size={16} className="text-[var(--text-secondary)]" aria-hidden />
               )}

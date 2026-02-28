@@ -207,7 +207,7 @@ export function ClientDocumentsTab({ businessId, clientId }: Props) {
       </div>
 
       {error ? (
-        <Card className="rounded-3xl border border-[var(--border)]/60 bg-[var(--surface)] p-4 text-sm text-rose-500 shadow-sm">
+        <Card className="rounded-3xl border border-[var(--border)]/60 bg-[var(--surface)] p-4 text-sm text-[var(--danger)] shadow-sm">
           {error}
         </Card>
       ) : null}
@@ -366,7 +366,7 @@ export function ClientDocumentsTab({ businessId, clientId }: Props) {
               className="w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
             />
           </div>
-          {uploadError ? <p className="text-xs text-rose-500">{uploadError}</p> : null}
+          {uploadError ? <p className="text-xs text-[var(--danger)]">{uploadError}</p> : null}
           <div className="flex justify-end gap-2">
             <Button type="button" variant="outline" onClick={() => setModalOpen(false)} disabled={uploading}>
               Annuler

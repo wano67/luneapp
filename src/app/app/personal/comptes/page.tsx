@@ -10,7 +10,6 @@ import { Select } from '@/components/ui/select';
 import Modal from '@/components/ui/modal';
 import CsvImportModal from '@/components/CsvImportModal';
 import { useFileDropHandler } from '@/components/file-drop/FileDropProvider';
-import { parseEuroToCents, sanitizeEuroInput } from '@/lib/money';
 import { emitWalletRefresh } from '@/lib/personalEvents';
 
 type AccountItem = {
@@ -451,8 +450,8 @@ export default function ComptesPage() {
 
       {error ? (
         <Card className="p-5">
-          <p className="text-sm font-semibold text-rose-500">Erreur</p>
-          <p className="text-sm text-rose-500/90">{error}</p>
+          <p className="text-sm font-semibold text-[var(--danger)]">Erreur</p>
+          <p className="text-sm text-[var(--danger)]">{error}</p>
         </Card>
       ) : null}
 
@@ -516,7 +515,7 @@ export default function ComptesPage() {
                       <p
                         className={[
                           'mt-1 text-xs font-semibold',
-                          deltaBig >= 0n ? 'text-emerald-400' : 'text-rose-400',
+                          deltaBig >= 0n ? 'text-[var(--success)]' : 'text-[var(--danger)]',
                         ].join(' ')}
                       >
                         {deltaBig >= 0n ? '+' : ''}
@@ -565,7 +564,7 @@ export default function ComptesPage() {
       >
         <form onSubmit={onCreate} className="space-y-4">
           {fieldErrors.form ? (
-            <div className="rounded-2xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+            <div className="rounded-2xl border border-[var(--danger-border)] bg-[var(--danger-bg)] px-4 py-3 text-sm text-[var(--danger)]">
               {fieldErrors.form}
             </div>
           ) : null}
@@ -649,7 +648,7 @@ export default function ComptesPage() {
       >
         <form onSubmit={onEdit} className="space-y-4">
           {editErrors.form ? (
-            <div className="rounded-2xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+            <div className="rounded-2xl border border-[var(--danger-border)] bg-[var(--danger-bg)] px-4 py-3 text-sm text-[var(--danger)]">
               {editErrors.form}
             </div>
           ) : null}
@@ -754,12 +753,12 @@ export default function ComptesPage() {
       />
 
       {lastImportedFileName ? (
-        <div className="rounded-2xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">
+        <div className="rounded-2xl border border-[var(--success-border)] bg-[var(--success-bg)] px-4 py-3 text-sm text-[var(--success)]">
           Import réussi — {lastImportedFileName}
         </div>
       ) : null}
       {successMessage ? (
-        <div className="rounded-2xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">
+        <div className="rounded-2xl border border-[var(--success-border)] bg-[var(--success-bg)] px-4 py-3 text-sm text-[var(--success)]">
           {successMessage}
         </div>
       ) : null}

@@ -72,7 +72,7 @@ export default function NewProjectForm({ businessId }: Props) {
           </div>
 
           {formState.error ? (
-            <p className="text-sm text-rose-500" role="alert">
+            <p className="text-sm text-[var(--danger)]" role="alert">
               {formState.error}
             </p>
           ) : null}

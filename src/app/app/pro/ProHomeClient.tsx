@@ -560,8 +560,8 @@ export default function ProHomeClient() {
         </Card>
       ) : error ? (
         <Card className="p-5">
-          <p className="text-sm font-semibold text-rose-500">Espace PRO</p>
-          <p className="text-sm text-rose-500/90">{error}</p>
+          <p className="text-sm font-semibold text-[var(--danger)]">Espace PRO</p>
+          <p className="text-sm text-[var(--danger)]/90">{error}</p>
         </Card>
       ) : (
         <>
@@ -643,7 +643,7 @@ export default function ProHomeClient() {
             placeholder="eyJhbGciOi..."
           />
 
-          {joinSuccess ? <p className="text-xs text-emerald-500">{joinSuccess}</p> : null}
+          {joinSuccess ? <p className="text-xs text-[var(--success)]">{joinSuccess}</p> : null}
 
           <div className="flex justify-end gap-2">
             <Button
