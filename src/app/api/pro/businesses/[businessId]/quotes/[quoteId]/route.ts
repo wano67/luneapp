@@ -9,67 +9,6 @@ import { assignDocumentNumber } from '@/server/services/numbering';
 import { buildClientSnapshot, buildIssuerSnapshot } from '@/server/billing/snapshots';
 import { parseCentsInput } from '@/lib/money';
 
-type QuoteWithItems = NonNullable<
-  Awaited<ReturnType<typeof prisma.quote.findFirst>>
-> & {
-  items: {
-    id: bigint;
-    serviceId: bigint | null;
-    label: string;
-    description: string | null;
-    discountType: string;
-    discountValue: number | null;
-    originalUnitPriceCents: bigint | null;
-    unitLabel: string | null;
-    billingUnit: string;
-    quantity: number;
-    unitPriceCents: bigint;
-    totalCents: bigint;
-    createdAt: Date;
-    updatedAt: Date;
-  }[];
-};
-
-function serializeQuote(quote: QuoteWithItems) {
-  return {
-    id: quote.id.toString(),
-    businessId: quote.businessId.toString(),
-    projectId: quote.projectId.toString(),
-    clientId: quote.clientId ? quote.clientId.toString() : null,
-    status: quote.status,
-    number: quote.number,
-    cancelledAt: quote.cancelledAt ? quote.cancelledAt.toISOString() : null,
-    cancelReason: quote.cancelReason ?? null,
-    depositPercent: quote.depositPercent,
-    currency: quote.currency,
-    totalCents: quote.totalCents.toString(),
-    depositCents: quote.depositCents.toString(),
-    balanceCents: quote.balanceCents.toString(),
-    note: quote.note,
-    issuedAt: quote.issuedAt ? quote.issuedAt.toISOString() : null,
-    signedAt: quote.signedAt ? quote.signedAt.toISOString() : null,
-    expiresAt: quote.expiresAt ? quote.expiresAt.toISOString() : null,
-    createdAt: quote.createdAt.toISOString(),
-    updatedAt: quote.updatedAt.toISOString(),
-    items: quote.items.map((item) => ({
-      id: item.id.toString(),
-      serviceId: item.serviceId ? item.serviceId.toString() : null,
-      label: item.label,
-      description: item.description,
-      discountType: item.discountType,
-      discountValue: item.discountValue ?? null,
-      originalUnitPriceCents: item.originalUnitPriceCents?.toString() ?? null,
-      unitLabel: item.unitLabel ?? null,
-      billingUnit: item.billingUnit,
-      quantity: item.quantity,
-      unitPriceCents: item.unitPriceCents.toString(),
-      totalCents: item.totalCents.toString(),
-      createdAt: item.createdAt.toISOString(),
-      updatedAt: item.updatedAt.toISOString(),
-    })),
-  };
-}
-
 function roundPercent(amount: bigint, percent: number) {
   return (amount * BigInt(Math.round(percent))) / BigInt(100);
 }
@@ -88,7 +27,7 @@ export const GET = withBusinessRoute<{ businessId: string; quoteId: string }>(
     });
     if (!quote) return notFound('Devis introuvable.');
 
-    return jsonb({ item: serializeQuote(quote as QuoteWithItems) }, requestId);
+    return jsonb({ item: quote }, requestId);
   }
 );
 
@@ -532,7 +471,7 @@ export const PATCH = withBusinessRoute<{ businessId: string; quoteId: string }>(
       return badRequest('items invalides.');
     }
 
-    return jsonb({ item: serializeQuote(updated as QuoteWithItems) }, requestId);
+    return jsonb({ item: updated }, requestId);
   }
 );
 

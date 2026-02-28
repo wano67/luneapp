@@ -7,24 +7,6 @@ import { upsertLedgerForMovement } from '@/server/services/ledger';
 import { parseCentsInput } from '@/lib/money';
 import { parseIdOpt } from '@/server/http/parsers';
 
-function serializeMovement(movement: Awaited<ReturnType<typeof prisma.inventoryMovement.findFirst>>) {
-  if (!movement) return null;
-  return {
-    id: movement.id.toString(),
-    businessId: movement.businessId.toString(),
-    productId: movement.productId.toString(),
-    type: movement.type,
-    source: movement.source,
-    quantity: movement.quantity,
-    unitCostCents: movement.unitCostCents ? movement.unitCostCents.toString() : null,
-    reason: movement.reason,
-    date: movement.date.toISOString(),
-    createdByUserId: movement.createdByUserId ? movement.createdByUserId.toString() : null,
-    createdAt: movement.createdAt.toISOString(),
-    updatedAt: movement.updatedAt.toISOString(),
-  };
-}
-
 // GET /api/pro/businesses/{businessId}/products/{productId}/movements
 export const GET = withBusinessRoute<{ businessId: string; productId: string }>(
   { minRole: 'VIEWER' },
@@ -44,7 +26,7 @@ export const GET = withBusinessRoute<{ businessId: string; productId: string }>(
       orderBy: { date: 'desc' },
     });
 
-    return jsonb({ items: movements.map((m) => serializeMovement(m)) }, requestId);
+    return jsonb({ items: movements }, requestId);
   }
 );
 
@@ -191,6 +173,6 @@ export const POST = withBusinessRoute<{ businessId: string; productId: string }>
       return created;
     });
 
-    return jsonbCreated({ item: serializeMovement(movement) }, requestId);
+    return jsonbCreated({ item: movement }, requestId);
   }
 );

@@ -158,28 +158,9 @@ export const GET = withBusinessRoute<{ businessId: string; serviceId: string }>(
 
   return jsonb({
     item: {
-      id: service.id.toString(),
-      businessId: service.businessId.toString(),
-      code: service.code,
-      name: service.name,
-      categoryReferenceId: service.categoryReferenceId ? service.categoryReferenceId.toString() : null,
+      ...service,
       categoryReferenceName: service.categoryReference?.name ?? null,
-      tagReferences: service.tags.map((t) => ({ id: t.reference.id.toString(), name: t.reference.name })),
-      type: service.type,
-      description: service.description,
-      defaultPriceCents: service.defaultPriceCents?.toString() ?? null,
-      tjmCents: service.tjmCents?.toString() ?? null,
-      durationHours: service.durationHours,
-      vatRate: service.vatRate,
-      taskTemplates: service.taskTemplates.map((tpl) => ({
-        id: tpl.id.toString(),
-        phase: tpl.phase,
-        title: tpl.title,
-        defaultAssigneeRole: tpl.defaultAssigneeRole,
-        defaultDueOffsetDays: tpl.defaultDueOffsetDays,
-      })),
-      createdAt: service.createdAt.toISOString(),
-      updatedAt: service.updatedAt.toISOString(),
+      tagReferences: service.tags.map((t) => ({ id: t.reference.id, name: t.reference.name })),
     },
   }, requestId);
   }
@@ -263,28 +244,9 @@ export const PATCH = withBusinessRoute<{ businessId: string; serviceId: string }
 
   return jsonb({
     item: {
-      id: updated.id.toString(),
-      businessId: updated.businessId.toString(),
-      code: updated.code,
-      name: updated.name,
-      categoryReferenceId: updated.categoryReferenceId ? updated.categoryReferenceId.toString() : null,
+      ...updated,
       categoryReferenceName: updated.categoryReference?.name ?? null,
-      tagReferences: updated.tags.map((t) => ({ id: t.reference.id.toString(), name: t.reference.name })),
-      type: updated.type,
-      description: updated.description,
-      defaultPriceCents: updated.defaultPriceCents?.toString() ?? null,
-      tjmCents: updated.tjmCents?.toString() ?? null,
-      durationHours: updated.durationHours,
-      vatRate: updated.vatRate,
-      taskTemplates: updated.taskTemplates.map((tpl) => ({
-        id: tpl.id.toString(),
-        phase: tpl.phase,
-        title: tpl.title,
-        defaultAssigneeRole: tpl.defaultAssigneeRole,
-        defaultDueOffsetDays: tpl.defaultDueOffsetDays,
-      })),
-      createdAt: updated.createdAt.toISOString(),
-      updatedAt: updated.updatedAt.toISOString(),
+      tagReferences: updated.tags.map((t) => ({ id: t.reference.id, name: t.reference.name })),
     },
   }, requestId);
   }

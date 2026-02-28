@@ -212,45 +212,24 @@ export const GET = withBusinessRoute({ minRole: 'VIEWER' }, async (ctx, request)
   return jsonb({
     counts,
     totalCount,
-    items: projects.map((p) => ({
-        id: p.id.toString(),
-        businessId: p.businessId.toString(),
-        clientId: p.clientId ? p.clientId.toString() : null,
-        clientName: p.client?.name ?? null,
-        categoryReferenceId: p.categoryReferenceId ? p.categoryReferenceId.toString() : null,
-        categoryReferenceName: p.categoryReference?.name ?? null,
-        tagReferences: p.tags.map((t) => ({ id: t.reference.id.toString(), name: t.reference.name })),
-        name: p.name,
-        status: p.status,
-        quoteStatus: p.quoteStatus,
-        depositStatus: p.depositStatus,
-        startedAt: p.startedAt ? p.startedAt.toISOString() : null,
-        archivedAt: p.archivedAt ? p.archivedAt.toISOString() : null,
-        startDate: p.startDate ? p.startDate.toISOString() : null,
-        endDate: p.endDate ? p.endDate.toISOString() : null,
-        createdAt: p.createdAt.toISOString(),
-        updatedAt: p.updatedAt.toISOString(),
-        amountCents: (() => {
-          const billingQuote = p.billingQuoteId ? billingQuoteById.get(p.billingQuoteId) : null;
-          const latestSigned = latestSignedByProject.get(p.id);
-          const serviceTotal = totalsByProject.get(p.id);
-          const value = pickProjectValueCents({
+    items: projects.map((p) => {
+        const billingQuote = p.billingQuoteId ? billingQuoteById.get(p.billingQuoteId) : null;
+        const latestSigned = latestSignedByProject.get(p.id);
+        const serviceTotal = totalsByProject.get(p.id);
+        return {
+          ...p,
+          clientName: p.client?.name ?? null,
+          categoryReferenceName: p.categoryReference?.name ?? null,
+          tagReferences: p.tags.map((t) => ({ id: t.reference.id, name: t.reference.name })),
+          amountCents: pickProjectValueCents({
             billingQuoteTotal: billingQuote?.totalCents ?? null,
             latestSignedTotal: latestSigned?.totalCents ?? null,
             serviceTotal: serviceTotal?.count ? serviceTotal.total : null,
-          });
-          return value != null ? value.toString() : null;
-        })(),
-        progress: progressByProject.get(p.id)?.progressPct ?? 0,
-        tasksSummary: progressByProject.get(p.id)
-          ? {
-              total: progressByProject.get(p.id)!.total,
-              open: progressByProject.get(p.id)!.open,
-              done: progressByProject.get(p.id)!.done,
-              progressPct: progressByProject.get(p.id)!.progressPct,
-            }
-          : { total: 0, open: 0, done: 0, progressPct: 0 },
-      })),
+          }),
+          progress: progressByProject.get(p.id)?.progressPct ?? 0,
+          tasksSummary: progressByProject.get(p.id) ?? { total: 0, open: 0, done: 0, progressPct: 0 },
+        };
+      }),
     }, requestId);
 });
 
@@ -357,21 +336,8 @@ export const POST = withBusinessRoute(
   return jsonb(
     {
       item: {
-        id: project.id.toString(),
-        businessId: project.businessId.toString(),
-        clientId: project.clientId ? project.clientId.toString() : null,
-        categoryReferenceId: project.categoryReferenceId ? project.categoryReferenceId.toString() : null,
-        tagReferences: validated.tagIds.map((id) => ({ id: id.toString() })),
-        name: project.name,
-        status: project.status,
-        quoteStatus: project.quoteStatus,
-        depositStatus: project.depositStatus,
-        startedAt: project.startedAt ? project.startedAt.toISOString() : null,
-        archivedAt: project.archivedAt ? project.archivedAt.toISOString() : null,
-        startDate: project.startDate ? project.startDate.toISOString() : null,
-        endDate: project.endDate ? project.endDate.toISOString() : null,
-        createdAt: project.createdAt.toISOString(),
-        updatedAt: project.updatedAt.toISOString(),
+        ...project,
+        tagReferences: validated.tagIds.map((id) => ({ id })),
       },
     },
     requestId,

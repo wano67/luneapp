@@ -15,54 +15,6 @@ const VALID_STATUS = new Set<ProspectPipelineStatus>([
   'CLOSED',
 ]);
 
-type ProspectLike = {
-  id: bigint;
-  businessId: bigint;
-  name: string;
-  title: string | null;
-  contactName: string | null;
-  contactEmail: string | null;
-  contactPhone: string | null;
-  source: string | null;
-  interestNote: string | null;
-  qualificationLevel: QualificationLevel | null;
-  projectIdea: string | null;
-  estimatedBudget: number | null;
-  origin: string | null;
-  probability: number;
-  nextActionDate: Date | null;
-  firstContactAt: Date | null;
-  pipelineStatus: ProspectPipelineStatus;
-  status: ProspectStatus;
-  createdAt: Date;
-  updatedAt: Date;
-};
-
-function serializeProspect(p: ProspectLike) {
-  return {
-    id: p.id.toString(),
-    businessId: p.businessId.toString(),
-    name: p.name,
-    title: p.title,
-    contactName: p.contactName,
-    contactEmail: p.contactEmail,
-    contactPhone: p.contactPhone,
-    source: p.source ?? null,
-    interestNote: p.interestNote,
-    qualificationLevel: p.qualificationLevel ?? null,
-    projectIdea: p.projectIdea,
-    estimatedBudget: p.estimatedBudget,
-    origin: p.origin,
-    probability: p.probability,
-    nextActionDate: p.nextActionDate ? p.nextActionDate.toISOString() : null,
-    firstContactAt: p.firstContactAt ? p.firstContactAt.toISOString() : null,
-    pipelineStatus: p.pipelineStatus,
-    status: p.status,
-    createdAt: p.createdAt.toISOString(),
-    updatedAt: p.updatedAt.toISOString(),
-  };
-}
-
 // GET /api/pro/businesses/{businessId}/prospects/{prospectId}
 export const GET = withBusinessRoute<{ businessId: string; prospectId: string }>(
   { minRole: 'VIEWER' },
@@ -79,7 +31,7 @@ export const GET = withBusinessRoute<{ businessId: string; prospectId: string }>
     });
     if (!prospect) return withIdNoStore(notFound('Prospect introuvable.'), requestId);
 
-    return jsonb({ item: serializeProspect(prospect) }, requestId);
+    return jsonb({ item: prospect }, requestId);
   }
 );
 
@@ -226,7 +178,7 @@ export const PATCH = withBusinessRoute<{ businessId: string; prospectId: string 
       where: { id: prospectIdBigInt, businessId: businessIdBigInt },
     });
 
-    return jsonb({ item: serializeProspect(prospect!) }, requestId);
+    return jsonb({ item: prospect! }, requestId);
   }
 );
 

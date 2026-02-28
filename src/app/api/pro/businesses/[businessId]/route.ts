@@ -4,53 +4,29 @@ import { jsonb } from '@/server/http/json';
 import { badRequest, notFound, readJson } from '@/server/http/apiUtils';
 import { normalizeWebsiteUrl } from '@/lib/normalizeWebsiteUrl';
 
-function serializeBusiness(business: {
-  id: bigint;
-  name: string;
-  websiteUrl: string | null;
-  legalName: string | null;
-  siret: string | null;
-  vatNumber: string | null;
-  addressLine1: string | null;
-  addressLine2: string | null;
-  postalCode: string | null;
-  city: string | null;
-  countryCode: string;
-  billingEmail: string | null;
-  billingPhone: string | null;
-  iban: string | null;
-  bic: string | null;
-  bankName: string | null;
-  accountHolder: string | null;
-  billingLegalText: string | null;
-  ownerId: bigint;
-  createdAt: Date;
-  updatedAt: Date;
-}) {
-  return {
-    id: business.id,
-    name: business.name,
-    websiteUrl: business.websiteUrl,
-    legalName: business.legalName,
-    siret: business.siret,
-    vatNumber: business.vatNumber,
-    addressLine1: business.addressLine1,
-    addressLine2: business.addressLine2,
-    postalCode: business.postalCode,
-    city: business.city,
-    countryCode: business.countryCode,
-    billingEmail: business.billingEmail,
-    billingPhone: business.billingPhone,
-    iban: business.iban,
-    bic: business.bic,
-    bankName: business.bankName,
-    accountHolder: business.accountHolder,
-    billingLegalText: business.billingLegalText,
-    ownerId: business.ownerId,
-    createdAt: business.createdAt,
-    updatedAt: business.updatedAt,
-  };
-}
+const businessSelect = {
+  id: true,
+  name: true,
+  websiteUrl: true,
+  legalName: true,
+  siret: true,
+  vatNumber: true,
+  addressLine1: true,
+  addressLine2: true,
+  postalCode: true,
+  city: true,
+  countryCode: true,
+  billingEmail: true,
+  billingPhone: true,
+  iban: true,
+  bic: true,
+  bankName: true,
+  accountHolder: true,
+  billingLegalText: true,
+  ownerId: true,
+  createdAt: true,
+  updatedAt: true,
+} as const;
 
 // GET /api/pro/businesses/{businessId}
 export const GET = withBusinessRoute(
@@ -58,13 +34,14 @@ export const GET = withBusinessRoute(
   async (ctx) => {
     const business = await prisma.business.findUnique({
       where: { id: ctx.businessId },
+      select: businessSelect,
     });
 
     if (!business) return notFound('Entreprise introuvable.');
 
     return jsonb(
       {
-        ...serializeBusiness(business),
+        ...business,
         role: ctx.membership.role,
       },
       ctx.requestId
@@ -253,8 +230,9 @@ export const PATCH = withBusinessRoute(
     const updated = await prisma.business.update({
       where: { id: ctx.businessId },
       data,
+      select: businessSelect,
     });
 
-    return jsonb({ item: serializeBusiness(updated) }, ctx.requestId);
+    return jsonb({ item: updated }, ctx.requestId);
   }
 );

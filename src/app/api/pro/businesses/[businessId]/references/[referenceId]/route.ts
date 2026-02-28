@@ -1,4 +1,3 @@
-import { BusinessReferenceType } from '@/generated/prisma';
 import { prisma } from '@/server/db/client';
 import { withBusinessRoute } from '@/server/http/routeHandler';
 import { jsonb, jsonbNoContent } from '@/server/http/json';
@@ -7,28 +6,6 @@ import { parseIdOpt } from '@/server/http/parsers';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object';
-}
-
-function serializeReference(reference: {
-  id: bigint;
-  businessId: bigint;
-  type: BusinessReferenceType;
-  name: string;
-  value: string | null;
-  isArchived: boolean;
-  createdAt: Date;
-  updatedAt: Date;
-}) {
-  return {
-    id: reference.id.toString(),
-    businessId: reference.businessId.toString(),
-    type: reference.type,
-    name: reference.name,
-    value: reference.value,
-    isArchived: reference.isArchived,
-    createdAt: reference.createdAt.toISOString(),
-    updatedAt: reference.updatedAt.toISOString(),
-  };
 }
 
 async function getReference(businessId: bigint, referenceId: bigint) {
@@ -82,7 +59,7 @@ export const PATCH = withBusinessRoute<{ businessId: string; referenceId: string
         },
       });
 
-      return jsonb({ item: serializeReference(updated) }, requestId);
+      return jsonb({ item: updated }, requestId);
     } catch (error) {
       const message =
         error instanceof Error && error.message.includes('Unique constraint')

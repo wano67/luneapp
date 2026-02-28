@@ -11,119 +11,28 @@ import { badRequest, notFound } from '@/server/http/apiUtils';
 import { parseIdOpt, parseDateOpt } from '@/server/http/parsers';
 import { computeProjectBillingSummary } from '@/server/billing/summary';
 
-type BillingSummary = NonNullable<Awaited<ReturnType<typeof computeProjectBillingSummary>>>;
-
-function serializeBillingSummary(summary: BillingSummary | null) {
-  if (!summary) return null;
-  return {
-    source: summary.source,
-    referenceQuoteId: summary.referenceQuoteId ? summary.referenceQuoteId.toString() : null,
-    currency: summary.currency,
-    plannedValueCents: summary.plannedValueCents.toString(),
-    totalCents: summary.totalCents.toString(),
-    depositPercent: summary.depositPercent,
-    depositCents: summary.depositCents.toString(),
-    balanceCents: summary.balanceCents.toString(),
-    alreadyInvoicedCents: summary.alreadyInvoicedCents.toString(),
-    alreadyPaidCents: summary.alreadyPaidCents.toString(),
-    remainingToCollectCents: summary.remainingToCollectCents.toString(),
-    remainingToInvoiceCents: summary.remainingToInvoiceCents.toString(),
-    remainingCents: summary.remainingCents.toString(),
-  };
-}
-
-function serializeProject(
-  project: {
-    id: bigint;
-    businessId: bigint;
-    clientId: bigint | null;
-    name: string;
-    status: ProjectStatus;
-    quoteStatus: ProjectQuoteStatus;
-    depositStatus: ProjectDepositStatus;
-    depositPaidAt: Date | null;
-    billingQuoteId?: bigint | null;
-    startedAt: Date | null;
-    archivedAt: Date | null;
-    startDate: Date | null;
-    endDate: Date | null;
-    prestationsText?: string | null;
-    createdAt: Date;
-    updatedAt: Date;
-    categoryReferenceId?: bigint | null;
+/** Reshape a Prisma project into the API response shape. deepSerialize (via jsonb) handles BigInt/Date. */
+function reshapeProject(
+  project: Record<string, unknown> & {
+    client?: { id: bigint; name: string | null } | null;
     categoryReference?: { id: bigint; name: string | null } | null;
     tags?: Array<{ referenceId: bigint; reference: { id: bigint; name: string } }>;
-    client?: { id: bigint; name: string | null } | null;
     _count?: { tasks: number; projectServices: number; interactions: number };
-    projectServices?: {
-      id: bigint;
-      projectId: bigint;
-      serviceId: bigint;
-      quantity: number;
-      priceCents: bigint | null;
-      notes: string | null;
-      createdAt: Date;
-      service: { id: bigint; code: string; name: string; type: string | null; defaultPriceCents: bigint | null };
-    }[];
     tasksSummary?: { total: number; open: number; done: number; progressPct: number };
   },
-  opts?: { billingSummary?: BillingSummary | null; valueCents?: bigint | null }
+  opts?: { billingSummary?: unknown; valueCents?: bigint | null }
 ) {
   return {
-    id: project.id.toString(),
-    businessId: project.businessId.toString(),
-    clientId: project.clientId ? project.clientId.toString() : null,
+    ...project,
     clientName: project.client?.name ?? null,
-    client: project.client ? { id: project.client.id.toString(), name: project.client.name } : null,
-    name: project.name,
-    categoryReferenceId: project.categoryReferenceId ? project.categoryReferenceId.toString() : null,
     categoryReferenceName: project.categoryReference?.name ?? null,
     tagReferences: project.tags
-      ? project.tags.map((tag) => ({
-          id: tag.reference.id.toString(),
-          name: tag.reference.name,
-        }))
+      ? project.tags.map((tag) => ({ id: tag.reference.id, name: tag.reference.name }))
       : [],
-    status: project.status,
-    quoteStatus: project.quoteStatus,
-    depositStatus: project.depositStatus,
-    depositPaidAt: project.depositPaidAt ? project.depositPaidAt.toISOString() : null,
-    billingQuoteId: project.billingQuoteId ? project.billingQuoteId.toString() : null,
-    startedAt: project.startedAt ? project.startedAt.toISOString() : null,
-    archivedAt: project.archivedAt ? project.archivedAt.toISOString() : null,
-    startDate: project.startDate ? project.startDate.toISOString() : null,
-    endDate: project.endDate ? project.endDate.toISOString() : null,
-    prestationsText: project.prestationsText ?? null,
-    billingSummary: opts?.billingSummary ? serializeBillingSummary(opts.billingSummary) : null,
-    valueCents: opts?.valueCents != null ? opts.valueCents.toString() : null,
-    counts: project._count
-      ? {
-          tasks: project._count.tasks,
-          projectServices: project._count.projectServices,
-          interactions: project._count.interactions,
-        }
-      : undefined,
-    projectServices: project.projectServices
-      ? project.projectServices.map((ps) => ({
-          id: ps.id.toString(),
-          projectId: ps.projectId.toString(),
-          serviceId: ps.serviceId.toString(),
-          quantity: ps.quantity,
-          priceCents: ps.priceCents?.toString() ?? null,
-          notes: ps.notes,
-          createdAt: ps.createdAt.toISOString(),
-          service: {
-            id: ps.service.id.toString(),
-            code: ps.service.code,
-            name: ps.service.name,
-            type: ps.service.type,
-            defaultPriceCents: ps.service.defaultPriceCents?.toString() ?? null,
-          },
-        }))
-      : undefined,
+    counts: project._count,
+    billingSummary: opts?.billingSummary ?? null,
+    valueCents: opts?.valueCents ?? null,
     tasksSummary: project.tasksSummary,
-    createdAt: project.createdAt.toISOString(),
-    updatedAt: project.updatedAt.toISOString(),
   };
 }
 
@@ -181,7 +90,7 @@ export const GET = withBusinessRoute<{ businessId: string; projectId: string }>(
 
     return jsonb(
       {
-        item: serializeProject(
+        item: reshapeProject(
           { ...project, tasksSummary: summary },
           { billingSummary, valueCents: billingSummary?.totalCents ?? null }
         ),
@@ -440,7 +349,7 @@ export const PATCH = withBusinessRoute<{ businessId: string; projectId: string }
 
     const billingSummary = await computeProjectBillingSummary(businessIdBigInt, projectIdBigInt);
 
-    return jsonb({ item: serializeProject(updated, { billingSummary }) }, requestId);
+    return jsonb({ item: reshapeProject(updated, { billingSummary }) }, requestId);
   }
 );
 

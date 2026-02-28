@@ -71,65 +71,22 @@ function sanitizeMetadata(raw: unknown): PaymentMetadata | null {
   return Object.keys(meta).length > 0 ? meta : null;
 }
 
-function serializeFinance(finance: {
-  id: bigint;
-  businessId: bigint;
-  projectId: bigint | null;
-  inventoryMovementId?: bigint | null;
-  inventoryProductId?: bigint | null;
-  type: FinanceType;
+function enrichFinance(finance: {
   amountCents: bigint;
-  category: string;
-  vendor?: string | null;
-  method?: PaymentMethod | null;
-  isRecurring?: boolean;
-  recurringUnit?: RecurringUnit | null;
-  recurringRuleId?: bigint | null;
-  isRuleOverride?: boolean;
-  lockedFromRule?: boolean;
-  date: Date;
   note: string | null;
-  deletedAt?: Date | null;
-  createdAt: Date;
-  updatedAt: Date;
   project?: { name: string | null } | null;
-  categoryReferenceId?: bigint | null;
   categoryReference?: { id: bigint; name: string | null } | null;
   tags?: Array<{ referenceId: bigint; reference: { id: bigint; name: string } }>;
 }) {
   const metadata = parseMetadataFromNote(finance.note);
-
   return {
-    id: finance.id.toString(),
-    businessId: finance.businessId.toString(),
-    projectId: finance.projectId ? finance.projectId.toString() : null,
+    ...finance,
+    amount: Number(finance.amountCents) / 100,
     projectName: finance.project?.name ?? null,
-    inventoryMovementId: finance.inventoryMovementId ? finance.inventoryMovementId.toString() : null,
-    inventoryProductId: finance.inventoryProductId ? finance.inventoryProductId.toString() : null,
-    categoryReferenceId: finance.categoryReferenceId ? finance.categoryReferenceId.toString() : null,
     categoryReferenceName: finance.categoryReference?.name ?? null,
     tagReferences: finance.tags
-      ? finance.tags.map((tag) => ({
-          id: tag.reference.id.toString(),
-          name: tag.reference.name,
-        }))
+      ? finance.tags.map((tag) => tag.reference)
       : [],
-    type: finance.type,
-    amountCents: finance.amountCents.toString(),
-    amount: Number(finance.amountCents) / 100,
-    category: finance.category,
-    vendor: finance.vendor ?? null,
-    method: finance.method ?? null,
-    isRecurring: Boolean(finance.isRecurring),
-    recurringUnit: finance.recurringUnit ?? null,
-    recurringRuleId: finance.recurringRuleId ? finance.recurringRuleId.toString() : null,
-    isRuleOverride: Boolean(finance.isRuleOverride),
-    lockedFromRule: Boolean(finance.lockedFromRule),
-    date: finance.date.toISOString(),
-    note: finance.note,
-    deletedAt: finance.deletedAt ? finance.deletedAt.toISOString() : null,
-    createdAt: finance.createdAt.toISOString(),
-    updatedAt: finance.updatedAt.toISOString(),
     ...(metadata ? { metadata } : {}),
   };
 }
@@ -156,7 +113,7 @@ export const GET = withBusinessRoute<{ businessId: string; financeId: string }>(
     });
     if (!finance) return withIdNoStore(notFound('Opération introuvable.'), requestId);
 
-    return jsonb({ item: serializeFinance(finance) }, requestId);
+    return jsonb({ item: enrichFinance(finance) }, requestId);
   }
 );
 
@@ -386,7 +343,7 @@ export const PATCH = withBusinessRoute<{ businessId: string; financeId: string }
       },
     });
 
-    return jsonb({ item: serializeFinance(updated) }, requestId);
+    return jsonb({ item: enrichFinance(updated) }, requestId);
   }
 );
 

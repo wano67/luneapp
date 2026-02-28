@@ -6,27 +6,6 @@ import { badRequest, notFound, withIdNoStore } from '@/server/http/apiUtils';
 import { parseCentsInput } from '@/lib/money';
 import { parseIdOpt } from '@/server/http/parsers';
 
-function serializeProduct(
-  product: Awaited<ReturnType<typeof prisma.product.findFirst>>,
-  stock?: number
-) {
-  if (!product) return null;
-  return {
-    id: product.id.toString(),
-    businessId: product.businessId.toString(),
-    sku: product.sku,
-    name: product.name,
-    description: product.description,
-    unit: product.unit,
-    salePriceCents: product.salePriceCents ? product.salePriceCents.toString() : null,
-    purchasePriceCents: product.purchasePriceCents ? product.purchasePriceCents.toString() : null,
-    isArchived: product.isArchived,
-    stock: stock ?? null,
-    createdAt: product.createdAt.toISOString(),
-    updatedAt: product.updatedAt.toISOString(),
-  };
-}
-
 async function computeStock(productId: bigint) {
   const movements = await prisma.inventoryMovement.findMany({
     where: { productId },
@@ -56,7 +35,7 @@ export const GET = withBusinessRoute<{ businessId: string; productId: string }>(
 
     const stock = await computeStock(productIdBigInt);
 
-    return jsonb({ item: serializeProduct(product, stock) }, requestId);
+    return jsonb({ item: { ...product, stock } }, requestId);
   }
 );
 
@@ -151,7 +130,7 @@ export const PATCH = withBusinessRoute<{ businessId: string; productId: string }
       data,
     });
 
-    return jsonb({ item: serializeProduct(updated) }, requestId);
+    return jsonb({ item: updated }, requestId);
   }
 );
 

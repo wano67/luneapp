@@ -24,50 +24,13 @@ function isValidPhone(s: string) {
 
 const STATUS_VALUES = new Set<ClientStatus>(['ACTIVE', 'PAUSED', 'FORMER']);
 
-function serializeClient(client: {
-  id: bigint;
-  businessId: bigint;
-  name: string;
-  email: string | null;
-  websiteUrl: string | null;
-  phone: string | null;
-  notes: string | null;
-  sector: string | null;
-  status: ClientStatus;
-  leadSource: LeadSource | null;
-  archivedAt: Date | null;
-  anonymizedAt: Date | null;
-  anonymizationReason: string | null;
-  categoryReferenceId?: bigint | null;
-  categoryReference?: { id: bigint; name: string | null } | null;
-  tags?: Array<{ referenceId: bigint; reference: { id: bigint; name: string } }>;
-  createdAt: Date;
-  updatedAt: Date;
-}) {
+function flattenClient(client: { categoryReference?: { name: string | null } | null; tags?: Array<{ reference: { id: bigint; name: string } }> }) {
   return {
-    id: client.id.toString(),
-    businessId: client.businessId.toString(),
-    categoryReferenceId: client.categoryReferenceId ? client.categoryReferenceId.toString() : null,
+    ...client,
     categoryReferenceName: client.categoryReference?.name ?? null,
     tagReferences: client.tags
-      ? client.tags.map((tag) => ({
-          id: tag.reference.id.toString(),
-          name: tag.reference.name,
-        }))
+      ? client.tags.map((tag) => tag.reference)
       : [],
-    name: client.name,
-    email: client.email,
-    websiteUrl: client.websiteUrl,
-    phone: client.phone,
-    notes: client.notes,
-    sector: client.sector,
-    status: client.status,
-    leadSource: client.leadSource,
-    archivedAt: client.archivedAt ? client.archivedAt.toISOString() : null,
-    anonymizedAt: client.anonymizedAt ? client.anonymizedAt.toISOString() : null,
-    anonymizationReason: client.anonymizationReason,
-    createdAt: client.createdAt.toISOString(),
-    updatedAt: client.updatedAt.toISOString(),
   };
 }
 
@@ -114,7 +77,7 @@ export const GET = withBusinessRoute({ minRole: 'VIEWER' }, async (ctx, req) => 
     },
   });
 
-  return jsonb({ items: clients.map(serializeClient) }, ctx.requestId);
+  return jsonb({ items: clients.map(flattenClient) }, ctx.requestId);
 });
 
 // ---------------------------------------------------------------------------
@@ -232,6 +195,6 @@ export const POST = withBusinessRoute(
       },
     });
 
-    return jsonbCreated({ item: serializeClient(client) }, ctx.requestId);
+    return jsonbCreated({ item: flattenClient(client) }, ctx.requestId);
   }
 );

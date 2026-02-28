@@ -50,7 +50,7 @@ type InvoiceWithItems = NonNullable<
   reservation?: { status: InventoryReservationStatus } | null;
 };
 
-function serializeInvoice(
+function enrichInvoice(
   invoice: InvoiceWithItems,
   opts?: {
     consumptionLedgerEntryId?: bigint | null;
@@ -60,50 +60,14 @@ function serializeInvoice(
 ) {
   if (!invoice) return null;
   return {
-    id: invoice.id.toString(),
-    businessId: invoice.businessId.toString(),
-    projectId: invoice.projectId.toString(),
-    clientId: invoice.clientId ? invoice.clientId.toString() : null,
-    quoteId: invoice.quoteId ? invoice.quoteId.toString() : null,
-    status: invoice.status,
-    number: invoice.number,
-    depositPercent: invoice.depositPercent,
-    currency: invoice.currency,
-    totalCents: invoice.totalCents.toString(),
-    depositCents: invoice.depositCents.toString(),
-    balanceCents: invoice.balanceCents.toString(),
-    note: invoice.note,
-    issuedAt: invoice.issuedAt ? invoice.issuedAt.toISOString() : null,
-    dueAt: invoice.dueAt ? invoice.dueAt.toISOString() : null,
-    paidAt: invoice.paidAt ? invoice.paidAt.toISOString() : null,
-    paidCents: opts?.paymentSummary ? opts.paymentSummary.paidCents.toString() : '0',
-    remainingCents: opts?.paymentSummary ? opts.paymentSummary.remainingCents.toString() : invoice.totalCents.toString(),
-    paymentStatus: opts?.paymentSummary ? opts.paymentSummary.status : 'UNPAID',
-    lastPaidAt: opts?.paymentSummary?.lastPaidAt ? opts.paymentSummary.lastPaidAt.toISOString() : null,
-    createdAt: invoice.createdAt.toISOString(),
-    updatedAt: invoice.updatedAt.toISOString(),
-    items: invoice.items.map((item) => ({
-      id: item.id.toString(),
-      serviceId: item.serviceId ? item.serviceId.toString() : null,
-      productId: item.productId ? item.productId.toString() : null,
-      label: item.label,
-      description: item.description ?? null,
-      discountType: item.discountType,
-      discountValue: item.discountValue ?? null,
-      originalUnitPriceCents: item.originalUnitPriceCents?.toString() ?? null,
-      unitLabel: item.unitLabel ?? null,
-      billingUnit: item.billingUnit,
-      quantity: item.quantity,
-      unitPriceCents: item.unitPriceCents.toString(),
-      totalCents: item.totalCents.toString(),
-      createdAt: item.createdAt.toISOString(),
-      updatedAt: item.updatedAt.toISOString(),
-    })),
+    ...invoice,
+    paidCents: opts?.paymentSummary?.paidCents ?? BigInt(0),
+    remainingCents: opts?.paymentSummary?.remainingCents ?? invoice.totalCents,
+    paymentStatus: opts?.paymentSummary?.status ?? 'UNPAID',
+    lastPaidAt: opts?.paymentSummary?.lastPaidAt ?? null,
     reservationStatus: invoice.reservation?.status ?? null,
-    consumptionLedgerEntryId: opts?.consumptionLedgerEntryId
-      ? opts.consumptionLedgerEntryId.toString()
-      : null,
-    cashSaleLedgerEntryId: opts?.cashSaleLedgerEntryId ? opts.cashSaleLedgerEntryId.toString() : null,
+    consumptionLedgerEntryId: opts?.consumptionLedgerEntryId ?? null,
+    cashSaleLedgerEntryId: opts?.cashSaleLedgerEntryId ?? null,
   };
 }
 
@@ -145,7 +109,7 @@ export const GET = withBusinessRoute<{ businessId: string; invoiceId: string }>(
     const paymentSummary = await computeInvoicePaymentSummary(prisma, invoice);
     const ledgerIds = await loadInvoiceLedgerIds(businessIdBigInt, invoiceIdBigInt);
 
-    return jsonb({ item: serializeInvoice(invoice as InvoiceWithItems, { ...ledgerIds, paymentSummary }) }, requestId);
+    return jsonb({ item: enrichInvoice(invoice as InvoiceWithItems, { ...ledgerIds, paymentSummary }) }, requestId);
   }
 );
 
@@ -274,7 +238,7 @@ export const PATCH = withBusinessRoute<{ businessId: string; invoiceId: string }
         await ensureLegacyPaymentForPaidInvoice(prisma, existing);
         const paymentSummary = await computeInvoicePaymentSummary(prisma, existing);
         const ledgerIds = await loadInvoiceLedgerIds(businessIdBigInt, invoiceIdBigInt);
-        return jsonb({ item: serializeInvoice(existing as InvoiceWithItems, { ...ledgerIds, paymentSummary }) }, requestId);
+        return jsonb({ item: enrichInvoice(existing as InvoiceWithItems, { ...ledgerIds, paymentSummary }) }, requestId);
       }
     }
 
@@ -293,7 +257,7 @@ export const PATCH = withBusinessRoute<{ businessId: string; invoiceId: string }
       await ensureLegacyPaymentForPaidInvoice(prisma, existing);
       const paymentSummary = await computeInvoicePaymentSummary(prisma, existing);
       const ledgerIds = await loadInvoiceLedgerIds(businessIdBigInt, invoiceIdBigInt);
-      return jsonb({ item: serializeInvoice(existing as InvoiceWithItems, { ...ledgerIds, paymentSummary }) }, requestId);
+      return jsonb({ item: enrichInvoice(existing as InvoiceWithItems, { ...ledgerIds, paymentSummary }) }, requestId);
     }
 
     const allowed = transitions[existing.status] ?? [];
@@ -690,7 +654,7 @@ export const PATCH = withBusinessRoute<{ businessId: string; invoiceId: string }
     const paymentSummary = await computeInvoicePaymentSummary(prisma, updated as InvoiceWithItems);
     const ledgerIds = await loadInvoiceLedgerIds(businessIdBigInt, invoiceIdBigInt);
 
-    return jsonb({ item: serializeInvoice(updated as InvoiceWithItems, { ...ledgerIds, paymentSummary }) }, requestId);
+    return jsonb({ item: enrichInvoice(updated as InvoiceWithItems, { ...ledgerIds, paymentSummary }) }, requestId);
   }
 );
 

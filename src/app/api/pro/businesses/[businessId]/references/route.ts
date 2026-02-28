@@ -12,28 +12,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object';
 }
 
-function serializeReference(reference: {
-  id: bigint;
-  businessId: bigint;
-  type: BusinessReferenceType;
-  name: string;
-  value: string | null;
-  isArchived: boolean;
-  createdAt: Date;
-  updatedAt: Date;
-}) {
-  return {
-    id: reference.id.toString(),
-    businessId: reference.businessId.toString(),
-    type: reference.type,
-    name: reference.name,
-    value: reference.value,
-    isArchived: reference.isArchived,
-    createdAt: reference.createdAt.toISOString(),
-    updatedAt: reference.updatedAt.toISOString(),
-  };
-}
-
 // GET /api/pro/businesses/{businessId}/references
 export const GET = withBusinessRoute({ minRole: 'VIEWER' }, async (ctx, request) => {
   const { requestId, businessId: businessIdBigInt } = ctx;
@@ -57,7 +35,7 @@ export const GET = withBusinessRoute({ minRole: 'VIEWER' }, async (ctx, request)
     orderBy: [{ createdAt: 'desc' }],
   });
 
-  return jsonb({ items: references.map(serializeReference) }, requestId);
+  return jsonb({ items: references }, requestId);
 });
 
 // POST /api/pro/businesses/{businessId}/references
@@ -94,7 +72,7 @@ export const POST = withBusinessRoute(
         },
       });
 
-      return jsonbCreated({ item: serializeReference(created) }, requestId);
+      return jsonbCreated({ item: created }, requestId);
     } catch (error) {
       const message =
         error instanceof Error && error.message.includes('Unique constraint')

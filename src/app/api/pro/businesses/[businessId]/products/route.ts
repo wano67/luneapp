@@ -6,27 +6,6 @@ import { badRequest, withIdNoStore } from '@/server/http/apiUtils';
 import { parseCentsInput } from '@/lib/money';
 
 // ---------------------------------------------------------------------------
-// Serialisation
-// ---------------------------------------------------------------------------
-
-function serializeProduct(product: Awaited<ReturnType<typeof prisma.product.findFirst>>) {
-  if (!product) return null;
-  return {
-    id: product.id.toString(),
-    businessId: product.businessId.toString(),
-    sku: product.sku,
-    name: product.name,
-    description: product.description,
-    unit: product.unit,
-    salePriceCents: product.salePriceCents ? product.salePriceCents.toString() : null,
-    purchasePriceCents: product.purchasePriceCents ? product.purchasePriceCents.toString() : null,
-    isArchived: product.isArchived,
-    createdAt: product.createdAt.toISOString(),
-    updatedAt: product.updatedAt.toISOString(),
-  };
-}
-
-// ---------------------------------------------------------------------------
 // GET /api/pro/businesses/{businessId}/products
 // ---------------------------------------------------------------------------
 
@@ -36,7 +15,7 @@ export const GET = withBusinessRoute({ minRole: 'VIEWER' }, async (ctx, req) => 
     where: { businessId: ctx.businessId, ...(includeArchived ? {} : { isArchived: false }) },
     orderBy: { createdAt: 'desc' },
   });
-  return jsonb({ items: products.map(serializeProduct) }, ctx.requestId);
+  return jsonb({ items: products }, ctx.requestId);
 });
 
 // ---------------------------------------------------------------------------
@@ -102,6 +81,6 @@ export const POST = withBusinessRoute(
       },
     });
 
-    return jsonbCreated({ item: serializeProduct(product) }, requestId);
+    return jsonbCreated({ item: product }, requestId);
   }
 );

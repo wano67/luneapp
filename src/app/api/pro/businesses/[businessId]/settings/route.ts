@@ -4,45 +4,6 @@ import { jsonb } from '@/server/http/json';
 import { badRequest } from '@/server/http/apiUtils';
 import { withIdNoStore } from '@/server/http/apiUtils';
 
-// ---------------------------------------------------------------------------
-// Serialisation (BigInt → string, Date → ISO)
-// Les champs sont explicites pour éviter les fuites de données sensibles.
-// ---------------------------------------------------------------------------
-
-type SettingsRecord = Awaited<ReturnType<typeof getOrCreateSettings>>;
-
-function serialize(s: SettingsRecord) {
-  return {
-    id: s.id.toString(),
-    businessId: s.businessId.toString(),
-    invoicePrefix: s.invoicePrefix,
-    quotePrefix: s.quotePrefix,
-    defaultDepositPercent: s.defaultDepositPercent,
-    paymentTermsDays: s.paymentTermsDays,
-    enableAutoNumbering: s.enableAutoNumbering,
-    vatRatePercent: s.vatRatePercent,
-    vatEnabled: s.vatEnabled,
-    allowMembersInvite: s.allowMembersInvite,
-    allowViewerExport: s.allowViewerExport,
-    integrationStripeEnabled: s.integrationStripeEnabled,
-    integrationStripePublicKey: s.integrationStripePublicKey,
-    accountInventoryCode: s.accountInventoryCode,
-    accountCogsCode: s.accountCogsCode,
-    accountCashCode: s.accountCashCode,
-    accountRevenueCode: s.accountRevenueCode,
-    ledgerSalesAccountCode: s.ledgerSalesAccountCode,
-    ledgerVatCollectedAccountCode: s.ledgerVatCollectedAccountCode,
-    ledgerCashAccountCode: s.ledgerCashAccountCode,
-    cgvText: s.cgvText ?? null,
-    paymentTermsText: s.paymentTermsText ?? null,
-    lateFeesText: s.lateFeesText ?? null,
-    fixedIndemnityText: s.fixedIndemnityText ?? null,
-    legalMentionsText: s.legalMentionsText ?? null,
-    createdAt: s.createdAt.toISOString(),
-    updatedAt: s.updatedAt.toISOString(),
-  };
-}
-
 async function getOrCreateSettings(businessId: bigint) {
   return prisma.businessSettings.upsert({
     where: { businessId },
@@ -57,7 +18,7 @@ async function getOrCreateSettings(businessId: bigint) {
 
 export const GET = withBusinessRoute({ minRole: 'VIEWER' }, async (ctx) => {
   const settings = await getOrCreateSettings(ctx.businessId);
-  return jsonb({ item: serialize(settings) }, ctx.requestId);
+  return jsonb({ item: settings }, ctx.requestId);
 });
 
 // ---------------------------------------------------------------------------
@@ -227,6 +188,6 @@ export const PATCH = withBusinessRoute(
       data,
     });
 
-    return jsonb({ item: serialize(updated) }, ctx.requestId);
+    return jsonb({ item: updated }, ctx.requestId);
   }
 );

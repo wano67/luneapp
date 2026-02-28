@@ -22,77 +22,14 @@ function isValidPhone(s: string) {
   return digits.length >= 7 && digits.length <= 15;
 }
 
-function serializeClient(client: {
-  id: bigint;
-  businessId: bigint;
-  name: string;
-  email: string | null;
-  websiteUrl: string | null;
-  phone: string | null;
-  companyName?: string | null;
-  mainContactName?: string | null;
-  billingCompanyName?: string | null;
-  billingContactName?: string | null;
-  billingEmail?: string | null;
-  billingPhone?: string | null;
-  billingVatNumber?: string | null;
-  billingReference?: string | null;
-  billingAddressLine1?: string | null;
-  billingAddressLine2?: string | null;
-  billingPostalCode?: string | null;
-  billingCity?: string | null;
-  billingCountryCode?: string | null;
-  notes: string | null;
-  sector: string | null;
-  status: ClientStatus;
-  leadSource: LeadSource | null;
-  archivedAt: Date | null;
-  anonymizedAt: Date | null;
-  anonymizationReason: string | null;
-  categoryReferenceId?: bigint | null;
-  categoryReference?: { id: bigint; name: string | null } | null;
-  tags?: Array<{ referenceId: bigint; reference: { id: bigint; name: string } }>;
-  createdAt: Date;
-  updatedAt: Date;
-}) {
+function flattenClient(client: { companyName?: string | null; categoryReference?: { name: string | null } | null; tags?: Array<{ reference: { id: bigint; name: string } }> }) {
   return {
-    id: client.id.toString(),
-    businessId: client.businessId.toString(),
-    categoryReferenceId: client.categoryReferenceId ? client.categoryReferenceId.toString() : null,
+    ...client,
+    company: client.companyName ?? null,
     categoryReferenceName: client.categoryReference?.name ?? null,
     tagReferences: client.tags
-      ? client.tags.map((tag) => ({
-          id: tag.reference.id.toString(),
-          name: tag.reference.name,
-        }))
+      ? client.tags.map((tag) => tag.reference)
       : [],
-    name: client.name,
-    email: client.email,
-    websiteUrl: client.websiteUrl,
-    phone: client.phone,
-    company: client.companyName ?? null,
-    companyName: client.companyName ?? null,
-    mainContactName: client.mainContactName ?? null,
-    billingCompanyName: client.billingCompanyName ?? null,
-    billingContactName: client.billingContactName ?? null,
-    billingEmail: client.billingEmail ?? null,
-    billingPhone: client.billingPhone ?? null,
-    billingVatNumber: client.billingVatNumber ?? null,
-    billingReference: client.billingReference ?? null,
-    billingAddressLine1: client.billingAddressLine1 ?? null,
-    billingAddressLine2: client.billingAddressLine2 ?? null,
-    billingPostalCode: client.billingPostalCode ?? null,
-    billingCity: client.billingCity ?? null,
-    billingCountryCode: client.billingCountryCode ?? null,
-    notes: client.notes,
-    sector: client.sector,
-    status: client.status,
-    leadSource: client.leadSource,
-    archivedAt: client.archivedAt ? client.archivedAt.toISOString() : null,
-    anonymizedAt: client.anonymizedAt ? client.anonymizedAt.toISOString() : null,
-    anonymizationReason: client.anonymizationReason,
-    createdAt: client.createdAt.toISOString(),
-    updatedAt: client.updatedAt.toISOString(),
   };
 }
 
@@ -115,7 +52,7 @@ export const GET = withBusinessRoute<{ businessId: string; clientId: string }>(
     });
     if (!client) return notFound('Client introuvable.');
 
-    return jsonb({ item: serializeClient(client) }, requestId);
+    return jsonb({ item: flattenClient(client) }, requestId);
   }
 );
 
@@ -495,6 +432,6 @@ export const PATCH = withBusinessRoute<{ businessId: string; clientId: string }>
       },
     });
 
-    return jsonb({ item: serializeClient(updated) }, requestId);
+    return jsonb({ item: flattenClient(updated) }, requestId);
   }
 );

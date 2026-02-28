@@ -22,82 +22,6 @@ function parseAmountCentsDirect(raw: unknown): bigint | null {
   return BigInt(parsed);
 }
 
-function serializeRule(rule: {
-  id: bigint;
-  businessId: bigint;
-  projectId: bigint | null;
-  categoryReferenceId: bigint | null;
-  type: FinanceType;
-  amountCents: bigint;
-  category: string;
-  vendor: string | null;
-  method: PaymentMethod | null;
-  note: string | null;
-  startDate: Date;
-  endDate: Date | null;
-  dayOfMonth: number;
-  frequency: RecurringUnit;
-  nextRunAt: Date | null;
-  isActive: boolean;
-  createdAt: Date;
-  updatedAt: Date;
-}) {
-  return {
-    id: rule.id.toString(),
-    businessId: rule.businessId.toString(),
-    projectId: rule.projectId ? rule.projectId.toString() : null,
-    categoryReferenceId: rule.categoryReferenceId ? rule.categoryReferenceId.toString() : null,
-    type: rule.type,
-    amountCents: rule.amountCents.toString(),
-    category: rule.category,
-    vendor: rule.vendor ?? null,
-    method: rule.method ?? null,
-    note: rule.note ?? null,
-    startDate: rule.startDate.toISOString(),
-    endDate: rule.endDate ? rule.endDate.toISOString() : null,
-    dayOfMonth: rule.dayOfMonth,
-    frequency: rule.frequency,
-    nextRunAt: rule.nextRunAt ? rule.nextRunAt.toISOString() : null,
-    isActive: rule.isActive,
-    createdAt: rule.createdAt.toISOString(),
-    updatedAt: rule.updatedAt.toISOString(),
-  };
-}
-
-function serializeOccurrence(finance: {
-  id: bigint;
-  projectId: bigint | null;
-  type: FinanceType;
-  amountCents: bigint;
-  category: string;
-  vendor: string | null;
-  method: PaymentMethod | null;
-  isRecurring: boolean;
-  recurringUnit: RecurringUnit | null;
-  recurringRuleId: bigint | null;
-  isRuleOverride: boolean;
-  lockedFromRule: boolean;
-  date: Date;
-  note: string | null;
-}) {
-  return {
-    id: finance.id.toString(),
-    projectId: finance.projectId ? finance.projectId.toString() : null,
-    type: finance.type,
-    amountCents: finance.amountCents.toString(),
-    category: finance.category,
-    vendor: finance.vendor ?? null,
-    method: finance.method ?? null,
-    isRecurring: finance.isRecurring,
-    recurringUnit: finance.recurringUnit ?? null,
-    recurringRuleId: finance.recurringRuleId ? finance.recurringRuleId.toString() : null,
-    isRuleOverride: finance.isRuleOverride,
-    lockedFromRule: finance.lockedFromRule,
-    date: finance.date.toISOString(),
-    note: finance.note ?? null,
-  };
-}
-
 async function generateOccurrences(params: {
   rule: {
     id: bigint;
@@ -200,8 +124,8 @@ export const GET = withBusinessRoute<{ businessId: string; ruleId: string }>(
 
     return jsonb(
       {
-        item: serializeRule(rule),
-        occurrences: occurrences.map((entry) => serializeOccurrence(entry)),
+        item: rule,
+        occurrences,
       },
       requestId
     );
@@ -397,6 +321,6 @@ export const PATCH = withBusinessRoute<{ businessId: string; ruleId: string }>(
       }
     }
 
-    return jsonb({ item: serializeRule(updated) }, requestId);
+    return jsonb({ item: updated }, requestId);
   }
 );

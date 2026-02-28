@@ -7,24 +7,6 @@ import { upsertLedgerForMovement } from '@/server/services/ledger';
 import { parseCentsInput } from '@/lib/money';
 import { parseIdOpt } from '@/server/http/parsers';
 
-function serializeMovement(movement: Awaited<ReturnType<typeof prisma.inventoryMovement.findFirst>>) {
-  if (!movement) return null;
-  return {
-    id: movement.id.toString(),
-    businessId: movement.businessId.toString(),
-    productId: movement.productId.toString(),
-    type: movement.type,
-    source: movement.source,
-    quantity: movement.quantity,
-    unitCostCents: movement.unitCostCents ? movement.unitCostCents.toString() : null,
-    reason: movement.reason,
-    date: movement.date.toISOString(),
-    createdByUserId: movement.createdByUserId ? movement.createdByUserId.toString() : null,
-    createdAt: movement.createdAt.toISOString(),
-    updatedAt: movement.updatedAt.toISOString(),
-  };
-}
-
 // PATCH /api/pro/businesses/{businessId}/products/{productId}/movements/{movementId}
 export const PATCH = withBusinessRoute<{ businessId: string; productId: string; movementId: string }>(
   {
@@ -150,7 +132,7 @@ export const PATCH = withBusinessRoute<{ businessId: string; productId: string; 
       return updatedMovement;
     });
 
-    return jsonb({ item: serializeMovement(updated) }, requestId);
+    return jsonb({ item: updated }, requestId);
   }
 );
 

@@ -1,89 +1,10 @@
 import { prisma } from '@/server/db/client';
-import { BillingUnit, DiscountType, InvoiceStatus, QuoteStatus } from '@/generated/prisma';
+import { InvoiceStatus, QuoteStatus } from '@/generated/prisma';
 import { withBusinessRoute } from '@/server/http/routeHandler';
 import { jsonbCreated } from '@/server/http/json';
 import { badRequest, notFound } from '@/server/http/apiUtils';
 import { parseIdOpt } from '@/server/http/parsers';
 import { buildClientSnapshot, buildIssuerSnapshot } from '@/server/billing/snapshots';
-
-function serializeInvoice(
-  invoice: {
-    id: bigint;
-    businessId: bigint;
-    projectId: bigint;
-    clientId: bigint | null;
-    quoteId: bigint | null;
-    status: InvoiceStatus;
-    depositPercent: number;
-    currency: string;
-    totalCents: bigint;
-    depositCents: bigint;
-    balanceCents: bigint;
-    note: string | null;
-    issuedAt: Date | null;
-    dueAt: Date | null;
-    paidAt: Date | null;
-    createdAt: Date;
-    updatedAt: Date;
-    items?: {
-      id: bigint;
-      serviceId: bigint | null;
-      label: string;
-      description: string | null;
-      discountType: DiscountType;
-      discountValue: number | null;
-      originalUnitPriceCents: bigint | null;
-      unitLabel: string | null;
-      billingUnit: BillingUnit;
-      quantity: number;
-      unitPriceCents: bigint;
-      totalCents: bigint;
-      createdAt: Date;
-      updatedAt: Date;
-    }[];
-  },
-  opts?: { includeItems?: boolean }
-) {
-  return {
-    id: invoice.id.toString(),
-    businessId: invoice.businessId.toString(),
-    projectId: invoice.projectId.toString(),
-    clientId: invoice.clientId ? invoice.clientId.toString() : null,
-    quoteId: invoice.quoteId ? invoice.quoteId.toString() : null,
-    status: invoice.status,
-    depositPercent: invoice.depositPercent,
-    currency: invoice.currency,
-    totalCents: invoice.totalCents.toString(),
-    depositCents: invoice.depositCents.toString(),
-    balanceCents: invoice.balanceCents.toString(),
-    note: invoice.note,
-    issuedAt: invoice.issuedAt ? invoice.issuedAt.toISOString() : null,
-    dueAt: invoice.dueAt ? invoice.dueAt.toISOString() : null,
-    paidAt: invoice.paidAt ? invoice.paidAt.toISOString() : null,
-    createdAt: invoice.createdAt.toISOString(),
-    updatedAt: invoice.updatedAt.toISOString(),
-    ...(opts?.includeItems
-      ? {
-          items: invoice.items?.map((item) => ({
-            id: item.id.toString(),
-            serviceId: item.serviceId ? item.serviceId.toString() : null,
-            label: item.label,
-            description: item.description ?? null,
-            discountType: item.discountType,
-            discountValue: item.discountValue ?? null,
-            originalUnitPriceCents: item.originalUnitPriceCents?.toString() ?? null,
-            unitLabel: item.unitLabel ?? null,
-            billingUnit: item.billingUnit,
-            quantity: item.quantity,
-            unitPriceCents: item.unitPriceCents.toString(),
-            totalCents: item.totalCents.toString(),
-            createdAt: item.createdAt.toISOString(),
-            updatedAt: item.updatedAt.toISOString(),
-          })),
-        }
-      : {}),
-  };
-}
 
 // POST /api/pro/businesses/{businessId}/quotes/{quoteId}/invoices
 export const POST = withBusinessRoute<{ businessId: string; quoteId: string }>(
@@ -242,12 +163,11 @@ export const POST = withBusinessRoute<{ businessId: string; quoteId: string }>(
       return created;
     });
 
-    const payload = serializeInvoice(invoice, { includeItems: true });
-    const basePath = `/api/pro/businesses/${businessIdBigInt}/invoices/${payload.id}`;
+    const basePath = `/api/pro/businesses/${businessIdBigInt}/invoices/${invoice.id}`;
 
     return jsonbCreated(
       {
-        item: payload,
+        item: invoice,
         pdfUrl: `${basePath}/pdf`,
         downloadUrl: `${basePath}/pdf`,
       },

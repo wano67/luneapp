@@ -1,5 +1,5 @@
 import { prisma } from '@/server/db/client';
-import type { Prisma, Prospect } from '@/generated/prisma';
+import type { Prisma } from '@/generated/prisma';
 import {
   LeadSource,
   ProspectPipelineStatus,
@@ -34,31 +34,6 @@ const VALID_PIPELINE_STATUS = new Set<ProspectPipelineStatus>([
   'FOLLOW_UP',
   'CLOSED',
 ]);
-
-function serializeProspect(p: Prospect) {
-  return {
-    id: p.id.toString(),
-    businessId: p.businessId.toString(),
-    name: p.name,
-    title: p.title,
-    contactName: p.contactName,
-    contactEmail: p.contactEmail,
-    contactPhone: p.contactPhone,
-    source: p.source ?? null,
-    interestNote: p.interestNote,
-    qualificationLevel: p.qualificationLevel ?? null,
-    projectIdea: p.projectIdea,
-    estimatedBudget: p.estimatedBudget,
-    origin: p.origin,
-    probability: p.probability,
-    nextActionDate: p.nextActionDate ? p.nextActionDate.toISOString() : null,
-    firstContactAt: p.firstContactAt ? p.firstContactAt.toISOString() : null,
-    pipelineStatus: p.pipelineStatus,
-    status: p.status,
-    createdAt: p.createdAt.toISOString(),
-    updatedAt: p.updatedAt.toISOString(),
-  };
-}
 
 // GET /api/pro/businesses/{businessId}/prospects
 export const GET = withBusinessRoute({ minRole: 'VIEWER' }, async (ctx, request) => {
@@ -107,7 +82,7 @@ export const GET = withBusinessRoute({ minRole: 'VIEWER' }, async (ctx, request)
     orderBy: { createdAt: 'desc' },
   });
 
-  return jsonb({ items: prospects.map(serializeProspect) }, requestId);
+  return jsonb({ items: prospects }, requestId);
 });
 
 // POST /api/pro/businesses/{businessId}/prospects
@@ -249,6 +224,6 @@ export const POST = withBusinessRoute(
 
     const prospect = await prisma.prospect.create({ data });
 
-    return jsonbCreated({ item: serializeProspect(prospect) }, requestId);
+    return jsonbCreated({ item: prospect }, requestId);
   }
 );
