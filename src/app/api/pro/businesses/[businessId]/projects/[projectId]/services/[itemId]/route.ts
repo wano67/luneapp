@@ -2,6 +2,7 @@ import { prisma } from '@/server/db/client';
 import { withBusinessRoute } from '@/server/http/routeHandler';
 import { jsonb, jsonbNoContent } from '@/server/http/json';
 import { badRequest, notFound } from '@/server/http/apiUtils';
+import { parseIdOpt } from '@/server/http/parsers';
 import { BillingUnit, DiscountType } from '@/generated/prisma';
 import { parseCentsInput } from '@/lib/money';
 
@@ -32,12 +33,9 @@ export const PATCH = withBusinessRoute<{ businessId: string; projectId: string; 
   },
   async (ctx, req, params) => {
     const { requestId, businessId: businessIdBigInt } = ctx;
-    const projectId = params?.projectId;
-    const itemId = params?.itemId;
-    if (!projectId || !/^\d+$/.test(projectId)) return badRequest('Ids invalides.');
-    if (!itemId || !/^\d+$/.test(itemId)) return badRequest('Ids invalides.');
-    const projectIdBigInt = BigInt(projectId);
-    const itemIdBigInt = BigInt(itemId);
+    const projectIdBigInt = parseIdOpt(params?.projectId);
+    const itemIdBigInt = parseIdOpt(params?.itemId);
+    if (!projectIdBigInt || !itemIdBigInt) return badRequest('Ids invalides.');
 
     const existing = await getItem(businessIdBigInt, projectIdBigInt, itemIdBigInt);
     if (!existing) return notFound('Élément introuvable.');
@@ -172,12 +170,9 @@ export const DELETE = withBusinessRoute<{ businessId: string; projectId: string;
   },
   async (ctx, _req, params) => {
     const { requestId, businessId: businessIdBigInt } = ctx;
-    const projectId = params?.projectId;
-    const itemId = params?.itemId;
-    if (!projectId || !/^\d+$/.test(projectId)) return badRequest('Ids invalides.');
-    if (!itemId || !/^\d+$/.test(itemId)) return badRequest('Ids invalides.');
-    const projectIdBigInt = BigInt(projectId);
-    const itemIdBigInt = BigInt(itemId);
+    const projectIdBigInt = parseIdOpt(params?.projectId);
+    const itemIdBigInt = parseIdOpt(params?.itemId);
+    if (!projectIdBigInt || !itemIdBigInt) return badRequest('Ids invalides.');
 
     const existing = await getItem(businessIdBigInt, projectIdBigInt, itemIdBigInt);
     if (!existing) return notFound('Élément introuvable.');

@@ -4,15 +4,7 @@ import { jsonbNoContent } from '@/server/http/json';
 import { badRequest, notFound, withIdNoStore } from '@/server/http/apiUtils';
 import { InvoiceStatus, LedgerSourceType } from '@/generated/prisma';
 import { softDeleteFinanceForInvoice } from '@/server/billing/invoiceFinance';
-
-function parseId(param: string | undefined) {
-  if (!param || !/^\d+$/.test(param)) return null;
-  try {
-    return BigInt(param);
-  } catch {
-    return null;
-  }
-}
+import { parseIdOpt } from '@/server/http/parsers';
 
 // DELETE /api/pro/businesses/{businessId}/invoices/{invoiceId}/payments/{paymentId}
 export const DELETE = withBusinessRoute<{ businessId: string; invoiceId: string; paymentId: string }>(
@@ -27,8 +19,8 @@ export const DELETE = withBusinessRoute<{ businessId: string; invoiceId: string;
   async (ctx, _request, params) => {
     const { requestId, businessId: businessIdBigInt } = ctx;
     const { invoiceId, paymentId } = await params;
-    const invoiceIdBigInt = parseId(invoiceId);
-    const paymentIdBigInt = parseId(paymentId);
+    const invoiceIdBigInt = parseIdOpt(invoiceId);
+    const paymentIdBigInt = parseIdOpt(paymentId);
     if (!invoiceIdBigInt || !paymentIdBigInt) {
       return withIdNoStore(badRequest('invoiceId ou paymentId invalide.'), requestId);
     }

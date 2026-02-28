@@ -1,29 +1,20 @@
 import { prisma } from '@/server/db/client';
 import { withBusinessRoute } from '@/server/http/routeHandler';
+import { parseIdOpt } from '@/server/http/parsers';
 import { jsonb } from '@/server/http/json';
-import { badRequest, notFound, withIdNoStore } from '@/server/http/apiUtils';
-
-// Null-returning ID parser pour les query params (comportement "soft" intentionnel)
-function parseId(param: string | undefined | null): bigint | null {
-  if (!param || !/^\d+$/.test(param)) return null;
-  try { return BigInt(param); } catch { return null; }
-}
-
-function isRecord(v: unknown): v is Record<string, unknown> {
-  return !!v && typeof v === 'object';
-}
+import { badRequest, isRecord, notFound, withIdNoStore } from '@/server/http/apiUtils';
 
 // POST /api/pro/businesses/{businessId}/prospects/{prospectId}/convert
 export const POST = withBusinessRoute<{ businessId: string; prospectId: string }>(
   { minRole: 'ADMIN' },
   async (ctx, request, params) => {
     const { requestId, businessId: businessIdBigInt } = ctx;
-    const prospectIdBigInt = parseId(params.prospectId);
+    const prospectIdBigInt = parseIdOpt(params.prospectId);
     if (!prospectIdBigInt) return withIdNoStore(badRequest('prospectId invalide.'), requestId);
 
     const body = await request.json().catch(() => null);
     const existingClientId =
-      isRecord(body) && typeof body.existingClientId === 'string' ? parseId(body.existingClientId) : null;
+      isRecord(body) && typeof body.existingClientId === 'string' ? parseIdOpt(body.existingClientId) : null;
     const projectName =
       isRecord(body) && typeof body.projectName === 'string' && body.projectName.trim()
         ? body.projectName.trim()

@@ -13,15 +13,7 @@ import {
   coerceClientSnapshot,
   coerceIssuerSnapshot,
 } from '@/server/billing/snapshots';
-
-function parseId(param: string | undefined) {
-  if (!param || !/^\d+$/.test(param)) return null;
-  try {
-    return BigInt(param);
-  } catch {
-    return null;
-  }
-}
+import { parseIdOpt } from '@/server/http/parsers';
 
 // GET /api/pro/businesses/{businessId}/invoices/{invoiceId}/pdf
 export const GET = withBusinessRoute<{ businessId: string; invoiceId: string }>(
@@ -29,7 +21,7 @@ export const GET = withBusinessRoute<{ businessId: string; invoiceId: string }>(
   async (ctx, _request, params) => {
     const { requestId, businessId: businessIdBigInt } = ctx;
     const { invoiceId } = await params;
-    const invoiceIdBigInt = parseId(invoiceId);
+    const invoiceIdBigInt = parseIdOpt(invoiceId);
     if (!invoiceIdBigInt) {
       return withIdNoStore(badRequest('invoiceId invalide.'), requestId);
     }

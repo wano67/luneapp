@@ -2,18 +2,14 @@ import { prisma } from '@/server/db/client';
 import { withBusinessRoute } from '@/server/http/routeHandler';
 import { jsonb, jsonbCreated } from '@/server/http/json';
 import { badRequest, notFound, withIdNoStore } from '@/server/http/apiUtils';
-
-function parseId(param: string | undefined | null): bigint | null {
-  if (!param || !/^\d+$/.test(param)) return null;
-  try { return BigInt(param); } catch { return null; }
-}
+import { parseIdOpt } from '@/server/http/parsers';
 
 // GET /api/pro/businesses/{businessId}/projects/{projectId}/members
 export const GET = withBusinessRoute<{ businessId: string; projectId: string }>(
   { minRole: 'VIEWER' },
   async (ctx, _request, params) => {
     const { requestId, businessId: businessIdBigInt } = ctx;
-    const projectIdBigInt = parseId(params.projectId);
+    const projectIdBigInt = parseIdOpt(params.projectId);
     if (!projectIdBigInt) return withIdNoStore(badRequest('projectId invalide.'), requestId);
 
     const project = await prisma.project.findFirst({
@@ -91,7 +87,7 @@ export const POST = withBusinessRoute<{ businessId: string; projectId: string }>
   { minRole: 'ADMIN' },
   async (ctx, request, params) => {
     const { requestId, businessId: businessIdBigInt } = ctx;
-    const projectIdBigInt = parseId(params.projectId);
+    const projectIdBigInt = parseIdOpt(params.projectId);
     if (!projectIdBigInt) return withIdNoStore(badRequest('projectId invalide.'), requestId);
 
     const project = await prisma.project.findFirst({

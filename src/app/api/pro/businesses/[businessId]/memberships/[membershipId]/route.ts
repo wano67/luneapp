@@ -2,19 +2,14 @@ import { prisma } from '@/server/db/client';
 import { withBusinessRoute } from '@/server/http/routeHandler';
 import { jsonb } from '@/server/http/json';
 import { badRequest, notFound, withIdNoStore } from '@/server/http/apiUtils';
-
-// Null-returning ID parser pour les query params (comportement "soft" intentionnel)
-function parseId(param: string | undefined | null): bigint | null {
-  if (!param || !/^\d+$/.test(param)) return null;
-  try { return BigInt(param); } catch { return null; }
-}
+import { parseIdOpt } from '@/server/http/parsers';
 
 // PATCH /api/pro/businesses/{businessId}/memberships/{membershipId}
 export const PATCH = withBusinessRoute<{ businessId: string; membershipId: string }>(
   { minRole: 'ADMIN' },
   async (ctx, request, params) => {
     const { requestId, businessId: businessIdBigInt } = ctx;
-    const membershipIdBigInt = parseId(params.membershipId);
+    const membershipIdBigInt = parseIdOpt(params.membershipId);
     if (!membershipIdBigInt) return withIdNoStore(badRequest('membershipId invalide.'), requestId);
 
     const membership = await prisma.businessMembership.findFirst({

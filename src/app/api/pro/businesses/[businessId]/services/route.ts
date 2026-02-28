@@ -2,18 +2,11 @@ import { prisma } from '@/server/db/client';
 import { withBusinessRoute } from '@/server/http/routeHandler';
 import { jsonb } from '@/server/http/json';
 import { badRequest, withIdNoStore } from '@/server/http/apiUtils';
-import { BusinessReferenceType, TaskPhase } from '@/generated/prisma';
+import { TaskPhase } from '@/generated/prisma';
+import { validateCategoryAndTags } from '@/server/http/validators';
 import { parseCentsInput } from '@/lib/money';
-
-// Null-returning ID parser pour les query params (comportement "soft" intentionnel)
-function parseId(param: string | undefined | null): bigint | null {
-  if (!param || !/^\d+$/.test(param)) return null;
-  try { return BigInt(param); } catch { return null; }
-}
-
-function normalizeStr(v: unknown) {
-  return String(v ?? '').trim();
-}
+import { ensureDelegate } from '@/server/http/delegates';
+import { parseIdOpt, parseStr } from '@/server/http/parsers';
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return !!v && typeof v === 'object';
@@ -51,10 +44,10 @@ type ServiceBodyParsed =
 
 function validateServiceBody(body: unknown): ServiceBodyParsed {
   if (!isRecord(body)) return { error: 'Payload invalide.' };
-  const code = normalizeStr(body.code);
-  const name = normalizeStr(body.name);
-  const type = normalizeStr(body.type);
-  const description = normalizeStr(body.description);
+  const code = parseStr(body.code) ?? '';
+  const name = parseStr(body.name) ?? '';
+  const type = parseStr(body.type) ?? '';
+  const description = parseStr(body.description) ?? '';
   const defaultPriceCentsRaw = parseCentsInput((body as { defaultPriceCents?: unknown }).defaultPriceCents);
   const defaultPriceCents =
     defaultPriceCentsRaw != null ? Math.max(0, Math.trunc(defaultPriceCentsRaw)) : null;
@@ -84,8 +77,8 @@ function validateServiceBody(body: unknown): ServiceBodyParsed {
             : null;
         return {
           phase,
-          title: normalizeStr(t.title),
-          defaultAssigneeRole: normalizeStr(t.defaultAssigneeRole || '') || null,
+          title: parseStr(t.title) ?? '',
+          defaultAssigneeRole: parseStr(t.defaultAssigneeRole) ?? null,
           defaultDueOffsetDays:
             typeof t.defaultDueOffsetDays === 'number' && Number.isFinite(t.defaultDueOffsetDays)
               ? Math.trunc(t.defaultDueOffsetDays)
@@ -135,58 +128,12 @@ function validateServiceBody(body: unknown): ServiceBodyParsed {
   };
 }
 
-function ensureServiceDelegate(requestId: string) {
-  if (!(prisma as { service?: unknown }).service) {
-    return jsonb({ error: 'Prisma client not generated / wrong import (service delegate absent).' }, requestId, { status: 500 });
-  }
-  return null;
-}
-
-async function validateCategoryAndTags(
-  businessId: bigint,
-  categoryReferenceId: bigint | null,
-  tagReferenceIds?: bigint[]
-): Promise<{ categoryId: bigint | null; tagIds: bigint[] } | { error: string }> {
-  if (categoryReferenceId) {
-    const category = await prisma.businessReference.findFirst({
-      where: {
-        id: categoryReferenceId,
-        businessId,
-        type: BusinessReferenceType.CATEGORY,
-        isArchived: false,
-      },
-      select: { id: true },
-    });
-    if (!category) {
-      return { error: 'categoryReferenceId invalide pour ce business.' };
-    }
-  }
-
-  let tagIds: bigint[] = [];
-  if (tagReferenceIds && tagReferenceIds.length) {
-    const tags = await prisma.businessReference.findMany({
-      where: {
-        id: { in: tagReferenceIds },
-        businessId,
-        type: BusinessReferenceType.TAG,
-        isArchived: false,
-      },
-      select: { id: true },
-    });
-    if (tags.length !== tagReferenceIds.length) {
-      return { error: 'tagReferenceIds invalides pour ce business.' };
-    }
-    tagIds = tags.map((t) => t.id);
-  }
-
-  return { categoryId: categoryReferenceId, tagIds };
-}
 
 // GET /api/pro/businesses/{businessId}/services
 export const GET = withBusinessRoute({ minRole: 'VIEWER' }, async (ctx, request) => {
   const { requestId, businessId: businessIdBigInt } = ctx;
 
-  const delegateError = ensureServiceDelegate(requestId);
+  const delegateError = ensureDelegate('service', requestId);
   if (delegateError) return delegateError;
 
   const { searchParams } = new URL(request.url);
@@ -195,11 +142,11 @@ export const GET = withBusinessRoute({ minRole: 'VIEWER' }, async (ctx, request)
   const categoryReferenceIdParam = searchParams.get('categoryReferenceId');
   const tagReferenceIdParam = searchParams.get('tagReferenceId');
 
-  const categoryReferenceId = categoryReferenceIdParam ? parseId(categoryReferenceIdParam) : null;
+  const categoryReferenceId = categoryReferenceIdParam ? parseIdOpt(categoryReferenceIdParam) : null;
   if (categoryReferenceIdParam && !categoryReferenceId) {
     return withIdNoStore(badRequest('categoryReferenceId invalide.'), requestId);
   }
-  const tagReferenceId = tagReferenceIdParam ? parseId(tagReferenceIdParam) : null;
+  const tagReferenceId = tagReferenceIdParam ? parseIdOpt(tagReferenceIdParam) : null;
   if (tagReferenceIdParam && !tagReferenceId) {
     return withIdNoStore(badRequest('tagReferenceId invalide.'), requestId);
   }
@@ -256,7 +203,7 @@ export const POST = withBusinessRoute(
   async (ctx, request) => {
   const { requestId, businessId: businessIdBigInt } = ctx;
 
-  const delegateError = ensureServiceDelegate(requestId);
+  const delegateError = ensureDelegate('service', requestId);
   if (delegateError) return delegateError;
 
   const body = await request.json().catch(() => null);

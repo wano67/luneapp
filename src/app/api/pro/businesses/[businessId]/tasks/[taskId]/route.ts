@@ -1,56 +1,14 @@
 import { prisma } from '@/server/db/client';
-import { BusinessReferenceType, TaskPhase, TaskStatus } from '@/generated/prisma';
+import { TaskPhase, TaskStatus } from '@/generated/prisma';
+import { validateCategoryAndTags } from '@/server/http/validators';
 import { withBusinessRoute } from '@/server/http/routeHandler';
 import { jsonb, jsonbNoContent } from '@/server/http/json';
-import { badRequest, notFound, serverError } from '@/server/http/apiUtils';
-
-function ensureTaskDelegate() {
-  if (!(prisma as { task?: unknown }).task) {
-    return serverError();
-  }
-  return null;
-}
+import { badRequest, notFound } from '@/server/http/apiUtils';
+import { ensureDelegate } from '@/server/http/delegates';
+import { parseIdOpt } from '@/server/http/parsers';
 
 function isValidStatus(status: unknown): status is TaskStatus {
   return status === 'TODO' || status === 'IN_PROGRESS' || status === 'DONE';
-}
-
-async function validateCategoryAndTags(
-  businessId: bigint,
-  categoryReferenceId: bigint | null,
-  tagReferenceIds?: bigint[]
-): Promise<{ categoryId: bigint | null; tagIds: bigint[] } | { error: string }> {
-  if (categoryReferenceId) {
-    const category = await prisma.businessReference.findFirst({
-      where: {
-        id: categoryReferenceId,
-        businessId,
-        type: BusinessReferenceType.CATEGORY,
-        isArchived: false,
-      },
-      select: { id: true },
-    });
-    if (!category) return { error: 'categoryReferenceId invalide pour ce business.' };
-  }
-
-  let tagIds: bigint[] = [];
-  if (tagReferenceIds && tagReferenceIds.length) {
-    const tags = await prisma.businessReference.findMany({
-      where: {
-        id: { in: tagReferenceIds },
-        businessId,
-        type: BusinessReferenceType.TAG,
-        isArchived: false,
-      },
-      select: { id: true },
-    });
-    if (tags.length !== tagReferenceIds.length) {
-      return { error: 'tagReferenceIds invalides pour ce business.' };
-    }
-    tagIds = tags.map((t) => t.id);
-  }
-
-  return { categoryId: categoryReferenceId, tagIds };
 }
 
 function serializeTask(task: {
@@ -122,12 +80,11 @@ export const GET = withBusinessRoute<{ businessId: string; taskId: string }>(
   async (ctx, _req, params) => {
     const { requestId, businessId: businessIdBigInt } = ctx;
 
-    const delegateError = ensureTaskDelegate();
+    const delegateError = ensureDelegate('task');
     if (delegateError) return delegateError;
 
-    const taskId = params?.taskId;
-    if (!taskId || !/^\d+$/.test(taskId)) return badRequest('taskId invalide.');
-    const taskIdBigInt = BigInt(taskId);
+    const taskIdBigInt = parseIdOpt(params?.taskId);
+    if (!taskIdBigInt) return badRequest('taskId invalide.');
 
     const task = await prisma.task.findFirst({
       where: { id: taskIdBigInt, businessId: businessIdBigInt },
@@ -183,12 +140,11 @@ export const PATCH = withBusinessRoute<{ businessId: string; taskId: string }>(
   async (ctx, req, params) => {
     const { requestId, businessId: businessIdBigInt, userId } = ctx;
 
-    const delegateError = ensureTaskDelegate();
+    const delegateError = ensureDelegate('task');
     if (delegateError) return delegateError;
 
-    const taskId = params?.taskId;
-    if (!taskId || !/^\d+$/.test(taskId)) return badRequest('taskId invalide.');
-    const taskIdBigInt = BigInt(taskId);
+    const taskIdBigInt = parseIdOpt(params?.taskId);
+    if (!taskIdBigInt) return badRequest('taskId invalide.');
 
     const existing = await prisma.task.findFirst({
       where: { id: taskIdBigInt, businessId: businessIdBigInt },
@@ -443,12 +399,11 @@ export const DELETE = withBusinessRoute<{ businessId: string; taskId: string }>(
   async (ctx, _req, params) => {
     const { requestId, businessId: businessIdBigInt } = ctx;
 
-    const delegateError = ensureTaskDelegate();
+    const delegateError = ensureDelegate('task');
     if (delegateError) return delegateError;
 
-    const taskId = params?.taskId;
-    if (!taskId || !/^\d+$/.test(taskId)) return badRequest('taskId invalide.');
-    const taskIdBigInt = BigInt(taskId);
+    const taskIdBigInt = parseIdOpt(params?.taskId);
+    if (!taskIdBigInt) return badRequest('taskId invalide.');
 
     const task = await prisma.task.findFirst({
       where: { id: taskIdBigInt, businessId: businessIdBigInt },

@@ -2,6 +2,7 @@ import { prisma } from '@/server/db/client';
 import { withBusinessRoute } from '@/server/http/routeHandler';
 import { jsonb, jsonbCreated } from '@/server/http/json';
 import { badRequest, notFound } from '@/server/http/apiUtils';
+import { parseIdOpt } from '@/server/http/parsers';
 import { applyServiceProcessTemplateToProjectService } from '@/server/services/process/applyServiceProcessTemplate';
 import { applyServiceTaskTemplatesToProjectService } from '@/server/services/process/applyServiceTaskTemplates';
 import { resolveServiceUnitPriceCents } from '@/server/services/pricing';
@@ -17,9 +18,8 @@ export const GET = withBusinessRoute<{ businessId: string; projectId: string }>(
   { minRole: 'VIEWER' },
   async (ctx, _req, params) => {
     const { requestId, businessId: businessIdBigInt } = ctx;
-    const projectId = params?.projectId;
-    if (!projectId || !/^\d+$/.test(projectId)) return badRequest('Ids invalides.');
-    const projectIdBigInt = BigInt(projectId);
+    const projectIdBigInt = parseIdOpt(params?.projectId);
+    if (!projectIdBigInt) return badRequest('Ids invalides.');
 
     const project = await prisma.project.findFirst({
       where: { id: projectIdBigInt, businessId: businessIdBigInt },
@@ -75,9 +75,8 @@ export const POST = withBusinessRoute<{ businessId: string; projectId: string }>
   },
   async (ctx, req, params) => {
     const { requestId, businessId: businessIdBigInt } = ctx;
-    const projectId = params?.projectId;
-    if (!projectId || !/^\d+$/.test(projectId)) return badRequest('Ids invalides.');
-    const projectIdBigInt = BigInt(projectId);
+    const projectIdBigInt = parseIdOpt(params?.projectId);
+    if (!projectIdBigInt) return badRequest('Ids invalides.');
 
     const project = await prisma.project.findFirst({
       where: { id: projectIdBigInt, businessId: businessIdBigInt },
@@ -173,7 +172,7 @@ export const POST = withBusinessRoute<{ businessId: string; projectId: string }>
       console.warn('project-service price missing (pricing will default to 0)', {
         requestId,
         businessId: businessIdBigInt.toString(),
-        projectId,
+        projectId: projectIdBigInt.toString(),
         serviceId: serviceIdBigInt.toString(),
       });
     }

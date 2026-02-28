@@ -2,31 +2,10 @@ import { prisma } from '@/server/db/client';
 import { ProspectStatus } from '@/generated/prisma';
 import type { ProspectPipelineStatus, QualificationLevel } from '@/generated/prisma';
 import { withBusinessRoute } from '@/server/http/routeHandler';
+import { parseIdOpt, parseDateOpt, parseStr } from '@/server/http/parsers';
 import { jsonb, jsonbNoContent } from '@/server/http/json';
-import { badRequest, isRecord, notFound, serverError, withIdNoStore } from '@/server/http/apiUtils';
-
-function parseId(param: string | undefined | null): bigint | null {
-  if (!param || !/^\d+$/.test(param)) return null;
-  try { return BigInt(param); } catch { return null; }
-}
-
-function ensureProspectDelegate(requestId: string) {
-  if (!(prisma as { prospect?: unknown }).prospect) {
-    return withIdNoStore(serverError(), requestId);
-  }
-  return null;
-}
-
-function normalizeStr(v: unknown) {
-  return String(v ?? '').trim();
-}
-
-function parseDate(value: unknown): Date | null {
-  if (value === null || value === undefined || value === '') return null;
-  if (typeof value !== 'string') return null;
-  const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
-}
+import { badRequest, isRecord, notFound, withIdNoStore } from '@/server/http/apiUtils';
+import { ensureDelegate } from '@/server/http/delegates';
 
 const VALID_STATUS = new Set<ProspectPipelineStatus>([
   'NEW',
@@ -89,10 +68,10 @@ export const GET = withBusinessRoute<{ businessId: string; prospectId: string }>
   { minRole: 'VIEWER' },
   async (ctx, _request, params) => {
     const { requestId, businessId: businessIdBigInt } = ctx;
-    const prospectIdBigInt = parseId(params.prospectId);
+    const prospectIdBigInt = parseIdOpt(params.prospectId);
     if (!prospectIdBigInt) return withIdNoStore(badRequest('prospectId invalide.'), requestId);
 
-    const delegateError = ensureProspectDelegate(requestId);
+    const delegateError = ensureDelegate('prospect', requestId);
     if (delegateError) return delegateError;
 
     const prospect = await prisma.prospect.findFirst({
@@ -109,10 +88,10 @@ export const PATCH = withBusinessRoute<{ businessId: string; prospectId: string 
   { minRole: 'ADMIN' },
   async (ctx, request, params) => {
     const { requestId, businessId: businessIdBigInt } = ctx;
-    const prospectIdBigInt = parseId(params.prospectId);
+    const prospectIdBigInt = parseIdOpt(params.prospectId);
     if (!prospectIdBigInt) return withIdNoStore(badRequest('prospectId invalide.'), requestId);
 
-    const delegateError = ensureProspectDelegate(requestId);
+    const delegateError = ensureDelegate('prospect', requestId);
     if (delegateError) return delegateError;
 
     const body = await request.json().catch(() => null);
@@ -123,20 +102,20 @@ export const PATCH = withBusinessRoute<{ businessId: string; prospectId: string 
     const data: Record<string, unknown> = {};
 
     if ('name' in body) {
-      const name = normalizeStr((body as { name?: unknown }).name);
+      const name = parseStr((body as { name?: unknown }).name);
       if (!name) return withIdNoStore(badRequest('Le nom est requis.'), requestId);
       if (name.length > 120) return withIdNoStore(badRequest('Nom trop long (max 120).'), requestId);
       data.name = name;
     }
 
     if ('title' in body) {
-      const title = normalizeStr((body as { title?: unknown }).title);
-      if (title.length > 120) return withIdNoStore(badRequest('Titre trop long (max 120).'), requestId);
+      const title = parseStr((body as { title?: unknown }).title);
+      if (title && title.length > 120) return withIdNoStore(badRequest('Titre trop long (max 120).'), requestId);
       data.title = title || null;
     }
 
     if ('contactName' in body) {
-      const contactName = normalizeStr((body as { contactName?: unknown }).contactName);
+      const contactName = parseStr((body as { contactName?: unknown }).contactName);
       if (contactName && contactName.length > 120) {
         return withIdNoStore(badRequest('Contact trop long (max 120).'), requestId);
       }
@@ -144,7 +123,7 @@ export const PATCH = withBusinessRoute<{ businessId: string; prospectId: string 
     }
 
     if ('contactEmail' in body) {
-      const email = normalizeStr((body as { contactEmail?: unknown }).contactEmail);
+      const email = parseStr((body as { contactEmail?: unknown }).contactEmail);
       if (email && (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))) {
         return withIdNoStore(badRequest('Email invalide.'), requestId);
       }
@@ -152,7 +131,7 @@ export const PATCH = withBusinessRoute<{ businessId: string; prospectId: string 
     }
 
     if ('contactPhone' in body) {
-      const phone = normalizeStr((body as { contactPhone?: unknown }).contactPhone);
+      const phone = parseStr((body as { contactPhone?: unknown }).contactPhone);
       if (phone && phone.length > 32) {
         return withIdNoStore(badRequest('Téléphone invalide.'), requestId);
       }
@@ -165,7 +144,7 @@ export const PATCH = withBusinessRoute<{ businessId: string; prospectId: string 
     }
 
     if ('interestNote' in body) {
-      const note = normalizeStr((body as { interestNote?: unknown }).interestNote);
+      const note = parseStr((body as { interestNote?: unknown }).interestNote);
       data.interestNote = note || null;
     }
 
@@ -175,7 +154,7 @@ export const PATCH = withBusinessRoute<{ businessId: string; prospectId: string 
     }
 
     if ('projectIdea' in body) {
-      const idea = normalizeStr((body as { projectIdea?: unknown }).projectIdea);
+      const idea = parseStr((body as { projectIdea?: unknown }).projectIdea);
       data.projectIdea = idea || null;
     }
 
@@ -186,7 +165,7 @@ export const PATCH = withBusinessRoute<{ businessId: string; prospectId: string 
     }
 
     if ('firstContactAt' in body) {
-      const d = parseDate((body as { firstContactAt?: unknown }).firstContactAt);
+      const d = parseDateOpt((body as { firstContactAt?: unknown }).firstContactAt);
       data.firstContactAt = d;
     }
 
@@ -207,7 +186,7 @@ export const PATCH = withBusinessRoute<{ businessId: string; prospectId: string 
     }
 
     if ('nextActionDate' in body) {
-      const parsed = parseDate((body as { nextActionDate?: unknown }).nextActionDate);
+      const parsed = parseDateOpt((body as { nextActionDate?: unknown }).nextActionDate);
       if ((body as { nextActionDate?: unknown }).nextActionDate && !parsed) {
         return withIdNoStore(badRequest('Prochaine action invalide.'), requestId);
       }
@@ -223,8 +202,8 @@ export const PATCH = withBusinessRoute<{ businessId: string; prospectId: string 
     }
 
     if ('origin' in body) {
-      const origin = normalizeStr((body as { origin?: unknown }).origin);
-      if (origin.length > 120) {
+      const origin = parseStr((body as { origin?: unknown }).origin);
+      if (origin && origin.length > 120) {
         return withIdNoStore(badRequest('Origine trop longue (max 120).'), requestId);
       }
       data.origin = origin || null;
@@ -256,10 +235,10 @@ export const DELETE = withBusinessRoute<{ businessId: string; prospectId: string
   { minRole: 'ADMIN' },
   async (ctx, _request, params) => {
     const { requestId, businessId: businessIdBigInt } = ctx;
-    const prospectIdBigInt = parseId(params.prospectId);
+    const prospectIdBigInt = parseIdOpt(params.prospectId);
     if (!prospectIdBigInt) return withIdNoStore(badRequest('prospectId invalide.'), requestId);
 
-    const delegateError = ensureProspectDelegate(requestId);
+    const delegateError = ensureDelegate('prospect', requestId);
     if (delegateError) return delegateError;
 
     const deleted = await prisma.prospect.deleteMany({

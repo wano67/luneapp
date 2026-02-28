@@ -1,25 +1,18 @@
 import { prisma } from '@/server/db/client';
 import { withBusinessRoute } from '@/server/http/routeHandler';
-import { parseIdOpt } from '@/server/http/parsers';
+import { parseIdOpt, parseStr } from '@/server/http/parsers';
 import { jsonb, jsonbCreated } from '@/server/http/json';
 import { badRequest, withIdNoStore } from '@/server/http/apiUtils';
-import { BusinessReferenceType, ClientStatus, LeadSource } from '@/generated/prisma';
+import { ClientStatus, LeadSource } from '@/generated/prisma';
+import { validateCategoryAndTags } from '@/server/http/validators';
 import { normalizeWebsiteUrl } from '@/lib/website';
-
-// ---------------------------------------------------------------------------
-// Helpers de validation (inchangés — logique métier)
-// ---------------------------------------------------------------------------
-
-function normalizeStr(v: unknown) {
-  return String(v ?? '').trim();
-}
 
 function isValidEmail(s: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
 }
 
 function sanitizePhone(s: unknown) {
-  return normalizeStr(s).replace(/\s+/g, ' ');
+  return (parseStr(s) ?? '').replace(/\s+/g, ' ');
 }
 
 function isValidPhone(s: string) {
@@ -30,44 +23,6 @@ function isValidPhone(s: string) {
 }
 
 const STATUS_VALUES = new Set<ClientStatus>(['ACTIVE', 'PAUSED', 'FORMER']);
-
-async function validateCategoryAndTags(
-  businessId: bigint,
-  categoryReferenceId: bigint | null,
-  tagReferenceIds?: bigint[]
-): Promise<{ categoryId: bigint | null; tagIds: bigint[] } | { error: string }> {
-  if (categoryReferenceId) {
-    const category = await prisma.businessReference.findFirst({
-      where: {
-        id: categoryReferenceId,
-        businessId,
-        type: BusinessReferenceType.CATEGORY,
-        isArchived: false,
-      },
-      select: { id: true },
-    });
-    if (!category) return { error: 'categoryReferenceId invalide pour ce business.' };
-  }
-
-  let tagIds: bigint[] = [];
-  if (tagReferenceIds && tagReferenceIds.length) {
-    const tags = await prisma.businessReference.findMany({
-      where: {
-        id: { in: tagReferenceIds },
-        businessId,
-        type: BusinessReferenceType.TAG,
-        isArchived: false,
-      },
-      select: { id: true },
-    });
-    if (tags.length !== tagReferenceIds.length) {
-      return { error: 'tagReferenceIds invalides pour ce business.' };
-    }
-    tagIds = tags.map((t) => t.id);
-  }
-
-  return { categoryId: categoryReferenceId, tagIds };
-}
 
 function serializeClient(client: {
   id: bigint;
@@ -187,13 +142,13 @@ export const POST = withBusinessRoute(
       return withIdNoStore(badRequest('Le nom du client est requis.'), ctx.requestId);
     }
 
-    const name = normalizeStr(b.name);
+    const name = parseStr(b.name) ?? '';
     if (!name)
       return withIdNoStore(badRequest('Le nom du client ne peut pas être vide.'), ctx.requestId);
     if (name.length > 120)
       return withIdNoStore(badRequest('Le nom du client est trop long (max 120).'), ctx.requestId);
 
-    const emailRaw = normalizeStr(typeof b.email === 'string' ? b.email : '');
+    const emailRaw = parseStr(typeof b.email === 'string' ? b.email : '') ?? '';
     const email = emailRaw || undefined;
     if (email && (email.length > 254 || !isValidEmail(email)))
       return withIdNoStore(badRequest('Email invalide.'), ctx.requestId);
@@ -203,7 +158,7 @@ export const POST = withBusinessRoute(
     if (phone && (phone.length > 32 || !isValidPhone(phone)))
       return withIdNoStore(badRequest('Téléphone invalide.'), ctx.requestId);
 
-    const notesRaw = normalizeStr(typeof b.notes === 'string' ? b.notes : '');
+    const notesRaw = parseStr(typeof b.notes === 'string' ? b.notes : '') ?? '';
     const notes = notesRaw || undefined;
     if (notes && notes.length > 2000)
       return withIdNoStore(badRequest('Notes trop longues (max 2000).'), ctx.requestId);
@@ -212,13 +167,13 @@ export const POST = withBusinessRoute(
     if (websiteNormalized.error)
       return withIdNoStore(badRequest(websiteNormalized.error), ctx.requestId);
 
-    const sector = normalizeStr(b.sector);
+    const sector = parseStr(b.sector) ?? '';
     const status =
       typeof b.status === 'string' && STATUS_VALUES.has(b.status as ClientStatus)
         ? (b.status as ClientStatus)
         : undefined;
 
-    const leadSourceRaw = normalizeStr(b.leadSource);
+    const leadSourceRaw = parseStr(b.leadSource) ?? '';
     const leadSource =
       leadSourceRaw && Object.values(LeadSource).includes(leadSourceRaw as LeadSource)
         ? (leadSourceRaw as LeadSource)

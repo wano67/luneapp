@@ -3,6 +3,7 @@ import { BillingUnit, DiscountType, InvoiceStatus, QuoteStatus } from '@/generat
 import { withBusinessRoute } from '@/server/http/routeHandler';
 import { jsonbCreated } from '@/server/http/json';
 import { badRequest, notFound } from '@/server/http/apiUtils';
+import { parseIdOpt } from '@/server/http/parsers';
 import { buildClientSnapshot, buildIssuerSnapshot } from '@/server/billing/snapshots';
 
 function serializeInvoice(
@@ -96,9 +97,8 @@ export const POST = withBusinessRoute<{ businessId: string; quoteId: string }>(
   },
   async (ctx, _req, params) => {
     const { requestId, businessId: businessIdBigInt, userId } = ctx;
-    const quoteId = params?.quoteId;
-    if (!quoteId || !/^\d+$/.test(quoteId)) return badRequest('quoteId invalide.');
-    const quoteIdBigInt = BigInt(quoteId);
+    const quoteIdBigInt = parseIdOpt(params?.quoteId);
+    if (!quoteIdBigInt) return badRequest('quoteId invalide.');
 
     const existingInvoice = await prisma.invoice.findFirst({
       where: { businessId: businessIdBigInt, quoteId: quoteIdBigInt },

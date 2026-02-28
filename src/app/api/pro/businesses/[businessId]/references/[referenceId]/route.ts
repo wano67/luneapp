@@ -3,12 +3,7 @@ import { prisma } from '@/server/db/client';
 import { withBusinessRoute } from '@/server/http/routeHandler';
 import { jsonb, jsonbNoContent } from '@/server/http/json';
 import { badRequest, notFound, withIdNoStore } from '@/server/http/apiUtils';
-
-// Null-returning ID parser pour les query params (comportement "soft" intentionnel)
-function parseId(param: string | undefined | null): bigint | null {
-  if (!param || !/^\d+$/.test(param)) return null;
-  try { return BigInt(param); } catch { return null; }
-}
+import { parseIdOpt } from '@/server/http/parsers';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object';
@@ -45,7 +40,7 @@ export const PATCH = withBusinessRoute<{ businessId: string; referenceId: string
   { minRole: 'ADMIN', rateLimit: { key: (ctx) => `pro:references:update:${ctx.businessId}:${ctx.userId}`, limit: 200, windowMs: 60 * 60 * 1000 } },
   async (ctx, request, params) => {
     const { requestId, businessId: businessIdBigInt } = ctx;
-    const referenceIdBigInt = parseId(params.referenceId);
+    const referenceIdBigInt = parseIdOpt(params.referenceId);
     if (!referenceIdBigInt) return withIdNoStore(badRequest('referenceId invalide.'), requestId);
 
     const body = await request.json().catch(() => null);
@@ -103,7 +98,7 @@ export const DELETE = withBusinessRoute<{ businessId: string; referenceId: strin
   { minRole: 'ADMIN', rateLimit: { key: (ctx) => `pro:references:delete:${ctx.businessId}:${ctx.userId}`, limit: 100, windowMs: 60 * 60 * 1000 } },
   async (ctx, _request, params) => {
     const { requestId, businessId: businessIdBigInt } = ctx;
-    const referenceIdBigInt = parseId(params.referenceId);
+    const referenceIdBigInt = parseIdOpt(params.referenceId);
     if (!referenceIdBigInt) return withIdNoStore(badRequest('referenceId invalide.'), requestId);
 
     const existing = await getReference(businessIdBigInt, referenceIdBigInt);

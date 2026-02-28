@@ -1,34 +1,13 @@
-import { NextResponse } from 'next/server';
 import { prisma } from '@/server/db/client';
-import { BusinessReferenceType, FinanceType, PaymentMethod, RecurringUnit } from '@/generated/prisma';
+import { FinanceType, PaymentMethod, RecurringUnit } from '@/generated/prisma';
+import { validateCategoryAndTags } from '@/server/http/validators';
 import { withBusinessRoute } from '@/server/http/routeHandler';
 import { jsonb } from '@/server/http/json';
 import { badRequest, withIdNoStore } from '@/server/http/apiUtils';
+import { ensureDelegate } from '@/server/http/delegates';
 import { parseCentsInput, parseEuroToCents } from '@/lib/money';
 import { addMonths, enumerateMonthlyDates } from '@/server/finances/recurring';
-
-// Null-returning ID parser pour les query params (comportement "soft" intentionnel)
-function parseId(param: string | undefined | null): bigint | null {
-  if (!param || !/^\d+$/.test(param)) return null;
-  try {
-    return BigInt(param);
-  } catch {
-    return null;
-  }
-}
-
-function ensureFinanceDelegate(requestId: string) {
-  if (!(prisma as { finance?: unknown }).finance) {
-    return withIdNoStore(
-      NextResponse.json(
-        { error: 'Prisma client not generated / wrong import (finance delegate absent).' },
-        { status: 500 }
-      ),
-      requestId
-    );
-  }
-  return null;
-}
+import { parseIdOpt, parseDateOpt } from '@/server/http/parsers';
 
 function isValidType(value: unknown): value is FinanceType {
   return value === 'INCOME' || value === 'EXPENSE';
@@ -46,13 +25,6 @@ function parseAmountCentsDirect(raw: unknown): bigint | null {
   const parsed = parseCentsInput(raw);
   if (parsed == null) return null;
   return BigInt(parsed);
-}
-
-function parseDate(value: unknown): Date | null {
-  if (typeof value !== 'string') return null;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-  return date;
 }
 
 async function ensureRecurringFinanceHorizon(params: {
@@ -121,44 +93,6 @@ async function ensureRecurringFinanceHorizon(params: {
     data: entries,
     skipDuplicates: true,
   });
-}
-
-async function validateCategoryAndTags(
-  businessId: bigint,
-  categoryReferenceId: bigint | null,
-  tagReferenceIds?: bigint[]
-): Promise<{ categoryId: bigint | null; tagIds: bigint[] } | { error: string }> {
-  if (categoryReferenceId) {
-    const category = await prisma.businessReference.findFirst({
-      where: {
-        id: categoryReferenceId,
-        businessId,
-        type: BusinessReferenceType.CATEGORY,
-        isArchived: false,
-      },
-      select: { id: true },
-    });
-    if (!category) return { error: 'categoryReferenceId invalide pour ce business.' };
-  }
-
-  let tagIds: bigint[] = [];
-  if (tagReferenceIds && tagReferenceIds.length) {
-    const tags = await prisma.businessReference.findMany({
-      where: {
-        id: { in: tagReferenceIds },
-        businessId,
-        type: BusinessReferenceType.TAG,
-        isArchived: false,
-      },
-      select: { id: true },
-    });
-    if (tags.length !== tagReferenceIds.length) {
-      return { error: 'tagReferenceIds invalides pour ce business.' };
-    }
-    tagIds = tags.map((t) => t.id);
-  }
-
-  return { categoryId: categoryReferenceId, tagIds };
 }
 
 const PAYMENT_METADATA_KEYS = [
@@ -272,7 +206,7 @@ function serializeFinance(finance: {
 export const GET = withBusinessRoute({ minRole: 'VIEWER' }, async (ctx, request) => {
   const { requestId, businessId: businessIdBigInt } = ctx;
 
-  const delegateError = ensureFinanceDelegate(requestId);
+  const delegateError = ensureDelegate('finance', requestId);
   if (delegateError) return delegateError;
 
   await ensureRecurringFinanceHorizon({ businessId: businessIdBigInt });
@@ -281,14 +215,14 @@ export const GET = withBusinessRoute({ minRole: 'VIEWER' }, async (ctx, request)
   const typeParam = searchParams.get('type');
   const typeFilter = isValidType(typeParam) ? typeParam : null;
   const projectParam = searchParams.get('projectId');
-  const projectIdFilter = projectParam ? parseId(projectParam) : null;
+  const projectIdFilter = projectParam ? parseIdOpt(projectParam) : null;
   if (projectParam && !projectIdFilter) {
     return withIdNoStore(badRequest('projectId invalide.'), requestId);
   }
   const startParam = searchParams.get('periodStart') ?? searchParams.get('from');
   const endParam = searchParams.get('periodEnd') ?? searchParams.get('to');
-  const fromDate = startParam ? parseDate(startParam) : null;
-  const toDate = endParam ? parseDate(endParam) : null;
+  const fromDate = startParam ? parseDateOpt(startParam) : null;
+  const toDate = endParam ? parseDateOpt(endParam) : null;
   if (startParam && !fromDate) {
     return withIdNoStore(badRequest('periodStart invalide.'), requestId);
   }
@@ -298,12 +232,12 @@ export const GET = withBusinessRoute({ minRole: 'VIEWER' }, async (ctx, request)
   const aggregate = searchParams.get('aggregate') === '1';
   const categoryParam = searchParams.get('category')?.trim();
   const categoryReferenceIdParam = searchParams.get('categoryReferenceId');
-  const categoryReferenceId = categoryReferenceIdParam ? parseId(categoryReferenceIdParam) : null;
+  const categoryReferenceId = categoryReferenceIdParam ? parseIdOpt(categoryReferenceIdParam) : null;
   if (categoryReferenceIdParam && !categoryReferenceId) {
     return withIdNoStore(badRequest('categoryReferenceId invalide.'), requestId);
   }
   const tagReferenceIdParam = searchParams.get('tagReferenceId');
-  const tagReferenceId = tagReferenceIdParam ? parseId(tagReferenceIdParam) : null;
+  const tagReferenceId = tagReferenceIdParam ? parseIdOpt(tagReferenceIdParam) : null;
   if (tagReferenceIdParam && !tagReferenceId) {
     return withIdNoStore(badRequest('tagReferenceId invalide.'), requestId);
   }
@@ -364,7 +298,7 @@ export const POST = withBusinessRoute(
   async (ctx, request) => {
   const { requestId, businessId: businessIdBigInt } = ctx;
 
-  const delegateError = ensureFinanceDelegate(requestId);
+  const delegateError = ensureDelegate('finance', requestId);
   if (delegateError) return delegateError;
 
   const body = await request.json().catch(() => null);
@@ -391,7 +325,7 @@ export const POST = withBusinessRoute(
   }
   const category = categoryRaw.trim();
 
-  const dateParsed = parseDate((body as { date?: unknown }).date);
+  const dateParsed = parseDateOpt((body as { date?: unknown }).date);
   if (!dateParsed) {
     return withIdNoStore(badRequest('date invalide.'), requestId);
   }
@@ -444,9 +378,9 @@ export const POST = withBusinessRoute(
         ? 12
         : 0;
   const recurringStartDateRaw = (body as { recurringStartDate?: unknown }).recurringStartDate;
-  const recurringStartDate = parseDate(recurringStartDateRaw) ?? dateParsed;
+  const recurringStartDate = parseDateOpt(recurringStartDateRaw) ?? dateParsed;
   const recurringEndDateRaw = (body as { recurringEndDate?: unknown }).recurringEndDate;
-  const recurringEndDate = parseDate(recurringEndDateRaw);
+  const recurringEndDate = parseDateOpt(recurringEndDateRaw);
   const recurringDayRaw = (body as { recurringDayOfMonth?: unknown }).recurringDayOfMonth;
   const recurringDayOfMonth =
     typeof recurringDayRaw === 'number' && Number.isFinite(recurringDayRaw)

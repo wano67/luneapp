@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/server/db/client';
 import { withBusinessRoute } from '@/server/http/routeHandler';
 import { badRequest, notFound } from '@/server/http/apiUtils';
+import { parseIdOpt } from '@/server/http/parsers';
 import { buildQuotePdf } from '@/server/pdf/quotePdf';
 import {
   buildClientSnapshot,
@@ -15,9 +16,8 @@ export const GET = withBusinessRoute<{ businessId: string; quoteId: string }>(
   { minRole: 'VIEWER' },
   async (ctx, _req, params) => {
     const { requestId, businessId: businessIdBigInt } = ctx;
-    const quoteId = params?.quoteId;
-    if (!quoteId || !/^\d+$/.test(quoteId)) return badRequest('quoteId invalide.');
-    const quoteIdBigInt = BigInt(quoteId);
+    const quoteIdBigInt = parseIdOpt(params?.quoteId);
+    if (!quoteIdBigInt) return badRequest('quoteId invalide.');
 
     const quote = await prisma.quote.findFirst({
       where: { id: quoteIdBigInt, businessId: businessIdBigInt },

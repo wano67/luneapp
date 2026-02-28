@@ -1,24 +1,18 @@
 import { prisma } from '@/server/db/client';
 import { withBusinessRoute } from '@/server/http/routeHandler';
+import { parseIdOpt, parseStr } from '@/server/http/parsers';
 import { jsonb } from '@/server/http/json';
-import { badRequest, notFound } from '@/server/http/apiUtils';
-import { BusinessReferenceType, ClientStatus, LeadSource } from '@/generated/prisma';
+import { badRequest, isRecord, notFound } from '@/server/http/apiUtils';
+import { ClientStatus, LeadSource } from '@/generated/prisma';
+import { validateCategoryAndTags } from '@/server/http/validators';
 import { normalizeWebsiteUrl } from '@/lib/website';
-
-function normalizeStr(v: unknown) {
-  return String(v ?? '').trim();
-}
-
-function isRecord(v: unknown): v is Record<string, unknown> {
-  return !!v && typeof v === 'object';
-}
 
 function isValidEmail(s: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
 }
 
 function sanitizePhone(s: unknown) {
-  return normalizeStr(s).replace(/\s+/g, ' ');
+  return (parseStr(s) ?? '').replace(/\s+/g, ' ');
 }
 
 function isValidPhone(s: string) {
@@ -26,44 +20,6 @@ function isValidPhone(s: string) {
   if (!/^[\d+\-().\s]+$/.test(s)) return false;
   const digits = s.replace(/\D/g, '');
   return digits.length >= 7 && digits.length <= 15;
-}
-
-async function validateCategoryAndTags(
-  businessId: bigint,
-  categoryReferenceId: bigint | null,
-  tagReferenceIds?: bigint[]
-): Promise<{ categoryId: bigint | null; tagIds: bigint[] } | { error: string }> {
-  if (categoryReferenceId) {
-    const category = await prisma.businessReference.findFirst({
-      where: {
-        id: categoryReferenceId,
-        businessId,
-        type: BusinessReferenceType.CATEGORY,
-        isArchived: false,
-      },
-      select: { id: true },
-    });
-    if (!category) return { error: 'categoryReferenceId invalide pour ce business.' };
-  }
-
-  let tagIds: bigint[] = [];
-  if (tagReferenceIds && tagReferenceIds.length) {
-    const tags = await prisma.businessReference.findMany({
-      where: {
-        id: { in: tagReferenceIds },
-        businessId,
-        type: BusinessReferenceType.TAG,
-        isArchived: false,
-      },
-      select: { id: true },
-    });
-    if (tags.length !== tagReferenceIds.length) {
-      return { error: 'tagReferenceIds invalides pour ce business.' };
-    }
-    tagIds = tags.map((t) => t.id);
-  }
-
-  return { categoryId: categoryReferenceId, tagIds };
 }
 
 function serializeClient(client: {
@@ -147,9 +103,8 @@ export const GET = withBusinessRoute<{ businessId: string; clientId: string }>(
   { minRole: 'VIEWER' },
   async (ctx, _req, params) => {
     const { requestId, businessId: businessIdBigInt } = ctx;
-    const clientId = params?.clientId;
-    if (!clientId || !/^\d+$/.test(clientId)) return badRequest('Identifiants invalides.');
-    const clientIdBigInt = BigInt(clientId);
+    const clientIdBigInt = parseIdOpt(params?.clientId);
+    if (!clientIdBigInt) return badRequest('Identifiants invalides.');
 
     const client = await prisma.client.findFirst({
       where: { id: clientIdBigInt, businessId: businessIdBigInt },
@@ -176,9 +131,8 @@ export const PATCH = withBusinessRoute<{ businessId: string; clientId: string }>
   },
   async (ctx, req, params) => {
     const { requestId, businessId: businessIdBigInt } = ctx;
-    const clientId = params?.clientId;
-    if (!clientId || !/^\d+$/.test(clientId)) return badRequest('Identifiants invalides.');
-    const clientIdBigInt = BigInt(clientId);
+    const clientIdBigInt = parseIdOpt(params?.clientId);
+    if (!clientIdBigInt) return badRequest('Identifiants invalides.');
 
     const existing = await prisma.client.findFirst({
       where: { id: clientIdBigInt, businessId: businessIdBigInt },
@@ -196,7 +150,7 @@ export const PATCH = withBusinessRoute<{ businessId: string; clientId: string }>
 
     if ('name' in body) {
       if (typeof body.name !== 'string') return badRequest('Nom invalide.');
-      const name = normalizeStr(body.name);
+      const name = parseStr(body.name) ?? '';
       if (!name) return badRequest('Nom requis.');
       if (name.length > 120) return badRequest('Nom trop long (max 120).');
       data.name = name;
@@ -206,7 +160,7 @@ export const PATCH = withBusinessRoute<{ businessId: string; clientId: string }>
       if (body.email == null || body.email === '') {
         data.email = null;
       } else if (typeof body.email === 'string') {
-        const email = normalizeStr(body.email);
+        const email = parseStr(body.email);
         if (email && (email.length > 254 || !isValidEmail(email))) {
           return badRequest('Email invalide.');
         }
@@ -224,7 +178,7 @@ export const PATCH = withBusinessRoute<{ businessId: string; clientId: string }>
       if (raw == null || raw === '') {
         data.companyName = null;
       } else if (typeof raw === 'string') {
-        const companyName = normalizeStr(raw);
+        const companyName = parseStr(raw);
         if (companyName && companyName.length > 160) {
           return badRequest('Nom de société trop long (max 160).');
         }
@@ -238,7 +192,7 @@ export const PATCH = withBusinessRoute<{ businessId: string; clientId: string }>
       if (body.mainContactName == null || body.mainContactName === '') {
         data.mainContactName = null;
       } else if (typeof body.mainContactName === 'string') {
-        const mainContactName = normalizeStr(body.mainContactName);
+        const mainContactName = parseStr(body.mainContactName);
         if (mainContactName && mainContactName.length > 160) {
           return badRequest('Contact principal trop long (max 160).');
         }
@@ -266,7 +220,7 @@ export const PATCH = withBusinessRoute<{ businessId: string; clientId: string }>
       if (body.billingCompanyName == null || body.billingCompanyName === '') {
         data.billingCompanyName = null;
       } else if (typeof body.billingCompanyName === 'string') {
-        const billingCompanyName = normalizeStr(body.billingCompanyName);
+        const billingCompanyName = parseStr(body.billingCompanyName);
         if (billingCompanyName && billingCompanyName.length > 160) {
           return badRequest('Société facturation trop longue (max 160).');
         }
@@ -280,7 +234,7 @@ export const PATCH = withBusinessRoute<{ businessId: string; clientId: string }>
       if (body.billingContactName == null || body.billingContactName === '') {
         data.billingContactName = null;
       } else if (typeof body.billingContactName === 'string') {
-        const billingContactName = normalizeStr(body.billingContactName);
+        const billingContactName = parseStr(body.billingContactName);
         if (billingContactName && billingContactName.length > 160) {
           return badRequest('Contact facturation trop long (max 160).');
         }
@@ -294,7 +248,7 @@ export const PATCH = withBusinessRoute<{ businessId: string; clientId: string }>
       if (body.billingEmail == null || body.billingEmail === '') {
         data.billingEmail = null;
       } else if (typeof body.billingEmail === 'string') {
-        const billingEmail = normalizeStr(body.billingEmail);
+        const billingEmail = parseStr(body.billingEmail);
         if (billingEmail && (billingEmail.length > 254 || !isValidEmail(billingEmail))) {
           return badRequest('Email facturation invalide.');
         }
@@ -322,7 +276,7 @@ export const PATCH = withBusinessRoute<{ businessId: string; clientId: string }>
       if (body.billingVatNumber == null || body.billingVatNumber === '') {
         data.billingVatNumber = null;
       } else if (typeof body.billingVatNumber === 'string') {
-        const billingVatNumber = normalizeStr(body.billingVatNumber);
+        const billingVatNumber = parseStr(body.billingVatNumber);
         if (billingVatNumber && billingVatNumber.length > 40) {
           return badRequest('Numéro TVA trop long (40 max).');
         }
@@ -336,7 +290,7 @@ export const PATCH = withBusinessRoute<{ businessId: string; clientId: string }>
       if (body.billingReference == null || body.billingReference === '') {
         data.billingReference = null;
       } else if (typeof body.billingReference === 'string') {
-        const billingReference = normalizeStr(body.billingReference);
+        const billingReference = parseStr(body.billingReference);
         if (billingReference && billingReference.length > 120) {
           return badRequest('Référence client trop longue (120 max).');
         }
@@ -350,7 +304,7 @@ export const PATCH = withBusinessRoute<{ businessId: string; clientId: string }>
       if (body.billingAddressLine1 == null || body.billingAddressLine1 === '') {
         data.billingAddressLine1 = null;
       } else if (typeof body.billingAddressLine1 === 'string') {
-        const billingAddressLine1 = normalizeStr(body.billingAddressLine1);
+        const billingAddressLine1 = parseStr(body.billingAddressLine1);
         if (billingAddressLine1 && billingAddressLine1.length > 200) {
           return badRequest('Adresse facturation trop longue (200 max).');
         }
@@ -364,7 +318,7 @@ export const PATCH = withBusinessRoute<{ businessId: string; clientId: string }>
       if (body.billingAddressLine2 == null || body.billingAddressLine2 === '') {
         data.billingAddressLine2 = null;
       } else if (typeof body.billingAddressLine2 === 'string') {
-        const billingAddressLine2 = normalizeStr(body.billingAddressLine2);
+        const billingAddressLine2 = parseStr(body.billingAddressLine2);
         if (billingAddressLine2 && billingAddressLine2.length > 200) {
           return badRequest('Complément adresse facturation trop long (200 max).');
         }
@@ -378,7 +332,7 @@ export const PATCH = withBusinessRoute<{ businessId: string; clientId: string }>
       if (body.billingPostalCode == null || body.billingPostalCode === '') {
         data.billingPostalCode = null;
       } else if (typeof body.billingPostalCode === 'string') {
-        const billingPostalCode = normalizeStr(body.billingPostalCode);
+        const billingPostalCode = parseStr(body.billingPostalCode);
         if (billingPostalCode && billingPostalCode.length > 20) {
           return badRequest('Code postal facturation trop long (20 max).');
         }
@@ -392,7 +346,7 @@ export const PATCH = withBusinessRoute<{ businessId: string; clientId: string }>
       if (body.billingCity == null || body.billingCity === '') {
         data.billingCity = null;
       } else if (typeof body.billingCity === 'string') {
-        const billingCity = normalizeStr(body.billingCity);
+        const billingCity = parseStr(body.billingCity);
         if (billingCity && billingCity.length > 100) {
           return badRequest('Ville facturation trop longue (100 max).');
         }
@@ -406,7 +360,7 @@ export const PATCH = withBusinessRoute<{ businessId: string; clientId: string }>
       if (body.billingCountryCode == null || body.billingCountryCode === '') {
         data.billingCountryCode = null;
       } else if (typeof body.billingCountryCode === 'string') {
-        const billingCountryCode = normalizeStr(body.billingCountryCode);
+        const billingCountryCode = parseStr(body.billingCountryCode);
         if (billingCountryCode && billingCountryCode.length !== 2) {
           return badRequest('Pays facturation invalide (ISO 2 lettres).');
         }
@@ -428,7 +382,7 @@ export const PATCH = withBusinessRoute<{ businessId: string; clientId: string }>
       if (body.notes == null || body.notes === '') {
         data.notes = null;
       } else if (typeof body.notes === 'string') {
-        const notes = normalizeStr(body.notes);
+        const notes = parseStr(body.notes);
         if (notes && notes.length > 2000) {
           return badRequest('Notes trop longues (max 2000).');
         }

@@ -1,22 +1,15 @@
 import { prisma } from '@/server/db/client';
 import {
-  BusinessReferenceType,
   ProjectDepositStatus,
   ProjectQuoteStatus,
   ProjectStatus,
 } from '@/generated/prisma';
+import { validateCategoryAndTags } from '@/server/http/validators';
 import { withBusinessRoute } from '@/server/http/routeHandler';
 import { jsonb, jsonbNoContent } from '@/server/http/json';
 import { badRequest, notFound } from '@/server/http/apiUtils';
+import { parseIdOpt, parseDateOpt } from '@/server/http/parsers';
 import { computeProjectBillingSummary } from '@/server/billing/summary';
-
-function parseIsoDate(value: unknown): Date | null {
-  if (value === null || value === undefined) return null;
-  if (typeof value !== 'string' || !value.trim()) return null;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-  return date;
-}
 
 type BillingSummary = NonNullable<Awaited<ReturnType<typeof computeProjectBillingSummary>>>;
 
@@ -134,44 +127,6 @@ function serializeProject(
   };
 }
 
-async function validateCategoryAndTags(
-  businessId: bigint,
-  categoryReferenceId: bigint | null,
-  tagReferenceIds?: bigint[]
-): Promise<{ categoryId: bigint | null; tagIds: bigint[] } | { error: string }> {
-  if (categoryReferenceId) {
-    const category = await prisma.businessReference.findFirst({
-      where: {
-        id: categoryReferenceId,
-        businessId,
-        type: BusinessReferenceType.CATEGORY,
-        isArchived: false,
-      },
-      select: { id: true },
-    });
-    if (!category) return { error: 'categoryReferenceId invalide pour ce business.' };
-  }
-
-  let tagIds: bigint[] = [];
-  if (tagReferenceIds && tagReferenceIds.length) {
-    const tags = await prisma.businessReference.findMany({
-      where: {
-        id: { in: tagReferenceIds },
-        businessId,
-        type: BusinessReferenceType.TAG,
-        isArchived: false,
-      },
-      select: { id: true },
-    });
-    if (tags.length !== tagReferenceIds.length) {
-      return { error: 'tagReferenceIds invalides pour ce business.' };
-    }
-    tagIds = tags.map((t) => t.id);
-  }
-
-  return { categoryId: categoryReferenceId, tagIds };
-}
-
 function isValidStatus(status: unknown): status is ProjectStatus {
   return typeof status === 'string' && Object.values(ProjectStatus).includes(status as ProjectStatus);
 }
@@ -181,9 +136,8 @@ export const GET = withBusinessRoute<{ businessId: string; projectId: string }>(
   { minRole: 'VIEWER' },
   async (ctx, _req, params) => {
     const { requestId, businessId: businessIdBigInt } = ctx;
-    const projectId = params?.projectId;
-    if (!projectId || !/^\d+$/.test(projectId)) return badRequest('projectId invalide.');
-    const projectIdBigInt = BigInt(projectId);
+    const projectIdBigInt = parseIdOpt(params?.projectId);
+    if (!projectIdBigInt) return badRequest('projectId invalide.');
 
     const [project, taskRows] = await Promise.all([
       prisma.project.findFirst({
@@ -249,9 +203,8 @@ export const PATCH = withBusinessRoute<{ businessId: string; projectId: string }
   },
   async (ctx, req, params) => {
     const { requestId, businessId: businessIdBigInt } = ctx;
-    const projectId = params?.projectId;
-    if (!projectId || !/^\d+$/.test(projectId)) return badRequest('projectId invalide.');
-    const projectIdBigInt = BigInt(projectId);
+    const projectIdBigInt = parseIdOpt(params?.projectId);
+    if (!projectIdBigInt) return badRequest('projectId invalide.');
 
     const project = await prisma.project.findFirst({
       where: { id: projectIdBigInt, businessId: businessIdBigInt },
@@ -318,7 +271,7 @@ export const PATCH = withBusinessRoute<{ businessId: string; projectId: string }
       if (depositPaidAtRaw === null) {
         data.depositPaidAt = null;
       } else {
-        const depositPaidAt = parseIsoDate(depositPaidAtRaw);
+        const depositPaidAt = parseDateOpt(depositPaidAtRaw);
         if (!depositPaidAt) {
           return badRequest('depositPaidAt invalide.');
         }
@@ -503,9 +456,8 @@ export const DELETE = withBusinessRoute<{ businessId: string; projectId: string 
   },
   async (ctx, _req, params) => {
     const { requestId, businessId: businessIdBigInt } = ctx;
-    const projectId = params?.projectId;
-    if (!projectId || !/^\d+$/.test(projectId)) return badRequest('projectId invalide.');
-    const projectIdBigInt = BigInt(projectId);
+    const projectIdBigInt = parseIdOpt(params?.projectId);
+    if (!projectIdBigInt) return badRequest('projectId invalide.');
 
     const project = await prisma.project.findFirst({
       where: { id: projectIdBigInt, businessId: businessIdBigInt },

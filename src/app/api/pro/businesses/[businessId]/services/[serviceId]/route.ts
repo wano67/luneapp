@@ -2,18 +2,11 @@ import { prisma } from '@/server/db/client';
 import { withBusinessRoute } from '@/server/http/routeHandler';
 import { jsonb, jsonbNoContent } from '@/server/http/json';
 import { badRequest, notFound, withIdNoStore } from '@/server/http/apiUtils';
-import { BusinessReferenceType, TaskPhase } from '@/generated/prisma';
+import { TaskPhase } from '@/generated/prisma';
+import { validateCategoryAndTags } from '@/server/http/validators';
 import { parseCentsInput } from '@/lib/money';
-
-// Null-returning ID parser pour les query params (comportement "soft" intentionnel)
-function parseId(param: string | undefined | null): bigint | null {
-  if (!param || !/^\d+$/.test(param)) return null;
-  try { return BigInt(param); } catch { return null; }
-}
-
-function normalizeStr(v: unknown) {
-  return String(v ?? '').trim();
-}
+import { ensureDelegate } from '@/server/http/delegates';
+import { parseIdOpt, parseStr } from '@/server/http/parsers';
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return !!v && typeof v === 'object';
@@ -52,10 +45,10 @@ type ServiceBodyParsed =
 
 function validateServiceBody(body: unknown): ServiceBodyParsed {
   if (!isRecord(body)) return { error: 'Payload invalide.' };
-  const code = normalizeStr(body.code);
-  const name = normalizeStr(body.name);
-  const type = normalizeStr(body.type);
-  const description = normalizeStr(body.description);
+  const code = parseStr(body.code) ?? '';
+  const name = parseStr(body.name) ?? '';
+  const type = parseStr(body.type) ?? '';
+  const description = parseStr(body.description) ?? '';
   const defaultPriceCentsRaw = parseCentsInput((body as { defaultPriceCents?: unknown }).defaultPriceCents);
   const defaultPriceCents =
     defaultPriceCentsRaw != null ? Math.max(0, Math.trunc(defaultPriceCentsRaw)) : null;
@@ -86,8 +79,8 @@ function validateServiceBody(body: unknown): ServiceBodyParsed {
         return {
           id: typeof t.id === 'string' && /^\d+$/.test(t.id) ? BigInt(t.id) : null,
           phase,
-          title: normalizeStr(t.title),
-          defaultAssigneeRole: normalizeStr(t.defaultAssigneeRole || '') || null,
+          title: parseStr(t.title) ?? '',
+          defaultAssigneeRole: parseStr(t.defaultAssigneeRole) ?? null,
           defaultDueOffsetDays:
             typeof t.defaultDueOffsetDays === 'number' && Number.isFinite(t.defaultDueOffsetDays)
               ? Math.trunc(t.defaultDueOffsetDays)
@@ -148,62 +141,16 @@ async function ensureService(businessId: bigint, serviceId: bigint) {
   });
 }
 
-function ensureServiceDelegate(requestId: string) {
-  if (!(prisma as { service?: unknown }).service) {
-    return jsonb({ error: 'Prisma client not generated / wrong import (service delegate absent).' }, requestId, { status: 500 });
-  }
-  return null;
-}
-
-async function validateCategoryAndTags(
-  businessId: bigint,
-  categoryReferenceId: bigint | null,
-  tagReferenceIds?: bigint[]
-): Promise<{ categoryId: bigint | null; tagIds: bigint[] } | { error: string }> {
-  if (categoryReferenceId) {
-    const category = await prisma.businessReference.findFirst({
-      where: {
-        id: categoryReferenceId,
-        businessId,
-        type: BusinessReferenceType.CATEGORY,
-        isArchived: false,
-      },
-      select: { id: true },
-    });
-    if (!category) {
-      return { error: 'categoryReferenceId invalide pour ce business.' };
-    }
-  }
-
-  let tagIds: bigint[] = [];
-  if (tagReferenceIds && tagReferenceIds.length) {
-    const tags = await prisma.businessReference.findMany({
-      where: {
-        id: { in: tagReferenceIds },
-        businessId,
-        type: BusinessReferenceType.TAG,
-        isArchived: false,
-      },
-      select: { id: true },
-    });
-    if (tags.length !== tagReferenceIds.length) {
-      return { error: 'tagReferenceIds invalides pour ce business.' };
-    }
-    tagIds = tags.map((t) => t.id);
-  }
-
-  return { categoryId: categoryReferenceId, tagIds };
-}
 
 // GET /api/pro/businesses/{businessId}/services/{serviceId}
 export const GET = withBusinessRoute<{ businessId: string; serviceId: string }>(
   { minRole: 'VIEWER' },
   async (ctx, _request, params) => {
   const { requestId, businessId: businessIdBigInt } = ctx;
-  const serviceIdBigInt = parseId(params.serviceId);
+  const serviceIdBigInt = parseIdOpt(params.serviceId);
   if (!serviceIdBigInt) return withIdNoStore(badRequest('serviceId invalide.'), requestId);
 
-  const delegateError = ensureServiceDelegate(requestId);
+  const delegateError = ensureDelegate('service', requestId);
   if (delegateError) return delegateError;
 
   const service = await ensureService(businessIdBigInt, serviceIdBigInt);
@@ -243,10 +190,10 @@ export const PATCH = withBusinessRoute<{ businessId: string; serviceId: string }
   { minRole: 'ADMIN', rateLimit: { key: (ctx) => `pro:services:update:${ctx.businessId}:${ctx.userId}`, limit: 200, windowMs: 60 * 60 * 1000 } },
   async (ctx, request, params) => {
   const { requestId, businessId: businessIdBigInt } = ctx;
-  const serviceIdBigInt = parseId(params.serviceId);
+  const serviceIdBigInt = parseIdOpt(params.serviceId);
   if (!serviceIdBigInt) return withIdNoStore(badRequest('serviceId invalide.'), requestId);
 
-  const delegateError = ensureServiceDelegate(requestId);
+  const delegateError = ensureDelegate('service', requestId);
   if (delegateError) return delegateError;
 
   const body = await request.json().catch(() => null);
@@ -348,10 +295,10 @@ export const DELETE = withBusinessRoute<{ businessId: string; serviceId: string 
   { minRole: 'ADMIN', rateLimit: { key: (ctx) => `pro:services:delete:${ctx.businessId}:${ctx.userId}`, limit: 50, windowMs: 60 * 60 * 1000 } },
   async (ctx, _request, params) => {
   const { requestId, businessId: businessIdBigInt } = ctx;
-  const serviceIdBigInt = parseId(params.serviceId);
+  const serviceIdBigInt = parseIdOpt(params.serviceId);
   if (!serviceIdBigInt) return withIdNoStore(badRequest('serviceId invalide.'), requestId);
 
-  const delegateError = ensureServiceDelegate(requestId);
+  const delegateError = ensureDelegate('service', requestId);
   if (delegateError) return delegateError;
 
   const existing = await ensureService(businessIdBigInt, serviceIdBigInt);

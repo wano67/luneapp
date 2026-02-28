@@ -20,19 +20,7 @@ import {
 } from '@/server/services/inventoryReservations';
 import { createLedgerForInvoiceConsumption, upsertCashSaleLedgerForInvoicePaid } from '@/server/services/ledger';
 import { parseCentsInput } from '@/lib/money';
-
-function parseId(param: string | undefined | null): bigint | null {
-  if (!param || !/^\d+$/.test(param)) return null;
-  try { return BigInt(param); } catch { return null; }
-}
-
-function parseIsoDate(value: unknown): Date | null {
-  if (value === null || value === undefined) return null;
-  if (typeof value !== 'string' || !value.trim()) return null;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-  return date;
-}
+import { parseIdOpt, parseDateOpt } from '@/server/http/parsers';
 
 function roundPercent(amount: bigint, percent: number) {
   return (amount * BigInt(Math.round(percent))) / BigInt(100);
@@ -144,7 +132,7 @@ export const GET = withBusinessRoute<{ businessId: string; invoiceId: string }>(
   async (ctx, _request, params) => {
     const { requestId, businessId: businessIdBigInt } = ctx;
 
-    const invoiceIdBigInt = parseId(params.invoiceId);
+    const invoiceIdBigInt = parseIdOpt(params.invoiceId);
     if (!invoiceIdBigInt) return withIdNoStore(badRequest('invoiceId invalide.'), requestId);
 
     const invoice = await prisma.invoice.findFirst({
@@ -174,7 +162,7 @@ export const PATCH = withBusinessRoute<{ businessId: string; invoiceId: string }
   async (ctx, request, params) => {
     const { requestId, businessId: businessIdBigInt } = ctx;
 
-    const invoiceIdBigInt = parseId(params.invoiceId);
+    const invoiceIdBigInt = parseIdOpt(params.invoiceId);
     if (!invoiceIdBigInt) return withIdNoStore(badRequest('invoiceId invalide.'), requestId);
 
     const body = await request.json().catch(() => null);
@@ -489,13 +477,13 @@ export const PATCH = withBusinessRoute<{ businessId: string; invoiceId: string }
       }
 
       if (issuedAtRaw !== undefined) {
-        const issuedAt = parseIsoDate(issuedAtRaw);
+        const issuedAt = parseDateOpt(issuedAtRaw);
         if (issuedAtRaw !== null && !issuedAt) return null;
         data.issuedAt = issuedAt;
       }
 
       if (dueAtRaw !== undefined) {
-        const dueAt = parseIsoDate(dueAtRaw);
+        const dueAt = parseDateOpt(dueAtRaw);
         if (dueAtRaw !== null && !dueAt) return null;
         data.dueAt = dueAt;
       }
@@ -504,7 +492,7 @@ export const PATCH = withBusinessRoute<{ businessId: string; invoiceId: string }
         if (paidAtRaw === null) {
           data.paidAt = null;
         } else {
-          const paidAt = parseIsoDate(paidAtRaw);
+          const paidAt = parseDateOpt(paidAtRaw);
           if (!paidAt) return null;
           data.paidAt = paidAt;
         }
@@ -712,7 +700,7 @@ export const DELETE = withBusinessRoute<{ businessId: string; invoiceId: string 
   async (ctx, _request, params) => {
     const { requestId, businessId: businessIdBigInt } = ctx;
 
-    const invoiceIdBigInt = parseId(params.invoiceId);
+    const invoiceIdBigInt = parseIdOpt(params.invoiceId);
     if (!invoiceIdBigInt) return withIdNoStore(badRequest('invoiceId invalide.'), requestId);
 
     const existing = await prisma.invoice.findFirst({

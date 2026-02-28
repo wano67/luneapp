@@ -4,6 +4,7 @@ import { BillingUnit, DiscountType, ProjectQuoteStatus, QuoteStatus } from '@/ge
 import { withBusinessRoute } from '@/server/http/routeHandler';
 import { jsonb, jsonbNoContent } from '@/server/http/json';
 import { badRequest, notFound } from '@/server/http/apiUtils';
+import { parseIdOpt, parseDateOpt } from '@/server/http/parsers';
 import { assignDocumentNumber } from '@/server/services/numbering';
 import { buildClientSnapshot, buildIssuerSnapshot } from '@/server/billing/snapshots';
 import { parseCentsInput } from '@/lib/money';
@@ -69,14 +70,6 @@ function serializeQuote(quote: QuoteWithItems) {
   };
 }
 
-function parseIsoDate(value: unknown): Date | null {
-  if (value === null || value === undefined) return null;
-  if (typeof value !== 'string' || !value.trim()) return null;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-  return date;
-}
-
 function roundPercent(amount: bigint, percent: number) {
   return (amount * BigInt(Math.round(percent))) / BigInt(100);
 }
@@ -86,9 +79,8 @@ export const GET = withBusinessRoute<{ businessId: string; quoteId: string }>(
   { minRole: 'VIEWER' },
   async (ctx, _req, params) => {
     const { requestId, businessId: businessIdBigInt } = ctx;
-    const quoteId = params?.quoteId;
-    if (!quoteId || !/^\d+$/.test(quoteId)) return badRequest('quoteId invalide.');
-    const quoteIdBigInt = BigInt(quoteId);
+    const quoteIdBigInt = parseIdOpt(params?.quoteId);
+    if (!quoteIdBigInt) return badRequest('quoteId invalide.');
 
     const quote = await prisma.quote.findFirst({
       where: { id: quoteIdBigInt, businessId: businessIdBigInt },
@@ -112,9 +104,8 @@ export const PATCH = withBusinessRoute<{ businessId: string; quoteId: string }>(
   },
   async (ctx, req, params) => {
     const { requestId, businessId: businessIdBigInt } = ctx;
-    const quoteId = params?.quoteId;
-    if (!quoteId || !/^\d+$/.test(quoteId)) return badRequest('quoteId invalide.');
-    const quoteIdBigInt = BigInt(quoteId);
+    const quoteIdBigInt = parseIdOpt(params?.quoteId);
+    if (!quoteIdBigInt) return badRequest('quoteId invalide.');
 
     const body = await req.json().catch(() => null);
     if (!body || typeof body !== 'object') {
@@ -205,13 +196,13 @@ export const PATCH = withBusinessRoute<{ businessId: string; quoteId: string }>(
     }
 
     if (issuedAtRaw !== undefined) {
-      const issuedAt = parseIsoDate(issuedAtRaw);
+      const issuedAt = parseDateOpt(issuedAtRaw);
       if (issuedAtRaw !== null && !issuedAt) return badRequest('issuedAt invalide.');
       data.issuedAt = issuedAt;
     }
 
     if (expiresAtRaw !== undefined) {
-      const expiresAt = parseIsoDate(expiresAtRaw);
+      const expiresAt = parseDateOpt(expiresAtRaw);
       if (expiresAtRaw !== null && !expiresAt) return badRequest('expiresAt invalide.');
       data.expiresAt = expiresAt;
     }
@@ -243,7 +234,7 @@ export const PATCH = withBusinessRoute<{ businessId: string; quoteId: string }>(
       if (signedAtRaw === null) {
         data.signedAt = null;
       } else {
-        const signedAt = parseIsoDate(signedAtRaw);
+        const signedAt = parseDateOpt(signedAtRaw);
         if (!signedAt) return badRequest('signedAt invalide.');
         data.signedAt = signedAt;
       }
@@ -557,9 +548,8 @@ export const DELETE = withBusinessRoute<{ businessId: string; quoteId: string }>
   },
   async (ctx, _req, params) => {
     const { requestId, businessId: businessIdBigInt } = ctx;
-    const quoteId = params?.quoteId;
-    if (!quoteId || !/^\d+$/.test(quoteId)) return badRequest('quoteId invalide.');
-    const quoteIdBigInt = BigInt(quoteId);
+    const quoteIdBigInt = parseIdOpt(params?.quoteId);
+    if (!quoteIdBigInt) return badRequest('quoteId invalide.');
 
     const existing = await prisma.quote.findFirst({
       where: { id: quoteIdBigInt, businessId: businessIdBigInt },

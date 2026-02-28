@@ -1,21 +1,12 @@
 import { prisma } from '@/server/db/client';
-import { BusinessReferenceType, FinanceType, PaymentMethod, RecurringUnit } from '@/generated/prisma';
+import { FinanceType, PaymentMethod, RecurringUnit } from '@/generated/prisma';
+import { validateCategoryAndTags } from '@/server/http/validators';
 import { withBusinessRoute } from '@/server/http/routeHandler';
 import { jsonb, jsonbNoContent } from '@/server/http/json';
-import { badRequest, notFound, serverError, withIdNoStore } from '@/server/http/apiUtils';
+import { badRequest, notFound, withIdNoStore } from '@/server/http/apiUtils';
+import { ensureDelegate } from '@/server/http/delegates';
 import { parseCentsInput, parseEuroToCents } from '@/lib/money';
-
-function parseId(param: string | undefined | null): bigint | null {
-  if (!param || !/^\d+$/.test(param)) return null;
-  try { return BigInt(param); } catch { return null; }
-}
-
-function ensureFinanceDelegate(requestId: string) {
-  if (!(prisma as { finance?: unknown }).finance) {
-    return withIdNoStore(serverError(), requestId);
-  }
-  return null;
-}
+import { parseIdOpt, parseDateOpt } from '@/server/http/parsers';
 
 function isValidType(value: unknown): value is FinanceType {
   return value === 'INCOME' || value === 'EXPENSE';
@@ -34,52 +25,6 @@ function parseAmountCentsDirect(raw: unknown): bigint | null {
   const parsed = parseCentsInput(raw);
   if (parsed == null) return null;
   return BigInt(parsed);
-}
-
-function parseDate(value: unknown): Date | null {
-  if (value === null || value === undefined || value === '') return null;
-  if (typeof value !== 'string') return null;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-  return date;
-}
-
-async function validateCategoryAndTags(
-  businessId: bigint,
-  categoryReferenceId: bigint | null,
-  tagReferenceIds?: bigint[]
-): Promise<{ categoryId: bigint | null; tagIds: bigint[] } | { error: string }> {
-  if (categoryReferenceId) {
-    const category = await prisma.businessReference.findFirst({
-      where: {
-        id: categoryReferenceId,
-        businessId,
-        type: BusinessReferenceType.CATEGORY,
-        isArchived: false,
-      },
-      select: { id: true },
-    });
-    if (!category) return { error: 'categoryReferenceId invalide pour ce business.' };
-  }
-
-  let tagIds: bigint[] = [];
-  if (tagReferenceIds && tagReferenceIds.length) {
-    const tags = await prisma.businessReference.findMany({
-      where: {
-        id: { in: tagReferenceIds },
-        businessId,
-        type: BusinessReferenceType.TAG,
-        isArchived: false,
-      },
-      select: { id: true },
-    });
-    if (tags.length !== tagReferenceIds.length) {
-      return { error: 'tagReferenceIds invalides pour ce business.' };
-    }
-    tagIds = tags.map((t) => t.id);
-  }
-
-  return { categoryId: categoryReferenceId, tagIds };
 }
 
 const PAYMENT_METADATA_KEYS = [
@@ -195,10 +140,10 @@ export const GET = withBusinessRoute<{ businessId: string; financeId: string }>(
   async (ctx, _request, params) => {
     const { requestId, businessId: businessIdBigInt } = ctx;
 
-    const delegateError = ensureFinanceDelegate(requestId);
+    const delegateError = ensureDelegate('finance', requestId);
     if (delegateError) return delegateError;
 
-    const financeIdBigInt = parseId(params.financeId);
+    const financeIdBigInt = parseIdOpt(params.financeId);
     if (!financeIdBigInt) return withIdNoStore(badRequest('financeId invalide.'), requestId);
 
     const finance = await prisma.finance.findFirst({
@@ -228,10 +173,10 @@ export const PATCH = withBusinessRoute<{ businessId: string; financeId: string }
   async (ctx, request, params) => {
     const { requestId, businessId: businessIdBigInt } = ctx;
 
-    const delegateError = ensureFinanceDelegate(requestId);
+    const delegateError = ensureDelegate('finance', requestId);
     if (delegateError) return delegateError;
 
-    const financeIdBigInt = parseId(params.financeId);
+    const financeIdBigInt = parseIdOpt(params.financeId);
     if (!financeIdBigInt) return withIdNoStore(badRequest('financeId invalide.'), requestId);
 
     const existing = await prisma.finance.findFirst({
@@ -276,7 +221,7 @@ export const PATCH = withBusinessRoute<{ businessId: string; financeId: string }
     }
 
     if ('date' in body) {
-      const parsed = parseDate((body as { date?: unknown }).date);
+      const parsed = parseDateOpt((body as { date?: unknown }).date);
       if (!parsed) return withIdNoStore(badRequest('date invalide.'), requestId);
       data.date = parsed;
     }
@@ -458,7 +403,7 @@ export const DELETE = withBusinessRoute<{ businessId: string; financeId: string 
   async (ctx, _request, params) => {
     const { requestId, businessId: businessIdBigInt } = ctx;
 
-    const financeIdBigInt = parseId(params.financeId);
+    const financeIdBigInt = parseIdOpt(params.financeId);
     if (!financeIdBigInt) return withIdNoStore(badRequest('financeId invalide.'), requestId);
 
     const finance = await prisma.finance.findFirst({

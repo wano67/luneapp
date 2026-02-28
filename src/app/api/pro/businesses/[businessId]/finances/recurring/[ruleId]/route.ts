@@ -5,23 +5,7 @@ import { jsonb } from '@/server/http/json';
 import { badRequest, notFound, withIdNoStore } from '@/server/http/apiUtils';
 import { parseCentsInput, parseEuroToCents } from '@/lib/money';
 import { addMonths, enumerateMonthlyDates } from '@/server/finances/recurring';
-
-function parseId(param: string | undefined) {
-  if (!param || !/^\d+$/.test(param)) return null;
-  try {
-    return BigInt(param);
-  } catch {
-    return null;
-  }
-}
-
-function parseDate(value: unknown): Date | null {
-  if (value === null || value === undefined || value === '') return null;
-  if (typeof value !== 'string') return null;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-  return date;
-}
+import { parseIdOpt, parseDateOpt } from '@/server/http/parsers';
 
 function parseAmountCents(raw: unknown): bigint | null {
   if (raw === null || raw === undefined || raw === '') return null;
@@ -171,7 +155,7 @@ export const GET = withBusinessRoute<{ businessId: string; ruleId: string }>(
   async (ctx, request, params) => {
     const { requestId, businessId: businessIdBigInt } = ctx;
     const { ruleId } = await params;
-    const ruleIdBigInt = parseId(ruleId);
+    const ruleIdBigInt = parseIdOpt(ruleId);
     if (!ruleIdBigInt) {
       return withIdNoStore(badRequest('ruleId invalide.'), requestId);
     }
@@ -182,8 +166,8 @@ export const GET = withBusinessRoute<{ businessId: string; ruleId: string }>(
     if (!rule) return withIdNoStore(notFound('Règle introuvable.'), requestId);
 
     const { searchParams } = new URL(request.url);
-    const from = parseDate(searchParams.get('from'));
-    const to = parseDate(searchParams.get('to'));
+    const from = parseDateOpt(searchParams.get('from'));
+    const to = parseDateOpt(searchParams.get('to'));
     const limitRaw = searchParams.get('limit');
     const limit = limitRaw && /^\d+$/.test(limitRaw) ? Math.min(240, Math.max(1, Number(limitRaw))) : 120;
 
@@ -237,7 +221,7 @@ export const PATCH = withBusinessRoute<{ businessId: string; ruleId: string }>(
   async (ctx, request, params) => {
     const { requestId, businessId: businessIdBigInt } = ctx;
     const { ruleId } = await params;
-    const ruleIdBigInt = parseId(ruleId);
+    const ruleIdBigInt = parseIdOpt(ruleId);
     if (!ruleIdBigInt) {
       return withIdNoStore(badRequest('ruleId invalide.'), requestId);
     }
@@ -300,13 +284,13 @@ export const PATCH = withBusinessRoute<{ businessId: string; ruleId: string }>(
     }
 
     if ('startDate' in body) {
-      const parsed = parseDate((body as { startDate?: unknown }).startDate);
+      const parsed = parseDateOpt((body as { startDate?: unknown }).startDate);
       if (!parsed) return withIdNoStore(badRequest('startDate invalide.'), requestId);
       data.startDate = parsed;
     }
 
     if ('endDate' in body) {
-      const parsed = parseDate((body as { endDate?: unknown }).endDate);
+      const parsed = parseDateOpt((body as { endDate?: unknown }).endDate);
       data.endDate = parsed;
     }
 

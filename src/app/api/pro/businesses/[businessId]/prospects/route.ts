@@ -7,19 +7,17 @@ import {
   ProspectStatus,
 } from '@/generated/prisma';
 import { withBusinessRoute } from '@/server/http/routeHandler';
+import { parseDateOpt, parseStr } from '@/server/http/parsers';
 import { jsonb, jsonbCreated } from '@/server/http/json';
-import { badRequest, isRecord, serverError, withIdNoStore } from '@/server/http/apiUtils';
-
-function normalizeStr(v: unknown) {
-  return String(v ?? '').trim();
-}
+import { badRequest, isRecord, withIdNoStore } from '@/server/http/apiUtils';
+import { ensureDelegate } from '@/server/http/delegates';
 
 function isValidEmail(s: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
 }
 
 function sanitizePhone(s: string) {
-  return normalizeStr(s).replace(/\s+/g, ' ');
+  return (parseStr(s) ?? '').replace(/\s+/g, ' ');
 }
 
 function isValidPhone(s: string) {
@@ -36,19 +34,6 @@ const VALID_PIPELINE_STATUS = new Set<ProspectPipelineStatus>([
   'FOLLOW_UP',
   'CLOSED',
 ]);
-
-function ensureProspectDelegate(requestId: string) {
-  if (!(prisma as { prospect?: unknown }).prospect) {
-    return withIdNoStore(serverError(), requestId);
-  }
-  return null;
-}
-
-function parseDate(value: string | null) {
-  if (!value) return null;
-  const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
-}
 
 function serializeProspect(p: Prospect) {
   return {
@@ -79,7 +64,7 @@ function serializeProspect(p: Prospect) {
 export const GET = withBusinessRoute({ minRole: 'VIEWER' }, async (ctx, request) => {
   const { requestId, businessId: businessIdBigInt } = ctx;
 
-  const delegateError = ensureProspectDelegate(requestId);
+  const delegateError = ensureDelegate('prospect', requestId);
   if (delegateError) return delegateError;
 
   const { searchParams } = new URL(request.url);
@@ -87,11 +72,7 @@ export const GET = withBusinessRoute({ minRole: 'VIEWER' }, async (ctx, request)
   const pipelineStatusParam = searchParams.get('pipelineStatus') as ProspectPipelineStatus | null;
   const statusParam = searchParams.get('status') as ProspectStatus | null;
   const probabilityMin = parseInt(searchParams.get('probabilityMin') ?? '', 10);
-  const nextActionBeforeRaw = searchParams.get('nextActionBefore');
-  const nextActionBefore = parseDate(nextActionBeforeRaw);
-  if (nextActionBeforeRaw && !nextActionBefore) {
-    return withIdNoStore(badRequest('nextActionBefore invalide.'), requestId);
-  }
+  const nextActionBefore = parseDateOpt(searchParams.get('nextActionBefore'));
 
   const where: Prisma.ProspectWhereInput = { businessId: businessIdBigInt };
 
@@ -135,7 +116,7 @@ export const POST = withBusinessRoute(
   async (ctx, request) => {
     const { requestId, businessId: businessIdBigInt } = ctx;
 
-    const delegateError = ensureProspectDelegate(requestId);
+    const delegateError = ensureDelegate('prospect', requestId);
     if (delegateError) return delegateError;
 
     const body = await request.json().catch(() => null);
@@ -143,7 +124,7 @@ export const POST = withBusinessRoute(
       return withIdNoStore(badRequest('Le nom du prospect est requis.'), requestId);
     }
 
-    const name = normalizeStr(body.name);
+    const name = parseStr(body.name) ?? '';
     if (!name) {
       return withIdNoStore(badRequest('Le nom du prospect ne peut pas être vide.'), requestId);
     }
@@ -151,16 +132,16 @@ export const POST = withBusinessRoute(
       return withIdNoStore(badRequest('Le nom du prospect est trop long (max 120).'), requestId);
     }
 
-    const contactNameRaw = normalizeStr(
+    const contactNameRaw = parseStr(
       typeof body.contactName === 'string' ? body.contactName : ''
-    );
+    ) ?? '';
     if (contactNameRaw && contactNameRaw.length > 120) {
       return withIdNoStore(badRequest('Le nom du contact est trop long (max 120).'), requestId);
     }
 
-    const contactEmailRaw = normalizeStr(
+    const contactEmailRaw = parseStr(
       typeof body.contactEmail === 'string' ? body.contactEmail : ''
-    );
+    ) ?? '';
     if (contactEmailRaw && (contactEmailRaw.length > 254 || !isValidEmail(contactEmailRaw))) {
       return withIdNoStore(badRequest('Email du contact invalide.'), requestId);
     }
@@ -172,20 +153,20 @@ export const POST = withBusinessRoute(
       return withIdNoStore(badRequest('Téléphone du contact invalide.'), requestId);
     }
 
-    const interestNoteRaw = normalizeStr(
+    const interestNoteRaw = parseStr(
       typeof body.interestNote === 'string' ? body.interestNote : ''
-    );
+    ) ?? '';
     if (interestNoteRaw && interestNoteRaw.length > 2000) {
       return withIdNoStore(badRequest("Note d'intérêt trop longue (max 2000)."), requestId);
     }
 
-    const projectIdeaRaw = normalizeStr(typeof body.projectIdea === 'string' ? body.projectIdea : '');
+    const projectIdeaRaw = parseStr(typeof body.projectIdea === 'string' ? body.projectIdea : '') ?? '';
     if (projectIdeaRaw && projectIdeaRaw.length > 2000) {
       return withIdNoStore(badRequest('Idée de projet trop longue (max 2000).'), requestId);
     }
 
-    const origin = normalizeStr(body.origin);
-    const title = normalizeStr(typeof body.title === 'string' ? body.title : '');
+    const origin = parseStr(body.origin) ?? '';
+    const title = parseStr(typeof body.title === 'string' ? body.title : '') ?? '';
     if (title && title.length > 120) {
       return withIdNoStore(badRequest('Titre trop long (max 120).'), requestId);
     }

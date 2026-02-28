@@ -6,12 +6,7 @@ import { InvoiceStatus, PaymentMethod } from '@/generated/prisma';
 import { upsertCashSaleLedgerForInvoicePaid } from '@/server/services/ledger';
 import { upsertFinanceForInvoicePaid } from '@/server/billing/invoiceFinance';
 import { parseCentsInput, parseEuroToCents } from '@/lib/money';
-
-// Null-returning ID parser pour les query params (comportement "soft" intentionnel)
-function parseId(param: string | undefined | null): bigint | null {
-  if (!param || !/^\d+$/.test(param)) return null;
-  try { return BigInt(param); } catch { return null; }
-}
+import { parseIdOpt, parseDateOpt } from '@/server/http/parsers';
 
 function parsePaymentMethod(value: unknown): PaymentMethod {
   if (typeof value !== 'string') return PaymentMethod.WIRE;
@@ -21,19 +16,12 @@ function parsePaymentMethod(value: unknown): PaymentMethod {
     : PaymentMethod.WIRE;
 }
 
-function parseDate(value: unknown): Date | null {
-  if (typeof value !== 'string' || !value.trim()) return null;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-  return date;
-}
-
 // GET /api/pro/businesses/{businessId}/payments?clientId=...
 export const GET = withBusinessRoute({ minRole: 'VIEWER' }, async (ctx, request) => {
   const { requestId, businessId: businessIdBigInt } = ctx;
 
   const clientIdParam = request.nextUrl.searchParams.get('clientId');
-  const clientId = parseId(clientIdParam ?? undefined);
+  const clientId = parseIdOpt(clientIdParam ?? undefined);
 
   const payments = await prisma.payment.findMany({
     where: { businessId: businessIdBigInt, deletedAt: null, ...(clientId ? { clientId } : {}) },
@@ -75,8 +63,8 @@ export const POST = withBusinessRoute(
   const body = await request.json().catch(() => null);
   if (!body || typeof body !== 'object') return withIdNoStore(badRequest('Payload invalide.'), requestId);
 
-  const invoiceId = parseId((body as { invoiceId?: string }).invoiceId);
-  const clientId = parseId((body as { clientId?: string }).clientId);
+  const invoiceId = parseIdOpt((body as { invoiceId?: string }).invoiceId);
+  const clientId = parseIdOpt((body as { clientId?: string }).clientId);
   const amountRaw = (body as { amount?: unknown }).amount;
   const amountCentsRaw = (body as { amountCents?: unknown }).amountCents;
   let amountCents: bigint | null = null;
@@ -98,7 +86,7 @@ export const POST = withBusinessRoute(
   }
   const dateStr = typeof (body as { date?: string }).date === 'string' ? (body as { date?: string }).date : null;
   const paidAtRaw = (body as { paidAt?: string }).paidAt;
-  const paymentDate = parseDate(paidAtRaw ?? dateStr) ?? new Date();
+  const paymentDate = parseDateOpt(paidAtRaw ?? dateStr) ?? new Date();
   const method = parsePaymentMethod((body as { method?: unknown }).method);
   const reference = typeof (body as { reference?: unknown }).reference === 'string' ? (body as { reference: string }).reference.trim() : null;
   const note = typeof (body as { note?: unknown }).note === 'string' ? (body as { note: string }).note.trim() : null;

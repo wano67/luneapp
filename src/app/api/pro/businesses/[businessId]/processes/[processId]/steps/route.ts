@@ -13,6 +13,7 @@ import {
   unauthorized,
   withRequestId,
 } from '@/server/http/apiUtils';
+import { ensureDelegates } from '@/server/http/delegates';
 
 function parseId(param: string | undefined) {
   if (!param || !/^\d+$/.test(param)) return null;
@@ -25,19 +26,6 @@ function parseId(param: string | undefined) {
 
 function withIdNoStore(res: NextResponse, requestId: string) {
   return withNoStore(withRequestId(res, requestId));
-}
-
-function ensureProcessDelegates(requestId: string) {
-  if (!(prisma as { process?: unknown }).process || !(prisma as { processStep?: unknown }).processStep) {
-    return withIdNoStore(
-      NextResponse.json(
-        { error: 'Prisma client not generated / wrong import (process/processStep delegate absent).' },
-        { status: 500 }
-      ),
-      requestId
-    );
-  }
-  return null;
 }
 
 function serializeStep(step: {
@@ -86,7 +74,7 @@ export async function POST(
     return withIdNoStore(unauthorized(), requestId);
   }
 
-  const delegateError = ensureProcessDelegates(requestId);
+  const delegateError = ensureDelegates(['process', 'processStep'], requestId);
   if (delegateError) return delegateError;
 
   const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'ADMIN');

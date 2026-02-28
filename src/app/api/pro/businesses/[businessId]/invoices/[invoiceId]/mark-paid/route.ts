@@ -5,22 +5,7 @@ import { badRequest, notFound, withIdNoStore } from '@/server/http/apiUtils';
 import { InvoiceStatus, PaymentMethod } from '@/generated/prisma';
 import { upsertCashSaleLedgerForInvoicePaid } from '@/server/services/ledger';
 import { upsertFinanceForInvoicePaid } from '@/server/billing/invoiceFinance';
-
-function parseId(param: string | undefined) {
-  if (!param || !/^\d+$/.test(param)) return null;
-  try {
-    return BigInt(param);
-  } catch {
-    return null;
-  }
-}
-
-function parseIsoDate(value: unknown): Date | null {
-  if (typeof value !== 'string' || !value.trim()) return null;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-  return date;
-}
+import { parseIdOpt, parseDateOpt } from '@/server/http/parsers';
 
 // POST /api/pro/businesses/{businessId}/invoices/{invoiceId}/mark-paid
 export const POST = withBusinessRoute<{ businessId: string; invoiceId: string }>(
@@ -35,13 +20,13 @@ export const POST = withBusinessRoute<{ businessId: string; invoiceId: string }>
   async (ctx, request, params) => {
     const { requestId, businessId: businessIdBigInt } = ctx;
     const { invoiceId } = await params;
-    const invoiceIdBigInt = parseId(invoiceId);
+    const invoiceIdBigInt = parseIdOpt(invoiceId);
     if (!invoiceIdBigInt) {
       return withIdNoStore(badRequest('invoiceId invalide.'), requestId);
     }
 
     const body = await request.json().catch(() => null);
-    const paidAt = parseIsoDate((body as { paidAt?: unknown })?.paidAt) ?? new Date();
+    const paidAt = parseDateOpt((body as { paidAt?: unknown })?.paidAt) ?? new Date();
     if (Number.isNaN(paidAt.getTime())) return withIdNoStore(badRequest('Date invalide.'), requestId);
     const methodRaw = (body as { method?: unknown })?.method;
     const method =

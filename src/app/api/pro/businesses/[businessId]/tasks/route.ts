@@ -1,24 +1,11 @@
 import { prisma } from '@/server/db/client';
-import { BusinessReferenceType, TaskPhase, TaskStatus } from '@/generated/prisma';
+import { TaskPhase, TaskStatus } from '@/generated/prisma';
+import { validateCategoryAndTags } from '@/server/http/validators';
 import { withBusinessRoute } from '@/server/http/routeHandler';
 import { jsonb, jsonbCreated } from '@/server/http/json';
-import { badRequest, serverError } from '@/server/http/apiUtils';
-
-function parseId(param: string | null | undefined): bigint | null {
-  if (!param || !/^\d+$/.test(param)) return null;
-  try {
-    return BigInt(param);
-  } catch {
-    return null;
-  }
-}
-
-function ensureTaskDelegate() {
-  if (!(prisma as { task?: unknown }).task) {
-    return serverError();
-  }
-  return null;
-}
+import { badRequest } from '@/server/http/apiUtils';
+import { ensureDelegate } from '@/server/http/delegates';
+import { parseIdOpt } from '@/server/http/parsers';
 
 function serializeTask(task: {
   id: bigint;
@@ -92,58 +79,20 @@ function isValidStatus(status: unknown): status is TaskStatus {
   return status === 'TODO' || status === 'IN_PROGRESS' || status === 'DONE';
 }
 
-async function validateCategoryAndTags(
-  businessId: bigint,
-  categoryReferenceId: bigint | null,
-  tagReferenceIds?: bigint[]
-): Promise<{ categoryId: bigint | null; tagIds: bigint[] } | { error: string }> {
-  if (categoryReferenceId) {
-    const category = await prisma.businessReference.findFirst({
-      where: {
-        id: categoryReferenceId,
-        businessId,
-        type: BusinessReferenceType.CATEGORY,
-        isArchived: false,
-      },
-      select: { id: true },
-    });
-    if (!category) return { error: 'categoryReferenceId invalide pour ce business.' };
-  }
-
-  let tagIds: bigint[] = [];
-  if (tagReferenceIds && tagReferenceIds.length) {
-    const tags = await prisma.businessReference.findMany({
-      where: {
-        id: { in: tagReferenceIds },
-        businessId,
-        type: BusinessReferenceType.TAG,
-        isArchived: false,
-      },
-      select: { id: true },
-    });
-    if (tags.length !== tagReferenceIds.length) {
-      return { error: 'tagReferenceIds invalides pour ce business.' };
-    }
-    tagIds = tags.map((t) => t.id);
-  }
-
-  return { categoryId: categoryReferenceId, tagIds };
-}
-
 // GET /api/pro/businesses/{businessId}/tasks
 export const GET = withBusinessRoute<{ businessId: string }>(
   { minRole: 'VIEWER' },
   async (ctx, req) => {
     const { requestId, businessId: businessIdBigInt, userId } = ctx;
 
-    const delegateError = ensureTaskDelegate();
+    const delegateError = ensureDelegate('task');
     if (delegateError) return delegateError;
 
     const { searchParams } = new URL(req.url);
     const statusParam = searchParams.get('status') as TaskStatus | null;
     const statusFilter = statusParam && isValidStatus(statusParam) ? statusParam : null;
     const projectParam = searchParams.get('projectId');
-    const projectIdFilter = projectParam ? parseId(projectParam) : null;
+    const projectIdFilter = projectParam ? parseIdOpt(projectParam) : null;
     if (projectParam && !projectIdFilter) {
       return badRequest('projectId invalide.');
     }
@@ -155,12 +104,12 @@ export const GET = withBusinessRoute<{ businessId: string }>(
     const assigneeParam = searchParams.get('assignee');
     const assigneeFilter = assigneeParam === 'me' ? userId : null;
     const categoryReferenceIdParam = searchParams.get('categoryReferenceId');
-    const categoryReferenceId = categoryReferenceIdParam ? parseId(categoryReferenceIdParam) : null;
+    const categoryReferenceId = categoryReferenceIdParam ? parseIdOpt(categoryReferenceIdParam) : null;
     if (categoryReferenceIdParam && !categoryReferenceId) {
       return badRequest('categoryReferenceId invalide.');
     }
     const tagReferenceIdParam = searchParams.get('tagReferenceId');
-    const tagReferenceId = tagReferenceIdParam ? parseId(tagReferenceIdParam) : null;
+    const tagReferenceId = tagReferenceIdParam ? parseIdOpt(tagReferenceIdParam) : null;
     if (tagReferenceIdParam && !tagReferenceId) {
       return badRequest('tagReferenceId invalide.');
     }
@@ -207,7 +156,7 @@ export const POST = withBusinessRoute<{ businessId: string }>(
   async (ctx, req) => {
     const { requestId, businessId: businessIdBigInt } = ctx;
 
-    const delegateError = ensureTaskDelegate();
+    const delegateError = ensureDelegate('task');
     if (delegateError) return delegateError;
 
     const body = await req.json().catch(() => null);

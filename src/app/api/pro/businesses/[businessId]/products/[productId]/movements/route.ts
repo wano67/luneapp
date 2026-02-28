@@ -5,6 +5,7 @@ import { jsonb, jsonbCreated } from '@/server/http/json';
 import { badRequest, notFound } from '@/server/http/apiUtils';
 import { upsertLedgerForMovement } from '@/server/services/ledger';
 import { parseCentsInput } from '@/lib/money';
+import { parseIdOpt } from '@/server/http/parsers';
 
 function serializeMovement(movement: Awaited<ReturnType<typeof prisma.inventoryMovement.findFirst>>) {
   if (!movement) return null;
@@ -29,9 +30,8 @@ export const GET = withBusinessRoute<{ businessId: string; productId: string }>(
   { minRole: 'VIEWER' },
   async (ctx, _req, params) => {
     const { requestId, businessId: businessIdBigInt } = ctx;
-    const productId = params?.productId;
-    if (!productId || !/^\d+$/.test(productId)) return badRequest('productId invalide.');
-    const productIdBigInt = BigInt(productId);
+    const productIdBigInt = parseIdOpt(params?.productId);
+    if (!productIdBigInt) return badRequest('productId invalide.');
 
     const product = await prisma.product.findFirst({
       where: { id: productIdBigInt, businessId: businessIdBigInt },
@@ -60,9 +60,8 @@ export const POST = withBusinessRoute<{ businessId: string; productId: string }>
   },
   async (ctx, req, params) => {
     const { requestId, businessId: businessIdBigInt, userId } = ctx;
-    const productId = params?.productId;
-    if (!productId || !/^\d+$/.test(productId)) return badRequest('productId invalide.');
-    const productIdBigInt = BigInt(productId);
+    const productIdBigInt = parseIdOpt(params?.productId);
+    if (!productIdBigInt) return badRequest('productId invalide.');
 
     const body = await req.json().catch(() => null);
     if (!body || typeof body !== 'object') return badRequest('Payload invalide.');

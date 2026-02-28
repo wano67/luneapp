@@ -13,6 +13,7 @@ import {
   unauthorized,
   withRequestId,
 } from '@/server/http/apiUtils';
+import { ensureDelegate } from '@/server/http/delegates';
 
 type SerializableStep = {
   id: string;
@@ -47,19 +48,6 @@ function parseId(param: string | undefined) {
 
 function withIdNoStore(res: NextResponse, requestId: string) {
   return withNoStore(withRequestId(res, requestId));
-}
-
-function ensureProcessDelegate(requestId: string) {
-  if (!(prisma as { process?: unknown }).process) {
-    return withIdNoStore(
-      NextResponse.json(
-        { error: 'Prisma client not generated / wrong import (process delegate absent).' },
-        { status: 500 }
-      ),
-      requestId
-    );
-  }
-  return null;
 }
 
 function serializeStep(step: {
@@ -139,7 +127,7 @@ export async function GET(
     return withIdNoStore(unauthorized(), requestId);
   }
 
-  const delegateError = ensureProcessDelegate(requestId);
+  const delegateError = ensureDelegate('process', requestId);
   if (delegateError) return delegateError;
 
   const businessIdBigInt = parseId(businessId);
@@ -181,7 +169,7 @@ export async function PATCH(
     return withIdNoStore(unauthorized(), requestId);
   }
 
-  const delegateError = ensureProcessDelegate(requestId);
+  const delegateError = ensureDelegate('process', requestId);
   if (delegateError) return delegateError;
 
   const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'ADMIN');
@@ -298,7 +286,7 @@ export async function DELETE(
     return withIdNoStore(unauthorized(), requestId);
   }
 
-  const delegateError = ensureProcessDelegate(requestId);
+  const delegateError = ensureDelegate('process', requestId);
   if (delegateError) return delegateError;
 
   const membership = await requireBusinessRole(businessIdBigInt, BigInt(userId), 'ADMIN');

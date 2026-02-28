@@ -4,12 +4,7 @@ import { withBusinessRoute } from '@/server/http/routeHandler';
 import { jsonb, jsonbNoContent } from '@/server/http/json';
 import { badRequest, notFound, withIdNoStore } from '@/server/http/apiUtils';
 import { parseCentsInput } from '@/lib/money';
-
-// Null-returning ID parser pour les query params (comportement "soft" intentionnel)
-function parseId(param: string | undefined | null): bigint | null {
-  if (!param || !/^\d+$/.test(param)) return null;
-  try { return BigInt(param); } catch { return null; }
-}
+import { parseIdOpt } from '@/server/http/parsers';
 
 function serializeProduct(
   product: Awaited<ReturnType<typeof prisma.product.findFirst>>,
@@ -51,7 +46,7 @@ export const GET = withBusinessRoute<{ businessId: string; productId: string }>(
   { minRole: 'VIEWER' },
   async (ctx, _request, params) => {
     const { requestId, businessId: businessIdBigInt } = ctx;
-    const productIdBigInt = parseId(params.productId);
+    const productIdBigInt = parseIdOpt(params.productId);
     if (!productIdBigInt) return withIdNoStore(badRequest('productId invalide.'), requestId);
 
     const product = await prisma.product.findFirst({
@@ -70,7 +65,7 @@ export const PATCH = withBusinessRoute<{ businessId: string; productId: string }
   { minRole: 'ADMIN', rateLimit: { key: (ctx) => `pro:products:update:${ctx.businessId}:${ctx.userId}`, limit: 120, windowMs: 60 * 60 * 1000 } },
   async (ctx, request, params) => {
     const { requestId, businessId: businessIdBigInt } = ctx;
-    const productIdBigInt = parseId(params.productId);
+    const productIdBigInt = parseIdOpt(params.productId);
     if (!productIdBigInt) return withIdNoStore(badRequest('productId invalide.'), requestId);
 
     const body = await request.json().catch(() => null);
@@ -165,7 +160,7 @@ export const DELETE = withBusinessRoute<{ businessId: string; productId: string 
   { minRole: 'ADMIN', rateLimit: { key: (ctx) => `pro:products:delete:${ctx.businessId}:${ctx.userId}`, limit: 60, windowMs: 60 * 60 * 1000 } },
   async (ctx, _request, params) => {
     const { requestId, businessId: businessIdBigInt } = ctx;
-    const productIdBigInt = parseId(params.productId);
+    const productIdBigInt = parseIdOpt(params.productId);
     if (!productIdBigInt) return withIdNoStore(badRequest('productId invalide.'), requestId);
 
     const product = await prisma.product.findFirst({

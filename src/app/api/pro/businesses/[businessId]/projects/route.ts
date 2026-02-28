@@ -1,12 +1,12 @@
 import { prisma } from '@/server/db/client';
 import {
-  BusinessReferenceType,
   Prisma,
   ProjectStatus,
   ProjectQuoteStatus,
   ProjectDepositStatus,
   TaskStatus,
 } from '@/generated/prisma';
+import { validateCategoryAndTags } from '@/server/http/validators';
 import {
   buildProjectWhere,
   getProjectCounts,
@@ -18,12 +18,7 @@ import { pickProjectValueCents } from '@/server/billing/summary';
 import { withBusinessRoute } from '@/server/http/routeHandler';
 import { jsonb } from '@/server/http/json';
 import { badRequest, withIdNoStore } from '@/server/http/apiUtils';
-
-// Null-returning ID parser pour les query params (comportement "soft" intentionnel)
-function parseId(param: string | undefined | null): bigint | null {
-  if (!param || !/^\d+$/.test(param)) return null;
-  try { return BigInt(param); } catch { return null; }
-}
+import { parseIdOpt } from '@/server/http/parsers';
 
 function parseScope(value: string | null): ProjectScope | null {
   if (!value) return null;
@@ -53,44 +48,6 @@ function applyDiscount(params: {
   return params.unitPriceCents;
 }
 
-async function validateCategoryAndTags(
-  businessId: bigint,
-  categoryReferenceId: bigint | null,
-  tagReferenceIds?: bigint[]
-): Promise<{ categoryId: bigint | null; tagIds: bigint[] } | { error: string }> {
-  if (categoryReferenceId) {
-    const category = await prisma.businessReference.findFirst({
-      where: {
-        id: categoryReferenceId,
-        businessId,
-        type: BusinessReferenceType.CATEGORY,
-        isArchived: false,
-      },
-      select: { id: true },
-    });
-    if (!category) return { error: 'categoryReferenceId invalide pour ce business.' };
-  }
-
-  let tagIds: bigint[] = [];
-  if (tagReferenceIds && tagReferenceIds.length) {
-    const tags = await prisma.businessReference.findMany({
-      where: {
-        id: { in: tagReferenceIds },
-        businessId,
-        type: BusinessReferenceType.TAG,
-        isArchived: false,
-      },
-      select: { id: true },
-    });
-    if (tags.length !== tagReferenceIds.length) {
-      return { error: 'tagReferenceIds invalides pour ce business.' };
-    }
-    tagIds = tags.map((t) => t.id);
-  }
-
-  return { categoryId: categoryReferenceId, tagIds };
-}
-
 // GET /api/pro/businesses/{businessId}/projects
 export const GET = withBusinessRoute({ minRole: 'VIEWER' }, async (ctx, request) => {
   const { requestId, businessId: businessIdBigInt } = ctx;
@@ -108,13 +65,12 @@ export const GET = withBusinessRoute({ minRole: 'VIEWER' }, async (ctx, request)
   const categoryReferenceIdParam = searchParams.get('categoryReferenceId');
   const tagReferenceIdParam = searchParams.get('tagReferenceId');
 
-  const clientId =
-    clientIdParam && /^\d+$/.test(clientIdParam) ? BigInt(clientIdParam) : null;
-  const categoryReferenceId = categoryReferenceIdParam ? parseId(categoryReferenceIdParam) : null;
+  const clientId = parseIdOpt(clientIdParam);
+  const categoryReferenceId = categoryReferenceIdParam ? parseIdOpt(categoryReferenceIdParam) : null;
   if (categoryReferenceIdParam && !categoryReferenceId) {
     return withIdNoStore(badRequest('categoryReferenceId invalide.'), requestId);
   }
-  const tagReferenceId = tagReferenceIdParam ? parseId(tagReferenceIdParam) : null;
+  const tagReferenceId = tagReferenceIdParam ? parseIdOpt(tagReferenceIdParam) : null;
   if (tagReferenceIdParam && !tagReferenceId) {
     return withIdNoStore(badRequest('tagReferenceId invalide.'), requestId);
   }

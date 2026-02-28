@@ -4,13 +4,9 @@ import { withBusinessRoute } from '@/server/http/routeHandler';
 import { jsonb, jsonbNoContent } from '@/server/http/json';
 import { badRequest, forbidden, notFound, withIdNoStore } from '@/server/http/apiUtils';
 import { BusinessPermission, Prisma } from '@/generated/prisma';
+import { parseIdOpt } from '@/server/http/parsers';
 
 type BusinessRole = 'OWNER' | 'ADMIN' | 'MEMBER' | 'VIEWER';
-
-function parseId(param: string | undefined | null): bigint | null {
-  if (!param || !/^\d+$/.test(param)) return null;
-  try { return BigInt(param); } catch { return null; }
-}
 
 function isValidRole(role: unknown): role is BusinessRole {
   return role === 'OWNER' || role === 'ADMIN' || role === 'MEMBER' || role === 'VIEWER';
@@ -86,7 +82,7 @@ export const GET = withBusinessRoute<{ businessId: string; userId: string }>(
   { minRole: 'VIEWER' },
   async (ctx, _request, params) => {
     const { requestId, businessId: businessIdBigInt } = ctx;
-    const targetUserId = parseId(params.userId);
+    const targetUserId = parseIdOpt(params.userId);
     if (!targetUserId) return withIdNoStore(badRequest('userId invalide.'), requestId);
 
     const targetMembership = (await prisma.businessMembership.findUnique({
@@ -110,7 +106,7 @@ export const PATCH = withBusinessRoute<{ businessId: string; userId: string }>(
   { minRole: 'VIEWER', rateLimit: { key: (ctx) => `pro:members:update:${ctx.businessId}:${ctx.userId}`, limit: 120, windowMs: 60 * 60 * 1000 } },
   async (ctx, request, params) => {
     const { requestId, businessId: businessIdBigInt } = ctx;
-    const targetUserId = parseId(params.userId);
+    const targetUserId = parseIdOpt(params.userId);
     if (!targetUserId) return withIdNoStore(badRequest('userId invalide.'), requestId);
 
     const targetMembership = (await prisma.businessMembership.findUnique({
@@ -297,7 +293,7 @@ export const DELETE = withBusinessRoute<{ businessId: string; userId: string }>(
   { minRole: 'ADMIN', rateLimit: { key: (ctx) => `pro:members:delete:${ctx.businessId}:${ctx.userId}`, limit: 60, windowMs: 60 * 60 * 1000 } },
   async (ctx, _request, params) => {
     const { requestId, businessId: businessIdBigInt } = ctx;
-    const targetUserId = parseId(params.userId);
+    const targetUserId = parseIdOpt(params.userId);
     if (!targetUserId) return withIdNoStore(badRequest('userId invalide.'), requestId);
 
     const targetMembership = await prisma.businessMembership.findUnique({

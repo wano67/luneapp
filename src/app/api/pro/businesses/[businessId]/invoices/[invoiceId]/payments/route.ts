@@ -7,15 +7,7 @@ import { ensureLegacyPaymentForPaidInvoice } from '@/server/billing/payments';
 import { upsertCashSaleLedgerForInvoicePaid } from '@/server/services/ledger';
 import { upsertFinanceForInvoicePaid } from '@/server/billing/invoiceFinance';
 import { parseCentsInput } from '@/lib/money';
-
-function parseId(param: string | undefined) {
-  if (!param || !/^\d+$/.test(param)) return null;
-  try {
-    return BigInt(param);
-  } catch {
-    return null;
-  }
-}
+import { parseIdOpt, parseDateOpt } from '@/server/http/parsers';
 
 function parsePaymentMethod(value: unknown): PaymentMethod {
   if (typeof value !== 'string') return PaymentMethod.WIRE;
@@ -25,20 +17,13 @@ function parsePaymentMethod(value: unknown): PaymentMethod {
     : PaymentMethod.WIRE;
 }
 
-function parseIsoDate(value: unknown): Date | null {
-  if (typeof value !== 'string' || !value.trim()) return null;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-  return date;
-}
-
 // GET /api/pro/businesses/{businessId}/invoices/{invoiceId}/payments
 export const GET = withBusinessRoute<{ businessId: string; invoiceId: string }>(
   { minRole: 'VIEWER' },
   async (ctx, _request, params) => {
     const { requestId, businessId: businessIdBigInt } = ctx;
     const { invoiceId } = await params;
-    const invoiceIdBigInt = parseId(invoiceId);
+    const invoiceIdBigInt = parseIdOpt(invoiceId);
     if (!invoiceIdBigInt) {
       return withIdNoStore(badRequest('invoiceId invalide.'), requestId);
     }
@@ -94,7 +79,7 @@ export const POST = withBusinessRoute<{ businessId: string; invoiceId: string }>
   async (ctx, request, params) => {
     const { requestId, businessId: businessIdBigInt } = ctx;
     const { invoiceId } = await params;
-    const invoiceIdBigInt = parseId(invoiceId);
+    const invoiceIdBigInt = parseIdOpt(invoiceId);
     if (!invoiceIdBigInt) {
       return withIdNoStore(badRequest('invoiceId invalide.'), requestId);
     }
@@ -110,7 +95,7 @@ export const POST = withBusinessRoute<{ businessId: string; invoiceId: string }>
     const amountCents = BigInt(parsedAmount);
     if (amountCents <= BigInt(0)) return withIdNoStore(badRequest('Montant invalide.'), requestId);
 
-    const paidAt = parseIsoDate((body as { paidAt?: unknown }).paidAt) ?? new Date();
+    const paidAt = parseDateOpt((body as { paidAt?: unknown }).paidAt) ?? new Date();
     if (Number.isNaN(paidAt.getTime())) return withIdNoStore(badRequest('Date invalide.'), requestId);
 
     const method = parsePaymentMethod((body as { method?: unknown }).method);
