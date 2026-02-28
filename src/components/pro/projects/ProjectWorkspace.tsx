@@ -36,7 +36,7 @@ import { CancelQuoteModal, type CancelQuoteEditorState } from '@/components/pro/
 import { InvoiceDateModal, type InvoiceDateEditorState } from '@/components/pro/projects/modals/InvoiceDateModal';
 import { DepositDateModal } from '@/components/pro/projects/modals/DepositDateModal';
 import { StagedInvoiceModal, type StagedInvoiceModalState } from '@/components/pro/projects/modals/StagedInvoiceModal';
-import { PaymentModal, type PaymentFormState } from '@/components/pro/projects/modals/PaymentModal';
+import { PaymentModal } from '@/components/pro/projects/modals/PaymentModal';
 import { QuoteEditorModal } from '@/components/pro/projects/modals/QuoteEditorModal';
 import { InvoiceEditorModal } from '@/components/pro/projects/modals/InvoiceEditorModal';
 import { FilesTab } from '@/components/pro/projects/tabs/FilesTab';
@@ -44,6 +44,7 @@ import { WorkTab } from '@/components/pro/projects/tabs/WorkTab';
 import { TeamTab } from '@/components/pro/projects/tabs/TeamTab';
 import { SetupModals } from '@/components/pro/projects/modals/SetupModals';
 import { useQuoteWizard } from '@/components/pro/projects/hooks/useQuoteWizard';
+import { usePaymentModal } from '@/components/pro/projects/hooks/usePaymentModal';
 
 type ProjectDetail = {
   id: string;
@@ -244,16 +245,6 @@ type InvoiceLineItem = {
   totalCents: string;
 };
 
-type PaymentItem = {
-  id: string;
-  amountCents: string;
-  paidAt: string;
-  method: string;
-  reference: string | null;
-  note: string | null;
-  createdBy?: { id: string; name?: string | null; email?: string | null } | null;
-  createdAt: string;
-};
 
 type QuoteEditorState = {
   quoteId: string;
@@ -314,12 +305,6 @@ function getInvoicePaidCents(invoice: InvoiceItem): number {
   return invoice.status === 'PAID' ? Number(invoice.totalCents) : 0;
 }
 
-function getInvoiceRemainingCents(invoice: InvoiceItem): number {
-  const remaining = invoice.remainingCents != null ? Number(invoice.remainingCents) : NaN;
-  if (Number.isFinite(remaining)) return Math.max(0, remaining);
-  const paid = getInvoicePaidCents(invoice);
-  return Math.max(0, Number(invoice.totalCents) - paid);
-}
 
 function toEditableLine(item: {
   id: string;
@@ -443,20 +428,6 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
   const [quoteActionId, setQuoteActionId] = useState<string | null>(null);
   const [invoiceActionId, setInvoiceActionId] = useState<string | null>(null);
   const [recurringInvoiceActionId, setRecurringInvoiceActionId] = useState<string | null>(null);
-  const [paymentModal, setPaymentModal] = useState<{ invoice: InvoiceItem } | null>(null);
-  const [paymentItems, setPaymentItems] = useState<PaymentItem[]>([]);
-  const [paymentLoading, setPaymentLoading] = useState(false);
-  const [paymentError, setPaymentError] = useState<string | null>(null);
-  const [paymentNotice, setPaymentNotice] = useState<string | null>(null);
-  const [paymentSaving, setPaymentSaving] = useState(false);
-  const [paymentDeletingId, setPaymentDeletingId] = useState<string | null>(null);
-  const [paymentForm, setPaymentForm] = useState<PaymentFormState>({
-    amount: '',
-    paidAt: '',
-    method: 'WIRE',
-    reference: '',
-    note: '',
-  });
   const [taskAssignments, setTaskAssignments] = useState<Record<string, string>>({});
   const [serviceTemplates, setServiceTemplates] = useState<Record<string, ServiceTemplate[]>>({});
   const [templatesLoading, setTemplatesLoading] = useState<Record<string, boolean>>({});
@@ -489,11 +460,6 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
   const [prestationsSaving, setPrestationsSaving] = useState(false);
   const [prestationsError, setPrestationsError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!paymentNotice) return;
-    const timer = setTimeout(() => setPaymentNotice(null), 3000);
-    return () => clearTimeout(timer);
-  }, [paymentNotice]);
 
   const closeModal = () => {
     setActiveSetupModal(null);
@@ -674,60 +640,33 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
     setInvoices(res.data.items ?? []);
   }, [businessId, projectId]);
 
-  const loadPayments = useCallback(
-    async (invoiceId: string) => {
-      if (!invoiceId) return;
-      setPaymentLoading(true);
-      setPaymentError(null);
-      try {
-        const res = await fetchJson<{ items: PaymentItem[] }>(
-          `/api/pro/businesses/${businessId}/invoices/${invoiceId}/payments`,
-          { cache: 'no-store' }
-        );
-        if (!res.ok || !res.data) {
-          setPaymentError(res.error ?? 'Paiements indisponibles.');
-          setPaymentItems([]);
-          return;
-        }
-        setPaymentItems(res.data.items ?? []);
-      } catch (err) {
-        setPaymentError(getErrorMessage(err));
-        setPaymentItems([]);
-      } finally {
-        setPaymentLoading(false);
-      }
-    },
-    [businessId]
-  );
-
-  async function openPaymentModal(invoice: InvoiceItem, presetAmountCents?: number) {
-    if (!isAdmin) {
-      setBillingError('Réservé aux admins/owners.');
-      return;
-    }
-    setPaymentError(null);
-    setPaymentNotice(null);
-    setPaymentItems([]);
-    setPaymentModal({ invoice });
-    setPaymentForm({
-      amount: presetAmountCents != null ? formatCentsToEuroInput(String(presetAmountCents)) : '',
-      paidAt: new Date().toISOString().slice(0, 10),
-      method: 'WIRE',
-      reference: '',
-      note: '',
-    });
-    await loadPayments(invoice.id);
-  }
-
-  function closePaymentModal() {
-    setPaymentModal(null);
-    setPaymentItems([]);
-    setPaymentError(null);
-    setPaymentNotice(null);
-    setPaymentLoading(false);
-    setPaymentSaving(false);
-    setPaymentDeletingId(null);
-  }
+  const {
+    paymentModal,
+    paymentItems,
+    paymentLoading,
+    paymentError,
+    paymentNotice,
+    paymentSaving,
+    paymentDeletingId,
+    paymentForm,
+    setPaymentForm,
+    activePaymentInvoice,
+    paymentTotalCents,
+    paymentPaidCents,
+    paymentRemainingCents,
+    applyPaymentShortcut,
+    openPaymentModal,
+    closePaymentModal,
+    handleSavePayment,
+    handleDeletePayment,
+  } = usePaymentModal({
+    businessId,
+    isAdmin,
+    invoices,
+    loadInvoices,
+    onBillingInfo: setBillingInfo,
+    onBillingError: setBillingError,
+  });
 
   const loadClients = useCallback(async (q?: string) => {
     const query = q ? `?q=${encodeURIComponent(q)}` : '';
@@ -1425,83 +1364,6 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
       setBillingError(getErrorMessage(err));
     } finally {
       setInvoiceActionId(null);
-    }
-  }
-
-  async function handleSavePayment() {
-    if (!paymentModal) return;
-    if (!isAdmin) {
-      setPaymentError('Réservé aux admins/owners.');
-      return;
-    }
-    const amountCents = parseEuroInputCents(paymentForm.amount);
-    if (!amountCents || amountCents <= 0) {
-      setPaymentError('Montant invalide.');
-      return;
-    }
-    setPaymentSaving(true);
-    setPaymentError(null);
-    setPaymentNotice(null);
-    setBillingInfo(null);
-    const invoice = paymentModal.invoice;
-    const remainingBefore = getInvoiceRemainingCents(invoice);
-    try {
-      const res = await fetchJson(
-        `/api/pro/businesses/${businessId}/invoices/${invoice.id}/payments`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            amountCents,
-            paidAt: paymentForm.paidAt || new Date().toISOString(),
-            method: paymentForm.method,
-            reference: paymentForm.reference || null,
-            note: paymentForm.note || null,
-          }),
-        }
-      );
-      if (!res.ok) {
-        setPaymentError(res.error ?? "Impossible d'ajouter le paiement.");
-        return;
-      }
-      const message = amountCents >= remainingBefore ? 'Facture soldée' : 'Paiement ajouté';
-      setBillingInfo(message);
-      setPaymentNotice(message);
-      setPaymentForm((prev) => ({ ...prev, amount: '', reference: '', note: '' }));
-      await Promise.all([loadInvoices(), loadPayments(invoice.id)]);
-    } catch (err) {
-      setPaymentError(getErrorMessage(err));
-    } finally {
-      setPaymentSaving(false);
-    }
-  }
-
-  async function handleDeletePayment(paymentId: string) {
-    if (!paymentModal) return;
-    if (!isAdmin) {
-      setPaymentError('Réservé aux admins/owners.');
-      return;
-    }
-    if (!window.confirm('Supprimer ce paiement ?')) return;
-    setPaymentDeletingId(paymentId);
-    setPaymentError(null);
-    setPaymentNotice(null);
-    try {
-      const res = await fetchJson(
-        `/api/pro/businesses/${businessId}/invoices/${paymentModal.invoice.id}/payments/${paymentId}`,
-        { method: 'DELETE' }
-      );
-      if (!res.ok) {
-        setPaymentError(res.error ?? 'Suppression du paiement impossible.');
-        return;
-      }
-      setBillingInfo('Paiement supprimé');
-      setPaymentNotice('Paiement supprimé');
-      await Promise.all([loadInvoices(), loadPayments(paymentModal.invoice.id)]);
-    } catch (err) {
-      setPaymentError(getErrorMessage(err));
-    } finally {
-      setPaymentDeletingId(null);
     }
   }
 
@@ -2365,18 +2227,6 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
     }
     return null;
   }, [businessId, latestInvoice, latestQuote]);
-
-  const activePaymentInvoice = paymentModal
-    ? invoices.find((inv) => inv.id === paymentModal.invoice.id) ?? paymentModal.invoice
-    : null;
-  const paymentTotalCents = activePaymentInvoice ? Number(activePaymentInvoice.totalCents) : 0;
-  const paymentPaidCents = activePaymentInvoice ? getInvoicePaidCents(activePaymentInvoice) : 0;
-  const paymentRemainingCents = activePaymentInvoice ? getInvoiceRemainingCents(activePaymentInvoice) : 0;
-  const applyPaymentShortcut = (ratio: number) => {
-    if (!Number.isFinite(paymentRemainingCents) || paymentRemainingCents <= 0) return;
-    const cents = Math.max(0, Math.round(paymentRemainingCents * ratio));
-    setPaymentForm((prev) => ({ ...prev, amount: formatCentsToEuroInput(String(cents)) }));
-  };
 
   const legalBlocks = useMemo(() => {
     const blocks = [
