@@ -70,6 +70,54 @@ export function useTaskHandlers(params: UseTaskHandlersParams) {
     [isAdmin, businessId, loadTasks, loadActivity, onBillingError]
   );
 
+  const createTask = useCallback(
+    async (title: string) => {
+      if (!isAdmin) {
+        onBillingError('Réservé aux admins/owners.');
+        return;
+      }
+      onBillingError(null);
+      try {
+        const res = await fetchJson(`/api/pro/businesses/${businessId}/tasks`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title, projectId: params.projectId }),
+        });
+        if (!res.ok) {
+          onBillingError(res.error ?? 'Impossible de créer la tâche.');
+          return;
+        }
+        await loadTasks();
+      } catch (err) {
+        onBillingError(getErrorMessage(err));
+      }
+    },
+    [isAdmin, businessId, params.projectId, loadTasks, onBillingError]
+  );
+
+  const deleteTask = useCallback(
+    async (taskId: string) => {
+      if (!isAdmin) {
+        onBillingError('Réservé aux admins/owners.');
+        return;
+      }
+      onBillingError(null);
+      try {
+        const res = await fetchJson(`/api/pro/businesses/${businessId}/tasks/${taskId}`, {
+          method: 'DELETE',
+        });
+        if (!res.ok) {
+          onBillingError(res.error ?? 'Impossible de supprimer la tâche.');
+          return;
+        }
+        await loadTasks();
+      } catch (err) {
+        onBillingError(getErrorMessage(err));
+      }
+    },
+    [isAdmin, businessId, loadTasks, onBillingError]
+  );
+
   const handleApplyServiceTemplates = useCallback(
     async (projectServiceId: string, taskAssigneeId: string, taskDueOffsetDays: string) => {
       if (!isAdmin) {
@@ -125,6 +173,8 @@ export function useTaskHandlers(params: UseTaskHandlersParams) {
     templatesApplying,
     updateTaskDueDate,
     updateTask,
+    createTask,
+    deleteTask,
     handleApplyServiceTemplates,
   };
 }

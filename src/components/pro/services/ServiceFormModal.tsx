@@ -4,33 +4,25 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Select } from '@/components/ui/select';
 import { Modal } from '@/components/ui/modal';
 import { fetchJson } from '@/lib/apiClient';
 import { formatCentsToEuroInput, parseEuroToCents, sanitizeEuroInput } from '@/lib/money';
 import { ReferencePicker } from '@/app/app/pro/[businessId]/references/ReferencePicker';
+import type { ServiceItem } from './service-types';
+import { SERVICE_UNITS, SERVICE_UNIT_LABELS } from './service-types';
 
-// ─── Local types ──────────────────────────────────────────────────────────────
-
-type Service = {
-  id: string;
-  code: string;
-  name: string;
-  type: string | null;
-  description: string | null;
-  defaultPriceCents: string | null;
-  tjmCents: string | null;
-  durationHours: number | null;
-  vatRate: number | null;
-  categoryReferenceId: string | null;
-  tagReferences?: { id: string; name: string }[];
-};
+// ─── Form state ──────────────────────────────────────────────────────────────
 
 type ServiceFormState = {
   code: string;
   name: string;
   type: string;
+  unit: string;
+  defaultQuantity: string;
   defaultPrice: string;
   tjm: string;
+  cost: string;
   durationHours: string;
   vatRate: string;
   description: string;
@@ -42,8 +34,11 @@ const emptyForm: ServiceFormState = {
   code: '',
   name: '',
   type: '',
+  unit: 'FORFAIT',
+  defaultQuantity: '1',
   defaultPrice: '',
   tjm: '',
+  cost: '',
   durationHours: '',
   vatRate: '',
   description: '',
@@ -51,18 +46,18 @@ const emptyForm: ServiceFormState = {
   tagReferenceIds: [],
 };
 
-// ─── Props ────────────────────────────────────────────────────────────────────
+// ─── Props ───────────────────────────────────────────────────────────────────
 
 type Props = {
   open: boolean;
-  editing: Service | null;
+  editing: ServiceItem | null;
   businessId: string;
   isAdmin: boolean;
   onClose: () => void;
   onAfterSave: (createdId: string | null, isEdit: boolean) => Promise<void>;
 };
 
-// ─── Component ────────────────────────────────────────────────────────────────
+// ─── Component ───────────────────────────────────────────────────────────────
 
 export function ServiceFormModal({ open, editing, businessId, isAdmin, onClose, onAfterSave }: Props) {
   const router = useRouter();
@@ -71,18 +66,19 @@ export function ServiceFormModal({ open, editing, businessId, isAdmin, onClose, 
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
-  // Initialize form when modal opens or editing changes
   useEffect(() => {
     if (!open) return;
     if (editing) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setForm({
         code: editing.code,
         name: editing.name,
         type: editing.type ?? '',
+        unit: editing.unit ?? 'FORFAIT',
+        defaultQuantity: String(editing.defaultQuantity ?? 1),
         description: editing.description ?? '',
         defaultPrice: formatCentsToEuroInput(editing.defaultPriceCents),
         tjm: formatCentsToEuroInput(editing.tjmCents),
+        cost: formatCentsToEuroInput(editing.costCents),
         durationHours: editing.durationHours != null ? String(editing.durationHours) : '',
         vatRate: editing.vatRate != null ? String(editing.vatRate) : '',
         categoryReferenceId: editing.categoryReferenceId ?? '',
@@ -106,14 +102,18 @@ export function ServiceFormModal({ open, editing, businessId, isAdmin, onClose, 
 
     const priceNum = form.defaultPrice.trim() ? parseEuroToCents(form.defaultPrice) : null;
     const tjmNum = form.tjm.trim() ? parseEuroToCents(form.tjm) : null;
+    const costNum = form.cost.trim() ? parseEuroToCents(form.cost) : null;
     const durationNum = form.durationHours.trim() ? Number(form.durationHours) : null;
     const vatNum = form.vatRate.trim() ? Number(form.vatRate) : null;
+    const qtyNum = form.defaultQuantity.trim() ? Number(form.defaultQuantity) : 1;
 
     if (
       (priceNum != null && !Number.isFinite(priceNum)) ||
       (tjmNum != null && !Number.isFinite(tjmNum)) ||
+      (costNum != null && !Number.isFinite(costNum)) ||
       (durationNum != null && Number.isNaN(durationNum)) ||
-      (vatNum != null && Number.isNaN(vatNum))
+      (vatNum != null && Number.isNaN(vatNum)) ||
+      Number.isNaN(qtyNum) || qtyNum < 1
     ) {
       setFormError('Merci de vérifier les valeurs numériques.');
       setSaving(false);
@@ -125,10 +125,13 @@ export function ServiceFormModal({ open, editing, businessId, isAdmin, onClose, 
       name: form.name.trim(),
       type: form.type.trim() || null,
       description: form.description.trim() || null,
+      unit: form.unit,
+      defaultQuantity: qtyNum,
     };
 
     if (priceNum != null) payload.defaultPriceCents = priceNum;
     if (tjmNum != null) payload.tjmCents = tjmNum;
+    if (costNum != null) payload.costCents = costNum;
     if (durationNum != null) payload.durationHours = durationNum;
     if (vatNum != null) payload.vatRate = vatNum;
     payload.categoryReferenceId = form.categoryReferenceId || null;
@@ -170,12 +173,13 @@ export function ServiceFormModal({ open, editing, businessId, isAdmin, onClose, 
         onClose();
       }}
       title={editing ? 'Éditer le service' : 'Créer un service'}
-      description="Renseigne les informations clés pour que l'équipe puisse le vendre."
+      description="Renseigne les informations clés pour que l&apos;équipe puisse le vendre."
     >
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="grid gap-4 md:grid-cols-2">
+          {/* Identité */}
           <div className="space-y-2">
-            <p className="text-xs font-semibold text-[var(--text-secondary)]">Identité</p>
+            <p className="text-xs font-semibold text-[var(--text-faint)]">Identité</p>
             <Input
               label="Code"
               required
@@ -196,9 +200,30 @@ export function ServiceFormModal({ open, editing, businessId, isAdmin, onClose, 
               onChange={(e) => setForm((prev) => ({ ...prev, type: e.target.value }))}
               placeholder="Workshop / Audit / Build…"
             />
+            <div className="grid gap-2 grid-cols-2">
+              <Select
+                label="Unité"
+                value={form.unit}
+                onChange={(e) => setForm((prev) => ({ ...prev, unit: e.target.value }))}
+              >
+                {SERVICE_UNITS.map((u) => (
+                  <option key={u} value={u}>{SERVICE_UNIT_LABELS[u]}</option>
+                ))}
+              </Select>
+              <Input
+                label="Qté défaut"
+                type="number"
+                inputMode="numeric"
+                min={1}
+                value={form.defaultQuantity}
+                onChange={(e) => setForm((prev) => ({ ...prev, defaultQuantity: e.target.value }))}
+                placeholder="1"
+              />
+            </div>
           </div>
+          {/* Tarification */}
           <div className="space-y-2">
-            <p className="text-xs font-semibold text-[var(--text-secondary)]">Tarification</p>
+            <p className="text-xs font-semibold text-[var(--text-faint)]">Tarification</p>
             <Input
               label="Prix par défaut (€)"
               type="text"
@@ -215,7 +240,15 @@ export function ServiceFormModal({ open, editing, businessId, isAdmin, onClose, 
               onChange={(e) => setForm((prev) => ({ ...prev, tjm: sanitizeEuroInput(e.target.value) }))}
               placeholder="800"
             />
-            <div className="grid gap-2 md:grid-cols-2">
+            <Input
+              label="Coût interne (€)"
+              type="text"
+              inputMode="decimal"
+              value={form.cost}
+              onChange={(e) => setForm((prev) => ({ ...prev, cost: sanitizeEuroInput(e.target.value) }))}
+              placeholder="500"
+            />
+            <div className="grid gap-2 grid-cols-2">
               <Input
                 label="Durée (h)"
                 type="number"
@@ -235,8 +268,10 @@ export function ServiceFormModal({ open, editing, businessId, isAdmin, onClose, 
             </div>
           </div>
         </div>
+
+        {/* Description */}
         <div className="space-y-2">
-          <p className="text-xs font-semibold text-[var(--text-secondary)]">Description</p>
+          <p className="text-xs font-semibold text-[var(--text-faint)]">Description</p>
           <textarea
             rows={3}
             value={form.description}
@@ -246,6 +281,7 @@ export function ServiceFormModal({ open, editing, businessId, isAdmin, onClose, 
           />
         </div>
 
+        {/* Références */}
         <ReferencePicker
           businessId={businessId}
           categoryId={form.categoryReferenceId || null}
@@ -258,7 +294,7 @@ export function ServiceFormModal({ open, editing, businessId, isAdmin, onClose, 
 
         {formError ? <p className="text-sm font-semibold text-[var(--danger)]">{formError}</p> : null}
         {!isAdmin ? (
-          <p className="text-xs text-[var(--text-secondary)]">
+          <p className="text-xs text-[var(--text-faint)]">
             Lecture seule : passe en ADMIN/OWNER pour créer ou modifier un service.
           </p>
         ) : null}

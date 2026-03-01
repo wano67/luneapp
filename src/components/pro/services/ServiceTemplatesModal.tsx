@@ -9,19 +9,9 @@ import { Select } from '@/components/ui/select';
 import { Modal } from '@/components/ui/modal';
 import { fetchJson } from '@/lib/apiClient';
 
-// ─── Local types ──────────────────────────────────────────────────────────────
+// ─── Types ───────────────────────────────────────────────────────────────────
 
-type TaskPhase = 'CADRAGE' | 'UX' | 'DESIGN' | 'DEV' | 'SEO' | 'LAUNCH' | 'FOLLOW_UP' | null;
-
-type ServiceTemplate = {
-  id: string;
-  serviceId: string;
-  phase: TaskPhase;
-  title: string;
-  defaultAssigneeRole: string | null;
-  defaultDueOffsetDays: number | null;
-  createdAt: string;
-};
+import type { ServiceTemplate, TaskPhase } from './service-types';
 
 type TemplateFormState = {
   title: string;

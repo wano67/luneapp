@@ -3,6 +3,7 @@ import { TaskStatus, FinanceType } from '@/generated/prisma';
 import { withBusinessRoute } from '@/server/http/routeHandler';
 import { jsonb } from '@/server/http/json';
 import { getProjectCounts } from '@/server/queries/projects';
+import { computeBusinessBillingSummary, computeBusinessProjectMetrics } from '@/server/billing/businessSummary';
 
 function startOfMonth(date: Date) {
   const d = new Date(date);
@@ -40,6 +41,11 @@ export const GET = withBusinessRoute({ minRole: 'VIEWER' }, async (ctx) => {
     upcomingTasks,
     upcomingInteractions,
     financeRows,
+    billingSummary,
+    projectMetrics,
+    allTimeIncomeAgg,
+    allTimeExpenseAgg,
+    latestFinanceRows,
   ] = await Promise.all([
     prisma.client.count({ where: { businessId: ctx.businessId } }),
     getProjectCounts({ businessId: ctx.businessId.toString() }),
@@ -85,6 +91,22 @@ export const GET = withBusinessRoute({ minRole: 'VIEWER' }, async (ctx) => {
     prisma.finance.findMany({
       where: { businessId: ctx.businessId, deletedAt: null, date: { gte: seriesStart } },
       select: { date: true, type: true, amountCents: true },
+    }),
+    computeBusinessBillingSummary(ctx.businessId),
+    computeBusinessProjectMetrics(ctx.businessId),
+    prisma.finance.aggregate({
+      where: { businessId: ctx.businessId, deletedAt: null, type: FinanceType.INCOME },
+      _sum: { amountCents: true },
+    }),
+    prisma.finance.aggregate({
+      where: { businessId: ctx.businessId, deletedAt: null, type: FinanceType.EXPENSE },
+      _sum: { amountCents: true },
+    }),
+    prisma.finance.findMany({
+      where: { businessId: ctx.businessId, deletedAt: null },
+      orderBy: { date: 'desc' },
+      take: 5,
+      select: { id: true, type: true, amountCents: true, category: true, vendor: true, date: true, projectId: true },
     }),
   ]);
 
@@ -138,6 +160,9 @@ export const GET = withBusinessRoute({ minRole: 'VIEWER' }, async (ctx) => {
   const projectsActiveCount = projectCounts.active;
   const projectsCompletedCount = projectCounts.inactive;
 
+  const allTimeIncomeCents = allTimeIncomeAgg._sum.amountCents ?? BigInt(0);
+  const allTimeExpenseCents = allTimeExpenseAgg._sum.amountCents ?? BigInt(0);
+
   const payload = {
     kpis: {
       projectsActiveCount,
@@ -147,6 +172,22 @@ export const GET = withBusinessRoute({ minRole: 'VIEWER' }, async (ctx) => {
       mtdExpenseCents: mtdExpense,
       mtdNetCents: mtdIncome - mtdExpense,
     },
+    treasury: {
+      allTimeIncomeCents,
+      allTimeExpenseCents,
+      balanceCents: allTimeIncomeCents - allTimeExpenseCents,
+    },
+    billing: {
+      totalInvoicedCents: billingSummary.totalInvoicedCents,
+      totalPaidCents: billingSummary.totalPaidCents,
+      pendingCollectionCents: billingSummary.pendingCollectionCents,
+      totalPlannedCents: billingSummary.totalPlannedCents,
+    },
+    projectMetrics: {
+      avgProfitabilityPercent: projectMetrics.avgProfitabilityPercent,
+      avgDurationDays: projectMetrics.avgDurationDays,
+      completedProjectsCount: projectMetrics.completedProjectsCount,
+    },
     projects: {
       activeCount: projectCounts.active,
       plannedCount: projectCounts.planned,
@@ -154,14 +195,13 @@ export const GET = withBusinessRoute({ minRole: 'VIEWER' }, async (ctx) => {
       archivedCount: projectCounts.archived,
       totalCount: projectCounts.total,
     },
-    // Compatibilité avec l'ancien contrat UI
     clientsCount,
     projectsActiveCount,
     activeProjectsCount: projectsActiveCount,
     openTasksCount,
     monthFinance,
     latestTasks,
-    latestFinances: [],
+    latestFinances: latestFinanceRows,
     nextActions: {
       tasks: latestTasks,
       interactions: upcomingInteractions.map((i) => ({

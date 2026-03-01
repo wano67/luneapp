@@ -85,6 +85,9 @@ export type TaskItem = {
   title: string;
   status: string;
   dueDate: string | null;
+  startDate: string | null;
+  phase: string | null;
+  notes: string | null;
   parentTaskId: string | null;
   assigneeName: string | null;
   assigneeEmail: string | null;
@@ -95,6 +98,16 @@ export type TaskItem = {
   subtasksCount?: number;
   checklistCount?: number;
   checklistDoneCount?: number;
+};
+
+export type ProjectDocument = {
+  id: string;
+  title: string;
+  filename: string;
+  mimeType: string;
+  sizeBytes: number;
+  kind: string;
+  createdAt: string;
 };
 
 export type MemberItem = {
@@ -227,6 +240,7 @@ export function useProjectDataLoaders({
   const [catalogSearchResults, setCatalogSearchResults] = useState<CatalogService[]>([]);
   const [serviceTemplates, setServiceTemplates] = useState<Record<string, ServiceTemplate[]>>({});
   const [templatesLoading, setTemplatesLoading] = useState<Record<string, boolean>>({});
+  const [projectDocuments, setProjectDocuments] = useState<ProjectDocument[]>([]);
 
   // ─── Loaders ──────────────────────────────────────────────────────────────
 
@@ -292,6 +306,13 @@ export function useProjectDataLoaders({
     );
     if (res.ok && res.data) setDocuments(res.data.uploads);
   }, [businessId, project?.clientId]);
+
+  const loadProjectDocuments = useCallback(async () => {
+    const res = await fetchJson<{ items: ProjectDocument[] }>(
+      `/api/pro/businesses/${businessId}/projects/${projectId}/documents`
+    );
+    if (res.ok && res.data) setProjectDocuments(res.data.items);
+  }, [businessId, projectId]);
 
   const loadBillingSettings = useCallback(async () => {
     const res = await fetchJson<{ item: BillingSettingsData }>(
@@ -389,6 +410,7 @@ export function useProjectDataLoaders({
       loadInvoices(),
       loadBillingSettings(),
       loadCatalogServices(),
+      loadProjectDocuments(),
     ]);
   }, [
     loadBillingSettings,
@@ -400,6 +422,7 @@ export function useProjectDataLoaders({
     loadOrganizationUnits,
     loadActivity,
     loadProject,
+    loadProjectDocuments,
     loadQuotes,
     loadServices,
     loadTasks,
@@ -449,6 +472,7 @@ export function useProjectDataLoaders({
     catalogSearchResults,
     serviceTemplates,
     templatesLoading,
+    projectDocuments,
     // Loaders
     loadProject,
     loadServices,
@@ -458,6 +482,7 @@ export function useProjectDataLoaders({
     loadOrganizationUnits,
     loadActivity,
     loadDocuments,
+    loadProjectDocuments,
     loadBillingSettings,
     loadQuotes,
     loadInvoices,

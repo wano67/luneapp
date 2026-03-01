@@ -1,7 +1,7 @@
 // src/app/app/pro/[businessId]/settings/team/page.tsx
 'use client';
 
-import { type FormEvent } from 'react';
+import { type FormEvent, useMemo } from 'react';
 import { useParams } from 'next/navigation';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -194,9 +194,7 @@ export default function BusinessTeamSettingsPage() {
                       Envoyée le {formatDate(inv.createdAt)}
                     </p>
                     {inv.expiresAt ? (
-                      <p className="text-[10px] text-[var(--text-secondary)]">
-                        Expire le {formatDate(inv.expiresAt)}
-                      </p>
+                      <InviteExpiry status={inv.status} expiresAt={inv.expiresAt} />
                     ) : null}
                   </div>
                 </div>
@@ -516,4 +514,14 @@ export default function BusinessTeamSettingsPage() {
       </Modal>
     </div>
   );
+}
+
+function InviteExpiry({ status, expiresAt }: { status: string; expiresAt: string }) {
+  const label = useMemo(() => {
+    if (status !== 'PENDING') return `Expire le ${formatDate(expiresAt)}`;
+    const diff = new Date(expiresAt).getTime() - new Date().getTime();
+    if (diff <= 0) return `Expire le ${formatDate(expiresAt)}`;
+    return `Expire dans ${Math.ceil(diff / 86_400_000)} j`;
+  }, [status, expiresAt]);
+  return <p className="text-[10px] text-[var(--text-secondary)]">{label}</p>;
 }

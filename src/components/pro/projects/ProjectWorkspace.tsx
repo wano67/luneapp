@@ -45,6 +45,8 @@ import { useTeamManagement } from '@/components/pro/projects/hooks/useTeamManage
 import { useServiceManagement } from '@/components/pro/projects/hooks/useServiceManagement';
 import { useProjectSetupModals } from '@/components/pro/projects/hooks/useProjectSetupModals';
 import { useTaskHandlers } from '@/components/pro/projects/hooks/useTaskHandlers';
+import { useDocumentUpload } from '@/components/pro/projects/hooks/useDocumentUpload';
+import { useMessaging } from '@/components/pro/projects/hooks/useMessaging';
 import { usePricingEngine } from '@/components/pro/projects/hooks/usePricingEngine';
 import { ProjectHeaderSection } from '@/components/pro/projects/ProjectHeaderSection';
 
@@ -233,6 +235,8 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
     loadOrganizationUnits,
     loadActivity,
     loadDocuments,
+    loadProjectDocuments,
+    projectDocuments,
     loadQuotes,
     loadInvoices,
     loadClients,
@@ -256,6 +260,8 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
     templatesApplying,
     updateTaskDueDate,
     updateTask,
+    createTask,
+    deleteTask,
     handleApplyServiceTemplates: applyServiceTemplatesRaw,
   } = useTaskHandlers({
     businessId,
@@ -266,11 +272,35 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
     onBillingError: setBillingError,
   });
 
+  const {
+    uploading: docUploading,
+    uploadDocument,
+    deleteDocument,
+  } = useDocumentUpload({
+    businessId,
+    projectId,
+    loadProjectDocuments,
+    onError: setBillingError,
+  });
 
+  // Current user ID for messaging
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetchJson<{ user: { id: string } }>('/api/auth/me').then((res) => {
+      if (!cancelled && res.ok && res.data?.user?.id) {
+        setCurrentUserId(String(res.data.user.id));
+      }
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
 
-
-
-
+  const messaging = useMessaging({
+    businessId,
+    projectId,
+    enabled: activeTab === 'team' && !!currentUserId,
+    onError: setBillingError,
+  });
 
 
 
@@ -1105,6 +1135,12 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
           }
           businessId={businessId}
           projectId={projectId}
+          tasks={tasks}
+          members={members}
+          isAdmin={isAdmin}
+          onQuickAddTask={createTask}
+          onUpdateTask={updateTask}
+          onDeleteTask={deleteTask}
         />
       ) : null}
 
@@ -1115,6 +1151,20 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
           isAdmin={isAdmin}
           onOpenUnitsModal={() => setUnitsModalOpen(true)}
           businessId={businessId}
+          currentUserId={currentUserId}
+          conversations={messaging.conversations}
+          activeConversationId={messaging.activeConversationId}
+          messages={messaging.messages}
+          loadingConversations={messaging.loadingConversations}
+          loadingMessages={messaging.loadingMessages}
+          sending={messaging.sending}
+          hasMoreMessages={messaging.hasMoreMessages}
+          tasks={tasks}
+          members={teamMembers}
+          onOpenConversation={messaging.openConversation}
+          onSendMessage={messaging.sendMessage}
+          onLoadOlderMessages={messaging.loadOlderMessages}
+          onCreateConversation={messaging.createConversation}
         />
       ) : null}
 
@@ -1215,6 +1265,11 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
           invoices={invoices}
           businessId={businessId}
           projectId={projectId}
+          projectDocuments={projectDocuments}
+          uploading={docUploading}
+          isAdmin={isAdmin}
+          onUpload={uploadDocument}
+          onDelete={deleteDocument}
         />
       ) : null}
 

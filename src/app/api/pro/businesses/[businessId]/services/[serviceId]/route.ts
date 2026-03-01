@@ -2,7 +2,7 @@ import { prisma } from '@/server/db/client';
 import { withBusinessRoute } from '@/server/http/routeHandler';
 import { jsonb, jsonbNoContent } from '@/server/http/json';
 import { badRequest, notFound, withIdNoStore } from '@/server/http/apiUtils';
-import { TaskPhase } from '@/generated/prisma';
+import { TaskPhase, ServiceUnit } from '@/generated/prisma';
 import { validateCategoryAndTags } from '@/server/http/validators';
 import { parseCentsInput } from '@/lib/money';
 import { ensureDelegate } from '@/server/http/delegates';
@@ -38,6 +38,9 @@ type ServiceBodyParsed =
       description: string | null;
       defaultPriceCents: number | null;
       tjmCents: number | null;
+      costCents: number | null;
+      unit: ServiceUnit;
+      defaultQuantity: number;
       durationHours: number | null;
       vatRate: number | null;
       templates: ServiceTemplateInput[];
@@ -54,6 +57,16 @@ function validateServiceBody(body: unknown): ServiceBodyParsed {
     defaultPriceCentsRaw != null ? Math.max(0, Math.trunc(defaultPriceCentsRaw)) : null;
   const tjmCentsRaw = parseCentsInput((body as { tjmCents?: unknown }).tjmCents);
   const tjmCents = tjmCentsRaw != null ? Math.max(0, Math.trunc(tjmCentsRaw)) : null;
+  const costCentsRaw = parseCentsInput((body as { costCents?: unknown }).costCents);
+  const costCents = costCentsRaw != null ? Math.max(0, Math.trunc(costCentsRaw)) : null;
+  const unitRaw = parseStr(body.unit) ?? '';
+  const unit: ServiceUnit = Object.values(ServiceUnit).includes(unitRaw as ServiceUnit)
+    ? (unitRaw as ServiceUnit)
+    : ServiceUnit.FORFAIT;
+  const defaultQuantity =
+    typeof body.defaultQuantity === 'number' && Number.isFinite(body.defaultQuantity)
+      ? Math.max(1, Math.trunc(body.defaultQuantity))
+      : 1;
   const durationHours =
     typeof body.durationHours === 'number' && Number.isFinite(body.durationHours)
       ? Math.max(0, Math.trunc(body.durationHours))
@@ -124,6 +137,9 @@ function validateServiceBody(body: unknown): ServiceBodyParsed {
     description: description || null,
     defaultPriceCents,
     tjmCents,
+    costCents,
+    unit,
+    defaultQuantity,
     durationHours,
     vatRate,
     templates,
@@ -207,6 +223,9 @@ export const PATCH = withBusinessRoute<{ businessId: string; serviceId: string }
     description: parsed.description || undefined,
     defaultPriceCents: parsed.defaultPriceCents ?? undefined,
     tjmCents: parsed.tjmCents ?? undefined,
+    costCents: parsed.costCents ?? undefined,
+    unit: parsed.unit,
+    defaultQuantity: parsed.defaultQuantity,
     durationHours: parsed.durationHours ?? undefined,
     vatRate: parsed.vatRate ?? undefined,
     taskTemplates: parsed.templates.length

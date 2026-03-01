@@ -68,11 +68,11 @@ export function StagedInvoiceModal({
               onChange={(e) => onModeChange(e.target.value as StagedInvoiceMode)}
               disabled={!isAdmin || loading}
             >
-              <option value="PERCENT">Pourcentage</option>
+              <option value="PERCENT">% du total projet</option>
               <option value="AMOUNT">Montant fixe</option>
             </Select>
             <Input
-              label={editor?.mode === 'AMOUNT' ? 'Montant (€)' : 'Pourcentage (%)'}
+              label={editor?.mode === 'AMOUNT' ? 'Montant (€)' : '% du montant total du projet'}
               type={editor?.mode === 'AMOUNT' ? 'text' : 'number'}
               inputMode={editor?.mode === 'AMOUNT' ? 'decimal' : 'numeric'}
               min={editor?.mode === 'AMOUNT' ? undefined : 0}

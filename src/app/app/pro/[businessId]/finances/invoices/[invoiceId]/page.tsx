@@ -3,7 +3,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -80,6 +80,7 @@ function formatCents(value: string | null | undefined, currency = 'EUR') {
 
 export default function InvoiceDetailPage() {
   const params = useParams();
+  const router = useRouter();
   const businessId = (params?.businessId ?? '') as string;
   const invoiceId = (params?.invoiceId ?? '') as string;
   const activeCtx = useActiveBusiness({ optional: true });
@@ -163,6 +164,7 @@ export default function InvoiceDetailPage() {
     setInvoice(res.data.item);
     setInfo(`Statut mis à jour (${getInvoiceStatusLabelFR(nextStatus)}).`);
     setUpdating(false);
+    router.refresh();
   }
 
   async function markPaid() {
@@ -189,6 +191,7 @@ export default function InvoiceDetailPage() {
     await load();
     setInfo('Facture soldée.');
     setUpdating(false);
+    router.refresh();
   }
 
   const requestHint = requestId ? `Ref: ${requestId}` : null;

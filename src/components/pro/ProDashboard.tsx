@@ -24,6 +24,22 @@ type DashboardPayload = {
     mtdIncomeCents?: string;
     mtdExpenseCents?: string;
   };
+  treasury?: {
+    allTimeIncomeCents?: string;
+    allTimeExpenseCents?: string;
+    balanceCents?: string;
+  };
+  billing?: {
+    totalInvoicedCents?: string;
+    totalPaidCents?: string;
+    pendingCollectionCents?: string;
+    totalPlannedCents?: string;
+  };
+  projectMetrics?: {
+    avgProfitabilityPercent?: number;
+    avgDurationDays?: number;
+    completedProjectsCount?: number;
+  };
   monthFinance?: {
     income?: { amountCents?: string | number; amount?: number };
     expense?: { amountCents?: string | number; amount?: number };
@@ -197,6 +213,11 @@ export default function ProDashboard({ businessId }: { businessId: string }) {
   const upcomingTasks = dashboard?.latestTasks ?? dashboard?.nextActions?.tasks ?? [];
   const monthlySeries = dashboard?.monthlySeries ?? [];
 
+  const treasuryBalance = parseCents(dashboard?.treasury?.balanceCents);
+  const pendingCollection = parseCents(dashboard?.billing?.pendingCollectionCents);
+  const avgProfitability = dashboard?.projectMetrics?.avgProfitabilityPercent ?? 0;
+  const avgDuration = dashboard?.projectMetrics?.avgDurationDays ?? 0;
+
   return (
     <div className="mx-auto max-w-6xl space-y-5 px-4 py-4">
       <BusinessHeader
@@ -228,10 +249,10 @@ export default function ProDashboard({ businessId }: { businessId: string }) {
 
       <BusinessKpis
         items={[
-          { label: 'Solde', value: formatCurrency(net) },
-          { label: 'Revenus', value: formatCurrency(income) },
-          { label: 'Projets actifs', value: String(activeProjects) },
-          { label: 'Tâches', value: String(openTasks) },
+          { label: 'Trésorerie', value: formatCurrency(treasuryBalance) },
+          { label: 'En attente', value: formatCurrency(pendingCollection) },
+          { label: 'Rentabilité', value: `${avgProfitability}%` },
+          { label: 'Durée moy.', value: avgDuration > 0 ? `${avgDuration}j` : '—' },
         ]}
       />
 

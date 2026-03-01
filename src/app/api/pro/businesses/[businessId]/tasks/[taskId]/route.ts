@@ -24,6 +24,7 @@ function serializeTask(task: {
   status: TaskStatus;
   progress: number;
   dueDate: Date | null;
+  startDate: Date | null;
   completedAt: Date | null;
   notes: string | null;
   createdAt: Date;
@@ -65,6 +66,7 @@ function serializeTask(task: {
     status: task.status,
     progress: task.progress,
     dueDate: task.dueDate ? task.dueDate.toISOString() : null,
+    startDate: task.startDate ? task.startDate.toISOString() : null,
     completedAt: task.completedAt ? task.completedAt.toISOString() : null,
     notes: task.notes,
     createdAt: task.createdAt.toISOString(),
@@ -279,6 +281,21 @@ export const PATCH = withBusinessRoute<{ businessId: string; taskId: string }>(
         data.dueDate = parsed;
       } else {
         return badRequest('dueDate invalide.');
+      }
+    }
+
+    if ('startDate' in body) {
+      const raw = (body as { startDate?: unknown }).startDate;
+      if (raw === null || raw === undefined || raw === '') {
+        data.startDate = null;
+      } else if (typeof raw === 'string') {
+        const parsed = new Date(raw);
+        if (Number.isNaN(parsed.getTime())) {
+          return badRequest('startDate invalide.');
+        }
+        data.startDate = parsed;
+      } else {
+        return badRequest('startDate invalide.');
       }
     }
 

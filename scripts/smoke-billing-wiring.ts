@@ -104,6 +104,9 @@ async function main() {
         description: 'Smoke billing',
         defaultPriceCents: 10000,
         durationHours: 2,
+        unit: 'HOUR',
+        costCents: 5000,
+        defaultQuantity: 2,
         categoryReferenceId: categoryId ?? undefined,
       },
     }
@@ -113,6 +116,16 @@ async function main() {
     (createSvcJson as { item?: { id?: string }; id?: string })?.item?.id ??
     (createSvcJson as { id?: string })?.id;
   if (!serviceId) throw new Error('Service creation returned no id.');
+
+  console.log('Verify service fields (unit, costCents, defaultQuantity)…');
+  const { res: svcDetailRes, json: svcDetailJson } = await request(
+    `/api/pro/businesses/${businessId}/services/${serviceId}`
+  );
+  if (!svcDetailRes.ok) throw new Error(`Service detail failed (${svcDetailRes.status}) ref=${getLastRequestId()}`);
+  const svcDetail = (svcDetailJson as { item?: Record<string, unknown> })?.item;
+  if (svcDetail?.unit !== 'HOUR') throw new Error(`Expected unit=HOUR, got ${String(svcDetail?.unit)}`);
+  if (String(svcDetail?.costCents) !== '5000') throw new Error(`Expected costCents=5000, got ${String(svcDetail?.costCents)}`);
+  if (svcDetail?.defaultQuantity !== 2) throw new Error(`Expected defaultQuantity=2, got ${String(svcDetail?.defaultQuantity)}`);
 
   console.log('Create task template for service…');
   const tplRes = await request(`/api/pro/businesses/${businessId}/services/${serviceId}/templates`, {
@@ -132,6 +145,9 @@ async function main() {
         description: 'Smoke billing B',
         defaultPriceCents: 15000,
         durationHours: 1,
+        unit: 'DAY',
+        costCents: 8000,
+        defaultQuantity: 1,
         categoryReferenceId: categoryId ?? undefined,
       },
     }
@@ -296,6 +312,8 @@ async function main() {
         description: 'Créée via wizard',
         defaultPriceCents: 5000,
         type: 'CUSTOM',
+        unit: 'FORFAIT',
+        defaultQuantity: 1,
       },
     }
   );

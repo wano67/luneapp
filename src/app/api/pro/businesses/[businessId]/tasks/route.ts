@@ -20,6 +20,7 @@ function serializeTask(task: {
   status: TaskStatus;
   progress: number;
   dueDate: Date | null;
+  startDate: Date | null;
   completedAt: Date | null;
   notes: string | null;
   createdAt: Date;
@@ -65,6 +66,7 @@ function serializeTask(task: {
     status: task.status,
     progress: task.progress,
     dueDate: task.dueDate ? task.dueDate.toISOString() : null,
+    startDate: task.startDate ? task.startDate.toISOString() : null,
     completedAt: task.completedAt ? task.completedAt.toISOString() : null,
     notes: task.notes,
     createdAt: task.createdAt.toISOString(),
@@ -271,6 +273,19 @@ export const POST = withBusinessRoute<{ businessId: string }>(
       dueDate = parsed;
     }
 
+    let startDate: Date | undefined;
+    if ('startDate' in body && (body as { startDate?: unknown }).startDate) {
+      const raw = (body as { startDate?: unknown }).startDate;
+      if (typeof raw !== 'string') {
+        return badRequest('startDate invalide.');
+      }
+      const parsed = new Date(raw);
+      if (Number.isNaN(parsed.getTime())) {
+        return badRequest('startDate invalide.');
+      }
+      startDate = parsed;
+    }
+
     const categoryProvided = Object.prototype.hasOwnProperty.call(body, 'categoryReferenceId');
     const categoryReferenceId =
       categoryProvided && typeof (body as { categoryReferenceId?: unknown }).categoryReferenceId === 'string'
@@ -312,6 +327,7 @@ export const POST = withBusinessRoute<{ businessId: string }>(
         progress: status === TaskStatus.DONE ? 100 : undefined,
         completedAt: status === TaskStatus.DONE ? new Date() : undefined,
         dueDate,
+        startDate,
         categoryReferenceId: validated.categoryId ?? undefined,
         tags:
           validated.tagIds.length > 0

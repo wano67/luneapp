@@ -15,6 +15,7 @@ export async function saveLocalFile(params: {
   businessId: bigint;
   clientId?: bigint | null;
   productId?: bigint | null;
+  projectId?: bigint | null;
 }) {
   const filename = sanitizeFilename(params.filename);
   const targetDir =
@@ -22,7 +23,9 @@ export async function saveLocalFile(params: {
       ? params.clientId.toString()
       : params.productId != null
         ? `product-${params.productId.toString()}`
-        : 'general';
+        : params.projectId != null
+          ? `project-${params.projectId.toString()}`
+          : 'general';
   const dir = path.join(ROOT, params.businessId.toString(), targetDir);
   await mkdir(dir, { recursive: true });
   const unique = randomUUID();

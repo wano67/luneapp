@@ -33,7 +33,7 @@ export default function NewProjectForm({ businessId }: Props) {
       if (!res.ok || !res.data?.item?.id) {
         throw new Error(res.error ?? 'Création du projet impossible.');
       }
-      router.replace(`/app/pro/${businessId}/projects/${res.data.item.id}`);
+      router.replace(`/app/pro/${businessId}/projects/${res.data.item.id}?setup=1`);
       router.refresh();
     } catch (err) {
       setFormState((s) => ({ ...s, error: getErrorMessage(err) || 'Erreur réseau.' }));

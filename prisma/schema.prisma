@@ -43,6 +43,14 @@ enum ProductUnit {
   OTHER
 }
 
+enum ServiceUnit {
+  FORFAIT
+  HOUR
+  DAY
+  PIECE
+  OTHER
+}
+
 enum InventoryMovementType {
   IN
   OUT
@@ -151,6 +159,9 @@ model User {
   ledgerEntriesCreated LedgerEntry[]
   clientsAnonymized    Client[] @relation("ClientAnonymizedBy")
   documentsCreated     BusinessDocument[] @relation("DocumentCreatedBy")
+  conversationsCreated Conversation[] @relation("ConversationCreatedBy")
+  conversationMembers  ConversationMember[]
+  messagesSent         Message[] @relation("MessageSender")
 }
 
 /**
@@ -206,6 +217,7 @@ model Business {
   inventoryReservations InventoryReservation[]
   ledgerEntries        LedgerEntry[]
   projectServiceRecurringRules ProjectServiceRecurringRule[]
+  conversations Conversation[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -488,6 +500,8 @@ model Project {
   projectMembers ProjectMember[]
   projectServiceRecurringRules ProjectServiceRecurringRule[]
   subscriptions Subscription[]
+  documents     BusinessDocument[]
+  conversations Conversation[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -526,6 +540,7 @@ model Task {
   title          String
   status         TaskStatus  @default(TODO)
   dueDate        DateTime?
+  startDate      DateTime?
   phase          TaskPhase?
   progress       Int         @default(0)
   completedAt    DateTime?
@@ -542,6 +557,7 @@ model Task {
   categoryReference BusinessReference? @relation("TaskCategoryReference", fields: [categoryReferenceId], references: [id], onDelete: SetNull)
   tags     TaskTag[]
   checklistItems TaskChecklistItem[]
+  messages Message[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -674,6 +690,9 @@ model Service {
   description String?
   defaultPriceCents BigInt?
   tjmCents    BigInt?
+  costCents   BigInt?
+  unit        ServiceUnit @default(FORFAIT)
+  defaultQuantity Int     @default(1)
   durationHours Int?
   vatRate     Int?
 
@@ -1401,6 +1420,7 @@ model BusinessDocument {
   id             BigInt       @id @default(autoincrement())
   businessId     BigInt
   clientId       BigInt?
+  projectId      BigInt?
   title          String
   filename       String
   mimeType       String
@@ -1413,10 +1433,88 @@ model BusinessDocument {
 
   business  Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
   client    Client?  @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
   createdBy User     @relation("DocumentCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
 
   @@index([businessId, clientId, createdAt])
+  @@index([businessId, projectId, createdAt])
   @@index([businessId, createdAt])
+}
+
+/**
+ * ===================== MESSAGING =====================
+ */
+
+enum ConversationType {
+  PRIVATE
+  GROUP
+}
+
+model Conversation {
+  id              BigInt           @id @default(autoincrement())
+  businessId      BigInt
+  projectId       BigInt?
+  type            ConversationType
+  name            String?
+  createdByUserId BigInt
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  business  Business              @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  project   Project?              @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy User                  @relation("ConversationCreatedBy", fields: [createdByUserId], references: [id])
+  members   ConversationMember[]
+  messages  Message[]
+
+  @@index([businessId, projectId])
+  @@index([projectId])
+}
+
+model ConversationMember {
+  id             BigInt    @id @default(autoincrement())
+  conversationId BigInt
+  userId         BigInt
+  joinedAt       DateTime  @default(now())
+  lastReadAt     DateTime?
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, userId])
+  @@index([userId])
+}
+
+model Message {
+  id             BigInt    @id @default(autoincrement())
+  conversationId BigInt
+  senderUserId   BigInt
+  content        String?
+  taskId         BigInt?
+  taskGroupIds   String?
+  createdAt      DateTime  @default(now())
+  editedAt       DateTime?
+
+  conversation Conversation       @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       User               @relation("MessageSender", fields: [senderUserId], references: [id])
+  task         Task?              @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  attachments  MessageAttachment[]
+
+  @@index([conversationId, createdAt])
+  @@index([senderUserId])
+}
+
+model MessageAttachment {
+  id         BigInt   @id @default(autoincrement())
+  messageId  BigInt
+  filename   String
+  mimeType   String
+  sizeBytes  Int
+  storageKey String   @unique
+  createdAt  DateTime @default(now())
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([messageId])
 }
 
 /**

@@ -3,7 +3,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Modal } from '@/components/ui/modal';
@@ -57,6 +57,7 @@ const tabs = [
 
 export default function ProspectDetailPage() {
   const params = useParams();
+  const router = useRouter();
   const businessId = (params?.businessId ?? '') as string;
   const prospectId = (params?.prospectId ?? '') as string;
   const activeCtx = useActiveBusiness({ optional: true });
@@ -248,6 +249,11 @@ export default function ProspectDetailPage() {
       setProspect((prev) =>
         prev ? { ...prev, status: 'WON', pipelineStatus: 'CLOSED' } : prev
       );
+      if (res.data.projectId) {
+        setTimeout(() => {
+          router.push(`/app/pro/${businessId}/projects/${res.data!.projectId}?setup=1`);
+        }, 1500);
+      }
     } catch (err) {
       setConvertError(getErrorMessage(err));
     } finally {

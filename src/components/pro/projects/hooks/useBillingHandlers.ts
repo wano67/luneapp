@@ -223,7 +223,7 @@ export function useBillingHandlers({
         return;
       }
       onBillingInfo('Devis créé.');
-      await Promise.all([loadQuotes(), loadInvoices()]);
+      await Promise.all([loadQuotes(), loadInvoices(), loadProject()]);
     } catch (err) {
       onBillingError(getErrorMessage(err));
     } finally {
@@ -360,7 +360,7 @@ export function useBillingHandlers({
         return;
       }
       onBillingInfo('Facture créée.');
-      await loadInvoices();
+      await Promise.all([loadInvoices(), loadProject()]);
     } catch (err) {
       onBillingError(getErrorMessage(err));
     } finally {
@@ -386,7 +386,7 @@ export function useBillingHandlers({
         return;
       }
       onBillingInfo('Facture mensuelle créée.');
-      await loadInvoices();
+      await Promise.all([loadInvoices(), loadProject()]);
     } catch (err) {
       onBillingError(getErrorMessage(err));
     } finally {
@@ -473,7 +473,7 @@ export function useBillingHandlers({
       }
       onBillingInfo('Facture créée.');
       closeStagedInvoiceModal();
-      await loadInvoices();
+      await Promise.all([loadInvoices(), loadProject()]);
     } catch (err) {
       setStagedInvoiceError(getErrorMessage(err));
     } finally {
@@ -502,7 +502,7 @@ export function useBillingHandlers({
         onBillingError(res.error ?? 'Mise à jour de la facture impossible.');
         return;
       }
-      await loadInvoices();
+      await Promise.all([loadInvoices(), loadProject()]);
     } catch (err) {
       onBillingError(getErrorMessage(err));
     } finally {
@@ -587,7 +587,7 @@ export function useBillingHandlers({
         setDateModalError(res.error ?? 'Mise à jour impossible.');
         return;
       }
-      await loadInvoices();
+      await Promise.all([loadInvoices(), loadProject()]);
       setInvoiceDateEditor(null);
     } catch (err) {
       setDateModalError(getErrorMessage(err));
@@ -904,7 +904,7 @@ export function useBillingHandlers({
         setInvoiceEditError(res.error ?? 'Mise à jour impossible.');
         return;
       }
-      await loadInvoices();
+      await Promise.all([loadInvoices(), loadProject()]);
       onBillingInfo('Facture mise à jour.');
       closeInvoiceEditor();
     } catch (err) {
@@ -931,7 +931,7 @@ export function useBillingHandlers({
         onBillingError(res.error ?? 'Suppression impossible.');
         return;
       }
-      await loadInvoices();
+      await Promise.all([loadInvoices(), loadProject()]);
       onBillingInfo('Facture supprimée.');
     } catch (err) {
       onBillingError(getErrorMessage(err));

@@ -89,7 +89,7 @@ async function main() {
     `/api/pro/businesses/${businessId}/services?q=${encodeURIComponent('Service Import')}`
   );
   if (!listRes.ok) throw new Error(`Services list failed (${listRes.status}) ref=${getLastRequestId()}`);
-  const items = (listJson as { items?: Array<{ code?: string; categoryReferenceName?: string }> })?.items ?? [];
+  const items = (listJson as { items?: Array<{ code?: string; categoryReferenceName?: string; unit?: string; defaultQuantity?: number }> })?.items ?? [];
   const foundA = items.find((s) => s.code === codeA);
   const foundB = items.find((s) => s.code === codeB);
   if (!foundA || !foundB) {
@@ -97,6 +97,13 @@ async function main() {
   }
   if (foundA.categoryReferenceName !== categoryName) {
     throw new Error(`Category not set on imported service ref=${getLastRequestId()}`);
+  }
+  // Imported services should have defaults for new fields
+  if (foundA.unit !== 'FORFAIT') {
+    throw new Error(`Expected default unit=FORFAIT on imported service, got ${String(foundA.unit)} ref=${getLastRequestId()}`);
+  }
+  if (foundA.defaultQuantity !== 1) {
+    throw new Error(`Expected default defaultQuantity=1, got ${String(foundA.defaultQuantity)} ref=${getLastRequestId()}`);
   }
 
   console.log('Smoke services import OK.');
