@@ -12,10 +12,12 @@ type TabsPillsProps = {
   onChange: (key: string) => void;
   ariaLabel?: string;
   className?: string;
+  /** When false, pills don't wrap and scroll horizontally instead (mobile-friendly). Default: false */
+  wrap?: boolean;
 };
 
 // Shared pill tabs with horizontal scroll on mobile and wrap on larger screens.
-export function TabsPills({ items, value, onChange, ariaLabel, className }: TabsPillsProps) {
+export function TabsPills({ items, value, onChange, ariaLabel, className, wrap = false }: TabsPillsProps) {
   return (
     <div
       className={cn('w-full', className)}
@@ -23,7 +25,12 @@ export function TabsPills({ items, value, onChange, ariaLabel, className }: Tabs
       aria-label={ariaLabel ?? 'Navigation'}
       data-component="tabs-pills"
     >
-      <div className="flex flex-wrap items-center gap-2">
+      <div
+        className={cn(
+          'flex items-center gap-2',
+          wrap ? 'flex-wrap' : 'scrollbar-thin flex-nowrap overflow-x-auto pb-1'
+        )}
+      >
         {items.map((tab) => {
           const active = tab.key === value;
           return (

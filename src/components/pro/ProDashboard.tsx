@@ -5,6 +5,9 @@ import Link from 'next/link';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { KpiCard } from '@/components/ui/kpi-card';
+import { PageContainer } from '@/components/layouts/PageContainer';
+import { BackButton } from '@/components/layouts/BackButton';
 import { ArrowRight, MoreVertical } from 'lucide-react';
 import CashflowChart from './charts/CashflowChart';
 import TasksDonut from './charts/TasksDonut';
@@ -72,12 +75,6 @@ type DashboardPayload = {
   monthlySeries?: Array<{ month: string; incomeCents: string | number; expenseCents: string | number }>;
 };
 
-type FinanceAggregate = {
-  incomeCents: string;
-  expenseCents: string;
-  netCents: string;
-};
-
 type TaskItem = {
   id: string;
   title: string;
@@ -94,11 +91,6 @@ const STATUS_LABELS: Record<TaskStatus, string> = {
   DONE: 'Terminé',
 };
 
-function daysAgo(days: number) {
-  const d = new Date();
-  d.setDate(d.getDate() - days);
-  return d;
-}
 
 function parseCents(value?: string | number) {
   if (typeof value === 'number') return value / 100;
@@ -135,11 +127,9 @@ function countLateTasks(tasks: TaskItem[]) {
 export default function ProDashboard({ businessId }: { businessId: string }) {
   const [periodDays, setPeriodDays] = useState(30);
   const [dashboard, setDashboard] = useState<DashboardPayload | null>(null);
-  const [financeAgg, setFinanceAgg] = useState<FinanceAggregate | null>(null);
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [requestId, setRequestId] = useState<string | null>(null);
   const activeCtx = useActiveBusiness({ optional: true });
 
   const active = useActiveBusiness({ optional: true });
@@ -150,35 +140,18 @@ export default function ProDashboard({ businessId }: { businessId: string }) {
     async function load() {
       setLoading(true);
       setError(null);
-      const periodEnd = new Date();
-      const periodStart = daysAgo(periodDays).toISOString();
-      const periodEndIso = periodEnd.toISOString();
-
       try {
-        const [dashRes, financeRes, tasksRes] = await Promise.all([
+        const [dashRes, tasksRes] = await Promise.all([
           fetchJson<DashboardPayload>(`/api/pro/businesses/${businessId}/dashboard`, { cache: 'no-store' }),
-          fetchJson<FinanceAggregate>(
-            `/api/pro/businesses/${businessId}/finances?aggregate=1&periodStart=${encodeURIComponent(periodStart)}&periodEnd=${encodeURIComponent(periodEndIso)}`,
-            { cache: 'no-store' }
-          ),
           fetchJson<{ items: TaskItem[] }>(`/api/pro/businesses/${businessId}/tasks`, { cache: 'no-store' }),
         ]);
 
         if (cancelled) return;
 
-        setRequestId(
-          dashRes.requestId ||
-            financeRes.requestId ||
-            tasksRes.requestId ||
-            null
-        );
-
         if (!dashRes.ok) throw new Error(dashRes.error || 'Dashboard indisponible');
-        if (!financeRes.ok) throw new Error(financeRes.error || 'Finances indisponibles');
         if (!tasksRes.ok) throw new Error(tasksRes.error || 'Tâches indisponibles');
 
         setDashboard(dashRes.data ?? null);
-        setFinanceAgg(financeRes.data ?? null);
         setTasks(tasksRes.data?.items ?? []);
       } catch (err) {
         if (cancelled) return;
@@ -194,20 +167,6 @@ export default function ProDashboard({ businessId }: { businessId: string }) {
     };
   }, [businessId, periodDays]);
 
-  const income = useMemo(() => {
-    if (financeAgg?.incomeCents) return parseCents(financeAgg.incomeCents);
-    return parseCents(dashboard?.kpis?.mtdIncomeCents);
-  }, [financeAgg, dashboard]);
-
-  const expense = useMemo(() => {
-    if (financeAgg?.expenseCents) return parseCents(financeAgg.expenseCents);
-    return parseCents(dashboard?.kpis?.mtdExpenseCents);
-  }, [financeAgg, dashboard]);
-
-  const net = useMemo(() => income - expense, [income, expense]);
-
-  const activeProjects = dashboard?.kpis?.projectsActiveCount ?? dashboard?.kpis?.activeProjectsCount ?? 0;
-  const openTasks = dashboard?.kpis?.openTasksCount ?? 0;
   const tasksByStatus = useMemo(() => countByStatus(tasks), [tasks]);
   const lateTasksCount = useMemo(() => countLateTasks(tasks), [tasks]);
   const upcomingTasks = dashboard?.latestTasks ?? dashboard?.nextActions?.tasks ?? [];
@@ -219,7 +178,7 @@ export default function ProDashboard({ businessId }: { businessId: string }) {
   const avgDuration = dashboard?.projectMetrics?.avgDurationDays ?? 0;
 
   return (
-    <div className="mx-auto max-w-6xl space-y-5 px-4 py-4">
+    <PageContainer className="space-y-5">
       <BusinessHeader
         businessName={activeCtx?.activeBusiness?.name ?? 'Entreprise'}
         websiteUrl={activeCtx?.activeBusiness?.websiteUrl ?? null}
@@ -227,24 +186,17 @@ export default function ProDashboard({ businessId }: { businessId: string }) {
         businessId={businessId}
       />
 
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2">
-          <span className="text-xs text-[var(--text-secondary)]">Période</span>
-          <select
-            value={periodDays}
-            onChange={(e) => setPeriodDays(Number(e.target.value))}
-            className="cursor-pointer rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-2 py-1 text-sm"
-          >
-            <option value={7}>7 jours</option>
-            <option value={30}>30 jours</option>
-            <option value={90}>90 jours</option>
-          </select>
-        </div>
-        {requestId ? (
-          <Badge variant="neutral" className="bg-[var(--surface-2)] text-[11px]">
-            Ref {requestId}
-          </Badge>
-        ) : null}
+      <div className="flex w-fit items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2">
+        <span className="text-xs text-[var(--text-secondary)]">Période</span>
+        <select
+          value={periodDays}
+          onChange={(e) => setPeriodDays(Number(e.target.value))}
+          className="cursor-pointer rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-2 py-1 text-sm"
+        >
+          <option value={7}>7 jours</option>
+          <option value={30}>30 jours</option>
+          <option value={90}>90 jours</option>
+        </select>
       </div>
 
       <BusinessKpis
@@ -271,11 +223,7 @@ export default function ProDashboard({ businessId }: { businessId: string }) {
             <Card className="lg:col-span-2 space-y-3 border border-[var(--border)]/80 bg-[var(--surface)] p-5">
               <div className="flex items-center justify-between">
                 <p className="text-sm font-semibold text-[var(--text-primary)]">Cash flow (12 mois)</p>
-                <Button
-                  asChild
-                  size="sm"
-                  className="cursor-pointer rounded-md bg-neutral-900 px-3 text-xs font-semibold text-white transition hover:bg-neutral-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
-                >
+                <Button asChild size="sm" variant="primary">
                   <Link href={`/app/pro/${businessId}/finances`}>Finances</Link>
                 </Button>
               </div>
@@ -285,11 +233,7 @@ export default function ProDashboard({ businessId }: { businessId: string }) {
             <Card className="space-y-3 border border-[var(--border)]/80 bg-[var(--surface)] p-5">
               <div className="flex items-center justify-between">
                 <p className="text-sm font-semibold text-[var(--text-primary)]">Tâches par statut</p>
-                <Button
-                  asChild
-                  size="sm"
-                  className="cursor-pointer rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 text-xs font-semibold text-[var(--text-primary)] transition hover:bg-[var(--surface-hover)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
-                >
+                <Button asChild size="sm" variant="outline">
                   <Link href={`/app/pro/${businessId}/tasks`}>Voir tâches</Link>
                 </Button>
               </div>
@@ -308,11 +252,15 @@ export default function ProDashboard({ businessId }: { businessId: string }) {
               <div className="flex items-center justify-between">
                 <p className="text-sm font-semibold text-[var(--text-primary)]">Actions rapides</p>
               </div>
-              <div className="grid gap-2 sm:grid-cols-2">
-                <QuickLink href={`/app/pro/${businessId}/clients`} label="Nouveau client" />
-                <QuickLink href={`/app/pro/${businessId}/projects`} label="Nouveau projet" />
-                <QuickLink href={`/app/pro/${businessId}/finances`} label="Ajouter une opération" />
-                <QuickLink href={`/app/pro/${businessId}/tasks`} label="Voir les tâches" />
+              <div className="grid gap-2 grid-cols-2 sm:grid-cols-4">
+                <QuickLink href={`/app/pro/${businessId}/clients`} label="Clients" />
+                <QuickLink href={`/app/pro/${businessId}/prospects`} label="Prospects" />
+                <QuickLink href={`/app/pro/${businessId}/projects`} label="Projets" />
+                <QuickLink href={`/app/pro/${businessId}/tasks`} label="Tâches" />
+                <QuickLink href={`/app/pro/${businessId}/agenda`} label="Agenda" />
+                <QuickLink href={`/app/pro/${businessId}/services`} label="Services" />
+                <QuickLink href={`/app/pro/${businessId}/stock`} label="Stock" />
+                <QuickLink href={`/app/pro/${businessId}/finances`} label="Finances" />
               </div>
             </Card>
 
@@ -339,7 +287,7 @@ export default function ProDashboard({ businessId }: { businessId: string }) {
           </div>
         </>
       )}
-    </div>
+    </PageContainer>
   );
 }
 
@@ -358,9 +306,7 @@ function BusinessHeader({
   const src = normalized ? `/api/logo?url=${encodeURIComponent(normalized)}` : null;
   return (
     <div className="flex flex-col gap-3 rounded-3xl border border-[var(--border)]/80 bg-[var(--surface)]/80 p-4">
-      <Link href="/app/pro" className="text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
-        ← Studio
-      </Link>
+      <BackButton href="/app/pro" label="Studio" />
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex items-start gap-3">
           <LogoBlock src={src} fallback={businessName} />
@@ -374,11 +320,7 @@ function BusinessHeader({
           </div>
         </div>
         <div className="flex flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:justify-end">
-          <Button
-            asChild
-            size="sm"
-            className="w-full cursor-pointer rounded-md bg-neutral-900 px-3 text-xs font-semibold text-white transition hover:bg-neutral-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)] sm:w-auto"
-          >
+          <Button asChild size="sm" variant="primary" className="w-full sm:w-auto">
             <Link href={`/app/pro/${businessId}/projects`}>Nouveau projet</Link>
           </Button>
           <HeaderMenu businessId={businessId} />
@@ -390,20 +332,10 @@ function BusinessHeader({
 
 function BusinessKpis({ items }: { items: Array<{ label: string; value: string }> }) {
   return (
-    <div className="rounded-3xl bg-[var(--surface)]/70 p-4">
-      <div className="grid grid-cols-1 justify-items-center gap-4 sm:grid-cols-4">
-        {items.slice(0, 4).map((item) => (
-          <div
-            key={item.label}
-            className="flex h-[120px] w-[120px] flex-col items-center justify-center rounded-full bg-[var(--surface)] text-center shadow-[0_0_0_1px_var(--border)]"
-          >
-            <span className="text-2xl font-bold text-[var(--text-primary)]">{item.value}</span>
-            <span className="mt-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-secondary)]">
-              {item.label}
-            </span>
-          </div>
-        ))}
-      </div>
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      {items.slice(0, 4).map((item) => (
+        <KpiCard key={item.label} label={item.label} value={item.value} />
+      ))}
     </div>
   );
 }
@@ -430,10 +362,13 @@ function HeaderMenu({ businessId }: { businessId: string }) {
 
   const items = [
     { label: 'Projets', href: `/app/pro/${businessId}/projects` },
+    { label: 'Tâches', href: `/app/pro/${businessId}/tasks` },
     { label: 'Clients', href: `/app/pro/${businessId}/clients` },
-    { label: 'Catalogue services', href: `/app/pro/${businessId}/services` },
+    { label: 'Prospects', href: `/app/pro/${businessId}/prospects` },
+    { label: 'Agenda', href: `/app/pro/${businessId}/agenda` },
+    { label: 'Services', href: `/app/pro/${businessId}/services` },
+    { label: 'Stock', href: `/app/pro/${businessId}/stock` },
     { label: 'Finances', href: `/app/pro/${businessId}/finances` },
-    { label: 'Membres', href: `/app/pro/${businessId}/settings/team` },
     { label: 'Paramètres', href: `/app/pro/${businessId}/settings` },
   ];
 
@@ -444,7 +379,7 @@ function HeaderMenu({ businessId }: { businessId: string }) {
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label="Actions"
-        className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full text-[var(--text-secondary)] transition hover:bg-black/5 hover:text-[var(--text-primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
+        className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full text-[var(--text-secondary)] transition hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
         onClick={() => setOpen((v) => !v)}
       >
         <MoreVertical size={18} />

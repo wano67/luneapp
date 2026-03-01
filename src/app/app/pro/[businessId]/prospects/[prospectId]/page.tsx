@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Modal } from '@/components/ui/modal';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
@@ -263,7 +264,7 @@ export default function ProspectDetailPage() {
 
   if (loading) {
     return (
-      <div className="mx-auto max-w-5xl space-y-4 px-4 py-6">
+      <div className="mx-auto max-w-6xl space-y-4 px-4 py-6">
         <Card className="h-32 animate-pulse rounded-2xl bg-[var(--surface)]">
           <div className="h-full w-full rounded-xl bg-[var(--surface-hover)]" />
         </Card>
@@ -276,7 +277,7 @@ export default function ProspectDetailPage() {
 
   if (error || !prospect) {
     return (
-      <div className="mx-auto max-w-5xl space-y-3 px-4 py-6">
+      <div className="mx-auto max-w-6xl space-y-3 px-4 py-6">
         <Link
           href={`/app/pro/${businessId}/prospects`}
           className="text-sm text-[var(--text-secondary)] underline-offset-4 hover:text-[var(--text-primary)]"
@@ -289,7 +290,7 @@ export default function ProspectDetailPage() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl space-y-5 px-4 py-6">
+    <div className="mx-auto max-w-6xl space-y-5 px-4 py-6">
       <div className="flex justify-end">
         <Link
           href={`/app/pro/${businessId}/agenda?prospectId=${prospectId}`}
@@ -312,18 +313,18 @@ export default function ProspectDetailPage() {
         leading={<LogoAvatar name={prospect.name || 'Prospect'} websiteUrl={prospect.websiteUrl ?? undefined} size={48} />}
         actions={
           <>
-            <button
-              type="button"
+            <Button
+              size="sm"
               onClick={() => {
                 setConvertError(null);
                 setConvertResult(null);
                 setConvertOpen(true);
               }}
-              className="w-full cursor-pointer rounded-md bg-neutral-900 px-3 py-2 text-sm font-semibold text-white transition hover:bg-neutral-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)] disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+              className="w-full sm:w-auto"
               disabled={!isAdmin}
             >
               Convertir en client + projet
-            </button>
+            </Button>
             <MenuDots businessId={businessId} prospectId={prospectId} />
           </>
         }
@@ -356,8 +357,9 @@ export default function ProspectDetailPage() {
             <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:justify-end">
               {editing ? (
                 <>
-                  <button
-                    type="button"
+                  <Button
+                    variant="outline"
+                    size="sm"
                     onClick={() => {
                       if (!prospect) return;
                       setForm({
@@ -375,29 +377,30 @@ export default function ProspectDetailPage() {
                       setSaveError(null);
                       setSaveInfo(null);
                     }}
-                    className="w-full cursor-pointer rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm font-semibold text-[var(--text-primary)] transition hover:bg-[var(--surface-hover)] sm:w-auto"
+                    className="w-full sm:w-auto"
                     disabled={!isAdmin}
                   >
                     Annuler
-                  </button>
-                  <button
-                    type="button"
+                  </Button>
+                  <Button
+                    size="sm"
                     onClick={handleSave}
-                    className="w-full cursor-pointer rounded-md bg-neutral-900 px-3 py-2 text-sm font-semibold text-white transition hover:bg-neutral-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)] disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+                    className="w-full sm:w-auto"
                     disabled={!hasChanges || saving || !isAdmin}
                   >
                     {saving ? 'Enregistrement…' : 'Enregistrer'}
-                  </button>
+                  </Button>
                 </>
               ) : (
-                <button
-                  type="button"
+                <Button
+                  variant="outline"
+                  size="sm"
                   onClick={() => setEditing(true)}
-                  className="w-full cursor-pointer rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm font-semibold text-[var(--text-primary)] transition hover:bg-[var(--surface-hover)] sm:w-auto"
+                  className="w-full sm:w-auto"
                   disabled={!isAdmin}
                 >
                   Modifier
-                </button>
+                </Button>
               )}
             </div>
           </div>
@@ -605,22 +608,21 @@ export default function ProspectDetailPage() {
           ) : null}
           {!isAdmin ? <p className="text-xs text-[var(--text-secondary)]">{readOnlyMessage}</p> : null}
           <div className="flex justify-end gap-2">
-            <button
-              type="button"
+            <Button
+              variant="outline"
+              size="sm"
               onClick={() => setConvertOpen(false)}
-              className="cursor-pointer rounded-md border border-[var(--border)] px-3 py-2 text-sm text-[var(--text-primary)] hover:bg-[var(--surface-hover)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
               disabled={convertLoading}
             >
               Fermer
-            </button>
-            <button
-              type="button"
+            </Button>
+            <Button
+              size="sm"
               onClick={handleConvert}
-              className="cursor-pointer rounded-md bg-neutral-900 px-3 py-2 text-sm font-semibold text-white transition hover:bg-neutral-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)] disabled:cursor-not-allowed disabled:opacity-50"
               disabled={!isAdmin || convertLoading}
             >
               {convertLoading ? 'Conversion…' : 'Convertir'}
-            </button>
+            </Button>
           </div>
         </div>
       </Modal>

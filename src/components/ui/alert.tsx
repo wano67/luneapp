@@ -14,14 +14,10 @@ type AlertProps = {
 
 const variantClasses: Record<AlertVariant, string> = {
   neutral: 'border-[var(--border)] bg-[var(--surface-2)] text-[var(--text)]',
-  info:
-    'border-[var(--accent-strong)] bg-[color:rgba(37,99,235,0.12)] text-[var(--accent-strong)]',
-  success:
-    'border-[var(--success)] bg-[color:rgba(34,197,94,0.12)] text-[var(--success)]',
-  danger:
-    'border-[var(--danger)] bg-[color:rgba(239,68,68,0.12)] text-[var(--danger)]',
-  warning:
-    'border-[var(--warning)] bg-[color:rgba(245,158,11,0.14)] text-[var(--warning)]',
+  info: 'border-[var(--info-border)] bg-[var(--info-bg)] text-[var(--info)]',
+  success: 'border-[var(--success-border)] bg-[var(--success-bg)] text-[var(--success)]',
+  danger: 'border-[var(--danger-border)] bg-[var(--danger-bg)] text-[var(--danger)]',
+  warning: 'border-[var(--warning-border)] bg-[var(--warning-bg)] text-[var(--warning)]',
 };
 
 export function Alert({

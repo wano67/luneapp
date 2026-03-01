@@ -18,6 +18,7 @@
   --text-faint: #6b7280;
   --accent: #2563eb;
   --accent-strong: #1d4ed8;
+  --info: #1d4ed8;
   --success: #166534;
   --danger: #b91c1c;
   --warning: #b45309;
@@ -25,6 +26,8 @@
   --shadow-float: 0 18px 46px rgba(17, 24, 39, 0.14);
 
   /* Semantic state backgrounds & borders */
+  --info-bg: rgba(37, 99, 235, 0.12);
+  --info-border: rgba(37, 99, 235, 0.35);
   --success-bg: rgba(22, 163, 74, 0.10);
   --success-border: rgba(22, 163, 74, 0.35);
   --danger-bg: rgba(185, 28, 28, 0.08);
@@ -32,11 +35,36 @@
   --warning-bg: rgba(180, 83, 9, 0.10);
   --warning-border: rgba(180, 83, 9, 0.30);
 
+  /* Charts */
+  --chart-accent: var(--accent);
+  --chart-in-progress: var(--warning);
+  --chart-done: var(--success);
+
   /* Legacy aliases */
   --background: var(--bg);
   --background-alt: var(--surface-2);
   --text-primary: var(--text);
   --text-secondary: var(--text-faint);
+
+  /* Radius */
+  --radius-sm: 10px;
+  --radius: 14px;
+  --radius-lg: 18px;
+  --radius-xl: 24px;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06);
+  --shadow: 0 8px 24px rgba(0, 0, 0, 0.10);
+  --shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.14);
+
+  /* Focus ring offset */
+  --ring-offset: var(--bg);
+
+  /* Aliases sémantiques — compatibilité composants */
+  --primary: var(--accent);
+  --primary-strong: var(--accent-strong);
+  --primary-foreground: #ffffff;
+  --muted-foreground: var(--text-faint);
 }
 
 [data-theme="dark"],
@@ -53,12 +81,15 @@
   --text-faint: #9ca3af;
   --accent: #60a5fa;
   --accent-strong: #3b82f6;
+  --info: #93c5fd;
   --success: #22c55e;
   --danger: #ef4444;
   --warning: #f59e0b;
   --focus-ring: #93c5fd;
   --shadow-float: 0 18px 46px rgba(0, 0, 0, 0.52);
 
+  --info-bg: rgba(59, 130, 246, 0.16);
+  --info-border: rgba(147, 197, 253, 0.4);
   --success-bg: rgba(34, 197, 94, 0.12);
   --success-border: rgba(34, 197, 94, 0.35);
   --danger-bg: rgba(239, 68, 68, 0.12);
@@ -66,10 +97,33 @@
   --warning-bg: rgba(245, 158, 11, 0.14);
   --warning-border: rgba(245, 158, 11, 0.35);
 
+  --chart-accent: var(--accent);
+  --chart-in-progress: var(--warning);
+  --chart-done: var(--success);
+
   --background: var(--bg);
   --background-alt: var(--surface-2);
   --text-primary: var(--text);
   --text-secondary: var(--text-faint);
+
+  /* Radius (same in dark) */
+  --radius-sm: 10px;
+  --radius: 14px;
+  --radius-lg: 18px;
+  --radius-xl: 24px;
+
+  /* Shadows (stronger in dark) */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow: 0 10px 30px rgba(0, 0, 0, 0.40);
+  --shadow-lg: 0 18px 60px rgba(0, 0, 0, 0.55);
+
+  --ring-offset: var(--bg);
+
+  /* Aliases sémantiques — dark mode */
+  --primary: var(--accent);
+  --primary-strong: var(--accent-strong);
+  --primary-foreground: #ffffff;
+  --muted-foreground: var(--text-faint);
 }
 
 /* Base layout */
@@ -130,5 +184,11 @@ a:hover {
   .card-interactive:hover .card-interactive__icon,
   .card-interactive:focus-visible .card-interactive__icon {
     @apply border-[var(--accent)] text-[var(--accent-strong)];
+  }
+}
+
+@layer utilities {
+  .text-muted-foreground {
+    color: var(--muted-foreground);
   }
 }

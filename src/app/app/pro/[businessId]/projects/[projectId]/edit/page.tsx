@@ -302,12 +302,12 @@ export default function ProjectEditPage() {
   const statusHelper = statusScope ? `Catégorie: ${statusScope}` : null;
 
   if (loading) {
-    return <div className="mx-auto max-w-4xl px-4 py-6">Chargement…</div>;
+    return <div className="mx-auto max-w-6xl px-4 py-6">Chargement…</div>;
   }
 
   if (!project) {
     return (
-      <div className="mx-auto max-w-4xl px-4 py-6">
+      <div className="mx-auto max-w-6xl px-4 py-6">
         <Card className="rounded-3xl border border-[var(--border)] bg-[var(--surface)] p-5 shadow-sm">
           <p className="text-sm font-semibold text-[var(--danger)]">Projet introuvable</p>
           <p className="text-xs text-[var(--text-secondary)]">{error ?? 'Ce projet est indisponible.'}</p>
@@ -322,7 +322,7 @@ export default function ProjectEditPage() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl space-y-4 px-4 py-6">
+    <div className="mx-auto max-w-6xl space-y-4 px-4 py-6">
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between gap-3">
           <Button asChild variant="outline" size="sm" className="gap-2">

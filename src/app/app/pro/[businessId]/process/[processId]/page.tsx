@@ -516,7 +516,7 @@ export default function ProcessDetailPage() {
           Les process sont partagés par business. Les étapes sont globales (MVP) et non encore projet-spécifique.
         </p>
         <p className="mt-1 text-sm">
-          <Link href={`/app/pro/${businessId}/projects`} className="text-blue-600 hover:underline">
+          <Link href={`/app/pro/${businessId}/projects`} className="text-[var(--accent)] hover:underline">
             Aller aux projets
           </Link>
         </p>
@@ -542,7 +542,7 @@ export default function ProcessDetailPage() {
           <label className="space-y-1">
             <span className="text-sm font-medium text-[var(--text-secondary)]">Description</span>
             <textarea
-              className="w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-400/60"
+              className="w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
               rows={3}
               value={form.description}
               onChange={(e) => updateForm('description', e.target.value)}
@@ -595,7 +595,7 @@ export default function ProcessDetailPage() {
             <div className="space-y-1">
               <span className="text-sm font-medium text-[var(--text-secondary)]">Description</span>
               <textarea
-                className="w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-400/60"
+                className="w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
                 rows={3}
                 value={stepForm.description}
                 onChange={(e) => updateStepForm('description', e.target.value)}

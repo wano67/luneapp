@@ -105,7 +105,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
   };
 
   const focusRing =
-    'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-400/60';
+    'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]';
 
   // fermeture "propre" (évite click-through si tu veux animer un jour)
   function haptic(ms = 10) {

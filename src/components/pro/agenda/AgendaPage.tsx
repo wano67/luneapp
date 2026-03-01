@@ -4,12 +4,12 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } fro
 import Link from 'next/link';
 import { fetchJson } from '@/lib/apiClient';
 import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Modal } from '@/components/ui/modal';
-import { KpiCirclesBlock } from '@/components/pro/KpiCirclesBlock';
+import { KpiCard } from '@/components/ui/kpi-card';
 import { ContactCard } from '@/components/pro/crm/ContactCard';
-import { PageHeaderPro } from '@/components/pro/PageHeaderPro';
-import { TabsPills } from '@/components/pro/TabsPills';
+import { ProPageShell } from '@/components/pro/ProPageShell';
 import { useActiveBusiness } from '@/app/app/pro/ActiveBusinessProvider';
 import { isProjectActive } from '@/lib/projectStatus';
 
@@ -444,14 +444,13 @@ export default function AgendaPage({ businessId, view = 'agenda' }: Props) {
         {isProspectView ? 'Aucun prospect' : 'Aucun client'} pour l’instant.
       </p>
       <div className="flex flex-col gap-1 sm:flex-row sm:items-center">
-        <button
-          type="button"
+        <Button
+          size="sm"
           onClick={() => openCreate(isProspectView ? 'prospect' : 'client')}
-          className="cursor-pointer rounded-md bg-neutral-900 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-neutral-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)] disabled:cursor-not-allowed disabled:opacity-50"
           disabled={!canWrite}
         >
           {isProspectView ? 'Ajouter un prospect' : 'Ajouter un client'}
-        </button>
+        </Button>
         {!canWrite ? <span className="text-xs text-[var(--text-secondary)]">{readOnlyMessage}</span> : null}
       </div>
     </Card>
@@ -502,28 +501,33 @@ export default function AgendaPage({ businessId, view = 'agenda' }: Props) {
   );
 
   return (
-    <div className="w-full space-y-6 px-5 py-6 md:px-8 xl:px-10">
-      <PageHeaderPro
-        backHref={`/app/pro/${businessId}`}
-        backLabel="Dashboard"
-        title={pageTitle}
-        subtitle={pageSubtitle}
-        actions={
-          <div className="flex flex-col gap-1 sm:items-end">
-            <button
-              type="button"
-              onClick={() => openCreate(isProspectView ? 'prospect' : 'client')}
-              className="w-full cursor-pointer rounded-md bg-neutral-900 px-3 py-2 text-sm font-semibold text-white transition hover:bg-neutral-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)] disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
-              disabled={!canWrite}
-            >
-              Ajouter un contact
-            </button>
-            {!canWrite ? <span className="text-xs text-[var(--text-secondary)]">{readOnlyMessage}</span> : null}
-          </div>
-        }
-      />
-
-      <KpiCirclesBlock items={kpis} />
+    <ProPageShell
+      backHref={`/app/pro/${businessId}`}
+      backLabel="Dashboard"
+      title={pageTitle}
+      subtitle={pageSubtitle}
+      actions={
+        <div className="flex flex-col gap-1 sm:items-end">
+          <Button
+            size="sm"
+            onClick={() => openCreate(isProspectView ? 'prospect' : 'client')}
+            className="w-full sm:w-auto"
+            disabled={!canWrite}
+          >
+            Ajouter un contact
+          </Button>
+          {!canWrite ? <span className="text-xs text-[var(--text-secondary)]">{readOnlyMessage}</span> : null}
+        </div>
+      }
+      tabs={isAgendaView ? tabs : undefined}
+      activeTab={isAgendaView ? activeTab : undefined}
+      onTabChange={isAgendaView ? (key) => setActiveTab(key as 'clients' | 'prospects') : undefined}
+    >
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {kpis.map((item) => (
+          <KpiCard key={item.label} label={item.label} value={item.value} />
+        ))}
+      </div>
 
       {isAgendaView ? (
         <Card className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
@@ -586,16 +590,6 @@ export default function AgendaPage({ businessId, view = 'agenda' }: Props) {
         </Card>
       ) : null}
 
-      {isAgendaView ? (
-        <TabsPills
-          items={tabs}
-          value={activeTab}
-          onChange={(key) => setActiveTab(key as 'clients' | 'prospects')}
-          ariaLabel="Agenda onglets"
-          className="-mx-1 px-1"
-        />
-      ) : null}
-
       <div className="space-y-4">{listContent}</div>
 
       <Modal
@@ -648,21 +642,22 @@ export default function AgendaPage({ businessId, view = 'agenda' }: Props) {
           {createSuccess ? <p className="text-xs text-[var(--success)]">{createSuccess}</p> : null}
           {!canWrite ? <p className="text-xs text-[var(--text-secondary)]">{readOnlyMessage}</p> : null}
           <div className="flex justify-end gap-2">
-            <button
+            <Button
               type="button"
+              variant="outline"
+              size="sm"
               onClick={() => setCreateOpen(false)}
-              className="cursor-pointer rounded-md border border-[var(--border)] px-3 py-2 text-sm text-[var(--text-primary)] hover:bg-[var(--surface-hover)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
               disabled={creating}
             >
               Annuler
-            </button>
-            <button
+            </Button>
+            <Button
               type="submit"
-              className="cursor-pointer rounded-md bg-neutral-900 px-3 py-2 text-sm font-semibold text-white transition hover:bg-neutral-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
+              size="sm"
               disabled={creating || !canWrite}
             >
               {creating ? 'Ajout...' : 'Ajouter'}
-            </button>
+            </Button>
           </div>
         </form>
       </Modal>
@@ -710,24 +705,25 @@ export default function AgendaPage({ businessId, view = 'agenda' }: Props) {
           ) : null}
           {!canWrite ? <p className="text-xs text-[var(--text-secondary)]">{readOnlyMessage}</p> : null}
           <div className="flex justify-end gap-2">
-            <button
+            <Button
               type="button"
+              variant="outline"
+              size="sm"
               onClick={closeAction}
-              className="cursor-pointer rounded-md border border-[var(--border)] px-3 py-2 text-sm text-[var(--text-primary)] hover:bg-[var(--surface-hover)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
               disabled={actionLoading}
             >
               Fermer
-            </button>
-            <button
+            </Button>
+            <Button
               type="submit"
-              className="cursor-pointer rounded-md bg-neutral-900 px-3 py-2 text-sm font-semibold text-white transition hover:bg-neutral-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)] disabled:cursor-not-allowed disabled:opacity-50"
+              size="sm"
               disabled={!canWrite || actionLoading || !actionTarget || !!actionResult}
             >
               {actionLoading ? 'Traitement...' : actionPrimaryLabel}
-            </button>
+            </Button>
           </div>
         </form>
       </Modal>
-    </div>
+    </ProPageShell>
   );
 }

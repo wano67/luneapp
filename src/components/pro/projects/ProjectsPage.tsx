@@ -2,11 +2,11 @@
 
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
-import { ArrowLeft, Plus } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { KpiCirclesBlock } from '@/components/pro/KpiCirclesBlock';
-import { TabsPills } from '@/components/pro/TabsPills';
+import { KpiCard } from '@/components/ui/kpi-card';
+import { ProPageShell } from '@/components/pro/ProPageShell';
 import { ProjectCard } from '@/components/pro/projects/ProjectCard';
 import { useProjects, type ProjectScope } from '@/lib/hooks/useProjects';
 
@@ -35,39 +35,32 @@ export default function ProjectsPage({ businessId }: Props) {
         : 'Aucun projet inactif pour l’instant.';
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 px-4 py-6">
-      <div className="flex flex-col gap-2">
-        <div className="flex items-center justify-between gap-3">
-          <Button asChild variant="outline" size="sm" className="gap-2">
-            <Link href={`/app/pro/${businessId}`} aria-label="Retour au dashboard">
-              <ArrowLeft size={16} />
-              Dashboard
-            </Link>
-          </Button>
-          <Button asChild size="sm" className="gap-2">
-            <Link href={`/app/pro/${businessId}/projects/new`} aria-label="Créer un projet">
-              <Plus size={16} />
-              Nouveau projet
-            </Link>
-          </Button>
-        </div>
-        <h1 className="text-xl font-semibold text-[var(--text-primary)]">Projets</h1>
-        <p className="text-sm text-[var(--text-secondary)]">Vue synthétique des projets</p>
+    <ProPageShell
+      backHref={`/app/pro/${businessId}`}
+      backLabel="Dashboard"
+      title="Projets"
+      subtitle="Vue synthétique des projets"
+      actions={
+        <Button asChild size="sm" className="gap-2">
+          <Link href={`/app/pro/${businessId}/projects/new`} aria-label="Créer un projet">
+            <Plus size={16} />
+            Nouveau projet
+          </Link>
+        </Button>
+      }
+      tabs={[
+        { key: 'ACTIVE', label: 'Actifs' },
+        { key: 'PLANNED', label: 'En attente' },
+        { key: 'INACTIVE', label: 'Inactifs' },
+      ]}
+      activeTab={scope}
+      onTabChange={(key) => setScope(key as ProjectScope)}
+    >
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {kpis.map((item) => (
+          <KpiCard key={item.label} label={item.label} value={item.value} />
+        ))}
       </div>
-
-      <KpiCirclesBlock items={kpis} />
-
-      <TabsPills
-        items={[
-          { key: 'ACTIVE', label: 'Actifs' },
-          { key: 'PLANNED', label: 'En attente' },
-          { key: 'INACTIVE', label: 'Inactifs' },
-        ]}
-        value={scope}
-        onChange={(key) => setScope(key as ProjectScope)}
-        ariaLabel="Filtre projets"
-        className="-mx-1 px-1"
-      />
 
       {isLoading ? (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -83,24 +76,17 @@ export default function ProjectsPage({ businessId }: Props) {
       ) : error ? (
         <Card className="flex items-center justify-between gap-3 rounded-3xl border border-[var(--border)] bg-[var(--surface)] p-4 text-sm text-[var(--danger)]">
           <span>{error}</span>
-          <button
-            type="button"
-            onClick={refetch}
-            className="rounded-md border border-[var(--border)] px-3 py-1 text-[var(--text-primary)] hover:bg-[var(--surface-hover)]"
-          >
+          <Button type="button" variant="outline" size="sm" onClick={refetch}>
             Réessayer
-          </button>
+          </Button>
         </Card>
       ) : !items || items.length === 0 ? (
         <Card className="flex flex-col gap-3 rounded-3xl border border-[var(--border)] bg-[var(--surface)] p-5">
           <p className="text-sm font-semibold text-[var(--text-primary)]">{emptyLabel}</p>
           <div className="flex gap-2">
-            <Link
-              href={`/app/pro/${businessId}/projects/new`}
-              className="cursor-pointer rounded-md bg-neutral-900 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-neutral-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
-            >
-              Créer un projet
-            </Link>
+            <Button asChild size="sm">
+              <Link href={`/app/pro/${businessId}/projects/new`}>Créer un projet</Link>
+            </Button>
           </div>
         </Card>
       ) : (
@@ -110,6 +96,6 @@ export default function ProjectsPage({ businessId }: Props) {
           ))}
         </div>
       )}
-    </div>
+    </ProPageShell>
   );
 }

@@ -19,8 +19,8 @@ type GanttChartProps = {
 
 const STATUS_COLORS: Record<string, string> = {
   TODO: 'var(--text-secondary)',
-  IN_PROGRESS: '#f59e0b',
-  DONE: '#10b981',
+  IN_PROGRESS: 'var(--chart-in-progress)',
+  DONE: 'var(--chart-done)',
 };
 
 const MS_PER_DAY = 86_400_000;

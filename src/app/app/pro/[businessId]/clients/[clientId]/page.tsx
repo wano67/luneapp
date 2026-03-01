@@ -5,6 +5,7 @@ import { useEffect, useState, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import { LogoAvatar } from '@/components/pro/LogoAvatar';
 import { MoreVertical } from 'lucide-react';
@@ -321,7 +322,7 @@ export default function ClientDetailPage() {
 
   if (loading) {
     return (
-      <div className="mx-auto max-w-5xl space-y-4 px-4 py-6">
+      <div className="mx-auto max-w-6xl space-y-4 px-4 py-6">
         <Card className="h-32 animate-pulse rounded-2xl bg-[var(--surface)]">
           <div className="h-full w-full rounded-xl bg-[var(--surface-hover)]" />
         </Card>
@@ -341,7 +342,7 @@ export default function ClientDetailPage() {
 
   if (error || !client) {
     return (
-      <div className="mx-auto max-w-5xl space-y-3 px-4 py-6">
+      <div className="mx-auto max-w-6xl space-y-3 px-4 py-6">
         <Link
           href={`/app/pro/${businessId}/clients`}
           className="text-sm text-[var(--text-secondary)] underline-offset-4 hover:text-[var(--text-primary)]"
@@ -396,7 +397,7 @@ export default function ClientDetailPage() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl space-y-5 px-4 py-6">
+    <div className="mx-auto max-w-6xl space-y-5 px-4 py-6">
       <div className="flex justify-end">
         <Link
           href={`/app/pro/${businessId}/agenda?clientId=${clientId}`}
@@ -423,21 +424,22 @@ export default function ClientDetailPage() {
         leading={<LogoAvatar name={client.name} websiteUrl={client.websiteUrl ?? undefined} size={52} />}
         actions={
           <>
-            <button
-              type="button"
+            <Button
+              size="sm"
               onClick={() => router.push(`/app/pro/${businessId}/projects?clientId=${clientId}`)}
-              className="w-full cursor-pointer rounded-md bg-neutral-900 px-3 py-2 text-sm font-semibold text-white transition hover:bg-neutral-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)] sm:w-auto"
+              className="w-full sm:w-auto"
             >
               Nouveau projet
-            </button>
-            <button
-              type="button"
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
               onClick={handleSave}
               disabled={!hasChanges || saving}
-              className="w-full cursor-pointer rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm font-semibold text-[var(--text-primary)] transition hover:bg-[var(--surface-hover)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)] disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+              className="w-full sm:w-auto"
             >
               {saving ? 'Enregistrement…' : 'Enregistrer'}
-            </button>
+            </Button>
             <MenuDots businessId={businessId} clientId={clientId} />
           </>
         }

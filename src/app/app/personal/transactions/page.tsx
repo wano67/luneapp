@@ -1045,7 +1045,7 @@ export default function PersoTransactionsPage() {
                   disabled={createLoading || !isValid}
                   className={[
                     'h-12 rounded-2xl px-6 text-base transition',
-                    isValid ? 'shadow-lg shadow-blue-500/20 ring-1 ring-blue-400/30' : 'opacity-70',
+                    isValid ? 'shadow-lg ring-1 ring-[var(--focus-ring)]/30' : 'opacity-70',
                   ].join(' ')}
                 >
                   {createLoading ? 'Création…' : 'Enregistrer'}
@@ -1224,7 +1224,7 @@ export default function PersoTransactionsPage() {
                   disabled={editLoading || !eIsValid}
                   className={[
                     'h-12 rounded-2xl px-6 text-base transition',
-                    eIsValid ? 'shadow-lg shadow-blue-500/20 ring-1 ring-blue-400/30' : 'opacity-70',
+                    eIsValid ? 'shadow-lg ring-1 ring-[var(--focus-ring)]/30' : 'opacity-70',
                   ].join(' ')}
                 >
                   {editLoading ? 'Enregistrement…' : 'Enregistrer'}

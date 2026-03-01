@@ -13,12 +13,14 @@ export function Table({ children, className, wrapperClassName, ...props }: Table
         wrapperClassName
       )}
     >
-      <table
-        className={cn('min-w-0 w-full border-collapse text-sm text-[var(--text)]', className)}
-        {...props}
-      >
-        {children}
-      </table>
+      <div className="w-full overflow-x-auto">
+        <table
+          className={cn('w-full min-w-max border-collapse text-sm text-[var(--text)]', className)}
+          {...props}
+        >
+          {children}
+        </table>
+      </div>
     </div>
   );
 }
