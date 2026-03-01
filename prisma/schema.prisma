@@ -154,6 +154,8 @@ model User {
   personalAccounts     PersonalAccount[]
   personalTransactions PersonalTransaction[]
   personalCategories   PersonalCategory[]
+  personalBudgets      PersonalBudget[]
+  savingsGoals         SavingsGoal[]
   interactionsCreated  Interaction[] @relation("InteractionCreatedBy")
   inventoryMovements   InventoryMovement[]
   ledgerEntriesCreated LedgerEntry[]
@@ -1562,8 +1564,9 @@ model PersonalCategory {
   name      String
   createdAt DateTime @default(now())
 
-  // ✅ inverse relation
+  // ✅ inverse relations
   transactions PersonalTransaction[]
+  budgets      PersonalBudget[]
 
   @@unique([userId, name])
 }
@@ -1592,4 +1595,50 @@ model PersonalTransaction {
 
   @@index([userId, date])
   @@index([accountId, date])
+}
+
+/**
+ * Budget mensuel / annuel (Wallet perso)
+ */
+enum BudgetPeriod {
+  MONTHLY
+  YEARLY
+}
+
+model PersonalBudget {
+  id     BigInt @id @default(autoincrement())
+  userId BigInt
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  categoryId BigInt?
+  category   PersonalCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  name       String
+  limitCents BigInt
+  period     BudgetPeriod @default(MONTHLY)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+}
+
+/**
+ * Objectifs d'épargne (Wallet perso)
+ */
+model SavingsGoal {
+  id     BigInt @id @default(autoincrement())
+  userId BigInt
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name         String
+  targetCents  BigInt
+  currentCents BigInt    @default(0)
+  deadline     DateTime?
+  isCompleted  Boolean   @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
 }

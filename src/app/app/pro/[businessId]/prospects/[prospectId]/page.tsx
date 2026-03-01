@@ -11,7 +11,8 @@ import { Modal } from '@/components/ui/modal';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import { LogoAvatar } from '@/components/pro/LogoAvatar';
 import { MoreVertical } from 'lucide-react';
-import { PageHeaderPro } from '@/components/pro/PageHeaderPro';
+import { PageHeader } from '@/components/layouts/PageHeader';
+import { PageContainer } from '@/components/layouts/PageContainer';
 import { TabsPills } from '@/components/pro/TabsPills';
 import { useActiveBusiness } from '@/app/app/pro/ActiveBusinessProvider';
 
@@ -264,20 +265,20 @@ export default function ProspectDetailPage() {
 
   if (loading) {
     return (
-      <div className="mx-auto max-w-6xl space-y-4 px-4 py-6">
+      <PageContainer className="space-y-4">
         <Card className="h-32 animate-pulse rounded-2xl bg-[var(--surface)]">
           <div className="h-full w-full rounded-xl bg-[var(--surface-hover)]" />
         </Card>
         <Card className="h-24 animate-pulse rounded-2xl bg-[var(--surface)]">
           <div className="h-full w-full rounded-xl bg-[var(--surface-hover)]" />
         </Card>
-      </div>
+      </PageContainer>
     );
   }
 
   if (error || !prospect) {
     return (
-      <div className="mx-auto max-w-6xl space-y-3 px-4 py-6">
+      <PageContainer className="space-y-3">
         <Link
           href={`/app/pro/${businessId}/prospects`}
           className="text-sm text-[var(--text-secondary)] underline-offset-4 hover:text-[var(--text-primary)]"
@@ -285,12 +286,12 @@ export default function ProspectDetailPage() {
           ← Retour aux prospects
         </Link>
         <Card className="p-4 text-sm text-[var(--danger)]">{error ?? 'Prospect introuvable'}</Card>
-      </div>
+      </PageContainer>
     );
   }
 
   return (
-    <div className="mx-auto max-w-6xl space-y-5 px-4 py-6">
+    <PageContainer className="space-y-5">
       <div className="flex justify-end">
         <Link
           href={`/app/pro/${businessId}/agenda?prospectId=${prospectId}`}
@@ -299,7 +300,7 @@ export default function ProspectDetailPage() {
           Ouvrir dans le CRM
         </Link>
       </div>
-      <PageHeaderPro
+      <PageHeader
         backHref={`/app/pro/${businessId}/prospects`}
         backLabel="Prospects"
         title={prospect.name || 'Prospect'}
@@ -626,7 +627,7 @@ export default function ProspectDetailPage() {
           </div>
         </div>
       </Modal>
-    </div>
+    </PageContainer>
   );
 }
 

@@ -8,7 +8,7 @@ import { KpiCard } from '@/components/ui/kpi-card';
 import { FeatureGrid } from '@/components/marketing/FeatureGrid';
 import { PricingCards } from '@/components/marketing/PricingCards';
 import { Faq } from '@/components/marketing/Faq';
-import { TestimonialStrip } from '@/components/marketing/TestimonialStrip';
+import { TestimonialCards } from '@/components/marketing/TestimonialCards';
 
 export const metadata: Metadata = {
   title: 'Lune • OS perso & pro',
@@ -113,9 +113,9 @@ export default function HomePage() {
             </Button>
           </div>
           <div className="grid gap-4 sm:grid-cols-3">
-            <KpiCard label="Prospects suivis" value="2 400+" delta="+18% ce mois" trend="up" />
-            <KpiCard label="Clients actifs" value="620" delta="+42 nouveaux" trend="neutral" />
-            <KpiCard label="Temps gagné" value="6h / semaine" delta="Automations & cockpit" />
+            <KpiCard label="Espaces pro & perso" value="Un seul outil" hint="Pas de double saisie" />
+            <KpiCard label="Sécurité" value="Par défaut" hint="CSRF, auth, rate-limit" />
+            <KpiCard label="Mobile-first" value="Partout" hint="Testé sur petit écran" />
           </div>
         </div>
         <Card className="border-[var(--border)] bg-[var(--surface)] p-6 shadow-lg shadow-[var(--shadow-float)]/25">
@@ -155,7 +155,7 @@ export default function HomePage() {
         </Card>
       </section>
 
-      <TestimonialStrip />
+      <TestimonialCards />
 
       <FeatureGrid
         title="Tout ce dont vous avez besoin"
@@ -238,16 +238,16 @@ export default function HomePage() {
 
       <Faq items={faqItems} />
 
-      <section className="rounded-3xl border border-[var(--border)] bg-[var(--surface)] p-8 text-center shadow-md shadow-[var(--shadow-float)]/25">
-        <h2 className="text-2xl font-semibold text-[var(--text)]">Prêt à travailler au calme ?</h2>
-        <p className="mt-3 text-sm text-[var(--text-secondary)]">
-          Crée ton compte et accède à l’app interne. Lune est conçu pour rester simple, sûr et mobile.
+      <section className="rounded-3xl bg-[var(--accent)] p-8 text-center shadow-md">
+        <h2 className="text-2xl font-semibold text-white">Prêt à travailler au calme ?</h2>
+        <p className="mt-3 text-sm text-white/80">
+          Crée ton compte et accède à l&apos;app. Lune est conçu pour rester simple, sûr et mobile.
         </p>
         <div className="mt-6 flex flex-wrap justify-center gap-3">
-          <Button asChild size="lg">
+          <Button asChild size="lg" variant="outline" className="border-white/40 bg-white/10 text-white hover:bg-white/20">
             <Link href="/register">Créer un compte</Link>
           </Button>
-          <Button asChild variant="outline" size="lg">
+          <Button asChild size="lg" className="bg-white text-[var(--accent)] hover:bg-white/90">
             <Link href="/login">Se connecter</Link>
           </Button>
         </div>

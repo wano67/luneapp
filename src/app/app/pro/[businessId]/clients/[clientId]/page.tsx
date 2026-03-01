@@ -13,7 +13,8 @@ import { normalizeWebsiteUrl } from '@/lib/website';
 import { KpiCirclesBlock } from '@/components/pro/KpiCirclesBlock';
 import { formatCurrencyEUR } from '@/lib/formatCurrency';
 import { ClientAccountingTab } from '@/components/pro/clients/ClientAccountingTab';
-import { PageHeaderPro } from '@/components/pro/PageHeaderPro';
+import { PageHeader } from '@/components/layouts/PageHeader';
+import { PageContainer } from '@/components/layouts/PageContainer';
 import { TabsPills } from '@/components/pro/TabsPills';
 import { ClientInteractionsTab } from '@/components/pro/clients/ClientInteractionsTab';
 import { ClientDocumentsTab } from '@/components/pro/clients/ClientDocumentsTab';
@@ -322,7 +323,7 @@ export default function ClientDetailPage() {
 
   if (loading) {
     return (
-      <div className="mx-auto max-w-6xl space-y-4 px-4 py-6">
+      <PageContainer className="space-y-4">
         <Card className="h-32 animate-pulse rounded-2xl bg-[var(--surface)]">
           <div className="h-full w-full rounded-xl bg-[var(--surface-hover)]" />
         </Card>
@@ -336,13 +337,13 @@ export default function ClientDetailPage() {
         <Card className="h-64 animate-pulse rounded-2xl bg-[var(--surface)]">
           <div className="h-full w-full rounded-xl bg-[var(--surface-hover)]" />
         </Card>
-      </div>
+      </PageContainer>
     );
   }
 
   if (error || !client) {
     return (
-      <div className="mx-auto max-w-6xl space-y-3 px-4 py-6">
+      <PageContainer className="space-y-3">
         <Link
           href={`/app/pro/${businessId}/clients`}
           className="text-sm text-[var(--text-secondary)] underline-offset-4 hover:text-[var(--text-primary)]"
@@ -350,7 +351,7 @@ export default function ClientDetailPage() {
           ← Retour aux clients
         </Link>
         <Card className="p-4 text-sm text-[var(--danger)]">{error ?? 'Client introuvable'}</Card>
-      </div>
+      </PageContainer>
     );
   }
 
@@ -397,7 +398,7 @@ export default function ClientDetailPage() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl space-y-5 px-4 py-6">
+    <PageContainer className="space-y-5">
       <div className="flex justify-end">
         <Link
           href={`/app/pro/${businessId}/agenda?clientId=${clientId}`}
@@ -406,7 +407,7 @@ export default function ClientDetailPage() {
           Ouvrir dans le CRM
         </Link>
       </div>
-      <PageHeaderPro
+      <PageHeader
         backHref={`/app/pro/${businessId}/clients`}
         backLabel="Clients"
         title={client.name}
@@ -529,7 +530,7 @@ export default function ClientDetailPage() {
           onUpdated={handleClientUpdated}
         />
       ) : null}
-    </div>
+    </PageContainer>
   );
 }
 
