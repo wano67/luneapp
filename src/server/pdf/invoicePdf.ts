@@ -118,6 +118,12 @@ function summarizeText(value?: string | null, maxChars = 900) {
   return `${trimmed.slice(0, maxChars).trim()}…`;
 }
 
+function compactSingleLine(value?: string | null, maxChars = 180) {
+  const summary = summarizeText(value, maxChars);
+  if (!summary) return null;
+  return summary.replace(/\s+/g, ' ');
+}
+
 type InvoicePdfItem = {
   label: string;
   description?: string | null;
@@ -213,8 +219,10 @@ export async function buildInvoicePdf(payload: InvoicePdfPayload): Promise<Uint8
     primary: rgb(0.1, 0.1, 0.1),
     secondary: rgb(0.4, 0.4, 0.4),
     legal: rgb(0.5, 0.5, 0.5),
+    accent: rgb(0.13, 0.24, 0.47),
     line: rgb(0.86, 0.86, 0.86),
     soft: rgb(0.97, 0.96, 0.94),
+    panel: rgb(0.97, 0.98, 0.995),
   };
 
   const sizes = {
@@ -343,55 +351,104 @@ export async function buildInvoicePdf(payload: InvoicePdfPayload): Promise<Uint8
 
   const drawHeader = () => {
     const year = getYearLabel(payload.issuedAt ?? payload.dueAt);
-    page.drawText(sanitizePdfText(`FACTURE ${year}`), { x: marginX, y, size: sizes.docTitle, font: bold, color: colors.primary });
+    page.drawText(sanitizePdfText(`FACTURE ${year}`), { x: marginX, y, size: sizes.docTitle, font: bold, color: colors.accent });
     y -= sizes.docTitle + 6;
     const numberLabel = payload.number ?? payload.invoiceId;
     page.drawText(sanitizePdfText(`Facture n° ${numberLabel}`), { x: marginX, y, size: sizes.section, font: bold, color: colors.primary });
     y -= sizes.section + 8;
 
-    const headerRightX = 360;
-    const metaX = 380;
-    let metaY = topY;
-    page.drawText('FACTURE', { x: headerRightX, y: metaY, size: sizes.section, font: bold, color: colors.primary });
-    metaY -= 16;
     const metaLines = [
       payload.issuedAt ? `Émise: ${formatDate(payload.issuedAt)}` : null,
       payload.dueAt ? `Échéance: ${formatDate(payload.dueAt)}` : null,
       payload.paidAt ? `Payée: ${formatDate(payload.paidAt)}` : null,
+      payload.projectName ? `Projet: ${payload.projectName}` : null,
       payload.currency ? `Devise: ${payload.currency}` : null,
     ].filter((value): value is string => typeof value === 'string' && value.length > 0);
+    const metaBoxX = 352;
+    const metaBoxY = topY - 10 - metaLines.length * 12 - 10;
+    const metaBoxHeight = 20 + metaLines.length * 12;
+    page.drawRectangle({
+      x: metaBoxX,
+      y: metaBoxY,
+      width: pageWidth - marginX - metaBoxX,
+      height: metaBoxHeight,
+      color: colors.panel,
+      borderColor: colors.line,
+      borderWidth: 0.6,
+    });
+    let metaY = metaBoxY + metaBoxHeight - 14;
+    page.drawText('RÉFÉRENCES', { x: metaBoxX + 8, y: metaY, size: sizes.tiny, font: bold, color: colors.secondary });
+    metaY -= 12;
     for (const line of metaLines) {
-      page.drawText(sanitizePdfText(line), { x: metaX, y: metaY, size: sizes.tiny, font, color: colors.secondary });
+      page.drawText(sanitizePdfText(line), { x: metaBoxX + 8, y: metaY, size: sizes.tiny, font, color: colors.secondary });
       metaY -= 12;
     }
 
     y -= spacing.headerGap;
-    page.drawText('ÉMETTEUR', { x: marginX, y, size: sizes.tiny, font: bold, color: colors.secondary });
-    const issuerStartY = y - 12;
-    let issuerY = issuerStartY;
-    issuerLines.forEach((line) => {
-      page.drawText(sanitizePdfText(line), { x: marginX, y: issuerY, size: sizes.small, font, color: colors.primary });
+    const issuerBlockX = marginX;
+    const clientBlockX = 318;
+    const blockWidth = 226;
+    const wrappedIssuer = (issuerLines.length ? issuerLines : ['—']).flatMap((line) =>
+      wrapText(line, blockWidth - 20, font, sizes.small)
+    );
+    const wrappedClient = (clientLines.length ? clientLines : ['—']).flatMap((line) =>
+      wrapText(line, blockWidth - 20, font, sizes.small)
+    );
+    const maxLines = Math.max(wrappedIssuer.length, wrappedClient.length, 1);
+    const blockHeight = 28 + maxLines * 12 + 8;
+    const blockBottom = y - blockHeight + 10;
+
+    page.drawRectangle({
+      x: issuerBlockX,
+      y: blockBottom,
+      width: blockWidth,
+      height: blockHeight,
+      color: colors.panel,
+      borderColor: colors.line,
+      borderWidth: 0.6,
+    });
+    page.drawRectangle({
+      x: clientBlockX,
+      y: blockBottom,
+      width: blockWidth,
+      height: blockHeight,
+      color: colors.panel,
+      borderColor: colors.line,
+      borderWidth: 0.6,
+    });
+
+    page.drawText('ÉMETTEUR', { x: issuerBlockX + 8, y, size: sizes.tiny, font: bold, color: colors.secondary });
+    page.drawText('CLIENT', { x: clientBlockX + 8, y, size: sizes.tiny, font: bold, color: colors.secondary });
+    let issuerY = y - 14;
+    for (const line of wrappedIssuer) {
+      page.drawText(sanitizePdfText(line), { x: issuerBlockX + 8, y: issuerY, size: sizes.small, font, color: colors.primary });
       issuerY -= 12;
-    });
-
-    const clientBlockX = 320;
-    page.drawText('CLIENT', { x: clientBlockX, y, size: sizes.tiny, font: bold, color: colors.secondary });
-    let clientY = issuerStartY;
-    clientLines.forEach((line) => {
-      page.drawText(sanitizePdfText(line), { x: clientBlockX, y: clientY, size: sizes.small, font, color: colors.primary });
+    }
+    let clientY = y - 14;
+    for (const line of wrappedClient) {
+      page.drawText(sanitizePdfText(line), { x: clientBlockX + 8, y: clientY, size: sizes.small, font, color: colors.primary });
       clientY -= 12;
-    });
+    }
 
-    y = Math.min(issuerY, clientY) - spacing.block;
+    y = blockBottom - spacing.block;
   };
 
   const drawTableHeader = () => {
+    page.drawRectangle({
+      x: marginX - 4,
+      y: y - 4,
+      width: pageWidth - marginX * 2 + 8,
+      height: 16,
+      color: colors.panel,
+      borderColor: colors.line,
+      borderWidth: 0.6,
+    });
     page.drawText('Description', { x: columns.labelX, y, size: sizes.small, font: bold, color: colors.secondary });
     drawRightText('Qté', columns.qtyX, sizes.small, colors.secondary, bold);
     drawRightText('Unité', columns.unitX, sizes.small, colors.secondary, bold);
     drawRightText('PU', columns.unitPriceX, sizes.small, colors.secondary, bold);
     drawRightText('Total', columns.totalX, sizes.small, colors.secondary, bold);
-    y -= 10;
+    y -= 12;
     drawDivider();
   };
 
@@ -469,6 +526,17 @@ export async function buildInvoicePdf(payload: InvoicePdfPayload): Promise<Uint8
     y -= 14;
 
     const drawTotalRow = (label: string, value: string, size = sizes.body, isBold = false) => {
+      if (isBold) {
+        page.drawRectangle({
+          x: columns.unitPriceX - 24,
+          y: y - 4,
+          width: columns.totalX - (columns.unitPriceX - 24) + 4,
+          height: 16,
+          color: colors.panel,
+          borderColor: colors.line,
+          borderWidth: 0.6,
+        });
+      }
       page.drawText(sanitizePdfText(label), {
         x: columns.unitPriceX - 20,
         y,
@@ -481,7 +549,7 @@ export async function buildInvoicePdf(payload: InvoicePdfPayload): Promise<Uint8
     };
 
     drawTotalRow('Sous-total HT', formatAmount(totalCents, payload.currency));
-    drawTotalRow(`TVA ${vatEnabled ? `${vatRate}%` : '—'}`, formatAmount(vatCents, payload.currency));
+    drawTotalRow(vatEnabled ? `TVA ${vatRate}%` : 'TVA non applicable', formatAmount(vatCents, payload.currency));
     drawTotalRow('Total TTC', formatAmount(totalTtcCents, payload.currency), sizes.section, true);
     y -= 8;
 
@@ -489,7 +557,49 @@ export async function buildInvoicePdf(payload: InvoicePdfPayload): Promise<Uint8
       payload.depositPercent != null && Number.isFinite(payload.depositPercent) ? `${payload.depositPercent}%` : null;
     const depositLabel = depositPercentText ? `Acompte ${depositPercentText}` : 'Acompte';
     drawTotalRow(depositLabel, formatAmount(payload.depositCents, payload.currency));
-    drawTotalRow('Solde', formatAmount(payload.balanceCents, payload.currency));
+    drawTotalRow('Solde', formatAmount(payload.balanceCents, payload.currency), sizes.section, true);
+  };
+
+  const drawRegulatoryBlock = () => {
+    const lines: string[] = [];
+    lines.push(`Date limite de règlement: ${formatDate(payload.dueAt)}`);
+    const paymentTermsLine = compactSingleLine(
+      business?.paymentTermsText ?? (payload.paymentTermsDays != null ? `Paiement sous ${payload.paymentTermsDays} jours.` : null),
+      170
+    );
+    if (paymentTermsLine) {
+      lines.push(`Conditions de paiement: ${paymentTermsLine}`);
+    }
+    lines.push('Escompte pour paiement anticipé: néant.');
+    const lateFeesLine = compactSingleLine(business?.lateFeesText, 170);
+    if (lateFeesLine) {
+      lines.push(`Pénalités de retard: ${lateFeesLine}`);
+    }
+    const indemnityLine = compactSingleLine(business?.fixedIndemnityText, 150);
+    if (indemnityLine) {
+      lines.push(`Indemnité forfaitaire de recouvrement: ${indemnityLine}`);
+    }
+    if (!lines.length) return;
+
+    const wrapped = lines.flatMap((line) => wrapText(line, pageWidth - marginX * 2 - 20, font, sizes.tiny));
+    const blockHeight = 26 + wrapped.length * 12;
+    y -= spacing.section;
+    ensureSpace(blockHeight + 8);
+    page.drawRectangle({
+      x: marginX,
+      y: y - blockHeight + 8,
+      width: pageWidth - marginX * 2,
+      height: blockHeight,
+      color: colors.panel,
+      borderColor: colors.line,
+      borderWidth: 0.6,
+    });
+    page.drawText('Mentions de règlement', { x: marginX + 10, y, size: sizes.small, font: bold, color: colors.primary });
+    y -= 14;
+    for (const line of wrapped) {
+      page.drawText(sanitizePdfText(line), { x: marginX + 10, y, size: sizes.tiny, font, color: colors.secondary });
+      y -= 12;
+    }
   };
 
   const drawPaymentSituation = () => {
@@ -572,6 +682,7 @@ export async function buildInvoicePdf(payload: InvoicePdfPayload): Promise<Uint8
     drawTableHeader();
     payload.items.forEach(drawLineItem);
     drawTotalsBlock();
+    drawRegulatoryBlock();
     drawPaymentSituation();
     drawPrestationsSummary();
     drawPaymentBlock();

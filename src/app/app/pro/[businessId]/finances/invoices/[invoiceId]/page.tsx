@@ -25,6 +25,27 @@ type InvoiceItem = {
   updatedAt: string;
 };
 
+type InvoiceComplianceIssue = {
+  code: string;
+  severity: 'error' | 'warning' | 'info';
+  label: string;
+  detail: string;
+};
+
+type InvoiceComplianceReport = {
+  checkedAt: string;
+  isCompliant: boolean;
+  required: {
+    total: number;
+    completed: number;
+  };
+  recommended: {
+    total: number;
+    completed: number;
+  };
+  issues: InvoiceComplianceIssue[];
+};
+
 type InvoiceDetail = {
   id: string;
   businessId: string;
@@ -49,6 +70,7 @@ type InvoiceDetail = {
   updatedAt: string;
   consumptionLedgerEntryId?: string | null;
   cashSaleLedgerEntryId?: string | null;
+  compliance?: InvoiceComplianceReport;
   items: InvoiceItem[];
 };
 
@@ -316,6 +338,69 @@ export default function InvoiceDetailPage() {
             {actionError ? <p className="text-sm font-semibold text-[var(--danger)]">{actionError}</p> : null}
             {info ? <p className="text-sm text-[var(--success)]">{info}</p> : null}
           </Card>
+
+          {invoice.compliance ? (
+            <Card className="space-y-3 p-5">
+              <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-[var(--text-primary)]">Conformité facture</p>
+                  <p className="text-xs text-[var(--text-secondary)]">
+                    Vérification automatique des mentions obligatoires et recommandations administratives.
+                  </p>
+                </div>
+                <Badge variant="neutral">
+                  {invoice.compliance.isCompliant ? 'Conforme (socle obligatoire)' : 'Mentions obligatoires manquantes'}
+                </Badge>
+              </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                <Card className="space-y-1 border-dashed border-[var(--border)] bg-[var(--surface)] p-3">
+                  <p className="text-xs font-semibold text-[var(--text-secondary)]">Obligatoire</p>
+                  <p className="text-sm text-[var(--text-primary)]">
+                    {invoice.compliance.required.completed}/{invoice.compliance.required.total}
+                  </p>
+                </Card>
+                <Card className="space-y-1 border-dashed border-[var(--border)] bg-[var(--surface)] p-3">
+                  <p className="text-xs font-semibold text-[var(--text-secondary)]">Recommandé</p>
+                  <p className="text-sm text-[var(--text-primary)]">
+                    {invoice.compliance.recommended.completed}/{invoice.compliance.recommended.total}
+                  </p>
+                </Card>
+              </div>
+              {invoice.compliance.issues.length === 0 ? (
+                <p className="text-sm text-[var(--success)]">Aucune anomalie détectée.</p>
+              ) : (
+                <div className="space-y-2">
+                  {invoice.compliance.issues.map((issue) => (
+                    <div
+                      key={issue.code}
+                      className="rounded-xl border border-[var(--border)]/70 bg-[var(--surface-2)]/60 px-3 py-2"
+                    >
+                      <p
+                        className={`text-xs font-semibold ${
+                          issue.severity === 'error'
+                            ? 'text-[var(--danger)]'
+                            : issue.severity === 'warning'
+                              ? 'text-[var(--warning)]'
+                              : 'text-[var(--text-secondary)]'
+                        }`}
+                      >
+                        {issue.label}
+                      </p>
+                      <p className="text-xs text-[var(--text-secondary)]">{issue.detail}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="flex flex-wrap items-center gap-2">
+                <Button asChild variant="outline" size="sm">
+                  <Link href={`/app/pro/${businessId}/settings/billing`}>Compléter les paramètres de facturation</Link>
+                </Button>
+                <p className="text-[11px] text-[var(--text-secondary)]">
+                  Contrôle effectué le {formatDateTime(invoice.compliance.checkedAt)}.
+                </p>
+              </div>
+            </Card>
+          ) : null}
 
           <Card className="space-y-3 p-5">
             <div className="flex items-center justify-between">

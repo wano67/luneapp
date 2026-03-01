@@ -11,7 +11,12 @@ import { withBusinessRoute } from '@/server/http/routeHandler';
 import { jsonb, jsonbNoContent } from '@/server/http/json';
 import { badRequest, notFound, withIdNoStore } from '@/server/http/apiUtils';
 import { assignDocumentNumber } from '@/server/services/numbering';
-import { buildClientSnapshot, buildIssuerSnapshot } from '@/server/billing/snapshots';
+import {
+  buildClientSnapshot,
+  buildIssuerSnapshot,
+  coerceClientSnapshot,
+  coerceIssuerSnapshot,
+} from '@/server/billing/snapshots';
 import { computeInvoicePaymentSummary, ensureLegacyPaymentForPaidInvoice } from '@/server/billing/payments';
 import {
   consumeReservation,
@@ -21,6 +26,7 @@ import {
 import { createLedgerForInvoiceConsumption, upsertCashSaleLedgerForInvoicePaid } from '@/server/services/ledger';
 import { parseCentsInput } from '@/lib/money';
 import { parseIdOpt, parseDateOpt } from '@/server/http/parsers';
+import { assessInvoiceCompliance } from '@/server/billing/invoiceCompliance';
 
 function roundPercent(amount: bigint, percent: number) {
   return (amount * BigInt(Math.round(percent))) / BigInt(100);
@@ -109,7 +115,136 @@ export const GET = withBusinessRoute<{ businessId: string; invoiceId: string }>(
     const paymentSummary = await computeInvoicePaymentSummary(prisma, invoice);
     const ledgerIds = await loadInvoiceLedgerIds(businessIdBigInt, invoiceIdBigInt);
 
-    return jsonb({ item: enrichInvoice(invoice as InvoiceWithItems, { ...ledgerIds, paymentSummary }) }, requestId);
+    const [business, client] = await Promise.all([
+      prisma.business.findUnique({
+        where: { id: businessIdBigInt },
+        select: {
+          name: true,
+          legalName: true,
+          websiteUrl: true,
+          siret: true,
+          vatNumber: true,
+          addressLine1: true,
+          addressLine2: true,
+          postalCode: true,
+          city: true,
+          countryCode: true,
+          billingEmail: true,
+          billingPhone: true,
+          iban: true,
+          bic: true,
+          bankName: true,
+          accountHolder: true,
+          billingLegalText: true,
+          settings: {
+            select: {
+              paymentTermsDays: true,
+              vatEnabled: true,
+              cgvText: true,
+              paymentTermsText: true,
+              lateFeesText: true,
+              fixedIndemnityText: true,
+              legalMentionsText: true,
+            },
+          },
+        },
+      }),
+      invoice.clientId
+        ? prisma.client.findUnique({
+            where: { id: invoice.clientId },
+            select: {
+              name: true,
+              companyName: true,
+              email: true,
+              phone: true,
+              address: true,
+              billingCompanyName: true,
+              billingContactName: true,
+              billingEmail: true,
+              billingPhone: true,
+              billingVatNumber: true,
+              billingReference: true,
+              billingAddressLine1: true,
+              billingAddressLine2: true,
+              billingPostalCode: true,
+              billingCity: true,
+              billingCountryCode: true,
+            },
+          })
+        : null,
+    ]);
+
+    const issuerSnapshot =
+      coerceIssuerSnapshot(invoice.issuerSnapshotJson) ??
+      (business
+        ? buildIssuerSnapshot({
+            name: business.name,
+            legalName: business.legalName,
+            websiteUrl: business.websiteUrl,
+            siret: business.siret,
+            vatNumber: business.vatNumber,
+            addressLine1: business.addressLine1,
+            addressLine2: business.addressLine2,
+            postalCode: business.postalCode,
+            city: business.city,
+            countryCode: business.countryCode,
+            billingEmail: business.billingEmail,
+            billingPhone: business.billingPhone,
+            iban: business.iban,
+            bic: business.bic,
+            bankName: business.bankName,
+            accountHolder: business.accountHolder,
+            billingLegalText: business.billingLegalText,
+            cgvText: business.settings?.cgvText ?? null,
+            paymentTermsText: business.settings?.paymentTermsText ?? null,
+            lateFeesText: business.settings?.lateFeesText ?? null,
+            fixedIndemnityText: business.settings?.fixedIndemnityText ?? null,
+            legalMentionsText: business.settings?.legalMentionsText ?? null,
+          })
+        : null);
+
+    const clientSnapshot =
+      coerceClientSnapshot(invoice.clientSnapshotJson) ??
+      buildClientSnapshot(
+        client
+          ? {
+              name: client.name ?? null,
+              companyName: client.companyName ?? null,
+              email: client.email ?? null,
+              phone: client.phone ?? null,
+              address: client.address ?? null,
+              billingCompanyName: client.billingCompanyName ?? null,
+              billingContactName: client.billingContactName ?? null,
+              billingEmail: client.billingEmail ?? null,
+              billingPhone: client.billingPhone ?? null,
+              billingVatNumber: client.billingVatNumber ?? null,
+              billingReference: client.billingReference ?? null,
+              billingAddressLine1: client.billingAddressLine1 ?? null,
+              billingAddressLine2: client.billingAddressLine2 ?? null,
+              billingPostalCode: client.billingPostalCode ?? null,
+              billingCity: client.billingCity ?? null,
+              billingCountryCode: client.billingCountryCode ?? null,
+            }
+          : null
+      );
+
+    const compliance = assessInvoiceCompliance({
+      invoice: {
+        number: invoice.number,
+        issuedAt: invoice.issuedAt ?? invoice.createdAt,
+        dueAt: invoice.dueAt,
+        itemsCount: invoice.items.length,
+        vatEnabled: business?.settings?.vatEnabled ?? null,
+        paymentTermsDays: business?.settings?.paymentTermsDays ?? null,
+      },
+      issuer: issuerSnapshot,
+      client: clientSnapshot,
+    });
+
+    return jsonb(
+      { item: { ...enrichInvoice(invoice as InvoiceWithItems, { ...ledgerIds, paymentSummary }), compliance } },
+      requestId
+    );
   }
 );
 
