@@ -105,23 +105,42 @@ function wrapText(
   return lines.length ? lines : [''];
 }
 
+function splitParagraphs(text: string) {
+  const raw = text
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  const paragraphs: string[] = [];
+  raw.forEach((line) => {
+    if (line.length <= 360) {
+      paragraphs.push(line);
+      return;
+    }
+    const sentenceParts = line.split(/(?<=[.!?;:])\s+/).map((part) => part.trim()).filter(Boolean);
+    if (!sentenceParts.length) {
+      paragraphs.push(line);
+      return;
+    }
+    let current = '';
+    sentenceParts.forEach((part) => {
+      const next = current ? `${current} ${part}` : part;
+      if (next.length > 320 && current) {
+        paragraphs.push(current);
+        current = part;
+      } else {
+        current = next;
+      }
+    });
+    if (current) paragraphs.push(current);
+  });
+
+  return paragraphs;
+}
+
 function formatUnitPrice(value: Moneyish, currency: string, unitLabel: string | null) {
   const base = formatAmount(value, currency);
   return unitLabel ? `${base} ${unitLabel}` : base;
-}
-
-function summarizeText(value?: string | null, maxChars = 900) {
-  if (!value) return null;
-  const trimmed = value.trim();
-  if (!trimmed) return null;
-  if (trimmed.length <= maxChars) return trimmed;
-  return `${trimmed.slice(0, maxChars).trim()}…`;
-}
-
-function compactSingleLine(value?: string | null, maxChars = 180) {
-  const summary = summarizeText(value, maxChars);
-  if (!summary) return null;
-  return summary.replace(/\s+/g, ' ');
 }
 
 type QuotePdfItem = {
@@ -171,39 +190,6 @@ type LegalSection = {
   text: string;
 };
 
-function splitParagraphs(text: string) {
-  const raw = text
-    .split(/\n+/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-
-  const paragraphs: string[] = [];
-  raw.forEach((line) => {
-    if (line.length <= 360) {
-      paragraphs.push(line);
-      return;
-    }
-    const sentenceParts = line.split(/(?<=[.!?;:])\s+/).map((part) => part.trim()).filter(Boolean);
-    if (!sentenceParts.length) {
-      paragraphs.push(line);
-      return;
-    }
-    let current = '';
-    sentenceParts.forEach((part) => {
-      const next = current ? `${current} ${part}` : part;
-      if (next.length > 320 && current) {
-        paragraphs.push(current);
-        current = part;
-      } else {
-        current = next;
-      }
-    });
-    if (current) paragraphs.push(current);
-  });
-
-  return paragraphs;
-}
-
 function buildLegalSections(business: PartyDetails | null | undefined, paymentTermsDays?: number | null): LegalSection[] {
   if (!business) return [];
   const sections: LegalSection[] = [];
@@ -220,10 +206,22 @@ function buildLegalSections(business: PartyDetails | null | undefined, paymentTe
   return sections;
 }
 
-function getYearLabel(value?: string | null) {
-  if (!value) return new Date().getFullYear();
-  const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? new Date().getFullYear() : d.getFullYear();
+function buildAddressLines(party: {
+  addressLine1?: string | null;
+  addressLine2?: string | null;
+  postalCode?: string | null;
+  city?: string | null;
+  countryCode?: string | null;
+  address?: string | null;
+}) {
+  const lines: string[] = [];
+  if (party.addressLine1) lines.push(party.addressLine1);
+  if (party.addressLine2) lines.push(party.addressLine2);
+  const cityLine = [party.postalCode, party.city].filter(Boolean).join(' ');
+  if (cityLine) lines.push(cityLine);
+  if (party.countryCode) lines.push(party.countryCode);
+  if (!lines.length && party.address) lines.push(party.address);
+  return lines;
 }
 
 export async function buildQuotePdf(payload: QuotePdfPayload): Promise<Uint8Array> {
@@ -234,41 +232,27 @@ export async function buildQuotePdf(payload: QuotePdfPayload): Promise<Uint8Arra
   const pageWidth = 595;
   const marginX = 50;
   const topY = 790;
-  const bottomY = 60;
+  const bottomY = 56;
+  const contentWidth = pageWidth - marginX * 2;
 
   const colors = {
     primary: rgb(0.1, 0.1, 0.1),
-    secondary: rgb(0.4, 0.4, 0.4),
-    legal: rgb(0.5, 0.5, 0.5),
-    line: rgb(0.84, 0.84, 0.84),
-    soft: rgb(0.965, 0.97, 0.975),
-    panel: rgb(0.975, 0.978, 0.985),
+    secondary: rgb(0.42, 0.42, 0.42),
+    line: rgb(0.86, 0.86, 0.86),
   };
 
   const sizes = {
-    docTitle: 20,
-    section: 12,
+    title: 22,
+    number: 15,
+    section: 11,
     body: 10,
-    small: 9,
-    tiny: 8,
-    itemTitle: 11,
+    muted: 8,
   };
 
-  const spacing = {
-    section: 28,
-    block: 24,
-    row: 14,
-    rowGap: 12,
-    headerGap: 18,
-  };
-
-  const columns = {
-    labelX: marginX,
-    qtyX: 330,
-    unitX: 370,
-    unitPriceX: 440,
-    totalX: pageWidth - marginX,
-    labelWidth: 260,
+  const lineHeights = {
+    body: 13,
+    muted: 11,
+    legal: 14,
   };
 
   const pages: ReturnType<typeof pdfDoc.addPage>[] = [];
@@ -291,592 +275,455 @@ export async function buildQuotePdf(payload: QuotePdfPayload): Promise<Uint8Arra
     page.drawText(safe, { x: rightX - width, y, size, font: fontRef, color });
   };
 
-  const drawWrappedText = (
-    text: string,
-    opts: {
-      x: number;
-      maxWidth: number;
-      size: number;
-      color?: typeof colors.primary;
-      fontRef?: typeof font;
-      lineHeight?: number;
-      onNewPage?: () => void;
-    }
-  ) => {
-    const lines = wrapText(text, opts.maxWidth, opts.fontRef ?? font, opts.size);
-    const lineHeight = opts.lineHeight ?? Math.round(opts.size * 1.5);
-    for (const line of lines) {
-      ensureSpace(lineHeight, opts.onNewPage);
-      page.drawText(sanitizePdfText(line), {
-        x: opts.x,
-        y,
-        size: opts.size,
-        font: opts.fontRef ?? font,
-        color: opts.color ?? colors.primary,
-      });
-      y -= lineHeight;
-    }
-  };
-
   const drawParagraph = (
-    text: string,
+    paragraph: string,
     opts: {
       x: number;
-      maxWidth: number;
+      width: number;
       size: number;
-      color?: typeof colors.primary;
-      fontRef?: typeof font;
-      lineHeight?: number;
+      lineHeight: number;
+      color: typeof colors.primary;
       onNewPage?: () => void;
     }
   ) => {
-    const fontRef = opts.fontRef ?? font;
-    const lineHeight = opts.lineHeight ?? Math.round(opts.size * 1.5);
-    const lines = wrapText(text, opts.maxWidth, fontRef, opts.size);
-    const paragraphHeight = lines.length * lineHeight;
+    const lines = wrapText(paragraph, opts.width, font, opts.size);
+    const paragraphHeight = lines.length * opts.lineHeight;
     const pageBodyHeight = topY - bottomY;
+
     if (paragraphHeight <= pageBodyHeight) {
       ensureSpace(paragraphHeight, opts.onNewPage);
     }
+
     for (const line of lines) {
-      ensureSpace(lineHeight, opts.onNewPage);
+      ensureSpace(opts.lineHeight, opts.onNewPage);
       page.drawText(sanitizePdfText(line), {
         x: opts.x,
         y,
         size: opts.size,
-        font: fontRef,
-        color: opts.color ?? colors.primary,
+        font,
+        color: opts.color,
       });
-      y -= lineHeight;
+      y -= opts.lineHeight;
     }
   };
 
-  const drawDivider = () => {
+  const drawDivider = (thickness = 0.8) => {
     page.drawLine({
       start: { x: marginX, y },
       end: { x: pageWidth - marginX, y },
-      thickness: 0.6,
+      thickness,
       color: colors.line,
     });
-    y -= 10;
+    y -= 12;
   };
 
   const business = payload.business ?? null;
   const client = payload.client ?? null;
-  const issuerLines: string[] = [];
-  const legalName = business?.legalName || payload.businessName;
-  if (legalName) issuerLines.push(legalName);
-  if (business?.addressLine1) issuerLines.push(business.addressLine1);
-  if (business?.addressLine2) issuerLines.push(business.addressLine2);
-  const cityLine = [business?.postalCode, business?.city].filter(Boolean).join(' ');
-  if (cityLine) issuerLines.push(cityLine);
-  if (business?.countryCode) issuerLines.push(business.countryCode);
-  if (business?.siret) issuerLines.push(`SIRET: ${business.siret}`);
-  if (business?.vatNumber) issuerLines.push(`TVA: ${business.vatNumber}`);
-  if (business?.websiteUrl) issuerLines.push(business.websiteUrl);
-  if (business?.email) issuerLines.push(business.email);
-  if (business?.phone) issuerLines.push(business.phone);
 
-  const clientLines: string[] = [];
-  const clientLabel = client?.companyName || client?.name || payload.clientName || '';
-  if (clientLabel) clientLines.push(clientLabel);
-  if (client?.companyName && client?.name && client.companyName !== client.name) {
-    clientLines.push(`Contact: ${client.name}`);
-  }
-  const clientAddressLines: string[] = [];
-  if (client?.addressLine1) clientAddressLines.push(client.addressLine1);
-  if (client?.addressLine2) clientAddressLines.push(client.addressLine2);
-  const clientCity = [client?.postalCode, client?.city].filter(Boolean).join(' ');
-  if (clientCity) clientAddressLines.push(clientCity);
-  if (client?.countryCode) clientAddressLines.push(client.countryCode);
-  if (!clientAddressLines.length && client?.address) clientAddressLines.push(client.address);
-  clientAddressLines.forEach((line) => clientLines.push(line));
-  if (client?.email || payload.clientEmail) clientLines.push(client?.email ?? payload.clientEmail ?? '');
-  if (client?.phone) clientLines.push(client.phone);
-  if (client?.vatNumber) clientLines.push(`TVA: ${client.vatNumber}`);
-  if (client?.reference) clientLines.push(`Réf: ${client.reference}`);
+  const issuerName = business?.legalName || payload.businessName;
+  const issuerLegalLines = [
+    ...buildAddressLines({
+      addressLine1: business?.addressLine1,
+      addressLine2: business?.addressLine2,
+      postalCode: business?.postalCode,
+      city: business?.city,
+      countryCode: business?.countryCode,
+    }),
+    business?.siret ? `SIRET: ${business.siret}` : null,
+    business?.vatNumber ? `TVA: ${business.vatNumber}` : null,
+  ].filter((line): line is string => !!line);
+
+  const issuerContact = [business?.email, business?.phone, business?.websiteUrl].filter(Boolean).join(' · ');
+
+  const clientName = client?.companyName || client?.name || payload.clientName || 'Client';
+  const clientContact = client?.companyName && client?.name && client.companyName !== client.name ? client.name : null;
+  const clientAddressLines = buildAddressLines({
+    addressLine1: client?.addressLine1,
+    addressLine2: client?.addressLine2,
+    postalCode: client?.postalCode,
+    city: client?.city,
+    countryCode: client?.countryCode,
+    address: client?.address,
+  });
+  const clientReachLine = [client?.email ?? payload.clientEmail ?? null, client?.phone ?? null].filter(Boolean).join(' · ');
 
   const vatEnabled = payload.vatEnabled ?? false;
   const vatRate = payload.vatRatePercent ?? 0;
   const totalCents = toBigInt(payload.totalCents);
   const vatCents = vatEnabled ? (totalCents * BigInt(Math.round(vatRate))) / BigInt(100) : BigInt(0);
   const totalTtcCents = totalCents + vatCents;
+  const depositCents = toBigInt(payload.depositCents);
+  const balanceCents = toBigInt(payload.balanceCents);
 
-  const drawHeader = () => {
-    const year = getYearLabel(payload.issuedAt ?? payload.expiresAt);
-    page.drawText(sanitizePdfText(`DEVIS ${year}`), { x: marginX, y, size: sizes.docTitle, font: bold, color: colors.primary });
-    y -= sizes.docTitle + 6;
-    const numberLabel = payload.number ?? payload.quoteId;
-    page.drawText(sanitizePdfText(`Devis n° ${numberLabel}`), { x: marginX, y, size: sizes.section, font: bold, color: colors.primary });
-    y -= sizes.section + 8;
+  const colDescription = Math.round(contentWidth * 0.6);
+  const colQty = Math.round(contentWidth * 0.1);
+  const colUnitPrice = Math.round(contentWidth * 0.15);
+  const colTotal = contentWidth - colDescription - colQty - colUnitPrice;
 
-    const metaLines = [
-      payload.issuedAt ? `Émis: ${formatDate(payload.issuedAt)}` : null,
-      payload.expiresAt ? `Valable jusqu'au: ${formatDate(payload.expiresAt)}` : null,
-      payload.projectName ? `Projet: ${payload.projectName}` : null,
-      payload.currency ? `Devise: ${payload.currency}` : null,
-    ].filter((value): value is string => typeof value === 'string' && value.length > 0);
-    const metaBoxX = 352;
-    const metaBoxY = topY - 10 - metaLines.length * 12 - 10;
-    const metaBoxHeight = 20 + metaLines.length * 12;
-    page.drawRectangle({
-      x: metaBoxX,
-      y: metaBoxY,
-      width: pageWidth - marginX - metaBoxX,
-      height: metaBoxHeight,
-      color: colors.panel,
-      borderColor: colors.line,
-      borderWidth: 0.6,
-    });
-    let metaY = metaBoxY + metaBoxHeight - 14;
-    page.drawText('RÉFÉRENCES', { x: metaBoxX + 8, y: metaY, size: sizes.tiny, font: bold, color: colors.secondary });
-    metaY -= 12;
-    for (const line of metaLines) {
-      page.drawText(sanitizePdfText(line), { x: metaBoxX + 8, y: metaY, size: sizes.tiny, font, color: colors.secondary });
-      metaY -= 12;
-    }
-
-    y -= spacing.headerGap;
-    const issuerBlockX = marginX;
-    const clientBlockX = 318;
-    const blockWidth = 226;
-    const wrappedIssuer = (issuerLines.length ? issuerLines : ['—']).flatMap((line) =>
-      wrapText(line, blockWidth - 20, font, sizes.small)
-    );
-    const wrappedClient = (clientLines.length ? clientLines : ['—']).flatMap((line) =>
-      wrapText(line, blockWidth - 20, font, sizes.small)
-    );
-    const maxLines = Math.max(wrappedIssuer.length, wrappedClient.length, 1);
-    const blockHeight = 28 + maxLines * 12 + 8;
-    const blockBottom = y - blockHeight + 10;
-
-    page.drawRectangle({
-      x: issuerBlockX,
-      y: blockBottom,
-      width: blockWidth,
-      height: blockHeight,
-      color: colors.panel,
-      borderColor: colors.line,
-      borderWidth: 0.6,
-    });
-    page.drawRectangle({
-      x: clientBlockX,
-      y: blockBottom,
-      width: blockWidth,
-      height: blockHeight,
-      color: colors.panel,
-      borderColor: colors.line,
-      borderWidth: 0.6,
-    });
-
-    page.drawText('ÉMETTEUR', { x: issuerBlockX + 8, y, size: sizes.tiny, font: bold, color: colors.secondary });
-    page.drawText('CLIENT', { x: clientBlockX + 8, y, size: sizes.tiny, font: bold, color: colors.secondary });
-    let issuerY = y - 14;
-    for (const line of wrappedIssuer) {
-      page.drawText(sanitizePdfText(line), { x: issuerBlockX + 8, y: issuerY, size: sizes.small, font, color: colors.primary });
-      issuerY -= 12;
-    }
-    let clientY = y - 14;
-    for (const line of wrappedClient) {
-      page.drawText(sanitizePdfText(line), { x: clientBlockX + 8, y: clientY, size: sizes.small, font, color: colors.primary });
-      clientY -= 12;
-    }
-
-    y = blockBottom - spacing.block;
+  const tableX = {
+    description: marginX,
+    qtyRight: marginX + colDescription + colQty,
+    unitPriceRight: marginX + colDescription + colQty + colUnitPrice,
+    totalRight: marginX + colDescription + colQty + colUnitPrice + colTotal,
   };
 
-  const drawTableHeader = () => {
-    page.drawRectangle({
-      x: marginX - 4,
-      y: y - 4,
-      width: pageWidth - marginX * 2 + 8,
-      height: 16,
-      color: colors.panel,
-      borderColor: colors.line,
-      borderWidth: 0.6,
+  const totalRows: Array<{ label: string; value: string; size: number; bold?: boolean }> = [
+    { label: 'Sous-total HT', value: formatAmount(totalCents, payload.currency), size: sizes.body },
+    ...(vatEnabled
+      ? [{ label: `TVA ${vatRate}%`, value: formatAmount(vatCents, payload.currency), size: sizes.body }]
+      : []),
+    { label: 'Total TTC', value: formatAmount(totalTtcCents, payload.currency), size: sizes.number, bold: true },
+    ...(depositCents > BigInt(0)
+      ? [{ label: 'Acompte', value: formatAmount(depositCents, payload.currency), size: sizes.body }]
+      : []),
+    { label: 'Solde', value: formatAmount(balanceCents, payload.currency), size: sizes.body },
+  ];
+
+  const totalsBlockHeight = 24 + totalRows.length * lineHeights.body;
+
+  const drawHeader = () => {
+    ensureSpace(150);
+
+    const leftX = marginX;
+    const rightX = pageWidth - marginX;
+    const rightBlockX = pageWidth - 210;
+
+    let leftY = y;
+    page.drawText(sanitizePdfText(issuerName), {
+      x: leftX,
+      y: leftY,
+      size: sizes.section + 1,
+      font: bold,
+      color: colors.primary,
     });
-    page.drawText('Description', { x: columns.labelX, y, size: sizes.small, font: bold, color: colors.secondary });
-    drawRightText('Qté', columns.qtyX, sizes.small, colors.secondary, bold);
-    drawRightText('Unité', columns.unitX, sizes.small, colors.secondary, bold);
-    drawRightText('PU', columns.unitPriceX, sizes.small, colors.secondary, bold);
-    drawRightText('Total', columns.totalX, sizes.small, colors.secondary, bold);
-    y -= 12;
+    leftY -= 16;
+
+    issuerLegalLines.forEach((line) => {
+      const wrapped = wrapText(line, 300, font, sizes.muted);
+      wrapped.forEach((part) => {
+        page.drawText(sanitizePdfText(part), {
+          x: leftX,
+          y: leftY,
+          size: sizes.muted,
+          font,
+          color: colors.secondary,
+        });
+        leftY -= lineHeights.muted;
+      });
+    });
+
+    if (issuerContact) {
+      const wrappedContact = wrapText(issuerContact, 300, font, sizes.muted);
+      wrappedContact.forEach((part) => {
+        page.drawText(sanitizePdfText(part), {
+          x: leftX,
+          y: leftY,
+          size: sizes.muted,
+          font,
+          color: colors.secondary,
+        });
+        leftY -= lineHeights.muted;
+      });
+    }
+
+    let rightY = y;
+    page.drawText('DEVIS', {
+      x: rightBlockX,
+      y: rightY,
+      size: sizes.section,
+      font: bold,
+      color: colors.primary,
+    });
+    rightY -= 16;
+
+    const numberLabel = payload.number ?? payload.quoteId;
+    page.drawText(sanitizePdfText(numberLabel), {
+      x: rightBlockX,
+      y: rightY,
+      size: sizes.title,
+      font: bold,
+      color: colors.primary,
+    });
+    rightY -= 24;
+
+    const rightLines = [
+      `Date d'émission: ${formatDate(payload.issuedAt)}`,
+      `Valable jusqu'au: ${formatDate(payload.expiresAt)}`,
+    ];
+
+    rightLines.forEach((line) => {
+      const wrapped = wrapText(line, 160, font, sizes.body);
+      wrapped.forEach((part) => {
+        drawRightText(part, rightX, sizes.body, colors.secondary, font);
+        rightY -= lineHeights.body;
+      });
+    });
+
+    y = Math.min(leftY, rightY) - 10;
     drawDivider();
   };
 
-  const drawLineItem = (item: QuotePdfItem) => {
-    const labelLines = wrapText(item.label, columns.labelWidth, bold, sizes.itemTitle);
-    const descriptionLines = item.description ? wrapText(item.description, columns.labelWidth, font, sizes.small) : [];
-    const unitLabel = resolveUnitLabel(item);
-    const unitPriceText = formatUnitPrice(item.unitPriceCents, payload.currency, unitLabel);
-    const hasOriginalPrice =
-      item.originalUnitPriceCents != null && toBigInt(item.originalUnitPriceCents) > toBigInt(item.unitPriceCents);
-    const originalPriceText = hasOriginalPrice
-      ? formatUnitPrice(item.originalUnitPriceCents as Moneyish, payload.currency, unitLabel)
-      : null;
+  const drawClientBlock = () => {
+    const lines: string[] = [clientName];
+    if (clientContact) lines.push(`Contact: ${clientContact}`);
+    clientAddressLines.forEach((line) => lines.push(line));
+    if (clientReachLine) lines.push(clientReachLine);
+    if (client?.vatNumber) lines.push(`TVA: ${client.vatNumber}`);
 
-    const rowHeight =
-      (labelLines.length + descriptionLines.length) * spacing.row +
-      spacing.rowGap +
-      (originalPriceText ? spacing.row : 0);
+    const lineCount = lines.reduce((count, line) => count + wrapText(line, contentWidth, font, sizes.body).length, 0);
+    const blockHeight = 18 + lineCount * lineHeights.body + 6;
+    ensureSpace(blockHeight);
 
-    ensureSpace(rowHeight, drawTableHeader);
+    page.drawText('Client', {
+      x: marginX,
+      y,
+      size: sizes.section,
+      font: bold,
+      color: colors.primary,
+    });
+    y -= 16;
 
-    labelLines.forEach((line, idx) => {
-      page.drawText(sanitizePdfText(line), {
-        x: columns.labelX,
-        y,
-        size: sizes.itemTitle,
-        font: bold,
-        color: colors.primary,
+    lines.forEach((line, idx) => {
+      const wrapped = wrapText(line, contentWidth, font, sizes.body);
+      wrapped.forEach((part) => {
+        page.drawText(sanitizePdfText(part), {
+          x: marginX,
+          y,
+          size: idx === 0 ? sizes.body : sizes.muted,
+          font: idx === 0 ? bold : font,
+          color: idx === 0 ? colors.primary : colors.secondary,
+        });
+        y -= idx === 0 ? lineHeights.body : lineHeights.muted;
       });
-      if (idx === 0) {
-        drawRightText(String(item.quantity), columns.qtyX, sizes.body, colors.primary, font);
-        drawRightText(unitLabel ?? '—', columns.unitX, sizes.small, colors.secondary, font);
-        if (originalPriceText) {
-          const safe = sanitizePdfText(originalPriceText);
-          const priceY = y + 10;
-          const width = font.widthOfTextAtSize(safe, sizes.tiny);
-          page.drawText(safe, {
-            x: columns.unitPriceX - width,
-            y: priceY,
-            size: sizes.tiny,
-            font,
-            color: colors.secondary,
-          });
-          page.drawLine({
-            start: { x: columns.unitPriceX - width, y: priceY + 4 },
-            end: { x: columns.unitPriceX, y: priceY + 4 },
-            thickness: 0.6,
-            color: colors.secondary,
-          });
+    });
+
+    y -= 2;
+    drawDivider();
+  };
+
+  const drawProjectLine = () => {
+    if (!payload.projectName) return;
+    ensureSpace(30);
+    page.drawText(sanitizePdfText(payload.projectName), {
+      x: marginX,
+      y,
+      size: sizes.section,
+      font: bold,
+      color: colors.primary,
+    });
+    y -= 16;
+    drawDivider();
+  };
+
+  const drawTableHeader = () => {
+    page.drawText('Description', {
+      x: tableX.description,
+      y,
+      size: sizes.muted,
+      font: bold,
+      color: colors.secondary,
+    });
+    drawRightText('Qté', tableX.qtyRight, sizes.muted, colors.secondary, bold);
+    drawRightText('PU', tableX.unitPriceRight, sizes.muted, colors.secondary, bold);
+    drawRightText('Total', tableX.totalRight, sizes.muted, colors.secondary, bold);
+    y -= 10;
+    drawDivider(1);
+  };
+
+  const drawItemsTable = () => {
+    drawTableHeader();
+
+    payload.items.forEach((item, index) => {
+      const labelLines = wrapText(item.label, colDescription - 6, bold, sizes.body);
+      const descriptionLines = item.description
+        ? wrapText(item.description, colDescription - 16, font, sizes.muted)
+        : [];
+
+      const rowHeight =
+        labelLines.length * lineHeights.body +
+        (descriptionLines.length ? 4 + descriptionLines.length * lineHeights.muted : 0) +
+        10;
+
+      const reserveForTotals = index === payload.items.length - 1 ? totalsBlockHeight + 8 : 0;
+      ensureSpace(rowHeight + reserveForTotals, drawTableHeader);
+
+      const unitLabel = resolveUnitLabel(item);
+      const unitPriceText = formatUnitPrice(item.unitPriceCents, payload.currency, unitLabel);
+      const totalText = formatAmount(item.totalCents, payload.currency);
+
+      labelLines.forEach((line, lineIndex) => {
+        page.drawText(sanitizePdfText(line), {
+          x: tableX.description,
+          y,
+          size: sizes.body,
+          font: lineIndex === 0 ? bold : font,
+          color: colors.primary,
+        });
+
+        if (lineIndex === 0) {
+          drawRightText(String(item.quantity), tableX.qtyRight, sizes.body, colors.primary, font);
+          drawRightText(unitPriceText, tableX.unitPriceRight, sizes.body, colors.primary, font);
+          drawRightText(totalText, tableX.totalRight, sizes.body, colors.primary, bold);
         }
-        drawRightText(unitPriceText, columns.unitPriceX, sizes.body, colors.primary, font);
-        drawRightText(formatAmount(item.totalCents, payload.currency), columns.totalX, sizes.body, colors.primary, bold);
-      }
-      y -= spacing.row;
-    });
 
-    descriptionLines.forEach((line) => {
-      page.drawText(sanitizePdfText(line), {
-        x: columns.labelX,
-        y,
-        size: sizes.small,
-        font,
-        color: colors.secondary,
+        y -= lineHeights.body;
       });
-      y -= spacing.row;
-    });
 
-    y -= spacing.rowGap;
+      descriptionLines.forEach((line) => {
+        page.drawText(sanitizePdfText(line), {
+          x: tableX.description + 10,
+          y,
+          size: sizes.muted,
+          font,
+          color: colors.secondary,
+        });
+        y -= lineHeights.muted;
+      });
+
+      y -= 4;
+      drawDivider(1);
+    });
   };
 
   const drawTotalsBlock = () => {
-    y -= spacing.section;
-    ensureSpace(120);
-    page.drawLine({ start: { x: columns.unitPriceX - 20, y }, end: { x: columns.totalX, y }, thickness: 0.8, color: colors.line });
-    y -= 14;
+    ensureSpace(totalsBlockHeight);
 
-    const drawTotalRow = (label: string, value: string, size = sizes.body, isBold = false) => {
-      if (isBold) {
-        page.drawRectangle({
-          x: columns.unitPriceX - 24,
-          y: y - 4,
-          width: columns.totalX - (columns.unitPriceX - 24) + 4,
-          height: 16,
-          color: colors.panel,
-          borderColor: colors.line,
-          borderWidth: 0.6,
-        });
-      }
-      page.drawText(sanitizePdfText(label), {
-        x: columns.unitPriceX - 20,
+    const blockWidth = 220;
+    const labelX = pageWidth - marginX - blockWidth;
+    const valueRight = pageWidth - marginX;
+
+    y -= 6;
+    totalRows.forEach((row) => {
+      page.drawText(sanitizePdfText(row.label), {
+        x: labelX,
         y,
-        size,
-        font: isBold ? bold : font,
-        color: colors.primary,
+        size: row.size,
+        font: row.bold ? bold : font,
+        color: row.bold ? colors.primary : colors.secondary,
       });
-      drawRightText(value, columns.totalX, size, colors.primary, isBold ? bold : font);
-      y -= spacing.row;
-    };
+      drawRightText(row.value, valueRight, row.size, colors.primary, row.bold ? bold : font);
+      y -= row.size >= sizes.number ? lineHeights.body + 2 : lineHeights.body;
+    });
 
-    drawTotalRow('Sous-total HT', formatAmount(totalCents, payload.currency));
-    drawTotalRow(vatEnabled ? `TVA ${vatRate}%` : 'TVA non applicable', formatAmount(vatCents, payload.currency));
-    drawTotalRow('Total TTC', formatAmount(totalTtcCents, payload.currency), sizes.section, true);
-    y -= 8;
-
-    const depositPercentText =
-      payload.depositPercent != null && Number.isFinite(payload.depositPercent) ? `${payload.depositPercent}%` : null;
-    const depositLabel = depositPercentText ? `Acompte ${depositPercentText}` : 'Acompte';
-    drawTotalRow(depositLabel, formatAmount(payload.depositCents, payload.currency));
-    drawTotalRow('Solde', formatAmount(payload.balanceCents, payload.currency), sizes.section, true);
+    y -= 6;
+    drawDivider();
   };
 
-  const drawRegulatoryBlock = () => {
-    const lines: string[] = [];
-    if (payload.expiresAt) {
-      lines.push(`Durée de validité du devis: jusqu'au ${formatDate(payload.expiresAt)}`);
-    }
-    const paymentTermsLine = compactSingleLine(
-      business?.paymentTermsText ?? (payload.paymentTermsDays != null ? `Paiement sous ${payload.paymentTermsDays} jours.` : null),
-      170
-    );
-    if (paymentTermsLine) {
-      lines.push(`Conditions de paiement: ${paymentTermsLine}`);
-    }
-    lines.push('Escompte pour paiement anticipé: néant.');
-    const lateFeesLine = compactSingleLine(business?.lateFeesText, 170);
-    if (lateFeesLine) {
-      lines.push(`Pénalités de retard: ${lateFeesLine}`);
-    }
-    const indemnityLine = compactSingleLine(business?.fixedIndemnityText, 150);
-    if (indemnityLine) {
-      lines.push(`Indemnité forfaitaire de recouvrement: ${indemnityLine}`);
-    }
-    if (!lines.length) return;
+  const drawSignatureBlock = () => {
+    ensureSpace(78);
 
-    const wrapped = lines.flatMap((line) => wrapText(line, pageWidth - marginX * 2 - 20, font, sizes.tiny));
-    const blockHeight = 26 + wrapped.length * 12;
-    y -= spacing.section;
-    ensureSpace(blockHeight + 8);
-    page.drawRectangle({
+    page.drawText('Bon pour accord', {
       x: marginX,
-      y: y - blockHeight + 8,
-      width: pageWidth - marginX * 2,
-      height: blockHeight,
-      color: colors.panel,
-      borderColor: colors.line,
-      borderWidth: 0.6,
+      y,
+      size: sizes.section,
+      font: bold,
+      color: colors.primary,
     });
-    page.drawText('Mentions de règlement', { x: marginX + 10, y, size: sizes.small, font: bold, color: colors.primary });
-    y -= 14;
-    for (const line of wrapped) {
-      page.drawText(sanitizePdfText(line), { x: marginX + 10, y, size: sizes.tiny, font, color: colors.secondary });
-      y -= 12;
-    }
-  };
+    y -= 18;
 
-  const drawPaymentBlock = () => {
-    const paymentLines: string[] = [];
-    if (business?.accountHolder) paymentLines.push(`Titulaire: ${business.accountHolder}`);
-    if (business?.bankName) paymentLines.push(`Banque: ${business.bankName}`);
-    if (business?.iban) paymentLines.push(`IBAN: ${business.iban}`);
-    if (business?.bic) paymentLines.push(`BIC: ${business.bic}`);
-    if (!paymentLines.length) return;
-
-    y -= spacing.section;
-    ensureSpace(40 + paymentLines.length * spacing.row);
-    page.drawRectangle({
+    page.drawText('Signature:', {
       x: marginX,
-      y: y - (22 + paymentLines.length * spacing.row),
-      width: pageWidth - marginX * 2,
-      height: 26 + paymentLines.length * spacing.row,
-      color: colors.panel,
-      borderColor: colors.line,
-      borderWidth: 0.6,
+      y,
+      size: sizes.body,
+      font,
+      color: colors.secondary,
     });
-    page.drawText('Coordonnées de règlement', { x: marginX + 10, y, size: sizes.small, font: bold, color: colors.primary });
-    y -= 14;
-
-    paymentLines.forEach((line) => {
-      page.drawText(sanitizePdfText(line), {
-        x: marginX + 10,
-        y,
-        size: sizes.small,
-        font,
-        color: colors.secondary,
-      });
-      y -= spacing.row;
+    page.drawLine({
+      start: { x: marginX + 65, y: y + 2 },
+      end: { x: marginX + 250, y: y + 2 },
+      thickness: 0.8,
+      color: colors.line,
     });
-  };
+    y -= 20;
 
-  const drawDepositBlock = () => {
-    y -= spacing.section;
-    ensureSpace(90);
-    page.drawText('Bon pour accord', { x: marginX, y, size: sizes.section, font: bold, color: colors.primary });
+    page.drawText('Date:', {
+      x: marginX,
+      y,
+      size: sizes.body,
+      font,
+      color: colors.secondary,
+    });
+    page.drawLine({
+      start: { x: marginX + 40, y: y + 2 },
+      end: { x: marginX + 190, y: y + 2 },
+      thickness: 0.8,
+      color: colors.line,
+    });
     y -= 16;
-    page.drawText('Signature du client', { x: marginX, y, size: sizes.small, font, color: colors.secondary });
-    const boxWidth = 240;
-    const boxHeight = 70;
-    page.drawRectangle({
-      x: marginX,
-      y: y - boxHeight,
-      width: boxWidth,
-      height: boxHeight,
-      borderColor: colors.line,
-      borderWidth: 0.8,
-      color: colors.panel,
-    });
-    y -= boxHeight + 18;
   };
 
-  const drawCoverPage = () => {
-    drawHeader();
-    drawTableHeader();
-    payload.items.forEach(drawLineItem);
-    drawTotalsBlock();
-    drawRegulatoryBlock();
-    drawPaymentBlock();
-    drawDepositBlock();
-  };
-
-  const drawRecapPage = () => {
-    page = pdfDoc.addPage([pageWidth, 842]);
-    y = topY;
-    pages.push(page);
-
-    const onNewPage = () => {
-      page.drawText('Récapitulatif du devis', { x: marginX, y, size: sizes.section + 4, font: bold, color: colors.primary });
-      y -= spacing.block;
-    };
-
-    onNewPage();
-
-    const labelX = marginX;
-    const valueX = marginX + 140;
-
-    const drawRow = (label: string, value: string | null) => {
-      if (!value) return;
-      page.drawText(sanitizePdfText(label), { x: labelX, y, size: sizes.small, font: bold, color: colors.primary });
-      drawWrappedText(value, {
-        x: valueX,
-        maxWidth: pageWidth - valueX - marginX,
-        size: sizes.small,
-        color: colors.secondary,
-        onNewPage,
-      });
-      y -= 6;
-    };
-
-    drawRow('Objet', payload.projectName ?? '—');
-    drawRow('Date', payload.issuedAt ? formatDate(payload.issuedAt) : '—');
-    drawRow('Client', clientLabel || payload.clientName || '—');
-    drawRow('Émetteur', legalName || payload.businessName);
-    drawRow('Montant total', formatAmount(totalTtcCents, payload.currency));
-
-    const prestationsText = payload.prestationsText?.trim();
-    if (prestationsText) {
-      page.drawText('Détail des prestations', { x: labelX, y, size: sizes.small, font: bold, color: colors.primary });
-      y -= 12;
-      const paragraphs = splitParagraphs(prestationsText);
-      paragraphs.forEach((paragraph) => {
-        drawParagraph(paragraph, {
-          x: valueX,
-          maxWidth: pageWidth - valueX - marginX,
-          size: sizes.small,
-          color: colors.secondary,
-          onNewPage,
-        });
-        y -= 6;
-      });
-    }
-
-    if (payload.items.length) {
-      y -= 6;
-      page.drawText('Prestations tarifées', { x: labelX, y, size: sizes.small, font: bold, color: colors.primary });
-      y -= 12;
-      const itemsText = payload.items.map((item, index) => `${index + 1}. ${item.label}`).join('\n');
-      drawWrappedText(itemsText, {
-        x: valueX,
-        maxWidth: pageWidth - valueX - marginX,
-        size: sizes.small,
-        color: colors.secondary,
-        onNewPage,
-      });
-    }
-  };
-
-  const drawConditionsPage = (text: string) => {
-    page = pdfDoc.addPage([pageWidth, 842]);
-    y = topY;
-    pages.push(page);
-
-    const onNewPage = () => {
-      page.drawText('Conditions de collaboration', { x: marginX, y, size: sizes.section + 4, font: bold, color: colors.primary });
-      y -= spacing.block;
-    };
-
-    onNewPage();
-
-    const paragraphs = splitParagraphs(text);
-    paragraphs.forEach((paragraph) => {
-      drawParagraph(paragraph, {
-        x: marginX,
-        maxWidth: pageWidth - marginX * 2,
-        size: sizes.small,
-        color: colors.secondary,
-        onNewPage,
-      });
-      y -= 6;
-    });
-  };
-
-  const drawLegalPages = (sections: LegalSection[]) => {
+  const drawConditionsPages = () => {
+    const sections = buildLegalSections(business, payload.paymentTermsDays ?? null);
+    if (payload.note) sections.push({ title: 'Conditions particulières', text: payload.note });
     if (!sections.length) return;
 
-    const pageTitle = sections.some((section) => section.title === 'Conditions générales de vente')
-      ? 'Conditions générales de vente'
-      : 'Mentions légales';
-
-    const drawLegalHeader = () => {
-      page.drawText(pageTitle, { x: marginX, y, size: sizes.section + 4, font: bold, color: colors.primary });
-      y -= spacing.block;
+    const drawConditionsHeader = () => {
+      page.drawText('Conditions générales', {
+        x: marginX,
+        y,
+        size: sizes.section + 2,
+        font: bold,
+        color: colors.primary,
+      });
+      y -= 16;
+      drawDivider();
     };
 
     page = pdfDoc.addPage([pageWidth, 842]);
     y = topY;
     pages.push(page);
-    drawLegalHeader();
-
-    const onNewLegalPage = () => {
-      drawLegalHeader();
-    };
+    drawConditionsHeader();
 
     for (const section of sections) {
-      ensureSpace(40, onNewLegalPage);
-      if (section.title !== pageTitle) {
-        page.drawText(sanitizePdfText(section.title), {
-          x: marginX,
-          y,
-          size: sizes.small,
-          font: bold,
-          color: colors.primary,
-        });
-        y -= 12;
-      }
       const paragraphs = splitParagraphs(section.text);
+      if (!paragraphs.length) continue;
+
+      ensureSpace(34, drawConditionsHeader);
+      page.drawText(sanitizePdfText(section.title), {
+        x: marginX,
+        y,
+        size: sizes.section,
+        font: bold,
+        color: colors.primary,
+      });
+      y -= 14;
+
       paragraphs.forEach((paragraph) => {
         drawParagraph(paragraph, {
           x: marginX,
-          maxWidth: pageWidth - marginX * 2,
-          size: sizes.tiny,
-          color: colors.legal,
-          lineHeight: 12,
-          onNewPage: onNewLegalPage,
+          width: contentWidth,
+          size: sizes.body,
+          lineHeight: lineHeights.legal,
+          color: colors.secondary,
+          onNewPage: drawConditionsHeader,
         });
-        y -= 6;
+        y -= 8;
       });
-      y -= 6;
+
+      y -= 4;
     }
   };
 
-  drawCoverPage();
-  drawRecapPage();
-  if (payload.note) drawConditionsPage(payload.note);
-  drawLegalPages(buildLegalSections(business, payload.paymentTermsDays ?? null));
+  drawHeader();
+  drawClientBlock();
+  drawProjectLine();
+  drawItemsTable();
+  drawTotalsBlock();
+  drawSignatureBlock();
+  drawConditionsPages();
 
   pages.forEach((pageRef, index) => {
     pageRef.drawLine({
-      start: { x: marginX, y: 32 },
-      end: { x: pageWidth - marginX, y: 32 },
-      thickness: 0.5,
+      start: { x: marginX, y: 34 },
+      end: { x: pageWidth - marginX, y: 34 },
+      thickness: 0.6,
       color: colors.line,
     });
     const pageNumber = `Page ${index + 1}/${pages.length}`;
     pageRef.drawText(sanitizePdfText(pageNumber), {
       x: pageWidth - marginX - 60,
       y: 20,
-      size: sizes.tiny,
+      size: sizes.muted,
       font,
       color: colors.secondary,
     });
