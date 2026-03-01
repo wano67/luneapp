@@ -105,9 +105,14 @@ export default function FocusPage() {
             <SectionHeader
               title="Wallet — Perso"
               actions={
-                <Button asChild variant="outline" size="sm">
-                  <Link href="/app/personal">Voir le wallet</Link>
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                  <Button asChild variant="outline" size="sm">
+                    <Link href="/app/personal">Voir le wallet</Link>
+                  </Button>
+                  <Button asChild size="sm">
+                    <Link href="/app/performance/perso">Voir l&apos;analyse détaillée</Link>
+                  </Button>
+                </div>
               }
             />
             <div className="grid gap-4 sm:grid-cols-3">
@@ -134,9 +139,14 @@ export default function FocusPage() {
               <SectionHeader
                 title={`Studio — ${pro.businessName}`}
                 actions={
-                  <Button asChild variant="outline" size="sm">
-                    <Link href={`/app/pro/${pro.businessId}`}>Voir le studio</Link>
-                  </Button>
+                  <div className="flex flex-wrap gap-2">
+                    <Button asChild variant="outline" size="sm">
+                      <Link href={`/app/pro/${pro.businessId}`}>Voir le studio</Link>
+                    </Button>
+                    <Button asChild size="sm">
+                      <Link href="/app/performance/pro">Voir l&apos;analyse détaillée</Link>
+                    </Button>
+                  </div>
                 }
               />
               <div className="grid gap-4 sm:grid-cols-3">
@@ -179,7 +189,14 @@ export default function FocusPage() {
             </section>
           ) : (
             <section className="space-y-4">
-              <SectionHeader title="Studio — Pro" />
+              <SectionHeader
+                title="Studio — Pro"
+                actions={
+                  <Button asChild size="sm">
+                    <Link href="/app/performance/pro">Voir l&apos;analyse détaillée</Link>
+                  </Button>
+                }
+              />
               <Card className="p-6 text-center">
                 <p className="text-sm text-[var(--text-faint)]">
                   Aucune activité pro pour le moment.
