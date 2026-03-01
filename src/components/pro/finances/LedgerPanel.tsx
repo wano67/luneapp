@@ -5,9 +5,9 @@ import Link from 'next/link';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { DebugRequestId } from '@/components/ui/debug-request-id';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import { useActiveBusiness } from '@/app/app/pro/ActiveBusinessProvider';
-import { PageHeader } from '@/app/app/components/PageHeader';
 
 type LedgerLine = {
   id: string;
@@ -60,7 +60,7 @@ export function LedgerPanel({ businessId }: { businessId: string }) {
       );
       setRequestId(res.requestId ?? null);
       if (!res.ok || !res.data) {
-        setError(res.requestId ? `${res.error ?? 'Impossible de charger'} (Ref: ${res.requestId})` : res.error ?? 'Impossible de charger');
+        setError(res.error ?? 'Impossible de charger');
         setEntries([]);
         return;
       }
@@ -97,13 +97,7 @@ export function LedgerPanel({ businessId }: { businessId: string }) {
 
   return (
     <div className="space-y-4">
-      <PageHeader
-        backHref={`/app/pro/${businessId}/finances`}
-        backLabel="Finances"
-        title="Grand livre"
-        subtitle="Écritures liées au stock et aux factures."
-      />
-      {requestId ? <p className="text-[10px] text-[var(--text-secondary)]">Req: {requestId}</p> : null}
+      <DebugRequestId requestId={requestId} />
 
       <Card className="p-5 space-y-3">
         <div className="flex items-center justify-between gap-2">
@@ -152,7 +146,7 @@ export function LedgerPanel({ businessId }: { businessId: string }) {
                   </div>
                   <div className="grid gap-2 md:grid-cols-2">
                     {entry.lines.map((line) => (
-                      <div key={line.id} className="rounded border border-[var(--border)]/70 bg-white/40 p-2 text-xs">
+                      <div key={line.id} className="rounded border border-[var(--border)]/70 bg-[var(--surface)]/60 p-2 text-xs">
                         <div className="flex items-center justify-between">
                           <span className="font-semibold text-[var(--text-primary)]">{line.accountCode}</span>
                           <span className="text-[11px] text-[var(--text-secondary)]">

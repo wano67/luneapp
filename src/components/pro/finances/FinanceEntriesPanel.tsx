@@ -4,13 +4,13 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { DebugRequestId } from '@/components/ui/debug-request-id';
 import { Table, TableBody, TableCell, TableEmpty, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select } from '@/components/ui/select';
 import { Modal } from '@/components/ui/modal';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import { formatCurrency } from '@/app/app/pro/pro-data';
 import { useActiveBusiness } from '@/app/app/pro/ActiveBusinessProvider';
-import { PageHeader } from '@/app/app/components/PageHeader';
 import { Plus } from 'lucide-react';
 import { useRowSelection } from '@/app/app/components/selection/useRowSelection';
 import { BulkActionBar } from '@/app/app/components/selection/BulkActionBar';
@@ -136,11 +136,7 @@ export function FinanceEntriesPanel({ businessId }: Props) {
         return;
       }
       if (!res.ok || !res.data) {
-        setError(
-          res.requestId
-            ? `${res.error ?? 'Erreur de chargement.'} (Ref: ${res.requestId})`
-            : res.error ?? 'Erreur de chargement.'
-        );
+        setError(res.error ?? 'Erreur de chargement.');
         setItems([]);
         return;
       }
@@ -182,7 +178,7 @@ export function FinanceEntriesPanel({ businessId }: Props) {
     setReferenceRequestId(categories.requestId ?? tags.requestId ?? null);
     if (!categories.ok || !tags.ok || !categories.data || !tags.data) {
       const msg = categories.error ?? tags.error ?? 'Impossible de charger les références.';
-      setReferenceError(categories.requestId ? `${msg} (Ref: ${categories.requestId})` : msg);
+      setReferenceError(msg);
       return;
     }
     setCategoryOptions(categories.data.items ?? []);
@@ -218,7 +214,7 @@ export function FinanceEntriesPanel({ businessId }: Props) {
       method: 'DELETE',
     });
     if (!res.ok) {
-      setDeleteError(res.requestId ? `${res.error ?? 'Suppression impossible.'} (Ref: ${res.requestId})` : res.error ?? 'Suppression impossible.');
+      setDeleteError(res.error ?? 'Suppression impossible.');
       return;
     }
     setDeleteModal(null);
@@ -248,17 +244,11 @@ export function FinanceEntriesPanel({ businessId }: Props) {
 
   return (
     <div className="space-y-4">
-      <PageHeader
-        backHref={`/app/pro/${businessId}`}
-        backLabel="Dashboard"
-        title="Écritures"
-        subtitle="Charges et revenus pour piloter votre activité."
-        primaryAction={{
-          label: 'Ajouter une charge',
-          onClick: openCreate,
-          icon: <Plus size={14} />,
-        }}
-      />
+      <div className="flex justify-end">
+        <Button size="sm" onClick={openCreate} className="gap-2">
+          <Plus size={14} /> Ajouter une charge
+        </Button>
+      </div>
 
       {info ? <p className="text-sm text-[var(--success)]">{info}</p> : null}
 
@@ -304,13 +294,12 @@ export function FinanceEntriesPanel({ businessId }: Props) {
 
         {loading ? <p className="text-xs text-[var(--text-secondary)]">Chargement…</p> : null}
         {error ? <p className="text-xs text-[var(--danger)]">{error}</p> : null}
-        {requestId ? <p className="text-[10px] text-[var(--text-secondary)]">Req: {requestId}</p> : null}
+        <DebugRequestId requestId={requestId} />
 
         {referenceError ? (
-          <p className="text-xs text-[var(--danger)]">
-            {referenceError} {referenceRequestId ? `(Ref: ${referenceRequestId})` : null}
-          </p>
+          <p className="text-xs text-[var(--danger)]">{referenceError}</p>
         ) : null}
+        <DebugRequestId requestId={referenceRequestId} />
 
         {bulkError ? <p className="text-xs text-[var(--danger)]">{bulkError}</p> : null}
         {selectedCount > 0 ? (

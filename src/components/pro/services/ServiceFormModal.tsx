@@ -68,27 +68,28 @@ export function ServiceFormModal({ open, editing, businessId, isAdmin, onClose, 
 
   useEffect(() => {
     if (!open) return;
-    if (editing) {
-      setForm({
-        code: editing.code,
-        name: editing.name,
-        type: editing.type ?? '',
-        unit: editing.unit ?? 'FORFAIT',
-        defaultQuantity: String(editing.defaultQuantity ?? 1),
-        description: editing.description ?? '',
-        defaultPrice: formatCentsToEuroInput(editing.defaultPriceCents),
-        tjm: formatCentsToEuroInput(editing.tjmCents),
-        cost: formatCentsToEuroInput(editing.costCents),
-        durationHours: editing.durationHours != null ? String(editing.durationHours) : '',
-        vatRate: editing.vatRate != null ? String(editing.vatRate) : '',
-        categoryReferenceId: editing.categoryReferenceId ?? '',
-        tagReferenceIds: editing.tagReferences?.map((t) => t.id) ?? [],
-      });
-    } else {
-      setForm(emptyForm);
-    }
-    setFormError(null);
-    setSaving(false);
+    const nextForm = editing
+      ? {
+          code: editing.code,
+          name: editing.name,
+          type: editing.type ?? '',
+          unit: editing.unit ?? 'FORFAIT',
+          defaultQuantity: String(editing.defaultQuantity ?? 1),
+          description: editing.description ?? '',
+          defaultPrice: formatCentsToEuroInput(editing.defaultPriceCents),
+          tjm: formatCentsToEuroInput(editing.tjmCents),
+          cost: formatCentsToEuroInput(editing.costCents),
+          durationHours: editing.durationHours != null ? String(editing.durationHours) : '',
+          vatRate: editing.vatRate != null ? String(editing.vatRate) : '',
+          categoryReferenceId: editing.categoryReferenceId ?? '',
+          tagReferenceIds: editing.tagReferences?.map((t) => t.id) ?? [],
+        }
+      : emptyForm;
+    queueMicrotask(() => {
+      setForm(nextForm);
+      setFormError(null);
+      setSaving(false);
+    });
   }, [open, editing]);
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {

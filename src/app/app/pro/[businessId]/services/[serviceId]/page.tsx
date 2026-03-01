@@ -6,6 +6,7 @@ import { useParams, useSearchParams } from 'next/navigation';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { DebugRequestId } from '@/components/ui/debug-request-id';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { ProPageShell } from '@/components/pro/ProPageShell';
@@ -151,7 +152,7 @@ export default function ServiceDetailPage() {
       setRequestId(res.requestId);
       if (!res.ok || !res.data?.item) {
         const msg = res.error ?? 'Service introuvable.';
-        setError(res.requestId ? `${msg} (Ref: ${res.requestId})` : msg);
+        setError(msg);
         setService(null);
         return;
       }
@@ -226,7 +227,7 @@ export default function ServiceDetailPage() {
     setRequestId(res.requestId);
     if (!res.ok || !res.data?.item) {
       const msg = res.error ?? 'Impossible de sauvegarder.';
-      setFormError(res.requestId ? `${msg} (Ref: ${res.requestId})` : msg);
+      setFormError(msg);
       setSaving(false);
       return;
     }
@@ -486,7 +487,7 @@ export default function ServiceDetailPage() {
           </Card>
         )}
 
-        {requestId ? <p className="text-[10px] text-[var(--text-faint)]">Req: {requestId}</p> : null}
+        <DebugRequestId requestId={requestId} />
       </ProPageShell>
 
       {service ? (

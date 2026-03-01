@@ -6,6 +6,7 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { DebugRequestId } from '@/components/ui/debug-request-id';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { ProPageShell } from '@/components/pro/ProPageShell';
@@ -144,7 +145,7 @@ export default function ServicesPage() {
 
         {data.info ? <p className="text-sm text-[var(--success)]">{data.info}</p> : null}
         {readOnlyInfo ? <p className="text-xs text-[var(--text-faint)]">{readOnlyInfo}</p> : null}
-        {data.requestId ? <p className="text-[10px] text-[var(--text-faint)]">Req: {data.requestId}</p> : null}
+        <DebugRequestId requestId={data.requestId} />
       </ProPageShell>
 
       {/* Modals */}

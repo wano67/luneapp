@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import { Card } from '@/components/ui/card';
+import { DebugRequestId } from '@/components/ui/debug-request-id';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { fetchJson } from '@/lib/apiClient';
-import { PageHeader } from '@/app/app/components/PageHeader';
 
 type VatResponse = {
   businessId: string;
@@ -43,7 +43,7 @@ export function VatPanel({ businessId }: { businessId: string }) {
       setLoading(false);
       if (!res.ok || !res.data) {
         const msg = res.error ?? 'Impossible de charger la TVA.';
-        setError(res.requestId ? `${msg} (Ref: ${res.requestId})` : msg);
+        setError(msg);
         setData(null);
         return;
       }
@@ -57,19 +57,9 @@ export function VatPanel({ businessId }: { businessId: string }) {
 
   return (
     <div className="space-y-4">
-      <PageHeader
-        backHref={`/app/pro/${businessId}/finances`}
-        backLabel="Finances"
-        title="TVA / Déclarations"
-        subtitle="Synthèse TVA collectée/déductible basée sur vos écritures."
-      />
 
       {error && <div className="text-sm text-[var(--danger)] bg-[var(--danger-bg)] border border-[var(--danger-border)] px-3 py-2 rounded">{error}</div>}
-      {requestId && (
-        <div className="text-xs text-[var(--text-faint)]">
-          Request ID: <code>{requestId}</code>
-        </div>
-      )}
+      <DebugRequestId requestId={requestId} />
 
       {loading && <p>Chargement…</p>}
       {!loading && data && (

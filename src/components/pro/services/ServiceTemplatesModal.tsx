@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { DebugRequestId } from '@/components/ui/debug-request-id';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { Modal } from '@/components/ui/modal';
@@ -483,9 +484,7 @@ export function ServiceTemplatesModal({
           </form>
         ) : null}
 
-        {templateRequestId ? (
-          <p className="text-[10px] text-[var(--text-faint)]">Req: {templateRequestId}</p>
-        ) : null}
+        <DebugRequestId requestId={templateRequestId} />
       </div>
     </Modal>
   );
