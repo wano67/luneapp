@@ -57,17 +57,19 @@ export function RecurringRuleModal({
   onSave,
   onEditOccurrence,
 }: Props) {
+  const isCreateMode = !rule;
+
   return (
     <Modal
       open={open}
       onCloseAction={onClose}
-      title="Règle de récurrence"
-      description="Modifie la règle et les occurrences futures."
+      title={isCreateMode ? 'Nouvelle charge fixe' : 'Modifier la règle'}
+      description={isCreateMode ? 'Crée une nouvelle charge récurrente.' : 'Modifie la règle et les occurrences futures.'}
     >
       <div className="space-y-4">
         {loading ? <p className="text-xs text-[var(--text-secondary)]">Chargement…</p> : null}
         {error ? <p className="text-xs text-[var(--danger)]">{error}</p> : null}
-        {rule ? (
+        {rule || isCreateMode ? (
           <>
             <div className="grid gap-2 md:grid-cols-2">
               <label className="text-sm text-[var(--text-primary)]">
@@ -143,49 +145,52 @@ export function RecurringRuleModal({
               </label>
             </div>
 
-            <div className="rounded-2xl border border-[var(--border)]/60 bg-[var(--surface)]/40 p-3 text-xs text-[var(--text-secondary)]">
-              <div className="flex flex-wrap items-center gap-3">
-                <label className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={applyFuture}
-                    onChange={(e) => setApplyFuture(e.target.checked)}
-                    className="h-4 w-4 rounded border border-[var(--border)]"
-                  />
-                  <span>Appliquer aux occurrences futures</span>
-                </label>
-                <label className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={recalculate}
-                    onChange={(e) => setRecalculate(e.target.checked)}
-                    className="h-4 w-4 rounded border border-[var(--border)]"
-                  />
-                  <span>Recalculer (re-générer)</span>
-                </label>
-                <label className="flex items-center gap-2">
-                  <span>Horizon</span>
-                  <Input
-                    className="w-20"
-                    value={horizonMonths}
-                    onChange={(e) => setHorizonMonths(e.target.value)}
-                    type="number"
-                    min={1}
-                    max={36}
-                  />
-                </label>
+            {!isCreateMode ? (
+              <div className="rounded-2xl border border-[var(--border)]/60 bg-[var(--surface)]/40 p-3 text-xs text-[var(--text-secondary)]">
+                <div className="flex flex-wrap items-center gap-3">
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={applyFuture}
+                      onChange={(e) => setApplyFuture(e.target.checked)}
+                      className="h-4 w-4 rounded border border-[var(--border)]"
+                    />
+                    <span>Appliquer aux occurrences futures</span>
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={recalculate}
+                      onChange={(e) => setRecalculate(e.target.checked)}
+                      className="h-4 w-4 rounded border border-[var(--border)]"
+                    />
+                    <span>Recalculer (re-générer)</span>
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <span>Horizon</span>
+                    <Input
+                      className="w-20"
+                      value={horizonMonths}
+                      onChange={(e) => setHorizonMonths(e.target.value)}
+                      type="number"
+                      min={1}
+                      max={36}
+                    />
+                  </label>
+                </div>
               </div>
-            </div>
+            ) : null}
 
             <div className="flex justify-end gap-2">
               <Button size="sm" variant="outline" onClick={onClose}>
                 Fermer
               </Button>
               <Button size="sm" onClick={onSave} disabled={loading}>
-                {loading ? 'Enregistrement…' : 'Enregistrer'}
+                {loading ? (isCreateMode ? 'Création…' : 'Enregistrement…') : (isCreateMode ? 'Créer' : 'Enregistrer')}
               </Button>
             </div>
 
+            {!isCreateMode ? (
             <div className="rounded-2xl border border-[var(--border)]/60 bg-[var(--surface)]/40 p-3">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
                 Occurrences
@@ -219,6 +224,7 @@ export function RecurringRuleModal({
                 )}
               </div>
             </div>
+            ) : null}
           </>
         ) : null}
       </div>

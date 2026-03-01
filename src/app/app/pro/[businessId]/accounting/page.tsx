@@ -1,8 +1,8 @@
-import AccountingPage from '@/components/pro/accounting/AccountingPage';
+import { redirect } from 'next/navigation';
 
 type Props = { params: Promise<{ businessId: string }> };
 
-export default async function Page({ params }: Props) {
+export default async function AccountingRedirect({ params }: Props) {
   const { businessId } = await params;
-  return <AccountingPage businessId={businessId} />;
+  redirect(`/app/pro/${businessId}/finances`);
 }

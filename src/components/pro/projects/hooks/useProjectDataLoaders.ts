@@ -33,6 +33,7 @@ export type ProjectDetail = {
   startDate: string | null;
   endDate: string | null;
   prestationsText?: string | null;
+  tagReferences?: Array<{ id: string; name: string }>;
   updatedAt: string;
   tasksSummary?: { total: number; open: number; done: number; progressPct: number };
   projectServices?: Array<{

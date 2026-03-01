@@ -4,6 +4,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { AddressInput } from '@/components/ui/AddressInput';
 import { fetchJson } from '@/lib/apiClient';
 
 type BusinessResponse = {
@@ -182,28 +183,22 @@ export function BusinessInfoForm({ businessId }: Props) {
           onChange={(e) => setVatNumber(e.target.value)}
           disabled={!canEdit || loading || saving}
         />
+        <div className="md:col-span-2">
+          <AddressInput
+            value={{ addressLine1, postalCode, city }}
+            onChange={(fields) => {
+              if (fields.addressLine1 !== undefined) setAddressLine1(fields.addressLine1);
+              if (fields.postalCode !== undefined) setPostalCode(fields.postalCode);
+              if (fields.city !== undefined) setCity(fields.city);
+            }}
+            countryCode={countryCode || 'FR'}
+            disabled={!canEdit || loading || saving}
+          />
+        </div>
         <Input
-          label="Adresse"
-          value={addressLine1}
-          onChange={(e) => setAddressLine1(e.target.value)}
-          disabled={!canEdit || loading || saving}
-        />
-        <Input
-          label="Complément d’adresse"
+          label="Complément d'adresse"
           value={addressLine2}
           onChange={(e) => setAddressLine2(e.target.value)}
-          disabled={!canEdit || loading || saving}
-        />
-        <Input
-          label="Code postal"
-          value={postalCode}
-          onChange={(e) => setPostalCode(e.target.value)}
-          disabled={!canEdit || loading || saving}
-        />
-        <Input
-          label="Ville"
-          value={city}
-          onChange={(e) => setCity(e.target.value)}
           disabled={!canEdit || loading || saving}
         />
         <Input

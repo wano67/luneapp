@@ -78,7 +78,7 @@ type QuickServiceDraft = {
 
 export type SetupModalsProps = {
   // Routing
-  activeSetupModal: null | 'client' | 'deadline' | 'services' | 'tasks' | 'team' | 'documents';
+  activeSetupModal: null | 'client' | 'deadline' | 'services' | 'tasks' | 'team' | 'documents' | 'tags';
   accessModalOpen: boolean;
   unitsModalOpen: boolean;
   isAdmin: boolean;
@@ -90,10 +90,17 @@ export type SetupModalsProps = {
   clients: ClientLite[];
   clientSearch: string;
   selectedClientId: string | null;
+  clientCreateMode: boolean;
+  newClientName: string;
+  newClientEmail: string;
   setClientSearch: (v: string) => void;
   setSelectedClientId: (id: string) => void;
+  setClientCreateMode: (v: boolean) => void;
+  setNewClientName: (v: string) => void;
+  setNewClientEmail: (v: string) => void;
   onLoadClients: (search: string) => void;
   onAttachClient: () => void;
+  onCreateAndAttachClient: () => void;
 
   // Deadline modal
   startDateInput: string;
@@ -147,6 +154,13 @@ export type SetupModalsProps = {
   setDocumentFile: (f: File | null) => void;
   onUploadDocument: () => void;
 
+  // Tags modal
+  availableTags: Array<{ id: string; name: string }>;
+  selectedTagIds: Set<string>;
+  tagsLoading: boolean;
+  onToggleTag: (id: string) => void;
+  onUpdateTags: () => void;
+
   // Access modal
   projectMembers: ProjectAccessMember[];
   availableMembers: AvailableMember[];
@@ -188,10 +202,17 @@ export function SetupModals({
   clients,
   clientSearch,
   selectedClientId,
+  clientCreateMode,
+  newClientName,
+  newClientEmail,
   setClientSearch,
   setSelectedClientId,
+  setClientCreateMode,
+  setNewClientName,
+  setNewClientEmail,
   onLoadClients,
   onAttachClient,
+  onCreateAndAttachClient,
   startDateInput,
   endDateInput,
   setStartDateInput,
@@ -234,6 +255,11 @@ export function SetupModals({
   setDocumentKind,
   setDocumentFile,
   onUploadDocument,
+  availableTags,
+  selectedTagIds,
+  tagsLoading,
+  onToggleTag,
+  onUpdateTags,
   projectMembers,
   availableMembers,
   accessInfo,
@@ -263,44 +289,94 @@ export function SetupModals({
         open={activeSetupModal === 'client'}
         onCloseAction={onCloseModal}
         title="Associer un client"
-        description="Sélectionne un client existant."
+        description={clientCreateMode ? 'Crée un nouveau client et associe-le au projet.' : 'Sélectionne un client existant ou crée-en un nouveau.'}
       >
         <div className="space-y-3">
-          <Input
-            placeholder="Rechercher un client"
-            value={clientSearch}
-            onChange={(e) => {
-              setClientSearch(e.target.value);
-              onLoadClients(e.target.value);
-            }}
-          />
-          <div className="max-h-64 space-y-2 overflow-auto">
-            {clients.map((c) => (
-              <label
-                key={c.id}
-                className="flex cursor-pointer items-center justify-between rounded-lg border border-[var(--border)]/70 px-3 py-2"
-              >
-                <div>
-                  <p className="text-sm font-semibold text-[var(--text-primary)]">{c.name}</p>
-                  <p className="text-xs text-[var(--text-secondary)]">{c.email ?? '—'}</p>
-                </div>
-                <input
-                  type="radio"
-                  name="client"
-                  checked={selectedClientId === c.id}
-                  onChange={() => setSelectedClientId(c.id)}
-                />
-              </label>
-            ))}
+          {/* Toggle Chercher / Créer */}
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant={clientCreateMode ? 'ghost' : 'outline'}
+              onClick={() => setClientCreateMode(false)}
+            >
+              Chercher
+            </Button>
+            <Button
+              size="sm"
+              variant={clientCreateMode ? 'outline' : 'ghost'}
+              onClick={() => setClientCreateMode(true)}
+            >
+              Créer
+            </Button>
           </div>
+
+          {clientCreateMode ? (
+            /* ── Mode création ── */
+            <div className="space-y-3">
+              <Input
+                label="Nom *"
+                value={newClientName}
+                onChange={(e) => setNewClientName(e.target.value)}
+                placeholder="Nom du client"
+              />
+              <Input
+                label="Email (optionnel)"
+                type="email"
+                value={newClientEmail}
+                onChange={(e) => setNewClientEmail(e.target.value)}
+                placeholder="email@exemple.com"
+              />
+            </div>
+          ) : (
+            /* ── Mode recherche ── */
+            <>
+              <Input
+                placeholder="Rechercher un client"
+                value={clientSearch}
+                onChange={(e) => {
+                  setClientSearch(e.target.value);
+                  onLoadClients(e.target.value);
+                }}
+              />
+              <div className="max-h-64 space-y-2 overflow-auto">
+                {clients.map((c) => (
+                  <label
+                    key={c.id}
+                    className="flex cursor-pointer items-center justify-between rounded-lg border border-[var(--border)]/70 px-3 py-2"
+                  >
+                    <div>
+                      <p className="text-sm font-semibold text-[var(--text-primary)]">{c.name}</p>
+                      <p className="text-xs text-[var(--text-secondary)]">{c.email ?? '—'}</p>
+                    </div>
+                    <input
+                      type="radio"
+                      name="client"
+                      checked={selectedClientId === c.id}
+                      onChange={() => setSelectedClientId(c.id)}
+                    />
+                  </label>
+                ))}
+                {clients.length === 0 ? (
+                  <p className="text-sm text-[var(--text-secondary)]">Aucun client trouvé.</p>
+                ) : null}
+              </div>
+            </>
+          )}
+
           {modalError ? <p className="text-sm text-[var(--danger)]">{modalError}</p> : null}
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={onCloseModal}>
               Annuler
             </Button>
-            <Button onClick={onAttachClient} disabled={saving}>
-              {saving ? 'Enregistrement…' : 'Associer'}
-            </Button>
+            {clientCreateMode ? (
+              <Button onClick={onCreateAndAttachClient} disabled={saving}>
+                {saving ? 'Création…' : 'Créer & associer'}
+              </Button>
+            ) : (
+              <Button onClick={onAttachClient} disabled={saving}>
+                {saving ? 'Enregistrement…' : 'Associer'}
+              </Button>
+            )}
           </div>
         </div>
       </Modal>
@@ -667,6 +743,56 @@ export function SetupModals({
             </Button>
             <Button onClick={onUploadDocument} disabled={saving || !hasClientId}>
               {saving ? 'Upload…' : 'Uploader'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* ── Tags ────────────────────────────────────────────────────────────── */}
+      <Modal
+        open={activeSetupModal === 'tags'}
+        onCloseAction={onCloseModal}
+        title="Tags du projet"
+        description="Sélectionne les tags à associer au projet."
+      >
+        <div className="space-y-3">
+          {tagsLoading ? (
+            <p className="text-sm text-[var(--text-secondary)]">Chargement…</p>
+          ) : availableTags.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-[var(--border)] px-4 py-6 text-center">
+              <p className="text-sm text-[var(--text-secondary)]">Aucun tag disponible.</p>
+              <p className="mt-1 text-xs text-[var(--text-secondary)]">
+                Crée des tags dans Références pour les utiliser ici.
+              </p>
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {availableTags.map((tag) => {
+                const selected = selectedTagIds.has(tag.id);
+                return (
+                  <button
+                    key={tag.id}
+                    type="button"
+                    onClick={() => onToggleTag(tag.id)}
+                    className={
+                      selected
+                        ? 'rounded-full border border-[var(--accent)] bg-[var(--accent)]/10 px-3 py-1 text-sm font-medium text-[var(--accent)] transition'
+                        : 'rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-3 py-1 text-sm text-[var(--text-secondary)] transition hover:border-[var(--accent)]'
+                    }
+                  >
+                    {tag.name}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          {modalError ? <p className="text-sm text-[var(--danger)]">{modalError}</p> : null}
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={onCloseModal}>
+              Annuler
+            </Button>
+            <Button onClick={onUpdateTags} disabled={saving || tagsLoading}>
+              {saving ? 'Enregistrement…' : 'Enregistrer'}
             </Button>
           </div>
         </div>

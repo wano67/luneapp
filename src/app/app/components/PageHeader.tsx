@@ -1,4 +1,4 @@
-// src/app/app/components/PageHeader.tsx
+/** @deprecated Use `PageHeader` from `@/components/layouts` instead. */
 'use client';
 
 import Link from 'next/link';

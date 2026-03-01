@@ -100,8 +100,8 @@ export function ConversationList({
                 {/* Avatar */}
                 <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
                   conv.type === 'GROUP'
-                    ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300'
-                    : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
+                    ? 'bg-[var(--warning-bg)] text-[var(--warning)]'
+                    : 'bg-[var(--accent)]/10 text-[var(--accent)]'
                 }`}>
                   {conv.type === 'GROUP' ? <Users size={16} /> : initials}
                 </div>

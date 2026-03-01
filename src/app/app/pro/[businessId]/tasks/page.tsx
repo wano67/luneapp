@@ -514,7 +514,7 @@ function openEdit(task: Task) {
                             task.status === 'DONE'
                               ? 'bg-[var(--success-bg)] text-[var(--success)]'
                               : task.status === 'IN_PROGRESS'
-                                ? 'bg-blue-100 text-blue-700'
+                                ? 'bg-[var(--accent)]/10 text-[var(--accent)]'
                                 : 'bg-[var(--warning-bg)] text-[var(--warning)]'
                           }
                         >

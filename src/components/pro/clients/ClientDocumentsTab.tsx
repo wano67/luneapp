@@ -371,7 +371,7 @@ export function ClientDocumentsTab({ businessId, clientId }: Props) {
             <Button type="button" variant="outline" onClick={() => setModalOpen(false)} disabled={uploading}>
               Annuler
             </Button>
-            <Button type="submit" disabled={uploading} className="bg-neutral-900 text-white hover:bg-neutral-800">
+            <Button type="submit" disabled={uploading}>
               {uploading ? 'Import…' : 'Importer'}
             </Button>
           </div>

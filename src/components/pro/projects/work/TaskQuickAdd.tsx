@@ -3,13 +3,17 @@
 import { useCallback, useState } from 'react';
 import { Plus, Loader2 } from 'lucide-react';
 
+type ServiceOption = { id: string; name: string };
+
 type TaskQuickAddProps = {
-  onAdd: (title: string) => Promise<void>;
+  onAdd: (title: string, projectServiceId?: string) => Promise<void>;
+  services?: ServiceOption[];
   disabled?: boolean;
 };
 
-export function TaskQuickAdd({ onAdd, disabled }: TaskQuickAddProps) {
+export function TaskQuickAdd({ onAdd, services, disabled }: TaskQuickAddProps) {
   const [title, setTitle] = useState('');
+  const [serviceId, setServiceId] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   const handleSubmit = useCallback(async () => {
@@ -17,15 +21,15 @@ export function TaskQuickAdd({ onAdd, disabled }: TaskQuickAddProps) {
     if (!trimmed || submitting) return;
     setSubmitting(true);
     try {
-      await onAdd(trimmed);
+      await onAdd(trimmed, serviceId || undefined);
       setTitle('');
     } finally {
       setSubmitting(false);
     }
-  }, [title, submitting, onAdd]);
+  }, [title, serviceId, submitting, onAdd]);
 
   return (
-    <div className="flex items-center gap-2 rounded-xl border border-[var(--border)]/70 bg-[var(--surface)]/80 px-3 py-2">
+    <div className="flex flex-wrap items-center gap-2 rounded-xl border border-[var(--border)]/70 bg-[var(--surface)]/80 px-3 py-2">
       {submitting ? (
         <Loader2 size={16} className="shrink-0 animate-spin text-[var(--text-secondary)]" />
       ) : (
@@ -43,8 +47,21 @@ export function TaskQuickAdd({ onAdd, disabled }: TaskQuickAddProps) {
         }}
         placeholder="Ajouter une tâche…"
         disabled={disabled || submitting}
-        className="w-full bg-transparent text-sm text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] outline-none"
+        className="min-w-0 flex-1 bg-transparent text-sm text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] outline-none"
       />
+      {services && services.length > 0 ? (
+        <select
+          value={serviceId}
+          onChange={(e) => setServiceId(e.target.value)}
+          disabled={disabled || submitting}
+          className="min-w-0 max-w-[160px] shrink-0 rounded-lg border border-[var(--border)]/60 bg-[var(--surface-2)] px-2 py-1 text-xs text-[var(--text-secondary)] outline-none"
+        >
+          <option value="">Sans service</option>
+          {services.map((s) => (
+            <option key={s.id} value={s.id}>{s.name}</option>
+          ))}
+        </select>
+      ) : null}
     </div>
   );
 }

@@ -81,6 +81,75 @@ export function useRecurringRule({ businessId, loadFinances }: UseRecurringRuleO
 
   // ─── Handlers ──────────────────────────────────────────────────────────────
 
+  function openCreateRecurringRule() {
+    setRecurringRuleError(null);
+    setRecurringRule(null);
+    setRecurringOccurrences([]);
+    setRecurringRuleForm({
+      amount: '',
+      category: '',
+      vendor: '',
+      method: 'WIRE' as PaymentMethod,
+      startDate: new Date().toISOString().slice(0, 10),
+      endDate: '',
+      dayOfMonth: '1',
+      isActive: true,
+    });
+    setRecurringModalOpen(true);
+  }
+
+  async function handleCreateRecurringRule() {
+    setRecurringRuleError(null);
+    setRecurringRuleLoading(true);
+    try {
+      const amountCents = parseEuroToCents(recurringRuleForm.amount);
+      if (!Number.isFinite(amountCents) || amountCents <= 0) {
+        setRecurringRuleError('Montant invalide.');
+        return;
+      }
+      const dayOfMonth = recurringRuleForm.dayOfMonth
+        ? Math.min(31, Math.max(1, Number.parseInt(recurringRuleForm.dayOfMonth, 10)))
+        : 1;
+      if (!Number.isFinite(dayOfMonth) || dayOfMonth <= 0) {
+        setRecurringRuleError('Jour de facturation invalide.');
+        return;
+      }
+      if (!recurringRuleForm.category.trim()) {
+        setRecurringRuleError('Catégorie requise.');
+        return;
+      }
+      if (!recurringRuleForm.startDate) {
+        setRecurringRuleError('Date de début requise.');
+        return;
+      }
+      const res = await fetchJson<{ item: RecurringRule }>(`/api/pro/businesses/${businessId}/finances/recurring`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'EXPENSE',
+          amountCents,
+          category: recurringRuleForm.category.trim(),
+          vendor: recurringRuleForm.vendor.trim() || null,
+          method: recurringRuleForm.method,
+          startDate: recurringRuleForm.startDate,
+          endDate: recurringRuleForm.endDate || null,
+          dayOfMonth,
+          frequency: 'MONTHLY',
+        }),
+      });
+      if (!res.ok || !res.data) {
+        setRecurringRuleError(res.error ?? 'Création impossible.');
+        return;
+      }
+      setRecurringModalOpen(false);
+      await loadFinances();
+    } catch (err) {
+      setRecurringRuleError(getErrorMessage(err));
+    } finally {
+      setRecurringRuleLoading(false);
+    }
+  }
+
   async function openRecurringRule(ruleId: string) {
     setRecurringRuleError(null);
     setRecurringRuleLoading(true);
@@ -183,6 +252,9 @@ export function useRecurringRule({ businessId, loadFinances }: UseRecurringRuleO
     recurringRuleLoading,
     recurringRuleError,
     openRecurringRule,
+    openCreateRecurringRule,
     handleSaveRecurringRule,
+    handleCreateRecurringRule,
+    isCreateMode: recurringRule === null,
   };
 }

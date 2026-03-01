@@ -12,6 +12,8 @@ const TABS = [
   { key: 'general', label: 'Général' },
   { key: 'team', label: 'Équipe' },
   { key: 'billing', label: 'Facturation' },
+  { key: 'organization', label: 'Organisation' },
+  { key: 'references', label: 'Référentiels' },
   { key: 'integrations', label: 'Intégrations' },
   { key: 'taxes', label: 'Taxes' },
 ] as const;
@@ -115,6 +117,24 @@ export default function BusinessSettingsPage() {
             description="Configurez la facturation et les préférences de paiement."
             href={`/app/pro/${businessId}/settings/billing`}
             linkLabel="Aller à la facturation"
+          />
+        );
+      case 'organization':
+        return (
+          <PlaceholderCard
+            title="Organisation"
+            description="Gérez la structure de votre entreprise : pôles, départements, organigramme."
+            href={`/app/pro/${businessId}/organization`}
+            linkLabel="Gérer l'organisation"
+          />
+        );
+      case 'references':
+        return (
+          <PlaceholderCard
+            title="Référentiels"
+            description="Catégories, tags, numérotation et automatisations."
+            href={`/app/pro/${businessId}/references`}
+            linkLabel="Gérer les référentiels"
           />
         );
       case 'integrations':

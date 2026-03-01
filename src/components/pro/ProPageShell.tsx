@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
-import { PageHeaderPro } from '@/components/pro/PageHeaderPro';
+import { PageContainer } from '@/components/layouts/PageContainer';
+import { PageHeader } from '@/components/layouts/PageHeader';
 import { TabsPills } from '@/components/pro/TabsPills';
 import { cn } from '@/lib/cn';
 
@@ -35,8 +36,8 @@ export function ProPageShell({
   const resolvedActiveTab = hasTabs ? activeTab ?? tabs[0]?.key : undefined;
 
   return (
-    <div className={cn('mx-auto max-w-6xl space-y-4 px-4 py-4', className)} data-component="pro-page-shell">
-      <PageHeaderPro
+    <PageContainer className={cn('space-y-4', className)}>
+      <PageHeader
         backHref={backHref}
         backLabel={backLabel}
         title={title}
@@ -54,6 +55,6 @@ export function ProPageShell({
       ) : null}
 
       {children}
-    </div>
+    </PageContainer>
   );
 }

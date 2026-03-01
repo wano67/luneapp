@@ -71,17 +71,19 @@ export function useTaskHandlers(params: UseTaskHandlersParams) {
   );
 
   const createTask = useCallback(
-    async (title: string) => {
+    async (title: string, projectServiceId?: string) => {
       if (!isAdmin) {
         onBillingError('Réservé aux admins/owners.');
         return;
       }
       onBillingError(null);
       try {
+        const body: Record<string, unknown> = { title, projectId: params.projectId };
+        if (projectServiceId) body.projectServiceId = projectServiceId;
         const res = await fetchJson(`/api/pro/businesses/${businessId}/tasks`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ title, projectId: params.projectId }),
+          body: JSON.stringify(body),
         });
         if (!res.ok) {
           onBillingError(res.error ?? 'Impossible de créer la tâche.');

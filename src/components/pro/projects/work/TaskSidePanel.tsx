@@ -26,6 +26,8 @@ const STATUS_OPTIONS = [
   { value: 'DONE', label: 'Terminée' },
 ];
 
+type ServiceOption = { id: string; name: string };
+
 type TaskSidePanelProps = {
   task: TaskItem | null;
   open: boolean;
@@ -34,6 +36,7 @@ type TaskSidePanelProps = {
   isAdmin: boolean;
   onUpdate: (taskId: string, payload: Record<string, unknown>) => Promise<void>;
   onDelete: (taskId: string) => Promise<void>;
+  services?: ServiceOption[];
 };
 
 export function TaskSidePanel({
@@ -44,6 +47,7 @@ export function TaskSidePanel({
   isAdmin,
   onUpdate,
   onDelete,
+  services,
 }: TaskSidePanelProps) {
   const [title, setTitle] = useState('');
   const [deleting, setDeleting] = useState(false);
@@ -167,6 +171,21 @@ export function TaskSidePanel({
               </option>
             ))}
           </Select>
+
+          {/* Service lié */}
+          {services && services.length > 0 ? (
+            <Select
+              label="Service lié"
+              value={task.projectServiceId ?? ''}
+              onChange={(e) => patchField('projectServiceId', e.target.value || null)}
+              disabled={!isAdmin}
+            >
+              <option value="">Aucun</option>
+              {services.map((s) => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </Select>
+          ) : null}
 
           {/* Dates */}
           <div className="grid grid-cols-2 gap-3">

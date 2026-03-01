@@ -720,7 +720,7 @@ function ActionMenu({ businessId }: ActionMenuProps) {
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label="Actions"
-        className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full bg-transparent text-[var(--text-secondary)] opacity-70 transition hover:bg-black/5 hover:opacity-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
+        className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full bg-transparent text-[var(--text-secondary)] opacity-70 transition hover:bg-[var(--surface-hover)] hover:opacity-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
       >
         ⋮
       </button>

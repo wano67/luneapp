@@ -199,7 +199,7 @@ export function ClientInteractionsTab({ businessId, clientId, initialItems, alre
             <Button type="button" variant="outline" onClick={() => setModalOpen(false)} disabled={saving}>
               Annuler
             </Button>
-            <Button type="submit" disabled={saving} className="bg-neutral-900 text-white hover:bg-neutral-800">
+            <Button type="submit" disabled={saving}>
               {saving ? 'Ajout…' : 'Ajouter'}
             </Button>
           </div>

@@ -90,8 +90,8 @@ export function TaskSubmitPicker({ open, tasks, onClose, onSubmit }: TaskSubmitP
                     </div>
                     <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${
                       task.status === 'IN_PROGRESS'
-                        ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
-                        : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
+                        ? 'bg-[var(--warning-bg)] text-[var(--warning)] border border-[var(--warning-border)]'
+                        : 'bg-[var(--surface-2)] text-[var(--text-muted)] border border-[var(--border)]'
                     }`}>
                       {task.status === 'IN_PROGRESS' ? 'En cours' : 'À faire'}
                     </span>

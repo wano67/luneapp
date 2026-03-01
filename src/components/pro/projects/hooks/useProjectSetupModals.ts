@@ -2,7 +2,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import { parseEuroToCents } from '@/lib/money';
 
-type SetupModalKey = null | 'client' | 'deadline' | 'services' | 'tasks' | 'team' | 'documents';
+type SetupModalKey = null | 'client' | 'deadline' | 'services' | 'tasks' | 'team' | 'documents' | 'tags';
+
+type TagReference = { id: string; name: string };
 
 type ClientItem = { id: string; name: string; email?: string | null };
 type MemberItem = {
@@ -43,6 +45,7 @@ interface UseProjectSetupModalsParams {
   projectId: string;
   isAdmin: boolean;
   projectClientId: string | null;
+  projectTagReferences: TagReference[];
   projectStartDate: string | null;
   projectEndDate: string | null;
   clients: ClientItem[];
@@ -71,6 +74,7 @@ export function useProjectSetupModals(params: UseProjectSetupModalsParams) {
     projectId,
     isAdmin,
     projectClientId,
+    projectTagReferences,
     projectStartDate,
     projectEndDate,
     serviceTemplates,
@@ -112,7 +116,13 @@ export function useProjectSetupModals(params: UseProjectSetupModalsParams) {
   const [documentFile, setDocumentFile] = useState<File | null>(null);
   const [documentKind, setDocumentKind] = useState<'Administratif' | 'Projet'>('Administratif');
   const [clientSearch, setClientSearch] = useState('');
+  const [clientCreateMode, setClientCreateMode] = useState(false);
+  const [newClientName, setNewClientName] = useState('');
+  const [newClientEmail, setNewClientEmail] = useState('');
   const [serviceSearch, setServiceSearch] = useState('');
+  const [availableTags, setAvailableTags] = useState<TagReference[]>([]);
+  const [selectedTagIds, setSelectedTagIds] = useState<Set<string>>(new Set());
+  const [tagsLoading, setTagsLoading] = useState(false);
 
   // ─── Derived ────────────────────────────────────────────────────────────────
   const selectedServiceIds = useMemo(
@@ -147,8 +157,17 @@ export function useProjectSetupModals(params: UseProjectSetupModalsParams) {
       if (projectClientId) {
         void loadDocuments(projectClientId);
       }
+    } else if (activeSetupModal === 'tags') {
+      setModalError(null);
+      setSelectedTagIds(new Set(projectTagReferences.map((t) => t.id)));
+      setTagsLoading(true);
+      void fetchJson<{ items: TagReference[] }>(`/api/pro/businesses/${businessId}/references?type=TAG`)
+        .then((res) => {
+          if (res.ok && res.data?.items) setAvailableTags(res.data.items);
+        })
+        .finally(() => setTagsLoading(false));
     }
-  }, [activeSetupModal, loadClients, loadCatalogServices, loadMembers, loadTasks, loadDocuments, projectClientId]);
+  }, [activeSetupModal, loadClients, loadCatalogServices, loadMembers, loadTasks, loadDocuments, projectClientId, businessId, projectTagReferences]);
 
   useEffect(() => {
     if (!generateTasksOnAdd) return;
@@ -169,6 +188,9 @@ export function useProjectSetupModals(params: UseProjectSetupModalsParams) {
     setQuickServiceError(null);
     setQuickServiceSaving(false);
     setQuickServiceDraft({ name: '', code: '', price: '', billingUnit: 'ONE_OFF' });
+    setClientCreateMode(false);
+    setNewClientName('');
+    setNewClientEmail('');
   }, []);
 
   const handleAttachClient = useCallback(async () => {
@@ -187,6 +209,54 @@ export function useProjectSetupModals(params: UseProjectSetupModalsParams) {
     await refetchAll();
     closeModal();
   }, [selectedClientId, patchProject, refetchAll, closeModal]);
+
+  const handleCreateAndAttachClient = useCallback(async () => {
+    const name = newClientName.trim();
+    if (!name) {
+      setModalError('Le nom du client est requis.');
+      return;
+    }
+    setSaving(true);
+    setModalError(null);
+    try {
+      const createRes = await fetchJson<{ item: { id: string } }>(`/api/pro/businesses/${businessId}/clients`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email: newClientEmail.trim() || null }),
+      });
+      if (!createRes.ok || !createRes.data?.item?.id) {
+        throw new Error(createRes.error ?? 'Création du client impossible.');
+      }
+      const res = await patchProject({ clientId: createRes.data.item.id });
+      if (!res.ok) {
+        throw new Error(res.error ?? 'Impossible de lier le client.');
+      }
+      await refetchAll();
+      closeModal();
+    } catch (err) {
+      setModalError(getErrorMessage(err));
+    } finally {
+      setSaving(false);
+    }
+  }, [newClientName, newClientEmail, businessId, patchProject, refetchAll, closeModal]);
+
+  const handleUpdateTags = useCallback(async () => {
+    setSaving(true);
+    setModalError(null);
+    try {
+      const res = await patchProject({ tagReferenceIds: Array.from(selectedTagIds) });
+      if (!res.ok) {
+        setModalError(res.error ?? 'Impossible de mettre à jour les tags.');
+        return;
+      }
+      await refetchAll();
+      closeModal();
+    } catch (err) {
+      setModalError(getErrorMessage(err));
+    } finally {
+      setSaving(false);
+    }
+  }, [selectedTagIds, patchProject, refetchAll, closeModal]);
 
   const handleUpdateDates = useCallback(async () => {
     if (startDateInput && endDateInput && new Date(endDateInput) < new Date(startDateInput)) {
@@ -442,11 +512,23 @@ export function useProjectSetupModals(params: UseProjectSetupModalsParams) {
     setDocumentFile,
     clientSearch,
     setClientSearch,
+    clientCreateMode,
+    setClientCreateMode,
+    newClientName,
+    setNewClientName,
+    newClientEmail,
+    setNewClientEmail,
     serviceSearch,
     setServiceSearch,
     selectedServiceIds,
+    availableTags,
+    selectedTagIds,
+    setSelectedTagIds,
+    tagsLoading,
     closeModal,
     handleAttachClient,
+    handleCreateAndAttachClient,
+    handleUpdateTags,
     handleUpdateDates,
     handleAddServices,
     handleQuickCreateService,

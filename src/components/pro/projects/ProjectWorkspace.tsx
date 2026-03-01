@@ -66,6 +66,7 @@ type ProjectDetail = {
   startDate: string | null;
   endDate: string | null;
   prestationsText?: string | null;
+  tagReferences?: Array<{ id: string; name: string }>;
   updatedAt: string;
   tasksSummary?: { total: number; open: number; done: number; progressPct: number };
   projectServices?: Array<{
@@ -486,11 +487,23 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
     setDocumentFile,
     clientSearch,
     setClientSearch,
+    clientCreateMode,
+    setClientCreateMode,
+    newClientName,
+    setNewClientName,
+    newClientEmail,
+    setNewClientEmail,
     serviceSearch,
     setServiceSearch,
     selectedServiceIds,
+    availableTags,
+    selectedTagIds,
+    setSelectedTagIds,
+    tagsLoading,
     closeModal,
     handleAttachClient,
+    handleCreateAndAttachClient,
+    handleUpdateTags,
     handleUpdateDates,
     handleAddServices,
     handleQuickCreateService,
@@ -502,6 +515,7 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
     projectId,
     isAdmin,
     projectClientId: project?.clientId ?? null,
+    projectTagReferences: project?.tagReferences ?? [],
     projectStartDate: project?.startDate ?? null,
     projectEndDate: project?.endDate ?? null,
     clients,
@@ -584,15 +598,17 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
     const hasTasks = tasks.length > 0;
     const hasDocs = documents.length > 0;
     const hasTeam = members.length > 0 || tasks.some((t) => t.assigneeEmail || t.assigneeName);
+    const hasTags = (project?.tagReferences?.length ?? 0) > 0;
     return [
       { key: 'client', label: 'Client lié', done: hasClient, ctaLabel: 'Associer un client', href: `/app/pro/${businessId}/clients` },
       { key: 'deadline', label: 'Échéance définie', done: hasEndDate, ctaLabel: 'Définir la date', href: `/app/pro/${businessId}/projects/${projectId}/edit` },
+      { key: 'tags', label: 'Tags projet', done: hasTags, ctaLabel: 'Gérer les tags', href: `/app/pro/${businessId}/projects/${projectId}` },
       { key: 'services', label: 'Services ajoutés', done: hasServices, ctaLabel: 'Ajouter des services', href: `/app/pro/${businessId}/projects/${projectId}?tab=billing` },
       { key: 'tasks', label: 'Tâches générées/assignées', done: hasTasks, ctaLabel: 'Configurer les tâches', href: `/app/pro/${businessId}/projects/${projectId}?tab=work` },
       { key: 'team', label: 'Équipe assignée', done: hasTeam, ctaLabel: 'Ajouter un membre', href: `/app/pro/${businessId}/projects/${projectId}?tab=team` },
       { key: 'docs', label: 'Dossier documents initial', done: hasDocs, ctaLabel: 'Ajouter un document', href: `/app/pro/${businessId}/projects/${projectId}?tab=files` },
     ];
-  }, [businessId, project?.clientId, project?.endDate, projectId, services.length, tasks, members.length, documents.length]);
+  }, [businessId, project?.clientId, project?.endDate, project?.tagReferences, projectId, services.length, tasks, members.length, documents.length]);
 
   useEffect(() => {
     const tabParam = searchParams?.get('tab');
@@ -1088,6 +1104,7 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
         onChange={(key) => setActiveTab(key as typeof activeTab)}
         ariaLabel="Onglets projet"
         className="rounded-2xl bg-[var(--surface)]/70 p-2"
+        wrap={false}
       />
 
       {activeTab === 'overview' ? (
@@ -1141,6 +1158,7 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
           onQuickAddTask={createTask}
           onUpdateTask={updateTask}
           onDeleteTask={deleteTask}
+          services={services.map((s) => ({ id: s.id, name: s.service?.name ?? s.titleOverride ?? '' }))}
         />
       ) : null}
 
@@ -1490,10 +1508,17 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
         clients={clients}
         clientSearch={clientSearch}
         selectedClientId={selectedClientId}
+        clientCreateMode={clientCreateMode}
+        newClientName={newClientName}
+        newClientEmail={newClientEmail}
         setClientSearch={setClientSearch}
         setSelectedClientId={setSelectedClientId}
+        setClientCreateMode={setClientCreateMode}
+        setNewClientName={setNewClientName}
+        setNewClientEmail={setNewClientEmail}
         onLoadClients={(search) => void loadClients(search)}
         onAttachClient={handleAttachClient}
+        onCreateAndAttachClient={handleCreateAndAttachClient}
         startDateInput={startDateInput}
         endDateInput={endDateInput}
         setStartDateInput={setStartDateInput}
@@ -1536,6 +1561,16 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
         setDocumentKind={setDocumentKind}
         setDocumentFile={setDocumentFile}
         onUploadDocument={handleUploadDocument}
+        availableTags={availableTags}
+        selectedTagIds={selectedTagIds}
+        tagsLoading={tagsLoading}
+        onToggleTag={(id) => setSelectedTagIds((prev) => {
+          const next = new Set(prev);
+          if (next.has(id)) next.delete(id);
+          else next.add(id);
+          return next;
+        })}
+        onUpdateTags={handleUpdateTags}
         projectMembers={projectMembers}
         availableMembers={availableMembers}
         accessInfo={accessInfo}

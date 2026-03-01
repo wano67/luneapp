@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import { formatCentsToEuroInput, parseEuroToCents } from '@/lib/money';
 
@@ -101,6 +101,8 @@ export function useQuoteWizard({
     downloadUrl: string;
   } | null>(null);
 
+  const servicesPostedRef = useRef(false);
+
   // ─── Computed ─────────────────────────────────────────────────────────────
 
   const wizardLineValidation = useMemo(() => {
@@ -144,6 +146,7 @@ export function useQuoteWizard({
     setQuoteWizardInfo(null);
     setQuoteWizardResult(null);
     setQuoteWizardSaving(false);
+    servicesPostedRef.current = false;
   }, []);
 
   const openQuoteWizard = useCallback(() => {
@@ -233,6 +236,10 @@ export function useQuoteWizard({
       const hasDueOffset = Number.isFinite(dueOffset ?? NaN);
       const createTasks = quoteWizardGenerateTasks;
 
+      if (servicesPostedRef.current) {
+        // Services already posted on a previous attempt — skip to quote generation
+      } else {
+        servicesPostedRef.current = true;
       for (const line of quoteWizardLines) {
         let serviceId = line.serviceId ?? null;
         const unitPriceCents = line.unitPrice.trim() ? parseEuroInputCents(line.unitPrice) : null;
@@ -288,10 +295,11 @@ export function useQuoteWizard({
           throw new Error(addRes.error ?? 'Ajout des services au projet impossible.');
         }
       }
+      } // end else (services not yet posted)
 
       setQuoteWizardInfo('Génération du devis\u2026');
       const quoteRes = await fetchJson<{
-        quote: { id: string };
+        item: { id: string };
         pdfUrl: string;
         downloadUrl: string;
       }>(`/api/pro/businesses/${businessId}/projects/${projectId}/quotes`, { method: 'POST' });
@@ -299,7 +307,7 @@ export function useQuoteWizard({
         throw new Error(quoteRes.error ?? 'Création du devis impossible.');
       }
       setQuoteWizardResult({
-        quoteId: quoteRes.data.quote.id,
+        quoteId: quoteRes.data.item.id,
         pdfUrl: quoteRes.data.pdfUrl,
         downloadUrl: quoteRes.data.downloadUrl,
       });

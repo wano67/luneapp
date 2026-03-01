@@ -27,6 +27,12 @@ export type CashflowChartProps = {
   series: MonthlyPoint[];
 };
 
+function formatEur(value: number) {
+  const abs = Math.abs(value);
+  if (abs >= 1000) return `${(value / 1000).toFixed(1).replace(/\.0$/, '')}k€`;
+  return `${value.toFixed(0)}€`;
+}
+
 export default function CashflowChart({ series }: CashflowChartProps) {
   const data = (series ?? []).map((m) => {
     const income = toNumber(m.incomeCents);
@@ -40,17 +46,30 @@ export default function CashflowChart({ series }: CashflowChartProps) {
   });
 
   return (
-    <div className="h-72">
+    <div className="h-48 sm:h-72">
       <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={data}>
-          <CartesianGrid strokeDasharray="3 3" />
-          <XAxis dataKey="month" tickMargin={8} />
-          <YAxis />
-          <Tooltip />
-          <Legend />
-          <Line type="monotone" dataKey="income" stroke="#10b981" name="Revenus" strokeWidth={2} />
-          <Line type="monotone" dataKey="expense" stroke="#ef4444" name="Dépenses" strokeWidth={2} />
-          <Line type="monotone" dataKey="net" stroke="#3b82f6" name="Net" strokeWidth={2} />
+        <LineChart data={data} margin={{ left: 0, right: 8, top: 4, bottom: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+          <XAxis
+            dataKey="month"
+            tickMargin={6}
+            tick={{ fontSize: 11, fill: 'var(--text-faint)' }}
+            tickLine={false}
+            axisLine={false}
+          />
+          <YAxis
+            tickFormatter={formatEur}
+            tick={{ fontSize: 11, fill: 'var(--text-faint)' }}
+            tickLine={false}
+            axisLine={false}
+            width={48}
+            tickCount={5}
+          />
+          <Tooltip formatter={(v) => formatEur(Number(v ?? 0))} />
+          <Legend wrapperStyle={{ fontSize: 12 }} />
+          <Line type="monotone" dataKey="income" stroke="var(--success)" name="Revenus" strokeWidth={2} dot={false} />
+          <Line type="monotone" dataKey="expense" stroke="var(--danger)" name="Dépenses" strokeWidth={2} dot={false} />
+          <Line type="monotone" dataKey="net" stroke="var(--accent)" name="Net" strokeWidth={2} dot={false} />
         </LineChart>
       </ResponsiveContainer>
     </div>

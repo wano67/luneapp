@@ -133,7 +133,7 @@ export function ReferencePicker(props: ReferencePickerProps) {
                     variant="neutral"
                     className={
                       active
-                        ? 'bg-blue-100 text-blue-700 border border-blue-200'
+                        ? 'bg-[var(--accent)]/10 text-[var(--accent)] border border-[var(--accent)]/25'
                         : 'bg-[var(--surface-hover)] text-[var(--text-secondary)]'
                     }
                   >

@@ -10,12 +10,14 @@ import { TreasuryPanel } from '@/components/pro/finances/TreasuryPanel';
 import { VatPanel } from '@/components/pro/finances/VatPanel';
 import { ForecastingPanel } from '@/components/pro/finances/ForecastingPanel';
 import { LedgerPanel } from '@/components/pro/finances/LedgerPanel';
+import { FixedChargesPanel } from '@/components/pro/finances/FixedChargesPanel';
 
 type Props = { businessId: string };
 
 const TABS = [
   { key: 'entries', label: 'Écritures' },
   { key: 'payments', label: 'Paiements' },
+  { key: 'charges', label: 'Charges fixes' },
   { key: 'treasury', label: 'Trésorerie' },
   { key: 'vat', label: 'TVA' },
   { key: 'forecasting', label: 'Prévisions' },
@@ -47,6 +49,8 @@ export default function AccountingPage({ businessId }: Props) {
         return <FinanceEntriesPanel businessId={businessId} />;
       case 'payments':
         return <PaymentsPanel businessId={businessId} />;
+      case 'charges':
+        return <FixedChargesPanel businessId={businessId} />;
       case 'treasury':
         return <TreasuryPanel businessId={businessId} />;
       case 'vat':

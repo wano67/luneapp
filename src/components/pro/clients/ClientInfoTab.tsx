@@ -265,7 +265,7 @@ export function ClientInfoTab({ businessId, clientId, client, onUpdated }: Props
               <Button
                 onClick={handleSave}
                 disabled={!hasChanges || saving || !isAdmin}
-                className="w-full sm:w-auto bg-neutral-900 text-white hover:bg-neutral-800"
+                className="w-full sm:w-auto"
               >
                 {saving ? 'Enregistrement…' : 'Enregistrer'}
               </Button>

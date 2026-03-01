@@ -12,7 +12,7 @@ type PageHeaderProProps = {
   className?: string;
 };
 
-// Premium page header shared across PRO pages: back link, identity block, responsive actions.
+/** @deprecated Use `PageHeader` from `@/components/layouts` instead. */
 export function PageHeaderPro({
   title,
   subtitle,

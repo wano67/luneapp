@@ -17,6 +17,8 @@ import { RoadmapView } from '@/components/pro/projects/work/RoadmapView';
 import { GanttChart } from '@/components/pro/projects/work/GanttChart';
 import type { TaskItem, MemberItem } from '@/components/pro/projects/hooks/useProjectDataLoaders';
 
+type ServiceOption = { id: string; name: string };
+
 type WorkTabTask = {
   id: string;
   title: string;
@@ -24,6 +26,7 @@ type WorkTabTask = {
   dueDate: string | null;
   assigneeName: string | null;
   assigneeEmail: string | null;
+  projectServiceName?: string | null;
   checklistCount?: number;
   checklistDoneCount?: number;
 };
@@ -53,9 +56,10 @@ export type WorkTabProps = {
   tasks: TaskItem[];
   members: MemberItem[];
   isAdmin: boolean;
-  onQuickAddTask: (title: string) => Promise<void>;
+  onQuickAddTask: (title: string, projectServiceId?: string) => Promise<void>;
   onUpdateTask: (taskId: string, payload: Record<string, unknown>) => Promise<void>;
   onDeleteTask: (taskId: string) => Promise<void>;
+  services?: ServiceOption[];
 };
 
 export function WorkTab({
@@ -73,6 +77,7 @@ export function WorkTab({
   onQuickAddTask,
   onUpdateTask,
   onDeleteTask,
+  services,
 }: WorkTabProps) {
   const [workView, setWorkView] = useState<WorkView>('list');
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
@@ -120,7 +125,7 @@ export function WorkTab({
 
       {/* Quick-add */}
       {isAdmin ? (
-        <TaskQuickAdd onAdd={onQuickAddTask} />
+        <TaskQuickAdd onAdd={onQuickAddTask} services={services} />
       ) : null}
 
       {/* Views */}
@@ -149,6 +154,7 @@ export function WorkTab({
         isAdmin={isAdmin}
         onUpdate={onUpdateTask}
         onDelete={onDeleteTask}
+        services={services}
       />
     </div>
   );
@@ -253,6 +259,11 @@ function ListView({
                           >
                             {formatTaskStatus(task.status)}
                           </span>
+                          {task.projectServiceName ? (
+                            <span className="inline-flex rounded-full border border-[var(--border)]/50 bg-[var(--surface-2)] px-2 py-0.5 text-[10px] text-[var(--text-secondary)]">
+                              {task.projectServiceName}
+                            </span>
+                          ) : null}
                           {indicator ? (
                             <p className="text-[11px] text-[var(--text-secondary)]">{indicator}</p>
                           ) : null}

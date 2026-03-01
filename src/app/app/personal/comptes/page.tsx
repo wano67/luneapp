@@ -7,6 +7,8 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
+import { PageContainer } from '@/components/layouts/PageContainer';
+import { PageHeader } from '@/components/layouts/PageHeader';
 import Modal from '@/components/ui/modal';
 import CsvImportModal from '@/components/CsvImportModal';
 import { useFileDropHandler } from '@/components/file-drop/FileDropProvider';
@@ -408,22 +410,18 @@ export default function ComptesPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <Card className="p-5">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="space-y-1">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-[var(--text-secondary)]">
-              Wallet · Comptes
-            </p>
-            <h2 className="text-lg font-semibold">Comptes</h2>
-            <p className="text-sm text-[var(--text-secondary)]">
-              Gère tes comptes et soldes, point d’entrée unique avant les transactions.
-            </p>
-            <p className="text-sm text-[var(--text-secondary)]">
-              Solde total (calculé) : {loading ? '—' : `${centsToEUR(totalCents.toString())} €`}
-            </p>
-          </div>
-
+    <PageContainer className="space-y-6">
+      <PageHeader
+        title="Comptes"
+        subtitle={
+          <>
+            {"Gère tes comptes et soldes, point d'entrée unique avant les transactions."}
+            <span className="block text-sm text-[var(--text-faint)]">
+              {'Solde total (calculé) : '}{loading ? '—' : `${centsToEUR(totalCents.toString())} €`}
+            </span>
+          </>
+        }
+        actions={
           <div className="flex gap-2">
             <Button
               variant="outline"
@@ -445,8 +443,8 @@ export default function ComptesPage() {
               Créer un compte
             </Button>
           </div>
-        </div>
-      </Card>
+        }
+      />
 
       {error ? (
         <Card className="p-5">
@@ -762,6 +760,6 @@ export default function ComptesPage() {
           {successMessage}
         </div>
       ) : null}
-    </div>
+    </PageContainer>
   );
 }

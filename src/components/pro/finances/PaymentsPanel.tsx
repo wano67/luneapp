@@ -10,7 +10,6 @@ import { Table, TableBody, TableCell, TableEmpty, TableHead, TableHeader, TableR
 import { formatCurrency, formatDate, paginate, type PaymentMethod } from '@/app/app/pro/pro-data';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import { KpiCard } from '@/components/ui/kpi-card';
-import { PageHeader } from '@/app/app/components/PageHeader';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -160,12 +159,6 @@ export function PaymentsPanel({ businessId }: { businessId: string }) {
 
   return (
     <div className="space-y-4">
-      <PageHeader
-        backHref={`/app/pro/${businessId}/finances`}
-        backLabel="Finances"
-        title="Mouvements"
-        subtitle="Vue complète des entrées et sorties d'argent."
-      />
 
       <div className="grid gap-3 md:grid-cols-3">
         <KpiCard
