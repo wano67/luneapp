@@ -48,6 +48,7 @@
     "smoke:clients-delete": "pnpm tsx scripts/smoke-clients-delete.ts",
     "smoke:clients-gdpr": "pnpm tsx scripts/smoke-clients-gdpr.ts",
     "smoke:tasks-billing-link": "pnpm tsx scripts/smoke-tasks-billing-link.ts",
+    "generate-samples": "pnpm tsx scripts/generate-pdf-samples.ts",
     "db:migrate": "prisma migrate deploy",
     "db:deploy": "prisma migrate deploy",
     "db:reset": "prisma migrate reset",
