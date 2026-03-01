@@ -4,7 +4,7 @@
 import type { ReactNode } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { LayoutDashboard, Wallet2, Building2, Banknote, FileText } from 'lucide-react';
+import { LayoutDashboard, Wallet2, Building2, Banknote, FileText, PiggyBank, Target, BarChart3, TrendingUp } from 'lucide-react';
 import { useActiveBusiness } from './pro/ActiveBusinessProvider';
 import { normalizeWebsiteUrl } from '@/lib/website';
 import { proNavSections, type ProNavSectionConfig } from '@/config/proNav';
@@ -128,13 +128,24 @@ function getWalletSections(): NavSection[] {
         { href: `${base}`, label: 'Vue d’accueil', icon: <Wallet2 size={18} />, accent: 'wallet' },
         { href: `${base}/comptes`, label: 'Comptes', icon: <Banknote size={18} /> },
         { href: `${base}/transactions`, label: 'Transactions', icon: <FileText size={18} /> },
+        { href: `${base}/budgets`, label: 'Budgets', icon: <PiggyBank size={18} /> },
+        { href: `${base}/epargne`, label: 'Épargne', icon: <Target size={18} /> },
       ],
     },
   ];
 }
 
 function getFocusSections(): NavSection[] {
-  return [];
+  return [
+    {
+      title: 'Performance',
+      items: [
+        { href: '/app/focus', label: "Vue d'ensemble", icon: <BarChart3 size={18} />, accent: 'focus' },
+        { href: '/app/performance/pro', label: 'Analyse Pro', icon: <TrendingUp size={18} /> },
+        { href: '/app/performance/perso', label: 'Analyse Perso', icon: <Wallet2 size={18} /> },
+      ],
+    },
+  ];
 }
 
 function buildSections(space: Space, businessId: string | null): NavSection[] {

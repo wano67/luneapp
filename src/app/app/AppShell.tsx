@@ -6,7 +6,7 @@ import React, { useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import AppSidebar, { type Space, getActiveSidebarMeta } from './AppSidebar';
-import { Banknote, FileText, Wallet2 } from 'lucide-react';
+import { Banknote, FileText, Wallet2, PiggyBank, Target } from 'lucide-react';
 import { IconFocus, IconHome, IconStudio, IconWallet, IconUser } from '@/components/icons';
 import { useBodyScrollLock } from '@/lib/scrollLock';
 import { LogoMark } from '@/components/marketing/LogoMark';
@@ -64,6 +64,18 @@ export default function AppShell({ children }: { children: ReactNode }) {
         label: 'Transactions',
         href: '/app/personal/transactions',
         icon: <FileText size={18} />,
+      },
+      {
+        key: 'wallet-budgets',
+        label: 'Budgets',
+        href: '/app/personal/budgets',
+        icon: <PiggyBank size={18} />,
+      },
+      {
+        key: 'wallet-epargne',
+        label: 'Épargne',
+        href: '/app/personal/epargne',
+        icon: <Target size={18} />,
       },
     ],
     []
@@ -211,7 +223,8 @@ export default function AppShell({ children }: { children: ReactNode }) {
   }
 
   // menuSpace: sous-nav de l'univers courant (null => global)
-  const menuSpace: Space = space === 'perso' || space === 'pro' ? space : null;
+  const menuSpace: Space =
+    space === 'perso' || space === 'pro' || space === 'focus' ? space : null;
 
   function spaceLabel(s: Space) {
     if (s === 'home') return 'Accueil';
@@ -238,7 +251,11 @@ export default function AppShell({ children }: { children: ReactNode }) {
     }
 
     if (s === 'focus') {
-      return [];
+      return [
+        { label: "Vue d'ensemble", href: '/app/focus' },
+        { label: 'Analyse Pro', href: '/app/performance/pro' },
+        { label: 'Analyse Perso', href: '/app/performance/perso' },
+      ];
     }
 
     if (s === 'pro') {
@@ -565,7 +582,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
           style={{ zIndex: 58, paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
           aria-label="Navigation Wallet mobile"
         >
-          <div className="grid grid-cols-3 gap-1 px-2 py-2">
+          <div className="grid grid-cols-5 gap-1 px-2 py-2">
             {walletBottomNav.map((item) => {
               const active =
                 item.key === 'wallet-home'

@@ -2,33 +2,15 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { KpiCard } from '@/components/ui/kpi-card';
+import { SectionHeader } from '@/components/ui/section-header';
+import { PageContainer } from '@/components/layouts/PageContainer';
+import { PageHeader } from '@/components/layouts/PageHeader';
+import { fetchJson } from '@/lib/apiClient';
 import { formatCents } from '@/lib/money';
 import { Wallet2, Building2, UserPlus, Upload, FolderPlus, Users } from 'lucide-react';
-
-type ApiErrorShape = { error: string };
-
-function isApiErrorShape(v: unknown): v is ApiErrorShape {
-  return !!v && typeof v === 'object' && 'error' in v && typeof (v as { error?: unknown }).error === 'string';
-}
-
-function isRecord(v: unknown): v is Record<string, unknown> {
-  return !!v && typeof v === 'object';
-}
-
-async function safeJson(res: Response): Promise<unknown> {
-  try {
-    return await res.json();
-  } catch {
-    return null;
-  }
-}
-
-function getErrorMessage(e: unknown): string {
-  return e instanceof Error ? e.message : 'Erreur';
-}
 
 type AccountMini = { id: string; name: string; balanceCents: string; currency: string };
 
@@ -40,11 +22,18 @@ type SummaryData = {
   accounts: AccountMini[];
 };
 
+type MeData = { user?: { name?: string } };
+type SummaryResponse = {
+  kpis?: { totalBalanceCents?: string; monthNetCents?: string };
+  accounts?: Array<{ id?: string; name?: string; balanceCents?: string; currency?: string }>;
+  latestTransactions?: unknown[];
+};
+type BusinessResponse = {
+  items?: Array<{ business?: { id?: string; name?: string } }>;
+};
 type BusinessItem = { id: string; name: string };
 
 export default function AppHomePage() {
-  const router = useRouter();
-
   const [userName, setUserName] = useState<string | null>(null);
   const [summary, setSummary] = useState<SummaryData | null>(null);
   const [businesses, setBusinesses] = useState<BusinessItem[]>([]);
@@ -70,94 +59,60 @@ export default function AppHomePage() {
 
     async function loadMe() {
       setLoadingAuth(true);
-      try {
-        const res = await fetch('/api/auth/me', { credentials: 'include', signal: ctrl.signal });
-        if (res.status === 401) {
-          router.push(`/login?from=${encodeURIComponent('/app')}`);
-          return;
-        }
-        const json = await safeJson(res);
-        if (res.ok && isRecord(json) && isRecord(json.user) && typeof json.user.name === 'string') {
-          const parts = json.user.name.trim().split(/\s+/);
-          setUserName(parts[0] || ' ');
-        }
-      } catch (e) {
-        if (!ctrl.signal.aborted) console.error('loadMe', e);
-      } finally {
-        if (!ctrl.signal.aborted) setLoadingAuth(false);
+      const res = await fetchJson<MeData>('/api/auth/me', {}, ctrl.signal);
+      if (ctrl.signal.aborted) return;
+      if (res.ok && res.data?.user?.name) {
+        const parts = res.data.user.name.trim().split(/\s+/);
+        setUserName(parts[0] || ' ');
       }
+      setLoadingAuth(false);
     }
 
-    loadMe();
+    void loadMe();
     return () => ctrl.abort();
-  }, [router]);
+  }, []);
 
   useEffect(() => {
     const ctrl = new AbortController();
 
     async function loadSummary() {
       setErrorPersonal(null);
-      try {
-        const res = await fetch('/api/personal/summary', { credentials: 'include', signal: ctrl.signal });
-        if (res.status === 401) {
-          router.push(`/login?from=${encodeURIComponent('/app')}`);
-          return;
-        }
-        const json = await safeJson(res);
-        if (!res.ok) {
-          setErrorPersonal(isApiErrorShape(json) ? json.error : 'Impossible de charger le portefeuille.');
-          return;
-        }
-        if (!isRecord(json) || !isRecord(json.kpis)) {
-          setErrorPersonal('Réponse inattendue.');
-          return;
-        }
-        const kpis = json.kpis as Record<string, unknown>;
-        const accounts = Array.isArray(json.accounts) ? json.accounts : [];
-        const latest = Array.isArray(json.latestTransactions) ? json.latestTransactions : [];
-
-        const totalBalanceCents =
-          typeof kpis.totalBalanceCents === 'string' ? kpis.totalBalanceCents : '0';
-        const monthNetCents = typeof kpis.monthNetCents === 'string' ? kpis.monthNetCents : '0';
-
-        const parsedAccounts: AccountMini[] = accounts
-          .map((a) => {
-            if (!isRecord(a)) return null;
-            if (
-              typeof a.id !== 'string' ||
-              typeof a.name !== 'string' ||
-              typeof a.balanceCents !== 'string' ||
-              typeof a.currency !== 'string'
-            ) {
-              return null;
-            }
-            return {
-              id: a.id,
-              name: a.name,
-              balanceCents: a.balanceCents,
-              currency: a.currency,
-            };
-          })
-          .filter(Boolean) as AccountMini[];
-
-        setSummary({
-          totalBalanceCents,
-          monthNetCents,
-          accountsCount: accounts.length,
-          latestCount: latest.length,
-          accounts: parsedAccounts,
-        });
-      } catch (e) {
-        if (ctrl.signal.aborted) return;
-        setErrorPersonal(getErrorMessage(e));
-      } finally {
-        // no-op
+      const res = await fetchJson<SummaryResponse>('/api/personal/summary', {}, ctrl.signal);
+      if (ctrl.signal.aborted) return;
+      if (!res.ok) {
+        setErrorPersonal(res.error ?? 'Impossible de charger le portefeuille.');
+        return;
       }
+      const d = res.data;
+      if (!d?.kpis) {
+        setErrorPersonal('Réponse inattendue.');
+        return;
+      }
+
+      const accounts = Array.isArray(d.accounts) ? d.accounts : [];
+      const latest = Array.isArray(d.latestTransactions) ? d.latestTransactions : [];
+
+      const parsedAccounts: AccountMini[] = accounts
+        .filter(
+          (a): a is { id: string; name: string; balanceCents: string; currency: string } =>
+            typeof a?.id === 'string' &&
+            typeof a?.name === 'string' &&
+            typeof a?.balanceCents === 'string' &&
+            typeof a?.currency === 'string'
+        );
+
+      setSummary({
+        totalBalanceCents: d.kpis.totalBalanceCents ?? '0',
+        monthNetCents: d.kpis.monthNetCents ?? '0',
+        accountsCount: accounts.length,
+        latestCount: latest.length,
+        accounts: parsedAccounts,
+      });
     }
 
-    loadSummary();
+    void loadSummary();
     return () => ctrl.abort();
-  }, [router]);
+  }, []);
 
   useEffect(() => {
     const ctrl = new AbortController();
@@ -165,40 +120,27 @@ export default function AppHomePage() {
     async function loadBusinesses() {
       setLoadingBusinesses(true);
       setErrorPro(null);
-      try {
-        const res = await fetch('/api/pro/businesses', { credentials: 'include', signal: ctrl.signal });
-        if (res.status === 401) {
-          router.push(`/login?from=${encodeURIComponent('/app')}`);
-          return;
-        }
-        const json = await safeJson(res);
-        if (!res.ok) {
-          setErrorPro(isApiErrorShape(json) ? json.error : 'Impossible de charger les entreprises.');
-          return;
-        }
-        const items = isRecord(json) && Array.isArray((json as { items?: unknown }).items)
-          ? (json as { items: unknown[] }).items
-          : [];
-        const mapped: BusinessItem[] = items
-          .map((it) => {
-            if (!isRecord(it) || !isRecord(it.business)) return null;
-            const b = it.business;
-            if (typeof b.id !== 'string' || typeof b.name !== 'string') return null;
-            return { id: b.id, name: b.name };
-          })
-          .filter(Boolean) as BusinessItem[];
-        setBusinesses(mapped);
-      } catch (e) {
-        if (ctrl.signal.aborted) return;
-        setErrorPro(getErrorMessage(e));
-      } finally {
-        if (!ctrl.signal.aborted) setLoadingBusinesses(false);
+      const res = await fetchJson<BusinessResponse>('/api/pro/businesses', {}, ctrl.signal);
+      if (ctrl.signal.aborted) return;
+      if (!res.ok) {
+        setErrorPro(res.error ?? 'Impossible de charger les entreprises.');
+        setLoadingBusinesses(false);
+        return;
       }
+      const items = res.data?.items ?? [];
+      const mapped: BusinessItem[] = items
+        .filter(
+          (it): it is { business: { id: string; name: string } } =>
+            typeof it?.business?.id === 'string' && typeof it?.business?.name === 'string'
+        )
+        .map((it) => ({ id: it.business.id, name: it.business.name }));
+      setBusinesses(mapped);
+      setLoadingBusinesses(false);
     }
 
-    loadBusinesses();
+    void loadBusinesses();
     return () => ctrl.abort();
-  }, [router]);
+  }, []);
 
   const greeting = useMemo(() => {
     if (loadingAuth) return 'Chargement…';
@@ -219,198 +161,210 @@ export default function AppHomePage() {
 
   const disablePro = !lastBusiness;
 
+  const monthNet = summary ? BigInt(summary.monthNetCents) : 0n;
+
   return (
-    <div className="mx-auto max-w-6xl space-y-6 px-4 py-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <p className="text-xs uppercase tracking-[0.18em] text-[var(--text-secondary)]">Accueil</p>
-          <h1 className="text-2xl font-semibold text-[var(--text-primary)]">{greeting}</h1>
-        </div>
-        {!lastBusiness ? (
-          <Button asChild variant="outline">
-            <Link href="/app/pro">Créer ou rejoindre une entreprise</Link>
-          </Button>
-        ) : (
-          <Button asChild>
-            <Link href={`/app/pro/${lastBusiness.id}`}>Aller au Studio</Link>
-          </Button>
-        )}
-      </div>
+    <PageContainer>
+      <div className="space-y-8">
+        <PageHeader
+          title={greeting}
+          subtitle="Tableau de bord personnel"
+          actions={
+            !lastBusiness ? (
+              <Button asChild variant="outline">
+                <Link href="/app/pro">Créer ou rejoindre une entreprise</Link>
+              </Button>
+            ) : (
+              <Button asChild>
+                <Link href={`/app/pro/${lastBusiness.id}`}>Aller au Studio</Link>
+              </Button>
+            )
+          }
+        />
 
-      <section className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
-            Choisir ton espace
-          </h2>
-          <div className="flex gap-3">
-            {errorPersonal ? <span className="text-xs text-[var(--danger)]">{errorPersonal}</span> : null}
-            {errorPro ? <span className="text-xs text-[var(--danger)]">{errorPro}</span> : null}
+        {/* KPIs */}
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <KpiCard
+            label="Solde total"
+            value={summary ? formatCents(summary.totalBalanceCents, 'EUR') : '—'}
+            hint="Tous comptes"
+          />
+          <KpiCard
+            label="Net ce mois"
+            value={summary ? formatCents(summary.monthNetCents, 'EUR') : '—'}
+            trend={monthNet > 0n ? 'up' : monthNet < 0n ? 'down' : 'neutral'}
+          />
+          <KpiCard
+            label="Comptes"
+            value={summary?.accountsCount ?? '—'}
+            hint="Comptes personnels"
+          />
+          <KpiCard
+            label="Entreprises"
+            value={loadingBusinesses ? '…' : businesses.length}
+            hint="Espace Pro"
+          />
+        </div>
+
+        {errorPersonal ? (
+          <p className="text-sm text-[var(--danger)]">{errorPersonal}</p>
+        ) : null}
+        {errorPro ? (
+          <p className="text-sm text-[var(--danger)]">{errorPro}</p>
+        ) : null}
+
+        {/* Espaces */}
+        <section className="space-y-4">
+          <SectionHeader title="Tes espaces" description="Accède rapidement à tes environnements." />
+          <div className="grid gap-4 md:grid-cols-2">
+            <Card className="flex flex-col justify-between gap-3 border-[var(--border)] bg-[var(--surface)] p-5">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 text-[var(--text-secondary)]">
+                  <Wallet2 size={18} />
+                  <span className="text-xs font-semibold uppercase tracking-[0.18em]">Wallet</span>
+                </div>
+                <p className="text-sm font-semibold text-[var(--text)]">Finances personnelles</p>
+                <p className="text-xs text-[var(--text-secondary)]">Comptes, transactions, budgets, épargne.</p>
+              </div>
+              <Button asChild>
+                <Link href="/app/personal">Ouvrir le Wallet</Link>
+              </Button>
+            </Card>
+
+            <Card className="flex flex-col justify-between gap-3 border-[var(--border)] bg-[var(--surface)] p-5">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 text-[var(--text-secondary)]">
+                  <Building2 size={18} />
+                  <span className="text-xs font-semibold uppercase tracking-[0.18em]">Studio</span>
+                </div>
+                <p className="text-sm font-semibold text-[var(--text)]">Pilotage entreprise</p>
+                <p className="text-xs text-[var(--text-secondary)]">Clients, projets, tâches, finances.</p>
+                <p className="text-xs text-[var(--text-secondary)]">
+                  {loadingBusinesses
+                    ? 'Chargement…'
+                    : `${businesses.length} entreprise${businesses.length > 1 ? 's' : ''}`}
+                </p>
+              </div>
+              <Button asChild variant={lastBusiness ? 'primary' : 'outline'}>
+                <Link href={lastBusiness ? `/app/pro/${lastBusiness.id}` : '/app/pro'}>
+                  {lastBusiness ? 'Ouvrir le Studio' : 'Créer ou rejoindre'}
+                </Link>
+              </Button>
+            </Card>
           </div>
-        </div>
-        <div className="grid gap-3 md:grid-cols-2">
-          <Card className="group flex flex-col justify-between gap-2 rounded-2xl border border-[var(--border)] bg-[var(--surface)]/80 p-4">
-            <div className="space-y-1">
-              <div className="flex items-center gap-2 text-[var(--text-secondary)]">
-                <Wallet2 size={18} />
-                <span className="text-xs font-semibold uppercase tracking-[0.18em]">Espace personnel</span>
-              </div>
-              <p className="text-sm font-semibold text-[var(--text-primary)]">Finances personnelles</p>
-              <p className="text-xs text-[var(--text-secondary)]">Wallet, transactions, budgets.</p>
-              {summary ? (
-                <p className="text-xs text-[var(--text-secondary)]">
-                  Solde total : {formatCents(summary.totalBalanceCents, 'EUR')}
-                </p>
-              ) : null}
-            </div>
-            <Button asChild>
-              <Link href="/app/personal">Ouvrir l’espace personnel</Link>
-            </Button>
-          </Card>
+        </section>
 
-          <Card className="group flex flex-col justify-between gap-2 rounded-2xl border border-[var(--border)] bg-[var(--surface)]/80 p-4">
-            <div className="space-y-1">
-              <div className="flex items-center gap-2 text-[var(--text-secondary)]">
-                <Building2 size={18} />
-                <span className="text-xs font-semibold uppercase tracking-[0.18em]">Studio (Pro)</span>
-              </div>
-              <p className="text-sm font-semibold text-[var(--text-primary)]">Pilotage entreprise</p>
-              <p className="text-xs text-[var(--text-secondary)]">Clients, projets, tâches, finances.</p>
-              <p className="text-xs text-[var(--text-secondary)]">
-                {loadingBusinesses
-                  ? 'Chargement…'
-                  : `${businesses.length} entreprise${businesses.length > 1 ? 's' : ''}`}
-              </p>
-              {lastBusiness ? (
-                <p className="text-xs text-[var(--text-secondary)]">Dernier espace : {lastBusiness.name}</p>
-              ) : null}
-            </div>
-            <Button asChild variant={lastBusiness ? 'primary' : 'outline'}>
-              <Link href={lastBusiness ? `/app/pro/${lastBusiness.id}` : '/app/pro'}>
-                {lastBusiness ? 'Ouvrir le Studio' : 'Créer ou rejoindre'}
-              </Link>
-            </Button>
-          </Card>
-        </div>
-      </section>
+        {/* Actions rapides */}
+        <section className="space-y-4">
+          <SectionHeader title="Actions rapides" description="Accès immédiats" />
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <QuickAction
+              icon={<Upload size={16} />}
+              title="Importer un CSV"
+              href="/app/personal/transactions?import=1"
+              helper="Transactions"
+            />
+            <QuickAction
+              icon={<UserPlus size={16} />}
+              title="Créer ou rejoindre"
+              href="/app/pro"
+              helper="Workspace"
+            />
+            <QuickAction
+              icon={<FolderPlus size={16} />}
+              title="Ajouter un produit"
+              href={lastBusiness ? `/app/pro/${lastBusiness.id}/stock` : '#'}
+              helper={disablePro ? 'Crée une entreprise' : 'Stock'}
+              disabled={disablePro}
+            />
+            <QuickAction
+              icon={<Users size={16} />}
+              title="Ajouter un client"
+              href={lastBusiness ? `/app/pro/${lastBusiness.id}/clients` : '#'}
+              helper={disablePro ? 'Crée une entreprise' : 'Clients'}
+              disabled={disablePro}
+            />
+          </div>
+        </section>
 
-      <section className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
-            Actions rapides
-          </h2>
-          <span className="text-xs text-[var(--text-secondary)]">Accès immédiats</span>
-        </div>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <QuickAction
-            icon={<Upload size={16} />}
-            title="Importer un CSV"
-            href="/app/personal/transactions?import=1"
-            helper="Transactions"
-          />
-          <QuickAction
-            icon={<UserPlus size={16} />}
-            title="Créer ou rejoindre une entreprise"
-            href="/app/pro"
-            helper="Workspace"
-          />
-          <QuickAction
-            icon={<FolderPlus size={16} />}
-            title="Ajouter un produit"
-            href={lastBusiness ? `/app/pro/${lastBusiness.id}/stock` : '#'}
-            helper={disablePro ? 'Crée une entreprise' : 'Stock'}
-            disabled={disablePro}
-          />
-          <QuickAction
-            icon={<Users size={16} />}
-            title="Ajouter un client"
-            href={lastBusiness ? `/app/pro/${lastBusiness.id}/clients` : '#'}
-            helper={disablePro ? 'Crée une entreprise' : 'Clients'}
-            disabled={disablePro}
-          />
-        </div>
-      </section>
+        {/* Reprendre */}
+        <section className="space-y-4">
+          <SectionHeader title="Reprendre" description="Continue ce que tu as commencé" />
+          <div className="grid gap-4 md:grid-cols-2">
+            {lastBusiness ? (
+              <Card className="flex h-full flex-col justify-between gap-3 border-[var(--border)] bg-[var(--surface)] p-5">
+                <div className="space-y-1">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[var(--text-secondary)]">
+                    Pro
+                  </p>
+                  <p className="text-sm font-semibold text-[var(--text)]">{lastBusiness.name}</p>
+                  <p className="text-xs text-[var(--text-secondary)]">Dashboard et opérations.</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button asChild size="sm">
+                    <Link href={`/app/pro/${lastBusiness.id}`}>Dashboard</Link>
+                  </Button>
+                  <Button asChild size="sm" variant="outline">
+                    <Link href={`/app/pro/${lastBusiness.id}/projects`}>Projets</Link>
+                  </Button>
+                  <Button asChild size="sm" variant="outline">
+                    <Link href={`/app/pro/${lastBusiness.id}/services`}>Catalogue</Link>
+                  </Button>
+                </div>
+              </Card>
+            ) : (
+              <Card className="border-dashed border-[var(--border)] bg-transparent p-5">
+                <p className="text-sm font-semibold text-[var(--text)]">Aucune entreprise encore</p>
+                <p className="text-xs text-[var(--text-secondary)]">Crée ou rejoins une entreprise pour débloquer le Studio.</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button asChild size="sm">
+                    <Link href="/app/pro">Créer une entreprise</Link>
+                  </Button>
+                  <Button asChild size="sm" variant="outline">
+                    <Link href="/app/pro?join=1">Rejoindre</Link>
+                  </Button>
+                </div>
+              </Card>
+            )}
 
-      <section className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
-            Reprendre
-          </h2>
-          <span className="text-xs text-[var(--text-secondary)]">Continue ce que tu as commencé</span>
-        </div>
-        <div className="grid gap-3 md:grid-cols-2">
-          {lastBusiness ? (
-            <Card className="flex h-full flex-col justify-between rounded-2xl border border-[var(--border)] bg-[var(--surface)]/70 p-4">
-              <div className="space-y-1">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[var(--text-secondary)]">
-                  Pro
-                </p>
-                <p className="text-sm font-semibold text-[var(--text-primary)]">{lastBusiness.name}</p>
-                <p className="text-xs text-[var(--text-secondary)]">Dashboard et opérations.</p>
-              </div>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <Button asChild size="sm">
-                  <Link href={`/app/pro/${lastBusiness.id}`}>Dashboard</Link>
-                </Button>
-                <Button asChild size="sm" variant="outline">
-                  <Link href={`/app/pro/${lastBusiness.id}/projects`}>Projets</Link>
-                </Button>
-                <Button asChild size="sm" variant="outline">
-                  <Link href={`/app/pro/${lastBusiness.id}/services`}>Catalogue services</Link>
-                </Button>
-              </div>
-            </Card>
-          ) : (
-            <Card className="rounded-2xl border border-dashed border-[var(--border)] bg-transparent p-4">
-              <p className="text-sm font-semibold text-[var(--text-primary)]">Aucune entreprise encore</p>
-              <p className="text-xs text-[var(--text-secondary)]">Crée ou rejoins une entreprise pour débloquer le Studio.</p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <Button asChild size="sm">
-                  <Link href="/app/pro">Créer une entreprise</Link>
-                </Button>
-                <Button asChild size="sm" variant="outline">
-                  <Link href="/app/pro?join=1">Rejoindre</Link>
-                </Button>
-              </div>
-            </Card>
-          )}
-
-          {recentAccount ? (
-            <Card className="flex h-full flex-col justify-between rounded-2xl border border-[var(--border)] bg-[var(--surface)]/70 p-4">
-              <div className="space-y-1">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[var(--text-secondary)]">
-                  Perso
-                </p>
-                <p className="text-sm font-semibold text-[var(--text-primary)]">{recentAccount.name}</p>
-                <p className="text-xs text-[var(--text-secondary)]">
-                  Solde : {formatCents(recentAccount.balanceCents, recentAccount.currency)}
-                </p>
-              </div>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <Button asChild size="sm" variant="outline">
-                  <Link href={`/app/personal/comptes/${recentAccount.id}`}>Vue compte</Link>
-                </Button>
-                <Button asChild size="sm">
-                  <Link href={`/app/personal/transactions?accountId=${recentAccount.id}`}>Transactions</Link>
-                </Button>
-              </div>
-            </Card>
-          ) : (
-            <Card className="rounded-2xl border border-dashed border-[var(--border)] bg-transparent p-4">
-              <p className="text-sm font-semibold text-[var(--text-primary)]">Aucun compte encore</p>
-              <p className="text-xs text-[var(--text-secondary)]">Ajoute un compte pour suivre tes finances.</p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <Button asChild size="sm">
-                  <Link href="/app/personal/comptes?new=1">Ajouter un compte</Link>
-                </Button>
-                <Button asChild size="sm" variant="outline">
-                  <Link href="/app/personal/transactions?import=1">Importer un CSV</Link>
-                </Button>
-              </div>
-            </Card>
-          )}
-        </div>
-      </section>
-    </div>
+            {recentAccount ? (
+              <Card className="flex h-full flex-col justify-between gap-3 border-[var(--border)] bg-[var(--surface)] p-5">
+                <div className="space-y-1">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[var(--text-secondary)]">
+                    Perso
+                  </p>
+                  <p className="text-sm font-semibold text-[var(--text)]">{recentAccount.name}</p>
+                  <p className="text-xs text-[var(--text-secondary)]">
+                    Solde : {formatCents(recentAccount.balanceCents, recentAccount.currency)}
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button asChild size="sm" variant="outline">
+                    <Link href={`/app/personal/comptes/${recentAccount.id}`}>Vue compte</Link>
+                  </Button>
+                  <Button asChild size="sm">
+                    <Link href={`/app/personal/transactions?accountId=${recentAccount.id}`}>Transactions</Link>
+                  </Button>
+                </div>
+              </Card>
+            ) : (
+              <Card className="border-dashed border-[var(--border)] bg-transparent p-5">
+                <p className="text-sm font-semibold text-[var(--text)]">Aucun compte encore</p>
+                <p className="text-xs text-[var(--text-secondary)]">Ajoute un compte pour suivre tes finances.</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button asChild size="sm">
+                    <Link href="/app/personal/comptes?new=1">Ajouter un compte</Link>
+                  </Button>
+                  <Button asChild size="sm" variant="outline">
+                    <Link href="/app/personal/transactions?import=1">Importer un CSV</Link>
+                  </Button>
+                </div>
+              </Card>
+            )}
+          </div>
+        </section>
+      </div>
+    </PageContainer>
   );
 }
 
@@ -429,14 +383,14 @@ function QuickAction({
 }) {
   return (
     <Card
-      className={`flex items-center justify-between gap-2 rounded-2xl border ${
-        disabled ? 'border-dashed opacity-70' : 'border-[var(--border)]'
-      } bg-[var(--surface)]/80 p-3`}
+      className={`flex items-center justify-between gap-2 border-[var(--border)] ${
+        disabled ? 'border-dashed opacity-70' : ''
+      } bg-[var(--surface)] p-3`}
     >
       <div className="flex items-center gap-2">
         <span className="text-[var(--text-secondary)]">{icon}</span>
         <div>
-          <p className="text-sm font-semibold text-[var(--text-primary)]">{title}</p>
+          <p className="text-sm font-semibold text-[var(--text)]">{title}</p>
           {helper ? <p className="text-xs text-[var(--text-secondary)]">{helper}</p> : null}
         </div>
       </div>

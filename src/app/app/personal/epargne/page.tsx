@@ -305,14 +305,14 @@ export default function EpargnePage() {
       <Modal
         open={modalOpen}
         onCloseAction={() => setModalOpen(false)}
-        title={editingId ? "Modifier l'objectif" : 'Nouvel objectif'}
+        title={editingId ? 'Modifier l\'objectif' : 'Nouvel objectif'}
         description="Définissez un montant cible et une échéance optionnelle."
       >
         <div className="space-y-4">
           {saveError ? <p className="text-xs text-[var(--danger)]">{saveError}</p> : null}
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="col-span-2 text-sm">
-              <span className="text-xs text-[var(--text-faint)]">Nom de l'objectif</span>
+              <span className="text-xs text-[var(--text-faint)]">Nom de l&apos;objectif</span>
               <Input
                 value={form.name}
                 onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}

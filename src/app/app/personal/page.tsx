@@ -161,7 +161,7 @@ export default function WalletHomePage() {
             <p className="py-3 text-sm text-[var(--text-faint)]">Chargement…</p>
           ) : (data?.accounts?.length ?? 0) === 0 ? (
             <p className="py-3 text-sm text-[var(--text-faint)]">
-              Aucun compte. Commence par créer un compte dans "Comptes".
+              Aucun compte. Commence par créer un compte dans &quot;Comptes&quot;.
             </p>
           ) : (
             data!.accounts.map((a) => (
