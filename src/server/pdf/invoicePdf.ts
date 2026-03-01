@@ -177,10 +177,36 @@ function resolveUnitLabel(item: Pick<InvoicePdfItem, 'unitLabel' | 'billingUnit'
 }
 
 function splitParagraphs(text: string) {
-  return text
+  const raw = text
     .split(/\n+/)
     .map((line) => line.trim())
     .filter(Boolean);
+
+  const paragraphs: string[] = [];
+  raw.forEach((line) => {
+    if (line.length <= 360) {
+      paragraphs.push(line);
+      return;
+    }
+    const sentenceParts = line.split(/(?<=[.!?;:])\s+/).map((part) => part.trim()).filter(Boolean);
+    if (!sentenceParts.length) {
+      paragraphs.push(line);
+      return;
+    }
+    let current = '';
+    sentenceParts.forEach((part) => {
+      const next = current ? `${current} ${part}` : part;
+      if (next.length > 320 && current) {
+        paragraphs.push(current);
+        current = part;
+      } else {
+        current = next;
+      }
+    });
+    if (current) paragraphs.push(current);
+  });
+
+  return paragraphs;
 }
 
 function buildLegalSections(business: PartyDetails | null | undefined, paymentTermsDays?: number | null): LegalSection[] {
@@ -219,10 +245,9 @@ export async function buildInvoicePdf(payload: InvoicePdfPayload): Promise<Uint8
     primary: rgb(0.1, 0.1, 0.1),
     secondary: rgb(0.4, 0.4, 0.4),
     legal: rgb(0.5, 0.5, 0.5),
-    accent: rgb(0.13, 0.24, 0.47),
-    line: rgb(0.86, 0.86, 0.86),
-    soft: rgb(0.97, 0.96, 0.94),
-    panel: rgb(0.97, 0.98, 0.995),
+    line: rgb(0.84, 0.84, 0.84),
+    soft: rgb(0.965, 0.97, 0.975),
+    panel: rgb(0.975, 0.978, 0.985),
   };
 
   const sizes = {
@@ -271,7 +296,7 @@ export async function buildInvoicePdf(payload: InvoicePdfPayload): Promise<Uint8
     page.drawText(safe, { x: rightX - width, y, size, font: fontRef, color });
   };
 
-  const drawWrappedText = (
+  const drawParagraph = (
     text: string,
     opts: {
       x: number;
@@ -283,15 +308,21 @@ export async function buildInvoicePdf(payload: InvoicePdfPayload): Promise<Uint8
       onNewPage?: () => void;
     }
   ) => {
-    const lines = wrapText(text, opts.maxWidth, opts.fontRef ?? font, opts.size);
+    const fontRef = opts.fontRef ?? font;
     const lineHeight = opts.lineHeight ?? Math.round(opts.size * 1.5);
+    const lines = wrapText(text, opts.maxWidth, fontRef, opts.size);
+    const paragraphHeight = lines.length * lineHeight;
+    const pageBodyHeight = topY - bottomY;
+    if (paragraphHeight <= pageBodyHeight) {
+      ensureSpace(paragraphHeight, opts.onNewPage);
+    }
     for (const line of lines) {
       ensureSpace(lineHeight, opts.onNewPage);
       page.drawText(sanitizePdfText(line), {
         x: opts.x,
         y,
         size: opts.size,
-        font: opts.fontRef ?? font,
+        font: fontRef,
         color: opts.color ?? colors.primary,
       });
       y -= lineHeight;
@@ -351,7 +382,7 @@ export async function buildInvoicePdf(payload: InvoicePdfPayload): Promise<Uint8
 
   const drawHeader = () => {
     const year = getYearLabel(payload.issuedAt ?? payload.dueAt);
-    page.drawText(sanitizePdfText(`FACTURE ${year}`), { x: marginX, y, size: sizes.docTitle, font: bold, color: colors.accent });
+    page.drawText(sanitizePdfText(`FACTURE ${year}`), { x: marginX, y, size: sizes.docTitle, font: bold, color: colors.primary });
     y -= sizes.docTitle + 6;
     const numberLabel = payload.number ?? payload.invoiceId;
     page.drawText(sanitizePdfText(`Facture n° ${numberLabel}`), { x: marginX, y, size: sizes.section, font: bold, color: colors.primary });
@@ -650,7 +681,7 @@ export async function buildInvoicePdf(payload: InvoicePdfPayload): Promise<Uint8
     y -= 12;
     const paragraphs = splitParagraphs(summary);
     paragraphs.forEach((paragraph) => {
-      drawWrappedText(paragraph, {
+      drawParagraph(paragraph, {
         x: marginX,
         maxWidth: pageWidth - marginX * 2,
         size: sizes.small,
@@ -717,7 +748,7 @@ export async function buildInvoicePdf(payload: InvoicePdfPayload): Promise<Uint8
       }
       const paragraphs = splitParagraphs(section.text);
       paragraphs.forEach((paragraph) => {
-        drawWrappedText(paragraph, {
+        drawParagraph(paragraph, {
           x: marginX,
           maxWidth: pageWidth - marginX * 2,
           size: sizes.tiny,

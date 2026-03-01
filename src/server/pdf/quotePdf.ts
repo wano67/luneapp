@@ -110,6 +110,20 @@ function formatUnitPrice(value: Moneyish, currency: string, unitLabel: string | 
   return unitLabel ? `${base} ${unitLabel}` : base;
 }
 
+function summarizeText(value?: string | null, maxChars = 900) {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (trimmed.length <= maxChars) return trimmed;
+  return `${trimmed.slice(0, maxChars).trim()}…`;
+}
+
+function compactSingleLine(value?: string | null, maxChars = 180) {
+  const summary = summarizeText(value, maxChars);
+  if (!summary) return null;
+  return summary.replace(/\s+/g, ' ');
+}
+
 type QuotePdfItem = {
   label: string;
   description?: string | null;
@@ -158,10 +172,36 @@ type LegalSection = {
 };
 
 function splitParagraphs(text: string) {
-  return text
+  const raw = text
     .split(/\n+/)
     .map((line) => line.trim())
     .filter(Boolean);
+
+  const paragraphs: string[] = [];
+  raw.forEach((line) => {
+    if (line.length <= 360) {
+      paragraphs.push(line);
+      return;
+    }
+    const sentenceParts = line.split(/(?<=[.!?;:])\s+/).map((part) => part.trim()).filter(Boolean);
+    if (!sentenceParts.length) {
+      paragraphs.push(line);
+      return;
+    }
+    let current = '';
+    sentenceParts.forEach((part) => {
+      const next = current ? `${current} ${part}` : part;
+      if (next.length > 320 && current) {
+        paragraphs.push(current);
+        current = part;
+      } else {
+        current = next;
+      }
+    });
+    if (current) paragraphs.push(current);
+  });
+
+  return paragraphs;
 }
 
 function buildLegalSections(business: PartyDetails | null | undefined, paymentTermsDays?: number | null): LegalSection[] {
@@ -200,8 +240,9 @@ export async function buildQuotePdf(payload: QuotePdfPayload): Promise<Uint8Arra
     primary: rgb(0.1, 0.1, 0.1),
     secondary: rgb(0.4, 0.4, 0.4),
     legal: rgb(0.5, 0.5, 0.5),
-    line: rgb(0.86, 0.86, 0.86),
-    soft: rgb(0.97, 0.96, 0.94),
+    line: rgb(0.84, 0.84, 0.84),
+    soft: rgb(0.965, 0.97, 0.975),
+    panel: rgb(0.975, 0.978, 0.985),
   };
 
   const sizes = {
@@ -277,6 +318,39 @@ export async function buildQuotePdf(payload: QuotePdfPayload): Promise<Uint8Arra
     }
   };
 
+  const drawParagraph = (
+    text: string,
+    opts: {
+      x: number;
+      maxWidth: number;
+      size: number;
+      color?: typeof colors.primary;
+      fontRef?: typeof font;
+      lineHeight?: number;
+      onNewPage?: () => void;
+    }
+  ) => {
+    const fontRef = opts.fontRef ?? font;
+    const lineHeight = opts.lineHeight ?? Math.round(opts.size * 1.5);
+    const lines = wrapText(text, opts.maxWidth, fontRef, opts.size);
+    const paragraphHeight = lines.length * lineHeight;
+    const pageBodyHeight = topY - bottomY;
+    if (paragraphHeight <= pageBodyHeight) {
+      ensureSpace(paragraphHeight, opts.onNewPage);
+    }
+    for (const line of lines) {
+      ensureSpace(lineHeight, opts.onNewPage);
+      page.drawText(sanitizePdfText(line), {
+        x: opts.x,
+        y,
+        size: opts.size,
+        font: fontRef,
+        color: opts.color ?? colors.primary,
+      });
+      y -= lineHeight;
+    }
+  };
+
   const drawDivider = () => {
     page.drawLine({
       start: { x: marginX, y },
@@ -336,48 +410,97 @@ export async function buildQuotePdf(payload: QuotePdfPayload): Promise<Uint8Arra
     page.drawText(sanitizePdfText(`Devis n° ${numberLabel}`), { x: marginX, y, size: sizes.section, font: bold, color: colors.primary });
     y -= sizes.section + 8;
 
-    const headerRightX = 360;
-    const metaX = 380;
-    let metaY = topY;
-    page.drawText('DEVIS', { x: headerRightX, y: metaY, size: sizes.section, font: bold, color: colors.primary });
-    metaY -= 16;
     const metaLines = [
-      payload.issuedAt ? `Créé le ${formatDate(payload.issuedAt)}` : null,
-      payload.expiresAt ? `Valable jusqu'au ${formatDate(payload.expiresAt)}` : null,
+      payload.issuedAt ? `Émis: ${formatDate(payload.issuedAt)}` : null,
+      payload.expiresAt ? `Valable jusqu'au: ${formatDate(payload.expiresAt)}` : null,
+      payload.projectName ? `Projet: ${payload.projectName}` : null,
       payload.currency ? `Devise: ${payload.currency}` : null,
     ].filter((value): value is string => typeof value === 'string' && value.length > 0);
+    const metaBoxX = 352;
+    const metaBoxY = topY - 10 - metaLines.length * 12 - 10;
+    const metaBoxHeight = 20 + metaLines.length * 12;
+    page.drawRectangle({
+      x: metaBoxX,
+      y: metaBoxY,
+      width: pageWidth - marginX - metaBoxX,
+      height: metaBoxHeight,
+      color: colors.panel,
+      borderColor: colors.line,
+      borderWidth: 0.6,
+    });
+    let metaY = metaBoxY + metaBoxHeight - 14;
+    page.drawText('RÉFÉRENCES', { x: metaBoxX + 8, y: metaY, size: sizes.tiny, font: bold, color: colors.secondary });
+    metaY -= 12;
     for (const line of metaLines) {
-      page.drawText(sanitizePdfText(line), { x: metaX, y: metaY, size: sizes.tiny, font, color: colors.secondary });
+      page.drawText(sanitizePdfText(line), { x: metaBoxX + 8, y: metaY, size: sizes.tiny, font, color: colors.secondary });
       metaY -= 12;
     }
 
     y -= spacing.headerGap;
-    page.drawText('ÉMETTEUR', { x: marginX, y, size: sizes.tiny, font: bold, color: colors.secondary });
-    const issuerStartY = y - 12;
-    let issuerY = issuerStartY;
-    issuerLines.forEach((line) => {
-      page.drawText(sanitizePdfText(line), { x: marginX, y: issuerY, size: sizes.small, font, color: colors.primary });
+    const issuerBlockX = marginX;
+    const clientBlockX = 318;
+    const blockWidth = 226;
+    const wrappedIssuer = (issuerLines.length ? issuerLines : ['—']).flatMap((line) =>
+      wrapText(line, blockWidth - 20, font, sizes.small)
+    );
+    const wrappedClient = (clientLines.length ? clientLines : ['—']).flatMap((line) =>
+      wrapText(line, blockWidth - 20, font, sizes.small)
+    );
+    const maxLines = Math.max(wrappedIssuer.length, wrappedClient.length, 1);
+    const blockHeight = 28 + maxLines * 12 + 8;
+    const blockBottom = y - blockHeight + 10;
+
+    page.drawRectangle({
+      x: issuerBlockX,
+      y: blockBottom,
+      width: blockWidth,
+      height: blockHeight,
+      color: colors.panel,
+      borderColor: colors.line,
+      borderWidth: 0.6,
+    });
+    page.drawRectangle({
+      x: clientBlockX,
+      y: blockBottom,
+      width: blockWidth,
+      height: blockHeight,
+      color: colors.panel,
+      borderColor: colors.line,
+      borderWidth: 0.6,
+    });
+
+    page.drawText('ÉMETTEUR', { x: issuerBlockX + 8, y, size: sizes.tiny, font: bold, color: colors.secondary });
+    page.drawText('CLIENT', { x: clientBlockX + 8, y, size: sizes.tiny, font: bold, color: colors.secondary });
+    let issuerY = y - 14;
+    for (const line of wrappedIssuer) {
+      page.drawText(sanitizePdfText(line), { x: issuerBlockX + 8, y: issuerY, size: sizes.small, font, color: colors.primary });
       issuerY -= 12;
-    });
-
-    const clientBlockX = 320;
-    page.drawText('CLIENT', { x: clientBlockX, y, size: sizes.tiny, font: bold, color: colors.secondary });
-    let clientY = issuerStartY;
-    clientLines.forEach((line) => {
-      page.drawText(sanitizePdfText(line), { x: clientBlockX, y: clientY, size: sizes.small, font, color: colors.primary });
+    }
+    let clientY = y - 14;
+    for (const line of wrappedClient) {
+      page.drawText(sanitizePdfText(line), { x: clientBlockX + 8, y: clientY, size: sizes.small, font, color: colors.primary });
       clientY -= 12;
-    });
+    }
 
-    y = Math.min(issuerY, clientY) - spacing.block;
+    y = blockBottom - spacing.block;
   };
 
   const drawTableHeader = () => {
+    page.drawRectangle({
+      x: marginX - 4,
+      y: y - 4,
+      width: pageWidth - marginX * 2 + 8,
+      height: 16,
+      color: colors.panel,
+      borderColor: colors.line,
+      borderWidth: 0.6,
+    });
     page.drawText('Description', { x: columns.labelX, y, size: sizes.small, font: bold, color: colors.secondary });
     drawRightText('Qté', columns.qtyX, sizes.small, colors.secondary, bold);
     drawRightText('Unité', columns.unitX, sizes.small, colors.secondary, bold);
     drawRightText('PU', columns.unitPriceX, sizes.small, colors.secondary, bold);
     drawRightText('Total', columns.totalX, sizes.small, colors.secondary, bold);
-    y -= 10;
+    y -= 12;
     drawDivider();
   };
 
@@ -455,6 +578,17 @@ export async function buildQuotePdf(payload: QuotePdfPayload): Promise<Uint8Arra
     y -= 14;
 
     const drawTotalRow = (label: string, value: string, size = sizes.body, isBold = false) => {
+      if (isBold) {
+        page.drawRectangle({
+          x: columns.unitPriceX - 24,
+          y: y - 4,
+          width: columns.totalX - (columns.unitPriceX - 24) + 4,
+          height: 16,
+          color: colors.panel,
+          borderColor: colors.line,
+          borderWidth: 0.6,
+        });
+      }
       page.drawText(sanitizePdfText(label), {
         x: columns.unitPriceX - 20,
         y,
@@ -467,7 +601,7 @@ export async function buildQuotePdf(payload: QuotePdfPayload): Promise<Uint8Arra
     };
 
     drawTotalRow('Sous-total HT', formatAmount(totalCents, payload.currency));
-    drawTotalRow(`TVA ${vatEnabled ? `${vatRate}%` : '—'}`, formatAmount(vatCents, payload.currency));
+    drawTotalRow(vatEnabled ? `TVA ${vatRate}%` : 'TVA non applicable', formatAmount(vatCents, payload.currency));
     drawTotalRow('Total TTC', formatAmount(totalTtcCents, payload.currency), sizes.section, true);
     y -= 8;
 
@@ -475,7 +609,51 @@ export async function buildQuotePdf(payload: QuotePdfPayload): Promise<Uint8Arra
       payload.depositPercent != null && Number.isFinite(payload.depositPercent) ? `${payload.depositPercent}%` : null;
     const depositLabel = depositPercentText ? `Acompte ${depositPercentText}` : 'Acompte';
     drawTotalRow(depositLabel, formatAmount(payload.depositCents, payload.currency));
-    drawTotalRow('Solde', formatAmount(payload.balanceCents, payload.currency));
+    drawTotalRow('Solde', formatAmount(payload.balanceCents, payload.currency), sizes.section, true);
+  };
+
+  const drawRegulatoryBlock = () => {
+    const lines: string[] = [];
+    if (payload.expiresAt) {
+      lines.push(`Durée de validité du devis: jusqu'au ${formatDate(payload.expiresAt)}`);
+    }
+    const paymentTermsLine = compactSingleLine(
+      business?.paymentTermsText ?? (payload.paymentTermsDays != null ? `Paiement sous ${payload.paymentTermsDays} jours.` : null),
+      170
+    );
+    if (paymentTermsLine) {
+      lines.push(`Conditions de paiement: ${paymentTermsLine}`);
+    }
+    lines.push('Escompte pour paiement anticipé: néant.');
+    const lateFeesLine = compactSingleLine(business?.lateFeesText, 170);
+    if (lateFeesLine) {
+      lines.push(`Pénalités de retard: ${lateFeesLine}`);
+    }
+    const indemnityLine = compactSingleLine(business?.fixedIndemnityText, 150);
+    if (indemnityLine) {
+      lines.push(`Indemnité forfaitaire de recouvrement: ${indemnityLine}`);
+    }
+    if (!lines.length) return;
+
+    const wrapped = lines.flatMap((line) => wrapText(line, pageWidth - marginX * 2 - 20, font, sizes.tiny));
+    const blockHeight = 26 + wrapped.length * 12;
+    y -= spacing.section;
+    ensureSpace(blockHeight + 8);
+    page.drawRectangle({
+      x: marginX,
+      y: y - blockHeight + 8,
+      width: pageWidth - marginX * 2,
+      height: blockHeight,
+      color: colors.panel,
+      borderColor: colors.line,
+      borderWidth: 0.6,
+    });
+    page.drawText('Mentions de règlement', { x: marginX + 10, y, size: sizes.small, font: bold, color: colors.primary });
+    y -= 14;
+    for (const line of wrapped) {
+      page.drawText(sanitizePdfText(line), { x: marginX + 10, y, size: sizes.tiny, font, color: colors.secondary });
+      y -= 12;
+    }
   };
 
   const drawPaymentBlock = () => {
@@ -484,31 +662,25 @@ export async function buildQuotePdf(payload: QuotePdfPayload): Promise<Uint8Arra
     if (business?.bankName) paymentLines.push(`Banque: ${business.bankName}`);
     if (business?.iban) paymentLines.push(`IBAN: ${business.iban}`);
     if (business?.bic) paymentLines.push(`BIC: ${business.bic}`);
-    const paymentTermsLine =
-      business?.paymentTermsText?.trim() ||
-      (payload.paymentTermsDays != null ? `Paiement sous ${payload.paymentTermsDays} jours.` : null);
-
-    if (!paymentLines.length && !paymentTermsLine) return;
+    if (!paymentLines.length) return;
 
     y -= spacing.section;
-    ensureSpace(80);
-    page.drawText('Règlement', { x: marginX, y, size: sizes.section, font: bold, color: colors.primary });
+    ensureSpace(40 + paymentLines.length * spacing.row);
+    page.drawRectangle({
+      x: marginX,
+      y: y - (22 + paymentLines.length * spacing.row),
+      width: pageWidth - marginX * 2,
+      height: 26 + paymentLines.length * spacing.row,
+      color: colors.panel,
+      borderColor: colors.line,
+      borderWidth: 0.6,
+    });
+    page.drawText('Coordonnées de règlement', { x: marginX + 10, y, size: sizes.small, font: bold, color: colors.primary });
     y -= 14;
-
-    if (paymentTermsLine) {
-      page.drawText(sanitizePdfText(paymentTermsLine), {
-        x: marginX,
-        y,
-        size: sizes.small,
-        font,
-        color: colors.secondary,
-      });
-      y -= spacing.row;
-    }
 
     paymentLines.forEach((line) => {
       page.drawText(sanitizePdfText(line), {
-        x: marginX,
+        x: marginX + 10,
         y,
         size: sizes.small,
         font,
@@ -533,7 +705,7 @@ export async function buildQuotePdf(payload: QuotePdfPayload): Promise<Uint8Arra
       height: boxHeight,
       borderColor: colors.line,
       borderWidth: 0.8,
-      color: rgb(1, 1, 1),
+      color: colors.panel,
     });
     y -= boxHeight + 18;
   };
@@ -543,6 +715,7 @@ export async function buildQuotePdf(payload: QuotePdfPayload): Promise<Uint8Arra
     drawTableHeader();
     payload.items.forEach(drawLineItem);
     drawTotalsBlock();
+    drawRegulatoryBlock();
     drawPaymentBlock();
     drawDepositBlock();
   };
@@ -587,7 +760,7 @@ export async function buildQuotePdf(payload: QuotePdfPayload): Promise<Uint8Arra
       y -= 12;
       const paragraphs = splitParagraphs(prestationsText);
       paragraphs.forEach((paragraph) => {
-        drawWrappedText(paragraph, {
+        drawParagraph(paragraph, {
           x: valueX,
           maxWidth: pageWidth - valueX - marginX,
           size: sizes.small,
@@ -627,7 +800,7 @@ export async function buildQuotePdf(payload: QuotePdfPayload): Promise<Uint8Arra
 
     const paragraphs = splitParagraphs(text);
     paragraphs.forEach((paragraph) => {
-      drawWrappedText(paragraph, {
+      drawParagraph(paragraph, {
         x: marginX,
         maxWidth: pageWidth - marginX * 2,
         size: sizes.small,
@@ -673,7 +846,7 @@ export async function buildQuotePdf(payload: QuotePdfPayload): Promise<Uint8Arra
       }
       const paragraphs = splitParagraphs(section.text);
       paragraphs.forEach((paragraph) => {
-        drawWrappedText(paragraph, {
+        drawParagraph(paragraph, {
           x: marginX,
           maxWidth: pageWidth - marginX * 2,
           size: sizes.tiny,
