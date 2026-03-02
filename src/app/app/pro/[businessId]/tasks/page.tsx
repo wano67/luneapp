@@ -4,18 +4,17 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import { useParams } from 'next/navigation';
-import { Card } from '@/components/ui/card';
+import { ClipboardList } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableEmpty, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { Modal } from '@/components/ui/modal';
+import { KpiCard } from '@/components/ui/kpi-card';
+import { ProPageShell } from '@/components/pro/ProPageShell';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import { useActiveBusiness } from '../../ActiveBusinessProvider';
-import RoleBanner from '@/components/RoleBanner';
-import { PageContainer } from '@/components/layouts/PageContainer';
-import { PageHeader } from '@/components/layouts/PageHeader';
 import { ReferencePicker } from '../references/ReferencePicker';
 import { useRowSelection } from '../../../components/selection/useRowSelection';
 import { BulkActionBar } from '../../../components/selection/BulkActionBar';
@@ -104,6 +103,9 @@ export default function TasksPage() {
   const filteredTasks = useMemo(() => {
     return statusFilter === 'ALL' ? tasks : tasks.filter((t) => t.status === statusFilter);
   }, [statusFilter, tasks]);
+
+  const todoCount = useMemo(() => tasks.filter((t) => t.status === 'TODO').length, [tasks]);
+  const inProgressCount = useMemo(() => tasks.filter((t) => t.status === 'IN_PROGRESS').length, [tasks]);
 
   function openCreate() {
     setEditing(null);
@@ -343,95 +345,73 @@ function openEdit(task: Task) {
   }
 
   return (
-    <PageContainer>
-    <div className="space-y-5">
-      <RoleBanner role={actorRole} />
-      <PageHeader
-        title="Tâches & production"
-        subtitle="Base unique des tâches liées aux projets pour suivre charge et urgences."
-        actions={
-          <Button
-            onClick={() => {
-              if (!isAdmin) {
-                setReadOnlyInfo(readOnlyMessage);
-                return;
-              }
-              openCreate();
-            }}
-            disabled={!isAdmin}
-          >
-            Nouvelle tâche
-          </Button>
-        }
-        context={
-          <>
-            {!isAdmin ? (
-              <p className="text-[11px] text-[var(--text-secondary)]">Lecture seule : création réservée aux admins.</p>
-            ) : null}
-            {requestId ? (
-              <p className="text-[10px] text-[var(--text-secondary)]">Request ID: {requestId}</p>
-            ) : null}
-          </>
-        }
-      />
+    <ProPageShell
+      backHref={`/app/pro/${businessId}`}
+      backLabel="Dashboard"
+      title="Tâches"
+      subtitle="Base unique des tâches liées aux projets."
+      actions={
+        <Button
+          onClick={() => {
+            if (!isAdmin) {
+              setReadOnlyInfo(readOnlyMessage);
+              return;
+            }
+            openCreate();
+          }}
+          disabled={!isAdmin}
+        >
+          Nouvelle tâche
+        </Button>
+      }
+    >
+      {/* KPI cards */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <KpiCard label="Total" value={tasks.length} delay={0} />
+        <KpiCard label="À faire" value={todoCount} delay={50} />
+        <KpiCard label="En cours" value={inProgressCount} delay={100} />
+      </div>
 
-      <Card className="space-y-4 p-5">
-        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-          <div className="flex flex-wrap gap-2">
-            {[{ value: 'ALL', label: 'Tous' }, ...STATUS_OPTIONS].map((opt) => (
-              <Button
-                key={opt.value}
-                size="sm"
-                variant="outline"
-                onClick={() => setStatusFilter(opt.value as TaskStatus | 'ALL')}
-              >
-                {opt.label}
-              </Button>
-            ))}
-            <select
-              value={categoryFilter}
-              onChange={(e) => setCategoryFilter(e.target.value)}
-              className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm"
-            >
-              <option value="">Catégorie: toutes</option>
-              {categoryOptions.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-            <select
-              value={tagFilter}
-              onChange={(e) => setTagFilter(e.target.value)}
-              className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm"
-            >
-              <option value="">Tag: tous</option>
-              {tagOptions.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          {info ? <span className="text-xs text-[var(--success)]">{info}</span> : null}
-          {error ? <span className="text-xs text-[var(--danger)]">{error}</span> : null}
-          {readOnlyInfo ? <span className="text-xs text-[var(--text-secondary)]">{readOnlyInfo}</span> : null}
+      {/* Section header: icon + title + filters */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <ClipboardList size={18} style={{ color: 'var(--text-secondary)' }} />
+          <span className="text-sm font-semibold text-[var(--text-primary)]">Tâches</span>
         </div>
-        {referenceError ? (
-          <p className="text-xs text-[var(--danger)]">
-            {referenceError}
-            {referenceRequestId ? ` (Ref: ${referenceRequestId})` : ''}
-          </p>
-        ) : referenceRequestId ? (
-          <p className="text-[10px] text-[var(--text-secondary)]">Refs Req: {referenceRequestId}</p>
-        ) : null}
+        <div className="flex flex-wrap items-center gap-2">
+          {[{ value: 'ALL' as const, label: 'Tous' }, ...STATUS_OPTIONS].map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => setStatusFilter(opt.value as TaskStatus | 'ALL')}
+              className="rounded-full px-3 py-1.5 text-xs font-semibold transition"
+              style={{
+                background: statusFilter === opt.value ? 'var(--shell-accent-dark)' : 'var(--surface)',
+                color: statusFilter === opt.value ? 'white' : 'var(--text)',
+                border: statusFilter === opt.value ? 'none' : '1px solid var(--border)',
+              }}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      </div>
 
-        {loading ? (
-          <p className="text-sm text-[var(--text-secondary)]">Chargement des tâches…</p>
-        ) : (
-          <div className="space-y-2">
-            {bulkError ? <p className="text-xs font-semibold text-[var(--danger)]">{bulkError}</p> : null}
-            <BulkActionBar
+      {/* Feedback messages */}
+      {info ? <span className="text-xs text-[var(--success)]">{info}</span> : null}
+      {error ? <span className="text-xs text-[var(--danger)]">{error}</span> : null}
+      {readOnlyInfo ? <span className="text-xs text-[var(--text-secondary)]">{readOnlyInfo}</span> : null}
+      {referenceError ? (
+        <p className="text-xs text-[var(--danger)]">{referenceError}</p>
+      ) : null}
+
+      {/* Table */}
+      {loading ? (
+        <p className="text-sm text-[var(--text-secondary)]">Chargement des tâches…</p>
+      ) : (
+        <div className="space-y-2">
+          {bulkError ? <p className="text-xs font-semibold text-[var(--danger)]">{bulkError}</p> : null}
+          <BulkActionBar
               count={selectedCount}
               onClear={clear}
               actions={[
@@ -558,7 +538,6 @@ function openEdit(task: Task) {
             </Table>
           </div>
         )}
-      </Card>
 
       <Modal
         open={modalOpen}
@@ -661,7 +640,6 @@ function openEdit(task: Task) {
           </div>
         </div>
       </Modal>
-    </div>
-    </PageContainer>
+    </ProPageShell>
   );
 }

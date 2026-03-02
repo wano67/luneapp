@@ -3,14 +3,14 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { Card } from '@/components/ui/card';
+import { Package } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Modal } from '@/components/ui/modal';
 import { Select } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
-import { PageContainer } from '@/components/layouts/PageContainer';
-import { PageHeader } from '@/components/layouts/PageHeader';
+import { KpiCard } from '@/components/ui/kpi-card';
+import { ProPageShell } from '@/components/pro/ProPageShell';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import { parseEuroToCents, sanitizeEuroInput } from '@/lib/money';
 import { useActiveBusiness } from '../../ActiveBusinessProvider';
@@ -67,6 +67,12 @@ export default function StockListPage() {
     () => [...products].sort((a, b) => a.name.localeCompare(b.name)),
     [products]
   );
+
+  const inStockCount = useMemo(
+    () => products.filter((p) => !p.isArchived && (summary[p.id]?.available ?? (summary[p.id]?.onHand ?? summary[p.id]?.stock ?? 0)) > 0).length,
+    [products, summary]
+  );
+  const archivedCount = useMemo(() => products.filter((p) => p.isArchived).length, [products]);
 
   const load = useCallback(async () => {
     if (!businessId) return;
@@ -183,73 +189,73 @@ export default function StockListPage() {
   }
 
   return (
-    <PageContainer>
-      <div className="space-y-5">
-      <PageHeader
-        title="Catalogue produits & inventaire"
-        subtitle="Suis les produits et leurs mouvements de stock."
-        context={
-          <div className="flex items-center gap-2 text-xs text-[var(--text-secondary)]">
-            <Link href={`/app/pro/${businessId}/finances/ledger`} className="underline">
-              Voir les écritures comptables
-            </Link>
-          </div>
-        }
-      />
+    <ProPageShell
+      backHref={`/app/pro/${businessId}`}
+      backLabel="Dashboard"
+      title="Stock"
+      subtitle="Catalogue produits et mouvements de stock."
+      actions={
+        <Button onClick={() => setModalOpen(true)}>
+          Nouveau produit
+        </Button>
+      }
+    >
+      {/* KPI cards */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <KpiCard label="Produits" value={products.length} delay={0} />
+        <KpiCard label="En stock" value={inStockCount} delay={50} />
+        <KpiCard label="Archivés" value={archivedCount} delay={100} />
+      </div>
 
-      <Card className="p-5 space-y-3">
-        <div className="flex items-center justify-between gap-2">
-          <div>
-            <p className="text-sm font-semibold text-[var(--text-primary)]">Produits</p>
-            <p className="text-xs text-[var(--text-secondary)]">Liste des produits actifs et stock courant.</p>
-          </div>
-          <div className="flex items-center gap-2">
-            {actionError ? <p className="text-xs text-[var(--danger)]">{actionError}</p> : null}
-            <Button size="sm" onClick={() => setModalOpen(true)}>
-              Nouveau produit
-            </Button>
-          </div>
+      {/* Section header */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <Package size={18} style={{ color: 'var(--text-secondary)' }} />
+          <span className="text-sm font-semibold text-[var(--text-primary)]">Produits</span>
         </div>
+        {actionError ? <p className="text-xs text-[var(--danger)]">{actionError}</p> : null}
+      </div>
 
-        {loading ? (
-          <p className="text-sm text-[var(--text-secondary)]">Chargement…</p>
-        ) : error ? (
-          <div className="space-y-2">
-            <p className="text-sm text-[var(--danger)]">{error}</p>
-            <Button size="sm" variant="outline" onClick={() => load()}>
-              Réessayer
-            </Button>
-          </div>
-        ) : sorted.length === 0 ? (
-          <p className="text-sm text-[var(--text-secondary)]">Aucun produit.</p>
-        ) : (
-          <div className="space-y-3">
-            {bulkInfo ? <p className="text-xs font-semibold text-[var(--success)]">{bulkInfo}</p> : null}
-            {bulkError ? <p className="text-xs font-semibold text-[var(--danger)]">{bulkError}</p> : null}
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <label className="flex items-center gap-2 text-xs text-[var(--text-secondary)]">
-                <input
-                  type="checkbox"
-                  className="h-4 w-4 accent-[var(--accent)]"
-                  checked={sorted.length > 0 && sorted.every((p) => isSelected(p.id))}
-                  onChange={() => toggleAll(sorted.map((p) => p.id))}
-                />
-                Tout sélectionner
-              </label>
-              <BulkActionBar
-                count={selectedCount}
-                onClear={clear}
-                actions={[
-                  {
-                    label: bulkLoading ? 'Suppression…' : 'Supprimer',
-                    onClick: () => handleBulkDelete(selectedArray),
-                    variant: 'danger',
-                    disabled: !isAdmin || bulkLoading,
-                  },
-                ]}
+      {/* Product list */}
+      {loading ? (
+        <p className="text-sm text-[var(--text-secondary)]">Chargement…</p>
+      ) : error ? (
+        <div className="space-y-2">
+          <p className="text-sm text-[var(--danger)]">{error}</p>
+          <Button size="sm" variant="outline" onClick={() => load()}>
+            Réessayer
+          </Button>
+        </div>
+      ) : sorted.length === 0 ? (
+        <p className="text-sm text-[var(--text-secondary)]">Aucun produit.</p>
+      ) : (
+        <div className="space-y-3">
+          {bulkInfo ? <p className="text-xs font-semibold text-[var(--success)]">{bulkInfo}</p> : null}
+          {bulkError ? <p className="text-xs font-semibold text-[var(--danger)]">{bulkError}</p> : null}
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <label className="flex items-center gap-2 text-xs text-[var(--text-secondary)]">
+              <input
+                type="checkbox"
+                className="h-4 w-4 accent-[var(--accent)]"
+                checked={sorted.length > 0 && sorted.every((p) => isSelected(p.id))}
+                onChange={() => toggleAll(sorted.map((p) => p.id))}
               />
-            </div>
-            {sorted.map((p) => {
+              Tout sélectionner
+            </label>
+            <BulkActionBar
+              count={selectedCount}
+              onClear={clear}
+              actions={[
+                {
+                  label: bulkLoading ? 'Suppression…' : 'Supprimer',
+                  onClick: () => handleBulkDelete(selectedArray),
+                  variant: 'danger',
+                  disabled: !isAdmin || bulkLoading,
+                },
+              ]}
+            />
+          </div>
+          {sorted.map((p) => {
               const sum = summary[p.id];
               return (
                 <div
@@ -292,7 +298,6 @@ export default function StockListPage() {
             })}
           </div>
         )}
-      </Card>
 
       <Modal
         open={modalOpen}
@@ -356,7 +361,6 @@ export default function StockListPage() {
           </div>
         </div>
       </Modal>
-      </div>
-    </PageContainer>
+    </ProPageShell>
   );
 }

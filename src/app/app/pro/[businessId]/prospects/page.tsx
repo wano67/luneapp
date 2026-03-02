@@ -1,8 +1,8 @@
-import AgendaPage from '@/components/pro/agenda/AgendaPage';
+import { redirect } from 'next/navigation';
 
 type Props = { params: Promise<{ businessId: string }> };
 
 export default async function ProspectsPage({ params }: Props) {
   const { businessId } = await params;
-  return <AgendaPage businessId={businessId} view="prospects" />;
+  redirect(`/app/pro/${businessId}/agenda`);
 }

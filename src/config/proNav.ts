@@ -2,14 +2,12 @@ import type { LucideIcon } from 'lucide-react';
 import {
   LayoutDashboard,
   Briefcase,
-  CalendarClock,
   ClipboardList,
   Folder,
   Boxes,
   Banknote,
   Settings2,
   Contact2,
-  BookOpen,
 } from 'lucide-react';
 
 export type ProNavItemConfig = {
@@ -75,25 +73,15 @@ export const proNavSections: ProNavSectionConfig[] = [
     title: 'CRM',
     items: [
       {
-        id: 'clients',
-        label: 'Clients',
+        id: 'crm',
+        label: 'CRM',
         icon: Contact2,
-        href: (biz) => `/app/pro/${biz}/clients`,
-        activePatterns: (biz) => [startsWithRegex(`/app/pro/${biz}/clients`)],
-      },
-      {
-        id: 'prospects',
-        label: 'Prospects',
-        icon: BookOpen,
-        href: (biz) => `/app/pro/${biz}/prospects`,
-        activePatterns: (biz) => [startsWithRegex(`/app/pro/${biz}/prospects`)],
-      },
-      {
-        id: 'agenda',
-        label: 'Agenda (Suivi)',
-        icon: CalendarClock,
         href: (biz) => `/app/pro/${biz}/agenda`,
-        activePatterns: (biz) => [startsWithRegex(`/app/pro/${biz}/agenda`)],
+        activePatterns: (biz) => [
+          startsWithRegex(`/app/pro/${biz}/agenda`),
+          startsWithRegex(`/app/pro/${biz}/clients`),
+          startsWithRegex(`/app/pro/${biz}/prospects`),
+        ],
       },
     ],
   },

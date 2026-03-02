@@ -13,8 +13,7 @@ import { ProPageShell } from '@/components/pro/ProPageShell';
 import { useActiveBusiness } from '@/app/app/pro/ActiveBusinessProvider';
 import { isProjectActive } from '@/lib/projectStatus';
 
-type ViewMode = 'agenda' | 'clients' | 'prospects';
-type Props = { businessId: string; view?: ViewMode };
+type Props = { businessId: string };
 
 type Contact = {
   id: string;
@@ -68,13 +67,12 @@ const tabs = [
   { key: 'prospects', label: 'Prospects' },
 ];
 
-export default function AgendaPage({ businessId, view = 'agenda' }: Props) {
+export default function AgendaPage({ businessId }: Props) {
   const activeCtx = useActiveBusiness({ optional: true });
   const isAdmin = activeCtx?.isAdmin ?? false;
   const readOnlyMessage = 'Réservé aux admins/owners.';
   const canWrite = isAdmin;
-  const isAgendaView = view === 'agenda';
-  const [activeTab, setActiveTab] = useState<'clients' | 'prospects'>(view === 'prospects' ? 'prospects' : 'clients');
+  const [activeTab, setActiveTab] = useState<'clients' | 'prospects'>('clients');
   const [clients, setClients] = useState<Contact[]>([]);
   const [prospects, setProspects] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
@@ -149,21 +147,13 @@ export default function AgendaPage({ businessId, view = 'agenda' }: Props) {
       try {
         setLoading(true);
         setError(null);
-        if (!isAgendaView) {
-          setFollowUps({ tasks: [], interactions: [] });
-          setFollowUpsError(null);
-          setFollowUpsLoading(false);
-        } else {
-          setFollowUpsLoading(true);
-          setFollowUpsError(null);
-        }
+        setFollowUpsLoading(true);
+        setFollowUpsError(null);
         const [clientsRes, prospectsRes, projectsRes, dashboardRes] = await Promise.all([
           fetchJson<ListResponse>(`/api/pro/businesses/${businessId}/clients`, {}, controller.signal),
           fetchJson<ListResponse>(`/api/pro/businesses/${businessId}/prospects`, {}, controller.signal),
           fetchJson<ProjectsResponse>(`/api/pro/businesses/${businessId}/projects?scope=ALL`, {}, controller.signal),
-          isAgendaView
-            ? fetchJson<DashboardResponse>(`/api/pro/businesses/${businessId}/dashboard`, {}, controller.signal)
-            : Promise.resolve(null),
+          fetchJson<DashboardResponse>(`/api/pro/businesses/${businessId}/dashboard`, {}, controller.signal),
         ]);
         if (controller.signal.aborted) return;
         if (!clientsRes.ok || !prospectsRes.ok || !projectsRes.ok) {
@@ -173,7 +163,7 @@ export default function AgendaPage({ businessId, view = 'agenda' }: Props) {
         setClients(clientsRes.data?.items ?? []);
         setProspects(prospectsRes.data?.items ?? []);
         setProjects(projectsRes.data?.items ?? []);
-        if (isAgendaView && dashboardRes) {
+        if (dashboardRes) {
           if (!dashboardRes.ok || !dashboardRes.data) {
             const msg = dashboardRes.error ?? 'Suivi indisponible';
             setFollowUpsError(dashboardRes.requestId ? `${msg} (Ref: ${dashboardRes.requestId})` : msg);
@@ -190,18 +180,16 @@ export default function AgendaPage({ businessId, view = 'agenda' }: Props) {
         setError((err as Error)?.message ?? 'Agenda indisponible');
       } finally {
         if (!controller.signal.aborted) setLoading(false);
-        if (!controller.signal.aborted && isAgendaView) setFollowUpsLoading(false);
+        if (!controller.signal.aborted) setFollowUpsLoading(false);
       }
     }
     void load();
     return () => controller.abort();
-  }, [businessId, isAgendaView, refreshKey]);
+  }, [businessId, refreshKey]);
 
   const currentList = useMemo(() => {
-    if (view === 'clients') return clients;
-    if (view === 'prospects') return prospects;
     return activeTab === 'clients' ? clients : prospects;
-  }, [activeTab, clients, prospects, view]);
+  }, [activeTab, clients, prospects]);
 
   const statsByClient = useMemo(() => {
     const map = new Map<
@@ -246,7 +234,7 @@ export default function AgendaPage({ businessId, view = 'agenda' }: Props) {
   }, [projects]);
 
   const kpis = useMemo(() => {
-    if (view === 'prospects' || activeTab === 'prospects') {
+    if (activeTab === 'prospects') {
       const total = prospects.length;
       const enCours = prospects.filter((p) => (p.status ? p.status !== 'LOST' : true)).length;
       const won = prospects.filter((p) => p.status === 'WON').length;
@@ -274,10 +262,9 @@ export default function AgendaPage({ businessId, view = 'agenda' }: Props) {
         ),
       },
     ];
-  }, [activeTab, clients, prospects, statsByClient, view]);
+  }, [activeTab, clients, prospects, statsByClient]);
 
   const followUpItems = useMemo(() => {
-    if (!isAgendaView) return [];
     const items: Array<{
       id: string;
       kind: 'task' | 'interaction';
@@ -317,7 +304,7 @@ export default function AgendaPage({ businessId, view = 'agenda' }: Props) {
         const bTime = b.date ? new Date(b.date).getTime() : 0;
         return aTime - bTime;
       });
-  }, [clientNames, followUps.interactions, followUps.tasks, isAgendaView, projectNames]);
+  }, [clientNames, followUps.interactions, followUps.tasks, projectNames]);
 
   async function handleCreate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -410,14 +397,7 @@ export default function AgendaPage({ businessId, view = 'agenda' }: Props) {
     }
   }
 
-  const isProspectView = view === 'prospects' || activeTab === 'prospects';
-  const pageTitle = view === 'clients' ? 'Clients' : view === 'prospects' ? 'Prospects' : 'Agenda';
-  const pageSubtitle =
-    view === 'clients'
-      ? 'Liste des clients de l’entreprise'
-      : view === 'prospects'
-        ? 'Suivi des prospects de l’entreprise'
-        : 'Clients et prospects de l’entreprise';
+  const isProspectView = activeTab === 'prospects';
   const actionTitle =
     actionTarget?.type === 'client' ? 'Créer un projet' : actionTarget?.type === 'prospect' ? 'Convertir' : 'Action';
   const actionDescription =
@@ -441,7 +421,7 @@ export default function AgendaPage({ businessId, view = 'agenda' }: Props) {
   ) : currentList.length === 0 ? (
     <Card className="flex flex-col gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5">
       <p className="text-sm font-semibold text-[var(--text-primary)]">
-        {isProspectView ? 'Aucun prospect' : 'Aucun client'} pour l’instant.
+        {isProspectView ? 'Aucun prospect' : 'Aucun client'} pour l'instant.
       </p>
       <div className="flex flex-col gap-1 sm:flex-row sm:items-center">
         <Button
@@ -456,15 +436,9 @@ export default function AgendaPage({ businessId, view = 'agenda' }: Props) {
     </Card>
   ) : (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-      {currentList.map((contact) => {
+      {currentList.map((contact, i) => {
         const cardProspect = isProspectView;
         const cardStats = statsByClient.get(contact.id);
-        const status: 'active' | 'inactive' | 'neutral' = cardProspect
-          ? 'neutral'
-          : (cardStats?.active ?? 0) > 0
-            ? 'active'
-            : 'inactive';
-        const cardType = cardProspect ? 'prospect' : 'client';
         const cardHref = `/app/pro/${businessId}/${cardProspect ? 'prospects' : 'clients'}/${contact.id}`;
         return (
           <ContactCard
@@ -476,24 +450,7 @@ export default function AgendaPage({ businessId, view = 'agenda' }: Props) {
                 ? { ...cardStats, lastInteraction: contact.lastContactAt ?? cardStats.lastInteraction }
                 : undefined
             }
-            status={status}
-            actions={
-              isAgendaView ? (
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <button
-                    type="button"
-                    onClick={() => openAction(cardType, contact.id, contact.name)}
-                    className="inline-flex items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-xs font-semibold text-[var(--text-primary)] transition hover:bg-[var(--surface-hover)] disabled:cursor-not-allowed disabled:opacity-50"
-                    disabled={!canWrite}
-                  >
-                    {cardType === 'client' ? 'Créer un projet' : 'Convertir'}
-                  </button>
-                  {!canWrite ? (
-                    <span className="text-[10px] text-[var(--text-secondary)]">{readOnlyMessage}</span>
-                  ) : null}
-                </div>
-              ) : null
-            }
+            index={i}
           />
         );
       })}
@@ -504,8 +461,8 @@ export default function AgendaPage({ businessId, view = 'agenda' }: Props) {
     <ProPageShell
       backHref={`/app/pro/${businessId}`}
       backLabel="Dashboard"
-      title={pageTitle}
-      subtitle={pageSubtitle}
+      title="CRM"
+      subtitle="Clients, prospects et suivi"
       actions={
         <div className="flex flex-col gap-1 sm:items-end">
           <Button
@@ -519,18 +476,17 @@ export default function AgendaPage({ businessId, view = 'agenda' }: Props) {
           {!canWrite ? <span className="text-xs text-[var(--text-secondary)]">{readOnlyMessage}</span> : null}
         </div>
       }
-      tabs={isAgendaView ? tabs : undefined}
-      activeTab={isAgendaView ? activeTab : undefined}
-      onTabChange={isAgendaView ? (key) => setActiveTab(key as 'clients' | 'prospects') : undefined}
+      tabs={tabs}
+      activeTab={activeTab}
+      onTabChange={(key) => setActiveTab(key as 'clients' | 'prospects')}
     >
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {kpis.map((item) => (
-          <KpiCard key={item.label} label={item.label} value={item.value} />
+        {kpis.map((item, i) => (
+          <KpiCard key={item.label} label={item.label} value={item.value} delay={i * 50} />
         ))}
       </div>
 
-      {isAgendaView ? (
-        <Card className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
+      <Card className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
               <p className="text-sm font-semibold text-[var(--text-primary)]">Suivi a venir</p>
@@ -587,8 +543,7 @@ export default function AgendaPage({ businessId, view = 'agenda' }: Props) {
           ) : (
             <p className="mt-3 text-sm text-[var(--text-secondary)]">Aucun suivi a venir.</p>
           )}
-        </Card>
-      ) : null}
+      </Card>
 
       <div className="space-y-4">{listContent}</div>
 
@@ -596,7 +551,7 @@ export default function AgendaPage({ businessId, view = 'agenda' }: Props) {
         open={createOpen}
         onCloseAction={() => (!creating ? setCreateOpen(false) : null)}
         title="Ajouter un contact"
-        description="Clients et prospects dans l’agenda."
+        description="Clients et prospects dans l'agenda."
       >
         <form className="space-y-4" onSubmit={handleCreate}>
           <Input

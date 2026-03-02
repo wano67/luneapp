@@ -26,9 +26,9 @@ type Props = {
 const PRO_SUB_LABELS: Record<string, string> = {
   projects: 'Projets',
   tasks: 'Tâches',
-  clients: 'Clients',
-  prospects: 'Prospects',
-  agenda: 'Agenda',
+  clients: 'CRM',
+  prospects: 'CRM',
+  agenda: 'CRM',
   services: 'Catalogue',
   stock: 'Stock',
   finances: 'Finances',

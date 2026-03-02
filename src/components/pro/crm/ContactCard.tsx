@@ -1,10 +1,9 @@
 import Link from 'next/link';
-import type { ReactNode } from 'react';
+import { ChevronRight } from 'lucide-react';
 import { LogoAvatar } from '@/components/pro/LogoAvatar';
 import { normalizeWebsiteUrl } from '@/lib/website';
 import { formatCurrencyEUR } from '@/lib/formatCurrency';
-import { cn } from '@/lib/cn';
-import { ArrowRight } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
 export type Contact = {
   id: string;
@@ -26,8 +25,7 @@ type Props = {
   href: string;
   contact: Contact;
   stats?: ContactStats;
-  status: 'active' | 'inactive' | 'neutral';
-  actions?: ReactNode;
+  index?: number;
 };
 
 function formatDate(value: string | null | undefined) {
@@ -39,69 +37,72 @@ function formatDate(value: string | null | undefined) {
   }
 }
 
-const STATUS_BORDER: Record<Props['status'], string> = {
-  active: 'border border-[var(--success-border)]',
-  inactive: 'border border-[var(--danger-border)]',
-  neutral: 'border border-[var(--border)]/60',
-};
-
-export function ContactCard({ href, contact, stats, status, actions }: Props) {
+export function ContactCard({ href, contact, stats, index = 0 }: Props) {
   const normalized = normalizeWebsiteUrl(contact.websiteUrl).value;
 
   const rows = [
-    { label: 'Projets', value: stats?.projects ?? 0 },
-    { label: 'Actifs', value: stats?.active ?? 0 },
+    { label: 'Projets', value: String(stats?.projects ?? 0) },
+    { label: 'Actifs', value: String(stats?.active ?? 0) },
     { label: 'Valeur', value: formatCurrencyEUR(stats?.valueCents) },
     { label: 'Dernière', value: formatDate(contact.lastContactAt ?? stats?.lastInteraction) },
   ];
 
   return (
-    <div className="space-y-1">
-      <Link
-        href={href}
-        className={cn(
-          'group card-interactive relative block min-h-[220px] rounded-3xl bg-[var(--surface)] p-4 pb-14 text-left shadow-sm transition hover:-translate-y-[1px] hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]',
-          STATUS_BORDER[status],
-        )}
-      >
-        <div className="flex h-full flex-col gap-4">
-          <div className="flex items-start gap-3">
-            <LogoAvatar
-              name={contact.name || contact.company || 'Contact'}
-              websiteUrl={normalized ?? undefined}
-              size={48}
-            />
-            <div className="min-w-0 space-y-1">
-              <p className="truncate text-sm font-semibold leading-tight text-[var(--text-primary)]">
-                {contact.name || 'Sans nom'}
-              </p>
-              {contact.company ? (
-                <p className="truncate text-[12px] text-[var(--text-secondary)]">{contact.company}</p>
-              ) : null}
-              {contact.email ? (
-                <p className="truncate text-[12px] text-[var(--text-secondary)]">{contact.email}</p>
-              ) : null}
-            </div>
-          </div>
-
-          <div className="grid flex-1 grid-cols-1 gap-x-4 gap-y-3 text-[13px] text-[var(--text-secondary)] sm:grid-cols-2">
-            {rows.map((row) => (
-              <div key={row.label} className="flex items-center justify-between">
-                <span>{row.label}</span>
-                <span className="text-[var(--text-primary)] font-medium">{row.value}</span>
-              </div>
-            ))}
-          </div>
+    <Link
+      href={href}
+      className="group relative flex flex-col rounded-xl p-3 transition hover:-translate-y-1 hover:shadow-lg animate-fade-in-up"
+      style={{
+        background: 'var(--shell-accent)',
+        height: 200,
+        animationDelay: `${index * 60}ms`,
+        animationFillMode: 'backwards',
+      }}
+    >
+      {/* Top: avatar + name */}
+      <div className="flex items-start gap-3">
+        <LogoAvatar
+          name={contact.name || contact.company || 'Contact'}
+          websiteUrl={normalized ?? undefined}
+          size={32}
+          className="ring-1 ring-white/20"
+        />
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-white truncate">{contact.name || 'Sans nom'}</p>
+          <p className="text-xs text-white/70 truncate mt-0.5">
+            {contact.company || contact.email || '—'}
+          </p>
         </div>
+      </div>
 
-        <div className="pointer-events-none absolute bottom-5 right-5">
-          <ArrowRight
-            strokeWidth={2.75}
-            className="text-[var(--text-secondary)] transition group-hover:translate-x-1 group-hover:text-[var(--text-primary)]"
-          />
-        </div>
-      </Link>
-      {actions ? <div className="px-2">{actions}</div> : null}
-    </div>
+      {/* Spacer */}
+      <div className="flex-1" />
+
+      {/* Stats */}
+      <div className="flex flex-col gap-1.5">
+        {rows.map((row) => (
+          <div key={row.label} className="flex items-center justify-between text-xs">
+            <span className="text-white/70">{row.label}</span>
+            <span className="text-white font-semibold">{row.value}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Ouvrir */}
+      <div className="mt-2 flex justify-end">
+        <Button
+          asChild
+          variant="outline"
+          size="sm"
+          className="!bg-white !text-black !border-0 pointer-events-none"
+        >
+          <span>
+            <span style={{ fontFamily: 'var(--font-barlow), sans-serif', fontWeight: 600, fontSize: 13 }}>
+              Ouvrir
+            </span>
+            <ChevronRight size={12} />
+          </span>
+        </Button>
+      </div>
+    </Link>
   );
 }
