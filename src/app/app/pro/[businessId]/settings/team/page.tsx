@@ -11,7 +11,8 @@ import { Modal } from '@/components/ui/modal';
 import { Input } from '@/components/ui/input';
 import { sanitizeEuroInput } from '@/lib/money';
 import { useActiveBusiness } from '../../../ActiveBusinessProvider';
-import { PageHeader } from '../../../../components/PageHeader';
+import { PageContainer } from '@/components/layouts/PageContainer';
+import { PageHeader } from '@/components/layouts/PageHeader';
 import {
   formatDate,
   canChangeRole,
@@ -80,6 +81,7 @@ export default function BusinessTeamSettingsPage() {
   } = useMemberActions({ businessId, actorRole, currentUserId, load, redirectToLogin });
 
   return (
+    <PageContainer>
     <div className="space-y-5">
       <PageHeader
         backHref={`/app/pro/${businessId}/settings`}
@@ -513,6 +515,7 @@ export default function BusinessTeamSettingsPage() {
         </div>
       </Modal>
     </div>
+    </PageContainer>
   );
 }
 

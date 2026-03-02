@@ -6,10 +6,7 @@ import { jsonb, jsonbCreated } from '@/server/http/json';
 import { badRequest, notFound, readJson, serverError } from '@/server/http/apiUtils';
 import { getAllowedOrigins } from '@/server/security/csrf';
 import crypto from 'crypto';
-
-function isValidEmail(email: string) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-}
+import { isValidEmail } from '@/lib/validation/email';
 
 function hashToken(raw: string) {
   return crypto.createHash('sha256').update(raw).digest('base64url');

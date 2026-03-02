@@ -11,10 +11,7 @@ import { parseDateOpt, parseStr } from '@/server/http/parsers';
 import { jsonb, jsonbCreated } from '@/server/http/json';
 import { badRequest, isRecord, withIdNoStore } from '@/server/http/apiUtils';
 import { ensureDelegate } from '@/server/http/delegates';
-
-function isValidEmail(s: string) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
-}
+import { isValidEmail } from '@/lib/validation/email';
 
 function sanitizePhone(s: string) {
   return (parseStr(s) ?? '').replace(/\s+/g, ' ');

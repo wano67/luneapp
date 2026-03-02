@@ -6,10 +6,7 @@ import { badRequest, withIdNoStore } from '@/server/http/apiUtils';
 import { ClientStatus, LeadSource } from '@/generated/prisma';
 import { validateCategoryAndTags } from '@/server/http/validators';
 import { normalizeWebsiteUrl } from '@/lib/website';
-
-function isValidEmail(s: string) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
-}
+import { isValidEmail } from '@/lib/validation/email';
 
 function sanitizePhone(s: unknown) {
   return (parseStr(s) ?? '').replace(/\s+/g, ' ');

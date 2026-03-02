@@ -10,6 +10,8 @@ import { Button } from '@/components/ui/button';
 import { fetchJson } from '@/lib/apiClient';
 import { ReferencePicker } from '../../references/ReferencePicker';
 import { useActiveBusiness } from '../../../ActiveBusinessProvider';
+import { PageContainer } from '@/components/layouts/PageContainer';
+import { PageHeader } from '@/components/layouts/PageHeader';
 
 type TaskStatus = 'TODO' | 'IN_PROGRESS' | 'DONE';
 
@@ -322,23 +324,27 @@ export default function TaskDetailPage() {
 
   if (loading) {
     return (
-      <Card className="p-5">
-        <p className="text-sm text-[var(--text-secondary)]">Chargement de la tâche…</p>
-      </Card>
+      <PageContainer>
+        <Card className="p-5">
+          <p className="text-sm text-[var(--text-secondary)]">Chargement de la tâche…</p>
+        </Card>
+      </PageContainer>
     );
   }
 
   if (!task) {
     return (
-      <Card className="space-y-2 p-5">
-        <p className="text-sm font-semibold text-[var(--danger)]">{error ?? 'Tâche introuvable.'}</p>
-        <Button variant="outline" size="sm" asChild>
-          <Link href={`/app/pro/${businessId}/tasks`}>Retour à la liste</Link>
-        </Button>
-        {requestId ? (
-          <p className="text-[10px] text-[var(--text-secondary)]">Request ID: {requestId}</p>
-        ) : null}
-      </Card>
+      <PageContainer>
+        <Card className="space-y-2 p-5">
+          <p className="text-sm font-semibold text-[var(--danger)]">{error ?? 'Tâche introuvable.'}</p>
+          <Button variant="outline" size="sm" asChild>
+            <Link href={`/app/pro/${businessId}/tasks`}>Retour à la liste</Link>
+          </Button>
+          {requestId ? (
+            <p className="text-[10px] text-[var(--text-secondary)]">Request ID: {requestId}</p>
+          ) : null}
+        </Card>
+      </PageContainer>
     );
   }
 
@@ -347,20 +353,23 @@ export default function TaskDetailPage() {
   const checklistSorted = [...checklistItems].sort((a, b) => a.position - b.position);
 
   return (
+    <PageContainer>
     <div className="space-y-4">
-      <Card className="space-y-2 p-5">
-        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-[var(--text-secondary)]">
-              Tâche
-            </p>
-            <h1 className="text-xl font-semibold text-[var(--text-primary)]">
-              {task.title}
-            </h1>
-            <p className="text-sm text-[var(--text-secondary)]">
-              Business #{task.businessId} · créée le {formatDate(task.createdAt)}
-            </p>
-          </div>
+      <PageHeader
+        title={task.title}
+        subtitle={`Business #${task.businessId} · créée le ${formatDate(task.createdAt)}`}
+        backHref={`/app/pro/${businessId}/tasks`}
+        backLabel="Retour"
+        actions={
+          task.projectId ? (
+            <Button size="sm" variant="ghost" asChild>
+              <Link href={`/app/pro/${businessId}/projects/${task.projectId}`}>
+                Voir le projet
+              </Link>
+            </Button>
+          ) : undefined
+        }
+        context={
           <div className="flex flex-wrap gap-2">
             <Badge variant="neutral">
               {STATUS_LABELS[task.status] ?? task.status}
@@ -381,20 +390,8 @@ export default function TaskDetailPage() {
               </Badge>
             ) : null}
           </div>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button size="sm" variant="outline" asChild>
-            <Link href={`/app/pro/${businessId}/tasks`}>Retour</Link>
-          </Button>
-          {task.projectId ? (
-            <Button size="sm" variant="ghost" asChild>
-              <Link href={`/app/pro/${businessId}/projects/${task.projectId}`}>
-                Voir le projet
-              </Link>
-            </Button>
-          ) : null}
-        </div>
-      </Card>
+        }
+      />
 
       <Card className="space-y-3 p-5">
         <div className="grid gap-3 md:grid-cols-2">
@@ -575,5 +572,6 @@ export default function TaskDetailPage() {
         </div>
       </Card>
     </div>
+    </PageContainer>
   );
 }

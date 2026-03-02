@@ -9,8 +9,10 @@ import { KpiCard } from '@/components/ui/kpi-card';
 import { PageContainer } from '@/components/layouts/PageContainer';
 import { BackButton } from '@/components/layouts/BackButton';
 import { ArrowRight, MoreVertical } from 'lucide-react';
-import CashflowChart from './charts/CashflowChart';
-import TasksDonut from './charts/TasksDonut';
+import dynamic from 'next/dynamic';
+
+const CashflowChart = dynamic(() => import('./charts/CashflowChart'), { ssr: false });
+const TasksDonut = dynamic(() => import('./charts/TasksDonut'), { ssr: false });
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import { formatCurrency } from '@/app/app/pro/pro-data';
 import { useActiveBusiness } from '@/app/app/pro/ActiveBusinessProvider';

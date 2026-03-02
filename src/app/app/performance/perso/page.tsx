@@ -9,8 +9,10 @@ import { Button } from '@/components/ui/button';
 import { KpiCard } from '@/components/ui/kpi-card';
 import { SectionHeader } from '@/components/ui/section-header';
 import { EmptyState } from '@/components/ui/empty-state';
-import { CategoryPieChart } from '@/components/ui/charts/CategoryPieChart';
-import { TrendLineChart } from '@/components/ui/charts/TrendLineChart';
+import dynamic from 'next/dynamic';
+
+const CategoryPieChart = dynamic(() => import('@/components/ui/charts/CategoryPieChart').then((m) => m.CategoryPieChart), { ssr: false });
+const TrendLineChart = dynamic(() => import('@/components/ui/charts/TrendLineChart').then((m) => m.TrendLineChart), { ssr: false });
 import { fetchJson } from '@/lib/apiClient';
 import { formatCentsToEuroDisplay } from '@/lib/money';
 

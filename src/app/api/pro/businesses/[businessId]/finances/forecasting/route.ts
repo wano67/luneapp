@@ -2,25 +2,7 @@ import { FinanceType } from '@/generated/prisma';
 import { prisma } from '@/server/db/client';
 import { withBusinessRoute } from '@/server/http/routeHandler';
 import { jsonb } from '@/server/http/json';
-
-function monthKey(date: Date) {
-  const year = date.getFullYear();
-  const month = date.getMonth() + 1;
-  return `${year}-${String(month).padStart(2, '0')}`;
-}
-
-function startOfMonth(date: Date) {
-  const d = new Date(date);
-  d.setDate(1);
-  d.setHours(0, 0, 0, 0);
-  return d;
-}
-
-function addMonths(date: Date, count: number) {
-  const d = new Date(date);
-  d.setMonth(d.getMonth() + count);
-  return d;
-}
+import { addMonths, startOfMonth, monthKey } from '@/lib/date';
 
 // GET /api/pro/businesses/{businessId}/finances/forecasting
 export const GET = withBusinessRoute(

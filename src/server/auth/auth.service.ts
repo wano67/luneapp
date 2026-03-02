@@ -6,6 +6,7 @@ import {
   authCookieOptions,
   signAuthToken,
 } from './jwt';
+import { normalizeEmail } from '@/lib/validation/email';
 
 type RegisterInput = {
   email: string;
@@ -19,10 +20,6 @@ type LoginInput = {
 };
 
 export type PublicUser = Omit<User, 'passwordHash' | 'id'> & { id: string };
-
-function normalizeEmail(email: string) {
-  return email.trim().toLowerCase();
-}
 
 async function hashPassword(password: string) {
   return bcrypt.hash(password, 10);

@@ -14,6 +14,8 @@ import { Modal } from '@/components/ui/modal';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import { useActiveBusiness } from '../../ActiveBusinessProvider';
 import RoleBanner from '@/components/RoleBanner';
+import { PageContainer } from '@/components/layouts/PageContainer';
+import { PageHeader } from '@/components/layouts/PageHeader';
 import { ReferencePicker } from '../references/ReferencePicker';
 import { useRowSelection } from '../../../components/selection/useRowSelection';
 import { BulkActionBar } from '../../../components/selection/BulkActionBar';
@@ -341,41 +343,37 @@ function openEdit(task: Task) {
   }
 
   return (
+    <PageContainer>
     <div className="space-y-5">
       <RoleBanner role={actorRole} />
-      <Card className="space-y-2 p-5">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-[var(--text-secondary)]">
-          Tâches
-        </p>
-        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h1 className="text-xl font-semibold text-[var(--text-primary)]">Tâches & production</h1>
-            <p className="text-sm text-[var(--text-secondary)]">
-              Base unique des tâches liées aux projets pour suivre charge et urgences.
-            </p>
-          </div>
-          <div className="flex flex-col items-start gap-1">
-            <Button
-              onClick={() => {
-                if (!isAdmin) {
-                  setReadOnlyInfo(readOnlyMessage);
-                  return;
-                }
-                openCreate();
-              }}
-              disabled={!isAdmin}
-            >
-              Nouvelle tâche
-            </Button>
+      <PageHeader
+        title="Tâches & production"
+        subtitle="Base unique des tâches liées aux projets pour suivre charge et urgences."
+        actions={
+          <Button
+            onClick={() => {
+              if (!isAdmin) {
+                setReadOnlyInfo(readOnlyMessage);
+                return;
+              }
+              openCreate();
+            }}
+            disabled={!isAdmin}
+          >
+            Nouvelle tâche
+          </Button>
+        }
+        context={
+          <>
             {!isAdmin ? (
               <p className="text-[11px] text-[var(--text-secondary)]">Lecture seule : création réservée aux admins.</p>
             ) : null}
-          </div>
-        </div>
-        {requestId ? (
-          <p className="text-[10px] text-[var(--text-secondary)]">Request ID: {requestId}</p>
-        ) : null}
-      </Card>
+            {requestId ? (
+              <p className="text-[10px] text-[var(--text-secondary)]">Request ID: {requestId}</p>
+            ) : null}
+          </>
+        }
+      />
 
       <Card className="space-y-4 p-5">
         <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
@@ -664,5 +662,6 @@ function openEdit(task: Task) {
         </div>
       </Modal>
     </div>
+    </PageContainer>
   );
 }

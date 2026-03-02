@@ -5,34 +5,15 @@ import { withBusinessRoute } from '@/server/http/routeHandler';
 import { jsonbCreated } from '@/server/http/json';
 import { badRequest, notFound } from '@/server/http/apiUtils';
 import { parseId } from '@/server/http/parsers';
-import { resolveServiceUnitPriceCents } from '@/server/services/pricing';
+import { resolveServiceUnitPriceCents, computeDiscountedPrice } from '@/server/services/pricing';
 import { computeProjectBillingSummary } from '@/server/billing/summary';
-
-function clampDayOfMonth(year: number, month: number, day: number) {
-  const lastDay = new Date(year, month + 1, 0).getDate();
-  return Math.min(Math.max(1, day), lastDay);
-}
+import { clampDayOfMonth } from '@/server/finances/recurring';
 
 function addMonth(base: Date, months: number, dayOfMonth: number) {
   const year = base.getFullYear();
   const month = base.getMonth() + months;
   const safeDay = clampDayOfMonth(year, month, dayOfMonth);
   return new Date(year, month, safeDay, 12, 0, 0, 0);
-}
-
-function applyDiscount(params: { unitPriceCents: bigint; discountType?: DiscountType | null; discountValue?: number | null }) {
-  const discountType = params.discountType ?? 'NONE';
-  const discountValue = params.discountValue ?? null;
-  if (discountType === 'PERCENT' && discountValue != null && Number.isFinite(discountValue)) {
-    const bounded = Math.min(100, Math.max(0, Math.trunc(discountValue)));
-    return (params.unitPriceCents * BigInt(100 - bounded)) / BigInt(100);
-  }
-  if (discountType === 'AMOUNT' && discountValue != null && Number.isFinite(discountValue)) {
-    const bounded = Math.max(0, Math.trunc(discountValue));
-    const final = params.unitPriceCents - BigInt(bounded);
-    return final > BigInt(0) ? final : BigInt(0);
-  }
-  return params.unitPriceCents;
 }
 
 // POST /api/pro/businesses/{businessId}/projects/{projectId}/services/{itemId}/recurring-invoices
@@ -69,7 +50,7 @@ export const POST = withBusinessRoute<{ businessId: string; projectId: string; i
     }
 
     const quantity = projectService.quantity && projectService.quantity > 0 ? projectService.quantity : 1;
-    const unitPriceCents = applyDiscount({
+    const unitPriceCents = computeDiscountedPrice({
       unitPriceCents: pricing.unitPriceCents,
       discountType: projectService.discountType ?? 'NONE',
       discountValue: projectService.discountValue ?? null,

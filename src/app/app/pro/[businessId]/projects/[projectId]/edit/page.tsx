@@ -3,11 +3,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, Loader2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
+import { PageContainer } from '@/components/layouts/PageContainer';
+import { PageHeader } from '@/components/layouts/PageHeader';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import { useClientsLite } from '@/lib/hooks/useClientsLite';
 import { ProjectStatus } from '@/generated/prisma';
@@ -302,12 +304,12 @@ export default function ProjectEditPage() {
   const statusHelper = statusScope ? `Catégorie: ${statusScope}` : null;
 
   if (loading) {
-    return <div className="mx-auto max-w-6xl px-4 py-6">Chargement…</div>;
+    return <PageContainer>Chargement…</PageContainer>;
   }
 
   if (!project) {
     return (
-      <div className="mx-auto max-w-6xl px-4 py-6">
+      <PageContainer>
         <Card className="rounded-3xl border border-[var(--border)] bg-[var(--surface)] p-5 shadow-sm">
           <p className="text-sm font-semibold text-[var(--danger)]">Projet introuvable</p>
           <p className="text-xs text-[var(--text-secondary)]">{error ?? 'Ce projet est indisponible.'}</p>
@@ -317,43 +319,40 @@ export default function ProjectEditPage() {
             </Button>
           </div>
         </Card>
-      </div>
+      </PageContainer>
     );
   }
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 px-4 py-6">
-      <div className="flex flex-col gap-2">
-        <div className="flex items-center justify-between gap-3">
-          <Button asChild variant="outline" size="sm" className="gap-2">
-            <Link href={`/app/pro/${businessId}/projects/${projectId}`}>
-              <ArrowLeft size={16} />
-              Retour
-            </Link>
-          </Button>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button asChild variant="outline" size="sm">
-              <Link href={`/app/pro/${businessId}/projects/${projectId}`}>Annuler</Link>
-            </Button>
-            <Button
-              size="sm"
-              type="submit"
-              form="project-edit-form"
-              disabled={saving || !hasChanges || isReadOnly}
-            >
-              {saving ? <Loader2 size={16} className="animate-spin" /> : null}
-              Enregistrer
-            </Button>
-          </div>
-        </div>
-        <h1 className="text-xl font-semibold text-[var(--text-primary)]">Modifier le projet</h1>
-        <p className="text-sm text-[var(--text-secondary)]">
-          Statut actuel : {statusLabel ?? project.status} {project.archivedAt ? '· Archivé' : ''}
-        </p>
-        <p className="text-xs text-[var(--text-secondary)]">
-          Statut sélectionné : {selectedStatusLabel}
-        </p>
-      </div>
+    <PageContainer>
+      <div className="space-y-4">
+        <PageHeader
+          title="Modifier le projet"
+          subtitle={`Statut actuel : ${statusLabel ?? project.status}${project.archivedAt ? ' \u00b7 Archiv\u00e9' : ''}`}
+          backHref={`/app/pro/${businessId}/projects/${projectId}`}
+          backLabel="Retour au projet"
+          actions={
+            <div className="flex flex-wrap items-center gap-2">
+              <Button asChild variant="outline" size="sm">
+                <Link href={`/app/pro/${businessId}/projects/${projectId}`}>Annuler</Link>
+              </Button>
+              <Button
+                size="sm"
+                type="submit"
+                form="project-edit-form"
+                disabled={saving || !hasChanges || isReadOnly}
+              >
+                {saving ? <Loader2 size={16} className="animate-spin" /> : null}
+                Enregistrer
+              </Button>
+            </div>
+          }
+          context={
+            <p className="text-xs text-[var(--text-secondary)]">
+              Statut s\u00e9lectionn\u00e9 : {selectedStatusLabel}
+            </p>
+          }
+        />
 
       {error ? <p className="text-sm text-[var(--danger)]">{error}</p> : null}
       {info ? <p className="text-sm text-[var(--success)]">{info}</p> : null}
@@ -484,6 +483,7 @@ export default function ProjectEditPage() {
           ) : null}
         </>
       )}
-    </div>
+      </div>
+    </PageContainer>
   );
 }

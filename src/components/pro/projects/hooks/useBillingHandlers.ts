@@ -122,6 +122,39 @@ function toEditableLine(item: {
   };
 }
 
+function createNewLine(): EditableLine {
+  return { id: `new-${Date.now()}`, label: '', description: '', quantity: '1', unitPrice: '', serviceId: null, productId: null };
+}
+
+type ParsedLineItem = {
+  id: string;
+  label: string;
+  description: string | null;
+  quantity: number;
+  unitPriceCents: number;
+  serviceId: string | null;
+  productId: string | null;
+};
+
+function validateLineItems(lines: EditableLine[], onError: (msg: string) => void): ParsedLineItem[] | null {
+  if (!lines.length) { onError('Ajoute au moins une ligne.'); return null; }
+  const items: ParsedLineItem[] = [];
+  for (const line of lines) {
+    const label = line.label.trim();
+    if (!label) { onError('Chaque ligne doit avoir un libellé.'); return null; }
+    const qty = Number(line.quantity);
+    if (!Number.isFinite(qty) || qty <= 0) { onError('Quantité invalide.'); return null; }
+    const unitPriceCents = parseEuroInputCents(line.unitPrice);
+    if (unitPriceCents == null) { onError('Prix unitaire invalide.'); return null; }
+    items.push({
+      id: line.id, label, description: line.description.trim() || null,
+      quantity: Math.max(1, Math.trunc(qty)), unitPriceCents,
+      serviceId: line.serviceId ?? null, productId: line.productId ?? null,
+    });
+  }
+  return items;
+}
+
 // ─── Hook types ───────────────────────────────────────────────────────────────
 
 type UseBillingHandlersOptions = {
@@ -195,13 +228,42 @@ export function useBillingHandlers({
     setDepositPaidDraft(projectDepositPaidAt ? projectDepositPaidAt.slice(0, 10) : '');
   }, [projectDepositPaidAt]);
 
+  // ─── Admin guard ─────────────────────────────────────────────────────────
+  function requireAdmin(onError: (msg: string) => void): boolean {
+    if (!isAdmin) { onError('Réservé aux admins/owners.'); return false; }
+    return true;
+  }
+
+  // ─── Generic delete ──────────────────────────────────────────────────────
+  async function handleDeleteDocument(
+    docId: string,
+    endpoint: string,
+    confirmMsg: string,
+    setActionId: (id: string | null) => void,
+    reloadFn: () => Promise<unknown>,
+    successMsg: string,
+  ) {
+    if (!requireAdmin(onBillingError)) return;
+    if (typeof window !== 'undefined' && !window.confirm(confirmMsg)) return;
+    onBillingError(null);
+    onBillingInfo(null);
+    setActionId(docId);
+    try {
+      const res = await fetchJson(`/api/pro/businesses/${businessId}/${endpoint}/${docId}`, { method: 'DELETE' });
+      if (!res.ok) { onBillingError(res.error ?? 'Suppression impossible.'); return; }
+      await reloadFn();
+      onBillingInfo(successMsg);
+    } catch (err) {
+      onBillingError(getErrorMessage(err));
+    } finally {
+      setActionId(null);
+    }
+  }
+
   // ─── Quote CRUD ────────────────────────────────────────────────────────────
 
   async function handleCreateQuote() {
-    if (!isAdmin) {
-      onBillingError('Réservé aux admins/owners.');
-      return;
-    }
+    if (!requireAdmin(onBillingError)) return;
     if (!servicesLength) {
       onBillingError('Ajoute au moins un service avant de créer un devis.');
       return;
@@ -232,10 +294,7 @@ export function useBillingHandlers({
   }
 
   function openCancelQuoteModal(quote: QuoteItemLocal) {
-    if (!isAdmin) {
-      onBillingError('Réservé aux admins/owners.');
-      return;
-    }
+    if (!requireAdmin(onBillingError)) return;
     setCancelQuoteError(null);
     setCancelQuoteEditor({
       quoteId: quote.id,
@@ -247,10 +306,7 @@ export function useBillingHandlers({
 
   async function handleCancelQuote() {
     if (!cancelQuoteEditor) return;
-    if (!isAdmin) {
-      setCancelQuoteError('Réservé aux admins/owners.');
-      return;
-    }
+    if (!requireAdmin(setCancelQuoteError)) return;
     const reason = cancelQuoteEditor.reason.trim();
     if (!reason) {
       setCancelQuoteError('La raison est requise.');
@@ -284,10 +340,7 @@ export function useBillingHandlers({
   }
 
   async function handleSetBillingReference(quoteId: string) {
-    if (!isAdmin) {
-      onBillingError('Réservé aux admins/owners.');
-      return;
-    }
+    if (!requireAdmin(onBillingError)) return;
     setReferenceUpdatingId(quoteId);
     onBillingError(null);
     onBillingInfo(null);
@@ -314,10 +367,7 @@ export function useBillingHandlers({
   }
 
   async function handleQuoteStatus(quoteId: string, nextStatus: 'SENT' | 'SIGNED' | 'EXPIRED') {
-    if (!isAdmin) {
-      onBillingError('Réservé aux admins/owners.');
-      return;
-    }
+    if (!requireAdmin(onBillingError)) return;
     setQuoteActionId(quoteId);
     onBillingError(null);
     onBillingInfo(null);
@@ -343,10 +393,7 @@ export function useBillingHandlers({
   }
 
   async function handleCreateInvoice(quoteId: string) {
-    if (!isAdmin) {
-      onBillingError('Réservé aux admins/owners.');
-      return;
-    }
+    if (!requireAdmin(onBillingError)) return;
     setInvoiceActionId(quoteId);
     onBillingError(null);
     onBillingInfo(null);
@@ -369,10 +416,7 @@ export function useBillingHandlers({
   }
 
   async function handleGenerateRecurringInvoice(projectServiceId: string) {
-    if (!isAdmin) {
-      onBillingError('Réservé aux admins/owners.');
-      return;
-    }
+    if (!requireAdmin(onBillingError)) return;
     setRecurringInvoiceActionId(projectServiceId);
     onBillingError(null);
     onBillingInfo(null);
@@ -397,10 +441,7 @@ export function useBillingHandlers({
   // ─── Staged invoice ────────────────────────────────────────────────────────
 
   function openStagedInvoiceModal(kind: 'DEPOSIT' | 'MID' | 'FINAL') {
-    if (!isAdmin) {
-      onBillingError('Réservé aux admins/owners.');
-      return;
-    }
+    if (!requireAdmin(onBillingError)) return;
     const defaultValue =
       kind === 'DEPOSIT' && Number.isFinite(summaryTotals.depositPercent)
         ? String(summaryTotals.depositPercent)
@@ -416,10 +457,7 @@ export function useBillingHandlers({
 
   async function handleCreateStagedInvoice() {
     if (!stagedInvoiceModal) return;
-    if (!isAdmin) {
-      setStagedInvoiceError('Réservé aux admins/owners.');
-      return;
-    }
+    if (!requireAdmin(setStagedInvoiceError)) return;
     if (remainingToInvoiceCents <= 0) {
       setStagedInvoiceError('Aucun montant restant à facturer.');
       return;
@@ -482,10 +520,7 @@ export function useBillingHandlers({
   }
 
   async function handleInvoiceStatus(invoiceId: string, nextStatus: 'SENT' | 'CANCELLED') {
-    if (!isAdmin) {
-      onBillingError('Réservé aux admins/owners.');
-      return;
-    }
+    if (!requireAdmin(onBillingError)) return;
     setInvoiceActionId(invoiceId);
     onBillingError(null);
     onBillingInfo(null);
@@ -513,10 +548,7 @@ export function useBillingHandlers({
   // ─── Date modals ───────────────────────────────────────────────────────────
 
   function openQuoteDateModal(quote: QuoteItemLocal) {
-    if (!isAdmin) {
-      onBillingError('Réservé aux admins/owners.');
-      return;
-    }
+    if (!requireAdmin(onBillingError)) return;
     setDateModalError(null);
     setQuoteDateEditor({
       quoteId: quote.id,
@@ -527,10 +559,7 @@ export function useBillingHandlers({
   }
 
   function openInvoiceDateModal(invoice: InvoiceItemLocal) {
-    if (!isAdmin) {
-      onBillingError('Réservé aux admins/owners.');
-      return;
-    }
+    if (!requireAdmin(onBillingError)) return;
     setDateModalError(null);
     setInvoiceDateEditor({
       invoiceId: invoice.id,
@@ -627,10 +656,7 @@ export function useBillingHandlers({
   // ─── Quote editor ──────────────────────────────────────────────────────────
 
   function openQuoteEditor(quote: QuoteItemLocal) {
-    if (!isAdmin) {
-      onBillingError('Réservé aux admins/owners.');
-      return;
-    }
+    if (!requireAdmin(onBillingError)) return;
     const lines = (quote.items ?? []).map(toEditableLine);
     setQuoteEditError(null);
     setQuoteEditor({
@@ -651,16 +677,7 @@ export function useBillingHandlers({
 
   function addQuoteLine() {
     if (!quoteEditor) return;
-    const nextLine: EditableLine = {
-      id: `new-${Date.now()}`,
-      label: '',
-      description: '',
-      quantity: '1',
-      unitPrice: '',
-      serviceId: null,
-      productId: null,
-    };
-    setQuoteEditor({ ...quoteEditor, lines: [...quoteEditor.lines, nextLine] });
+    setQuoteEditor({ ...quoteEditor, lines: [...quoteEditor.lines, createNewLine()] });
   }
 
   function removeQuoteLine(lineId: string) {
@@ -669,60 +686,25 @@ export function useBillingHandlers({
   }
 
   async function handleSaveQuoteEdit() {
-    if (!quoteEditor) return;
-    if (!isAdmin) {
-      setQuoteEditError('Réservé aux admins/owners.');
-      return;
-    }
-    if (quoteEditing) return;
+    if (!quoteEditor || quoteEditing) return;
+    if (!requireAdmin(setQuoteEditError)) return;
 
     const editableStatus = quoteEditor.status === 'DRAFT' || quoteEditor.status === 'SENT';
-    const canEditLines = quoteEditor.status === 'DRAFT';
     if (!editableStatus) {
       setQuoteEditError('Devis signé/annulé: modification interdite.');
       return;
     }
 
-    const payload: Record<string, unknown> = {};
-    const issuedAt = quoteEditor.issuedAt ? new Date(quoteEditor.issuedAt).toISOString() : null;
-    const expiresAt = quoteEditor.expiresAt ? new Date(quoteEditor.expiresAt).toISOString() : null;
-    payload.issuedAt = issuedAt;
-    payload.expiresAt = expiresAt;
-    payload.note = quoteEditor.note.trim() || null;
+    const payload: Record<string, unknown> = {
+      issuedAt: quoteEditor.issuedAt ? new Date(quoteEditor.issuedAt).toISOString() : null,
+      expiresAt: quoteEditor.expiresAt ? new Date(quoteEditor.expiresAt).toISOString() : null,
+      note: quoteEditor.note.trim() || null,
+    };
 
-    if (canEditLines) {
-      if (!quoteEditor.lines.length) {
-        setQuoteEditError('Ajoute au moins une ligne.');
-        return;
-      }
-      const items = [];
-      for (const line of quoteEditor.lines) {
-        const label = line.label.trim();
-        if (!label) {
-          setQuoteEditError('Chaque ligne doit avoir un libellé.');
-          return;
-        }
-        const description = line.description.trim();
-        const qty = Number(line.quantity);
-        if (!Number.isFinite(qty) || qty <= 0) {
-          setQuoteEditError('Quantité invalide.');
-          return;
-        }
-        const unitPriceCents = parseEuroInputCents(line.unitPrice);
-        if (unitPriceCents == null) {
-          setQuoteEditError('Prix unitaire invalide.');
-          return;
-        }
-        items.push({
-          id: line.id,
-          label,
-          description: description || null,
-          quantity: Math.max(1, Math.trunc(qty)),
-          unitPriceCents,
-          serviceId: line.serviceId ?? null,
-        });
-      }
-      payload.items = items;
+    if (quoteEditor.status === 'DRAFT') {
+      const items = validateLineItems(quoteEditor.lines, setQuoteEditError);
+      if (!items) return;
+      payload.items = items.map(({ productId: _, ...rest }) => rest);
     }
 
     setQuoteEditing(true);
@@ -730,16 +712,9 @@ export function useBillingHandlers({
     try {
       const res = await fetchJson<{ quote: QuoteItemLocal }>(
         `/api/pro/businesses/${businessId}/quotes/${quoteEditor.quoteId}`,
-        {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        }
+        { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }
       );
-      if (!res.ok) {
-        setQuoteEditError(res.error ?? 'Mise à jour impossible.');
-        return;
-      }
+      if (!res.ok) { setQuoteEditError(res.error ?? 'Mise à jour impossible.'); return; }
       await loadQuotes();
       onBillingInfo('Devis mis à jour.');
       closeQuoteEditor();
@@ -751,38 +726,17 @@ export function useBillingHandlers({
   }
 
   async function handleDeleteQuote(quoteId: string) {
-    if (!isAdmin) {
-      onBillingError('Réservé aux admins/owners.');
-      return;
-    }
-    if (typeof window !== 'undefined' && !window.confirm('Supprimer ce devis ? Cette action est irréversible.')) {
-      return;
-    }
-    onBillingError(null);
-    onBillingInfo(null);
-    setQuoteActionId(quoteId);
-    try {
-      const res = await fetchJson(`/api/pro/businesses/${businessId}/quotes/${quoteId}`, { method: 'DELETE' });
-      if (!res.ok) {
-        onBillingError(res.error ?? 'Suppression impossible.');
-        return;
-      }
-      await loadQuotes();
-      onBillingInfo('Devis supprimé.');
-    } catch (err) {
-      onBillingError(getErrorMessage(err));
-    } finally {
-      setQuoteActionId(null);
-    }
+    await handleDeleteDocument(
+      quoteId, 'quotes',
+      'Supprimer ce devis ? Cette action est irréversible.',
+      setQuoteActionId, () => loadQuotes(), 'Devis supprimé.',
+    );
   }
 
   // ─── Invoice editor ────────────────────────────────────────────────────────
 
   async function openInvoiceEditor(invoiceId: string) {
-    if (!isAdmin) {
-      onBillingError('Réservé aux admins/owners.');
-      return;
-    }
+    if (!requireAdmin(onBillingError)) return;
     setInvoiceEditError(null);
     setInvoiceEditor(null);
     try {
@@ -816,16 +770,7 @@ export function useBillingHandlers({
 
   function addInvoiceLine() {
     if (!invoiceEditor) return;
-    const nextLine: EditableLine = {
-      id: `new-${Date.now()}`,
-      label: '',
-      description: '',
-      quantity: '1',
-      unitPrice: '',
-      productId: null,
-      serviceId: null,
-    };
-    setInvoiceEditor({ ...invoiceEditor, lines: [...invoiceEditor.lines, nextLine] });
+    setInvoiceEditor({ ...invoiceEditor, lines: [...invoiceEditor.lines, createNewLine()] });
   }
 
   function removeInvoiceLine(lineId: string) {
@@ -834,59 +779,25 @@ export function useBillingHandlers({
   }
 
   async function handleSaveInvoiceEdit() {
-    if (!invoiceEditor) return;
-    if (!isAdmin) {
-      setInvoiceEditError('Réservé aux admins/owners.');
-      return;
-    }
-    if (invoiceEditing) return;
+    if (!invoiceEditor || invoiceEditing) return;
+    if (!requireAdmin(setInvoiceEditError)) return;
 
-    const canEditLines = invoiceEditor.status === 'DRAFT';
     const editableStatus = invoiceEditor.status === 'DRAFT' || invoiceEditor.status === 'SENT';
     if (!editableStatus) {
       setInvoiceEditError('Facture payée/annulée: modification interdite.');
       return;
     }
 
-    const payload: Record<string, unknown> = {};
-    payload.issuedAt = invoiceEditor.issuedAt ? new Date(invoiceEditor.issuedAt).toISOString() : null;
-    payload.dueAt = invoiceEditor.dueAt ? new Date(invoiceEditor.dueAt).toISOString() : null;
-    payload.note = invoiceEditor.note.trim() || null;
+    const payload: Record<string, unknown> = {
+      issuedAt: invoiceEditor.issuedAt ? new Date(invoiceEditor.issuedAt).toISOString() : null,
+      dueAt: invoiceEditor.dueAt ? new Date(invoiceEditor.dueAt).toISOString() : null,
+      note: invoiceEditor.note.trim() || null,
+    };
 
-    if (canEditLines) {
-      if (!invoiceEditor.lines.length) {
-        setInvoiceEditError('Ajoute au moins une ligne.');
-        return;
-      }
-      const lineItems = [];
-      for (const line of invoiceEditor.lines) {
-        const label = line.label.trim();
-        if (!label) {
-          setInvoiceEditError('Chaque ligne doit avoir un libellé.');
-          return;
-        }
-        const description = line.description.trim();
-        const qty = Number(line.quantity);
-        if (!Number.isFinite(qty) || qty <= 0) {
-          setInvoiceEditError('Quantité invalide.');
-          return;
-        }
-        const unitPriceCents = parseEuroInputCents(line.unitPrice);
-        if (unitPriceCents == null) {
-          setInvoiceEditError('Prix unitaire invalide.');
-          return;
-        }
-        lineItems.push({
-          id: line.id,
-          label,
-          description: description || null,
-          quantity: Math.max(1, Math.trunc(qty)),
-          unitPriceCents,
-          productId: line.productId ?? null,
-          serviceId: line.serviceId ?? null,
-        });
-      }
-      payload.lineItems = lineItems;
+    if (invoiceEditor.status === 'DRAFT') {
+      const items = validateLineItems(invoiceEditor.lines, setInvoiceEditError);
+      if (!items) return;
+      payload.lineItems = items;
     }
 
     setInvoiceEditing(true);
@@ -894,16 +805,9 @@ export function useBillingHandlers({
     try {
       const res = await fetchJson<{ item: InvoiceItemLocal }>(
         `/api/pro/businesses/${businessId}/invoices/${invoiceEditor.invoiceId}`,
-        {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        }
+        { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }
       );
-      if (!res.ok) {
-        setInvoiceEditError(res.error ?? 'Mise à jour impossible.');
-        return;
-      }
+      if (!res.ok) { setInvoiceEditError(res.error ?? 'Mise à jour impossible.'); return; }
       await Promise.all([loadInvoices(), loadProject()]);
       onBillingInfo('Facture mise à jour.');
       closeInvoiceEditor();
@@ -915,29 +819,11 @@ export function useBillingHandlers({
   }
 
   async function handleDeleteInvoice(invoiceId: string) {
-    if (!isAdmin) {
-      onBillingError('Réservé aux admins/owners.');
-      return;
-    }
-    if (typeof window !== 'undefined' && !window.confirm('Supprimer cette facture ? Cette action est irréversible.')) {
-      return;
-    }
-    onBillingError(null);
-    onBillingInfo(null);
-    setInvoiceActionId(invoiceId);
-    try {
-      const res = await fetchJson(`/api/pro/businesses/${businessId}/invoices/${invoiceId}`, { method: 'DELETE' });
-      if (!res.ok) {
-        onBillingError(res.error ?? 'Suppression impossible.');
-        return;
-      }
-      await Promise.all([loadInvoices(), loadProject()]);
-      onBillingInfo('Facture supprimée.');
-    } catch (err) {
-      onBillingError(getErrorMessage(err));
-    } finally {
-      setInvoiceActionId(null);
-    }
+    await handleDeleteDocument(
+      invoiceId, 'invoices',
+      'Supprimer cette facture ? Cette action est irréversible.',
+      setInvoiceActionId, () => Promise.all([loadInvoices(), loadProject()]).then(() => {}), 'Facture supprimée.',
+    );
   }
 
   return {

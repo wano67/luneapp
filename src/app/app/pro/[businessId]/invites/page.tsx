@@ -8,6 +8,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
+import { PageContainer } from '@/components/layouts/PageContainer';
+import { PageHeader } from '@/components/layouts/PageHeader';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import { useActiveBusiness } from '../../ActiveBusinessProvider';
 
@@ -223,16 +225,14 @@ export default function InvitesPage() {
   const otherInvites = invites.filter((inv) => inv.status !== 'PENDING');
 
   return (
-    <div className="space-y-4">
-      <Card className="space-y-3 p-5">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-[var(--text-secondary)]">
-          Invitations — admin
-        </p>
-        <h1 className="text-xl font-semibold text-[var(--text-primary)]">Inviter des membres</h1>
-        <p className="text-sm text-[var(--text-secondary)]">
-          Génère un lien pour rejoindre cette entreprise. Seuls les rôles Admin/Owner peuvent inviter.
-        </p>
+    <PageContainer>
+      <div className="space-y-5">
+      <PageHeader
+        title="Inviter des membres"
+        subtitle="Génère un lien pour rejoindre cette entreprise. Seuls les rôles Admin/Owner peuvent inviter."
+      />
 
+      <Card className="space-y-3 p-5">
         {isAdmin ? (
           <form onSubmit={handleCreateInvite} className="space-y-3">
             <div className="grid gap-3 md:grid-cols-[2fr_1fr_auto] md:items-end">
@@ -398,6 +398,7 @@ export default function InvitesPage() {
           </div>
         )}
       </Card>
-    </div>
+      </div>
+    </PageContainer>
   );
 }

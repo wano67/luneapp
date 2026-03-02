@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import SwitchBusinessModal from './SwitchBusinessModal';
-import { PageHeader } from '../components/PageHeader';
+import { PageHeader } from '@/components/layouts/PageHeader';
 import { ArrowRight } from 'lucide-react';
 import { LogoAvatar } from '@/components/pro/LogoAvatar';
 import { CreateBusinessWizard, defaultDraft, type CreateBusinessDraft } from './components/CreateBusinessWizard';
@@ -568,8 +568,12 @@ export default function ProHomeClient() {
           <PageHeader
             title="Studio"
             subtitle="Vos entreprises et leur activité."
-            primaryAction={{ label: 'Créer un business', onClick: () => setCreateOpen(true) }}
-            secondaryAction={{ label: 'Rejoindre', onClick: () => setJoinOpen(true), variant: 'ghost' }}
+            actions={
+              <div className="flex gap-2">
+                <Button variant="ghost" onClick={() => setJoinOpen(true)}>Rejoindre</Button>
+                <Button onClick={() => setCreateOpen(true)}>Créer un business</Button>
+              </div>
+            }
           />
 
           {kpis.length ? (

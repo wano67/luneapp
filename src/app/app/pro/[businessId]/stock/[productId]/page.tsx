@@ -9,6 +9,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
+import { PageContainer } from '@/components/layouts/PageContainer';
+import { PageHeader } from '@/components/layouts/PageHeader';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import { formatCentsToEuroDisplay, formatCentsToEuroInput, parseEuroToCents, sanitizeEuroInput } from '@/lib/money';
 import { useActiveBusiness } from '../../../ActiveBusinessProvider';
@@ -231,31 +233,34 @@ export default function ProductDetailPage() {
   }
 
   if (!product) {
-    return loading ? <p className="text-sm text-[var(--text-secondary)]">Chargement…</p> : <p className="text-sm text-[var(--danger)]">{error ?? 'Produit introuvable.'}</p>;
+    return (
+      <PageContainer>
+        {loading
+          ? <p className="text-sm text-[var(--text-secondary)]">Chargement…</p>
+          : <p className="text-sm text-[var(--danger)]">{error ?? 'Produit introuvable.'}</p>}
+      </PageContainer>
+    );
   }
 
   return (
-    <div className="space-y-4">
-      <Card className="p-5 space-y-1">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-[var(--text-secondary)]">
-          PRO · Stock
-        </p>
-        <div className="flex flex-wrap items-center gap-2">
-          <h1 className="text-xl font-semibold text-[var(--text-primary)]">{product.name}</h1>
-          <Badge variant="neutral">{product.sku}</Badge>
-          {product.isArchived ? <Badge variant="neutral">Archivé</Badge> : null}
-          <Link href={`/app/pro/${businessId}/stock`}>
-            <Button size="sm" variant="outline">
-              Retour liste
-            </Button>
-          </Link>
-        </div>
-        {actionError ? <p className="text-xs text-[var(--danger)]">{actionError}</p> : null}
-        {success ? <p className="text-xs text-[var(--success)]">{success}</p> : null}
-        <p className="text-sm text-[var(--text-secondary)]">
-          Stock courant: {product.stock ?? 0} {product.unit.toLowerCase()}
-        </p>
-      </Card>
+    <PageContainer>
+      <div className="space-y-4">
+        <PageHeader
+          title={product.name}
+          subtitle={`Stock courant : ${product.stock ?? 0} ${product.unit.toLowerCase()}`}
+          backHref={`/app/pro/${businessId}/stock`}
+          backLabel="Stock"
+          context={
+            <div className="space-y-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="neutral">{product.sku}</Badge>
+                {product.isArchived ? <Badge variant="neutral">Archivé</Badge> : null}
+              </div>
+              {actionError ? <p className="text-xs text-[var(--danger)]">{actionError}</p> : null}
+              {success ? <p className="text-xs text-[var(--success)]">{success}</p> : null}
+            </div>
+          }
+        />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card className="p-5 space-y-3">
@@ -427,6 +432,7 @@ export default function ProductDetailPage() {
           </div>
         )}
       </Card>
-    </div>
+      </div>
+    </PageContainer>
   );
 }

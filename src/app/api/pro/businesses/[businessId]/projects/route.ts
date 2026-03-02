@@ -13,7 +13,7 @@ import {
   mapProjectStatusToScope,
   type ProjectScope,
 } from '@/server/queries/projects';
-import { resolveServiceUnitPriceCents } from '@/server/services/pricing';
+import { resolveServiceUnitPriceCents, computeDiscountedPrice } from '@/server/services/pricing';
 import { pickProjectValueCents } from '@/server/billing/summary';
 import { withBusinessRoute } from '@/server/http/routeHandler';
 import { jsonb } from '@/server/http/json';
@@ -27,25 +27,6 @@ function parseScope(value: string | null): ProjectScope | null {
     return upper as ProjectScope;
   }
   return null;
-}
-
-function applyDiscount(params: {
-  unitPriceCents: bigint;
-  discountType?: string | null;
-  discountValue?: number | null;
-}) {
-  const discountType = params.discountType ?? 'NONE';
-  const discountValue = params.discountValue ?? null;
-  if (discountType === 'PERCENT' && discountValue != null && Number.isFinite(discountValue)) {
-    const bounded = Math.min(100, Math.max(0, Math.trunc(discountValue)));
-    return (params.unitPriceCents * BigInt(100 - bounded)) / BigInt(100);
-  }
-  if (discountType === 'AMOUNT' && discountValue != null && Number.isFinite(discountValue)) {
-    const bounded = Math.max(0, Math.trunc(discountValue));
-    const final = params.unitPriceCents - BigInt(bounded);
-    return final > BigInt(0) ? final : BigInt(0);
-  }
-  return params.unitPriceCents;
 }
 
 // GET /api/pro/businesses/{businessId}/projects
@@ -167,7 +148,7 @@ export const GET = withBusinessRoute({ minRole: 'VIEWER' }, async (ctx, request)
       tjmCents: row.service?.tjmCents ?? null,
     });
     const quantity = row.quantity && row.quantity > 0 ? row.quantity : 1;
-    const finalUnit = applyDiscount({
+    const finalUnit = computeDiscountedPrice({
       unitPriceCents: resolved.unitPriceCents,
       discountType: row.discountType,
       discountValue: row.discountValue,

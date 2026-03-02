@@ -10,6 +10,7 @@ import { PageHeader } from '@/components/layouts/PageHeader';
 import { fetchJson } from '@/lib/apiClient';
 import { formatCentsToEuroDisplay } from '@/lib/money';
 import { onWalletRefresh } from '@/lib/personalEvents';
+import { Skeleton, SkeletonKpiCard } from '@/components/ui/skeleton';
 
 type SummaryResponse = {
   kpis: {
@@ -125,25 +126,40 @@ export default function WalletHomePage() {
       ) : null}
 
       <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-4">
-        <KpiCard
-          label="Solde total"
-          value={loading ? '—' : (kpi?.total ?? '—')}
-        />
-        <KpiCard
-          label="Revenus (mois)"
-          value={loading ? '—' : (kpi?.income ?? '—')}
-          trend="up"
-        />
-        <KpiCard
-          label="Dépenses (mois)"
-          value={loading ? '—' : (kpi?.expense ?? '—')}
-          trend="down"
-        />
-        <KpiCard
-          label="Net (mois)"
-          value={loading ? '—' : (kpi?.net ?? '—')}
-          trend={kpi?.netTrend ?? 'neutral'}
-        />
+        {loading ? (
+          <>
+            <SkeletonKpiCard />
+            <SkeletonKpiCard />
+            <SkeletonKpiCard />
+            <SkeletonKpiCard />
+          </>
+        ) : (
+          <>
+            <KpiCard
+              label="Solde total"
+              value={kpi?.total ?? '—'}
+              className="animate-fade-in-up"
+            />
+            <KpiCard
+              label="Revenus (mois)"
+              value={kpi?.income ?? '—'}
+              trend="up"
+              className="animate-fade-in-up [animation-delay:50ms]"
+            />
+            <KpiCard
+              label="Dépenses (mois)"
+              value={kpi?.expense ?? '—'}
+              trend="down"
+              className="animate-fade-in-up [animation-delay:100ms]"
+            />
+            <KpiCard
+              label="Net (mois)"
+              value={kpi?.net ?? '—'}
+              trend={kpi?.netTrend ?? 'neutral'}
+              className="animate-fade-in-up [animation-delay:150ms]"
+            />
+          </>
+        )}
       </div>
 
       <Card className="p-5">
@@ -158,14 +174,22 @@ export default function WalletHomePage() {
 
         <div className="mt-4 divide-y divide-[var(--border)]">
           {loading ? (
-            <p className="py-3 text-sm text-[var(--text-faint)]">Chargement…</p>
+            Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="flex items-center justify-between gap-3 py-3">
+                <div className="space-y-2">
+                  <Skeleton width="120px" height="14px" />
+                  <Skeleton width="80px" height="10px" />
+                </div>
+                <Skeleton width="70px" height="14px" />
+              </div>
+            ))
           ) : (data?.accounts?.length ?? 0) === 0 ? (
             <p className="py-3 text-sm text-[var(--text-faint)]">
               Aucun compte. Commence par créer un compte dans &quot;Comptes&quot;.
             </p>
           ) : (
             data!.accounts.map((a) => (
-              <div key={a.id} className="flex items-center justify-between gap-3 py-3">
+              <div key={a.id} className="flex items-center justify-between gap-3 py-3 animate-fade-in-up">
                 <div className="min-w-0">
                   <p className="truncate font-semibold">{a.name}</p>
                   <p className="text-xs text-[var(--text-faint)]">
@@ -197,12 +221,23 @@ export default function WalletHomePage() {
 
         <div className="mt-4 divide-y divide-[var(--border)]">
           {loading ? (
-            <p className="py-3 text-sm text-[var(--text-faint)]">Chargement…</p>
+            Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="flex items-center justify-between gap-3 py-3">
+                <div className="space-y-2">
+                  <Skeleton width="140px" height="14px" />
+                  <Skeleton width="100px" height="10px" />
+                </div>
+                <div className="space-y-2 text-right">
+                  <Skeleton width="60px" height="14px" />
+                  <Skeleton width="40px" height="10px" />
+                </div>
+              </div>
+            ))
           ) : (data?.latestTransactions?.length ?? 0) === 0 ? (
             <p className="py-3 text-sm text-[var(--text-faint)]">Aucune transaction.</p>
           ) : (
             data!.latestTransactions.map((t) => (
-              <div key={t.id} className="flex items-center justify-between gap-3 py-3">
+              <div key={t.id} className="flex items-center justify-between gap-3 py-3 animate-fade-in-up">
                 <div className="min-w-0">
                   <p className="truncate font-semibold">{t.label}</p>
                   <p className="text-xs text-[var(--text-faint)]">

@@ -10,7 +10,9 @@ import { Select } from '@/components/ui/select';
 import { PageContainer } from '@/components/layouts/PageContainer';
 import { PageHeader } from '@/components/layouts/PageHeader';
 import Modal from '@/components/ui/modal';
-import CsvImportModal from '@/components/CsvImportModal';
+import dynamic from 'next/dynamic';
+
+const CsvImportModal = dynamic(() => import('@/components/CsvImportModal'), { ssr: false });
 import { useFileDropHandler } from '@/components/file-drop/FileDropProvider';
 import { emitWalletRefresh } from '@/lib/personalEvents';
 

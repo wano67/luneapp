@@ -11,15 +11,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { badRequest, getRequestId, withRequestId } from '@/server/http/apiUtils';
 import { isTransientDbError } from '@/server/db/prisma-errors';
 import { isDbCircuitOpen, markDbDown } from '@/server/db/db-circuit';
-
-function normalizeEmail(email: string) {
-  return email.trim().toLowerCase();
-}
-
-function isValidEmail(email: string) {
-  if (!email || email.length > 254) return false;
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-}
+import { isValidEmail, normalizeEmail } from '@/lib/validation/email';
 
 function isValidPassword(password: string) {
   if (typeof password !== 'string') return false;

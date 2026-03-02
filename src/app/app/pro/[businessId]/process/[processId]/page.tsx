@@ -12,7 +12,8 @@ import { Modal } from '@/components/ui/modal';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import { useActiveBusiness } from '../../../ActiveBusinessProvider';
 import RoleBanner from '@/components/RoleBanner';
-import { PageHeader } from '../../../../components/PageHeader';
+import { PageContainer } from '@/components/layouts/PageContainer';
+import { PageHeader } from '@/components/layouts/PageHeader';
 
 type ProcessStatus = 'ACTIVE' | 'ARCHIVED';
 
@@ -361,32 +362,25 @@ export default function ProcessDetailPage() {
   }
 
   return (
-    <div className="space-y-5">
+    <PageContainer>
+      <div className="space-y-5">
       <RoleBanner role={actorRole} />
       <PageHeader
         backHref={`/app/pro/${businessId}/process`}
         backLabel="Process"
         title={process?.name ?? `Process #${processId}`}
-        subtitle={process?.description ?? 'Suivi des étapes et de l’exécution'}
-        primaryAction={
-          isAdmin
-            ? {
-                label: 'Ajouter une étape',
-                onClick: () => openStepModal(),
-              }
-            : undefined
-        }
-        secondaryAction={
-          isAdmin
-            ? {
-                label: 'Modifier',
-                onClick: () => {
-                  if (!process) return;
-                  setEditOpen(true);
-                },
-                variant: 'outline',
-              }
-            : undefined
+        subtitle={process?.description ?? "Suivi des \u00e9tapes et de l\u2019ex\u00e9cution"}
+        actions={
+          isAdmin ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => { if (process) setEditOpen(true); }}>
+                Modifier
+              </Button>
+              <Button size="sm" onClick={() => openStepModal()}>
+                Ajouter une \u00e9tape
+              </Button>
+            </div>
+          ) : undefined
         }
       />
 
@@ -619,6 +613,7 @@ export default function ProcessDetailPage() {
           </div>
         </form>
       </Modal>
-    </div>
+      </div>
+    </PageContainer>
   );
 }

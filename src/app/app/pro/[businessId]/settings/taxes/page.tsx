@@ -2,7 +2,7 @@
 
 import { useParams } from 'next/navigation';
 import { SettingsForm } from '../SettingsForm';
-import { PageHeader } from '../../../../components/PageHeader';
+import { PageHeader } from '@/components/layouts/PageHeader';
 
 export default function TaxesSettingsPage() {
   const params = useParams();

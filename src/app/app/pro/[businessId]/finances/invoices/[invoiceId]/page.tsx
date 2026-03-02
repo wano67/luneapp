@@ -7,6 +7,8 @@ import { useParams, useRouter } from 'next/navigation';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { PageContainer } from '@/components/layouts/PageContainer';
+import { PageHeader } from '@/components/layouts/PageHeader';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import { getInvoiceStatusLabelFR, getPaymentStatusLabelFR } from '@/lib/billingStatus';
 import { useActiveBusiness } from '../../../../ActiveBusinessProvider';
@@ -220,24 +222,15 @@ export default function InvoiceDetailPage() {
   const pdfUrl = `/api/pro/businesses/${businessId}/invoices/${invoiceId}/pdf`;
 
   return (
-    <div className="space-y-5">
-      <Card className="space-y-3 p-5">
-        <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-[var(--text-secondary)]">
-              Pro · Facture
-            </p>
-            <h1 className="text-xl font-semibold text-[var(--text-primary)]">Facture #{invoiceId}</h1>
-            <p className="text-sm text-[var(--text-secondary)]">
-              Détail facture : montant, statut, échéance et lignes.
-            </p>
-          </div>
-          <Button asChild variant="outline">
-            <Link href={`/app/pro/${businessId}/finances`}>Retour finances</Link>
-          </Button>
-        </div>
-        {requestHint ? <p className="text-xs text-[var(--text-secondary)]">{requestHint}</p> : null}
-      </Card>
+    <PageContainer>
+      <div className="space-y-5">
+        <PageHeader
+          title={`Facture #${invoiceId}`}
+          subtitle="Détail facture : montant, statut, échéance et lignes."
+          backHref={`/app/pro/${businessId}/finances`}
+          backLabel="Finances"
+          context={requestHint ? <p className="text-xs text-[var(--text-secondary)]">{requestHint}</p> : undefined}
+        />
 
       {loading ? (
         <Card className="p-5">
@@ -447,6 +440,7 @@ export default function InvoiceDetailPage() {
           <p className="text-sm text-[var(--text-secondary)]">Facture introuvable.</p>
         </Card>
       )}
-    </div>
+      </div>
+    </PageContainer>
   );
 }

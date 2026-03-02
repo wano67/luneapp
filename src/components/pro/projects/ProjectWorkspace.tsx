@@ -11,7 +11,6 @@ import {
   formatDate,
 } from '@/components/pro/projects/workspace-ui';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
-import { formatCurrencyEUR } from '@/lib/formatCurrency';
 import { useActiveBusiness } from '@/app/app/pro/ActiveBusinessProvider';
 import type { ChecklistItem } from '@/components/pro/projects/ProjectSetupChecklist';
 import { OverviewTab } from '@/components/pro/projects/tabs/OverviewTab';
@@ -23,16 +22,10 @@ import {
   isProjectOverdue,
   shouldWarnProjectCompletion,
 } from '@/lib/projectStatusUi';
-import { parseEuroToCents, sanitizeEuroInput } from '@/lib/money';
+import { sanitizeEuroInput } from '@/lib/money';
 import { QuoteWizardModal } from '@/components/pro/projects/modals/QuoteWizardModal';
-import { QuoteDateModal } from '@/components/pro/projects/modals/QuoteDateModal';
-import { CancelQuoteModal } from '@/components/pro/projects/modals/CancelQuoteModal';
-import { InvoiceDateModal } from '@/components/pro/projects/modals/InvoiceDateModal';
-import { DepositDateModal } from '@/components/pro/projects/modals/DepositDateModal';
-import { StagedInvoiceModal } from '@/components/pro/projects/modals/StagedInvoiceModal';
 import { PaymentModal } from '@/components/pro/projects/modals/PaymentModal';
-import { QuoteEditorModal } from '@/components/pro/projects/modals/QuoteEditorModal';
-import { InvoiceEditorModal } from '@/components/pro/projects/modals/InvoiceEditorModal';
+import { BillingModals } from '@/components/pro/projects/modals/BillingModals';
 import { FilesTab } from '@/components/pro/projects/tabs/FilesTab';
 import { WorkTab } from '@/components/pro/projects/tabs/WorkTab';
 import { TeamTab } from '@/components/pro/projects/tabs/TeamTab';
@@ -41,6 +34,7 @@ import { useQuoteWizard } from '@/components/pro/projects/hooks/useQuoteWizard';
 import { usePaymentModal } from '@/components/pro/projects/hooks/usePaymentModal';
 import { useProjectDataLoaders } from '@/components/pro/projects/hooks/useProjectDataLoaders';
 import { useBillingHandlers } from '@/components/pro/projects/hooks/useBillingHandlers';
+import { useBillingComputed } from '@/components/pro/projects/hooks/useBillingComputed';
 import { useTeamManagement } from '@/components/pro/projects/hooks/useTeamManagement';
 import { useServiceManagement } from '@/components/pro/projects/hooks/useServiceManagement';
 import { useProjectSetupModals } from '@/components/pro/projects/hooks/useProjectSetupModals';
@@ -60,7 +54,19 @@ type ProjectDetail = {
   depositStatus?: string | null;
   depositPaidAt?: string | null;
   billingQuoteId?: string | null;
-  billingSummary?: BillingSummary | null;
+  billingSummary?: {
+    source: 'QUOTE' | 'PRICING';
+    referenceQuoteId: string | null;
+    currency: string;
+    totalCents: string;
+    depositPercent: number;
+    depositCents: string;
+    balanceCents: string;
+    alreadyInvoicedCents: string;
+    alreadyPaidCents: string;
+    remainingToCollectCents: string;
+    remainingCents: string;
+  } | null;
   valueCents?: string | null;
   archivedAt?: string | null;
   startDate: string | null;
@@ -106,66 +112,6 @@ type MemberItem = {
   organizationUnit?: { id: string; name: string } | null;
 };
 
-type BillingSummary = {
-  source: 'QUOTE' | 'PRICING';
-  referenceQuoteId: string | null;
-  currency: string;
-  totalCents: string;
-  depositPercent: number;
-  depositCents: string;
-  balanceCents: string;
-  alreadyInvoicedCents: string;
-  alreadyPaidCents: string;
-  remainingToCollectCents: string;
-  remainingCents: string;
-};
-
-type QuoteItem = {
-  id: string;
-  status: string;
-  number: string | null;
-  cancelledAt: string | null;
-  cancelReason: string | null;
-  totalCents: string;
-  depositCents: string;
-  balanceCents: string;
-  depositPercent: number;
-  currency: string;
-  issuedAt: string | null;
-  signedAt: string | null;
-  expiresAt: string | null;
-  note: string | null;
-  createdAt: string;
-  items?: Array<{
-    id: string;
-    serviceId: string | null;
-    label: string;
-    description?: string | null;
-    quantity: number;
-    unitPriceCents: string;
-    totalCents: string;
-  }>;
-};
-
-type InvoiceItem = {
-  id: string;
-  status: string;
-  number: string | null;
-  totalCents: string;
-  depositCents: string;
-  balanceCents: string;
-  currency: string;
-  issuedAt: string | null;
-  dueAt: string | null;
-  paidAt: string | null;
-  paidCents?: string;
-  remainingCents?: string;
-  paymentStatus?: string | null;
-  lastPaidAt?: string | null;
-  createdAt: string;
-  quoteId: string | null;
-};
-
 
 const tabs = [
   { key: 'overview', label: "Vue d\u2019ensemble" },
@@ -174,14 +120,6 @@ const tabs = [
   { key: 'billing', label: 'Facturation' },
   { key: 'files', label: 'Documents' },
 ];
-
-
-
-function getInvoicePaidCents(invoice: InvoiceItem): number {
-  const paid = invoice.paidCents != null ? Number(invoice.paidCents) : NaN;
-  if (Number.isFinite(paid)) return paid;
-  return invoice.status === 'PAID' ? Number(invoice.totalCents) : 0;
-}
 
 
 const OVERVIEW_PREVIEW_COUNT = 3;
@@ -205,86 +143,38 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
   const [markingCompleted, setMarkingCompleted] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
-
-
-  const {
-    project,
-    services,
-    setServices,
-    tasks,
-    members,
-    setMembers,
-    projectMembers,
-    organizationUnits,
-    activityItems,
-    documents,
-    quotes,
-    invoices,
-    billingSettings,
-    loading,
-    error,
-    clients,
-    catalogServices,
-    catalogSearchResults,
-    serviceTemplates,
-    templatesLoading,
-    loadProject,
-    loadServices,
-    loadTasks,
-    loadMembers,
-    loadProjectMembers,
-    loadOrganizationUnits,
-    loadActivity,
-    loadDocuments,
-    loadProjectDocuments,
-    projectDocuments,
-    loadQuotes,
-    loadInvoices,
-    loadClients,
-    loadCatalogServices,
-    loadServiceTemplates,
-    refetchAll,
-  } = useProjectDataLoaders({
-    businessId,
-    projectId,
-    onBillingError: setBillingError,
-  });
+  // ─── Data loaders ───────────────────────────────────────────────────────────
 
   const {
-    taskGroupExpanded,
-    setTaskGroupExpanded,
-    taskRowExpanded,
-    setTaskRowExpanded,
-    openServiceTasks,
-    setOpenServiceTasks,
-    taskUpdating,
-    templatesApplying,
-    updateTaskDueDate,
-    updateTask,
-    createTask,
-    deleteTask,
+    project, services, setServices, tasks, members, setMembers,
+    projectMembers, organizationUnits, activityItems, documents,
+    quotes, invoices, billingSettings, loading, error, clients,
+    catalogServices, catalogSearchResults, serviceTemplates, templatesLoading,
+    loadProject, loadServices, loadTasks, loadMembers, loadProjectMembers,
+    loadOrganizationUnits, loadActivity, loadDocuments, loadProjectDocuments,
+    projectDocuments, loadQuotes, loadInvoices, loadClients,
+    loadCatalogServices, loadServiceTemplates, refetchAll,
+  } = useProjectDataLoaders({ businessId, projectId, onBillingError: setBillingError });
+
+  // ─── Task handlers ──────────────────────────────────────────────────────────
+
+  const {
+    taskGroupExpanded, setTaskGroupExpanded,
+    taskRowExpanded, setTaskRowExpanded,
+    openServiceTasks, setOpenServiceTasks,
+    taskUpdating, templatesApplying,
+    updateTaskDueDate, updateTask, createTask, deleteTask,
     handleApplyServiceTemplates: applyServiceTemplatesRaw,
-  } = useTaskHandlers({
-    businessId,
-    projectId,
-    isAdmin,
-    loadTasks,
-    loadActivity,
-    onBillingError: setBillingError,
-  });
+  } = useTaskHandlers({ businessId, projectId, isAdmin, loadTasks, loadActivity, onBillingError: setBillingError });
+
+  // ─── Documents ──────────────────────────────────────────────────────────────
 
   const {
-    uploading: docUploading,
-    uploadDocument,
-    deleteDocument,
-  } = useDocumentUpload({
-    businessId,
-    projectId,
-    loadProjectDocuments,
-    onError: setBillingError,
-  });
+    uploading: docUploading, uploadDocument, deleteDocument,
+  } = useDocumentUpload({ businessId, projectId, loadProjectDocuments, onError: setBillingError });
 
-  // Current user ID for messaging
+  // ─── Current user (for messaging) ──────────────────────────────────────────
+
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   useEffect(() => {
     let cancelled = false;
@@ -296,116 +186,51 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
     return () => { cancelled = true; };
   }, []);
 
-  const messaging = useMessaging({
-    businessId,
-    projectId,
-    enabled: activeTab === 'team' && !!currentUserId,
-    onError: setBillingError,
-  });
+  const messaging = useMessaging({ businessId, projectId, enabled: activeTab === 'team' && !!currentUserId, onError: setBillingError });
 
-
-
+  // ─── Payment modal ─────────────────────────────────────────────────────────
 
   const {
-    paymentModal,
-    paymentItems,
-    paymentLoading,
-    paymentError,
-    paymentNotice,
-    paymentSaving,
-    paymentDeletingId,
-    paymentForm,
-    setPaymentForm,
-    activePaymentInvoice,
-    paymentTotalCents,
-    paymentPaidCents,
-    paymentRemainingCents,
-    applyPaymentShortcut,
-    openPaymentModal,
-    closePaymentModal,
-    handleSavePayment,
-    handleDeletePayment,
-  } = usePaymentModal({
-    businessId,
-    isAdmin,
-    invoices,
-    loadInvoices,
-    onBillingInfo: setBillingInfo,
-    onBillingError: setBillingError,
-  });
+    paymentModal, paymentItems, paymentLoading, paymentError, paymentNotice,
+    paymentSaving, paymentDeletingId, paymentForm, setPaymentForm,
+    activePaymentInvoice, paymentTotalCents, paymentPaidCents, paymentRemainingCents,
+    applyPaymentShortcut, openPaymentModal, closePaymentModal,
+    handleSavePayment, handleDeletePayment,
+  } = usePaymentModal({ businessId, isAdmin, invoices, loadInvoices, onBillingInfo: setBillingInfo, onBillingError: setBillingError });
 
-
-
-
+  // ─── Quote wizard ──────────────────────────────────────────────────────────
 
   const {
-    quoteWizardOpen,
-    quoteWizardStep,
-    setQuoteWizardStep,
-    quoteWizardLines,
-    quoteWizardSearch,
-    setQuoteWizardSearch,
-    quoteWizardGenerateTasks,
-    setQuoteWizardGenerateTasks,
-    quoteWizardAssigneeId,
-    setQuoteWizardAssigneeId,
-    quoteWizardDueOffsetDays,
-    setQuoteWizardDueOffsetDays,
-    quoteWizardError,
-    quoteWizardInfo,
-    quoteWizardSaving,
-    quoteWizardResult,
-    wizardLineValidation,
-    wizardCanContinue,
-    openQuoteWizard,
-    closeQuoteWizard,
-    addCatalogLine,
-    addCustomLine,
-    updateWizardLine,
-    removeWizardLine,
+    quoteWizardOpen, quoteWizardStep, setQuoteWizardStep,
+    quoteWizardLines, quoteWizardSearch, setQuoteWizardSearch,
+    quoteWizardGenerateTasks, setQuoteWizardGenerateTasks,
+    quoteWizardAssigneeId, setQuoteWizardAssigneeId,
+    quoteWizardDueOffsetDays, setQuoteWizardDueOffsetDays,
+    quoteWizardError, quoteWizardInfo, quoteWizardSaving, quoteWizardResult,
+    wizardLineValidation, wizardCanContinue,
+    openQuoteWizard, closeQuoteWizard,
+    addCatalogLine, addCustomLine, updateWizardLine, removeWizardLine,
     handleWizardGenerateQuote,
   } = useQuoteWizard({
-    businessId,
-    projectId,
-    isAdmin,
-    serviceTemplates,
-    templatesLoading,
-    loadCatalogServices,
-    loadMembers,
-    loadServiceTemplates,
-    refetchAll,
+    businessId, projectId, isAdmin, serviceTemplates, templatesLoading,
+    loadCatalogServices, loadMembers, loadServiceTemplates, refetchAll,
     onBillingInfo: setBillingInfo,
   });
 
+  // ─── Team management ───────────────────────────────────────────────────────
+
   const {
-    accessModalOpen,
-    setAccessModalOpen,
-    accessInfo,
-    unitsModalOpen,
-    setUnitsModalOpen,
-    unitErrors,
-    teamInfo,
-    unitDraftName,
-    setUnitDraftName,
-    unitDraftOrder,
-    setUnitDraftOrder,
-    unitDrafts,
-    setUnitDrafts,
-    handleAddProjectMember,
-    handleRemoveProjectMember,
-    handleCreateUnit,
-    handleUpdateUnit,
-    handleDeleteUnit,
+    accessModalOpen, setAccessModalOpen, accessInfo,
+    unitsModalOpen, setUnitsModalOpen, unitErrors,
+    teamInfo, unitDraftName, setUnitDraftName,
+    unitDraftOrder, setUnitDraftOrder,
+    unitDrafts, setUnitDrafts,
+    handleAddProjectMember, handleRemoveProjectMember,
+    handleCreateUnit, handleUpdateUnit, handleDeleteUnit,
     handleAssignMemberToUnit,
-  } = useTeamManagement({
-    businessId,
-    projectId,
-    isAdmin,
-    organizationUnits,
-    loadMembers,
-    loadProjectMembers,
-    loadOrganizationUnits,
-  });
+  } = useTeamManagement({ businessId, projectId, isAdmin, organizationUnits, loadMembers, loadProjectMembers, loadOrganizationUnits });
+
+  // ─── Patch project helper ─────────────────────────────────────────────────
 
   const patchProject = async (body: Record<string, unknown>) => {
     return fetchJson<{ item: ProjectDetail }>(`/api/pro/businesses/${businessId}/projects/${projectId}`, {
@@ -415,154 +240,74 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
     });
   };
 
-  const {
-    serviceDrafts,
-    setServiceDrafts,
-    lineSavingId,
-    lineErrors,
-    setLineErrors,
-    openNotes,
-    setOpenNotes,
-    draggingServiceId,
-    dragOverServiceId,
-    reordering,
-    prestationsDraft,
-    setPrestationsDraft,
-    prestationsSaving,
-    prestationsError,
-    prestationsDirty,
-    handleSavePrestations,
-    handleServiceDragStart,
-    handleServiceDragOver,
-    handleServiceDrop,
-    handleServiceDragEnd,
-    handleUpdateService,
-    handleDeleteService,
-  } = useServiceManagement({
-    businessId,
-    projectId,
-    isAdmin,
-    services,
-    setServices,
-    loadServices,
-    refetchAll,
-    patchProject,
-    loadProject,
-    projectPrestationsText: project?.prestationsText,
-    onBillingInfo: setBillingInfo,
-    onBillingError: setBillingError,
-  });
+  // ─── Service management ─────────────────────────────────────────────────────
 
   const {
-    activeSetupModal,
-    setActiveSetupModal,
-    saving,
-    modalError,
-    selectedClientId,
-    setSelectedClientId,
-    startDateInput,
-    setStartDateInput,
-    endDateInput,
-    setEndDateInput,
-    serviceSelections,
-    setServiceSelections,
-    quickServiceDraft,
-    setQuickServiceDraft,
-    quickServiceSaving,
-    quickServiceError,
-    taskAssignments,
-    setTaskAssignments,
-    generateTasksOnAdd,
-    setGenerateTasksOnAdd,
-    taskAssigneeId,
-    setTaskAssigneeId,
-    taskDueOffsetDays,
-    setTaskDueOffsetDays,
-    inviteEmail,
-    setInviteEmail,
-    inviteRole,
-    setInviteRole,
-    documentKind,
-    setDocumentKind,
-    setDocumentFile,
-    clientSearch,
-    setClientSearch,
-    clientCreateMode,
-    setClientCreateMode,
-    newClientName,
-    setNewClientName,
-    newClientEmail,
-    setNewClientEmail,
-    serviceSearch,
-    setServiceSearch,
-    selectedServiceIds,
-    availableTags,
-    selectedTagIds,
-    setSelectedTagIds,
-    tagsLoading,
-    closeModal,
-    handleAttachClient,
-    handleCreateAndAttachClient,
-    handleUpdateTags,
-    handleUpdateDates,
-    handleAddServices,
-    handleQuickCreateService,
-    handleAssignTasks,
-    handleInviteMember,
-    handleUploadDocument,
+    serviceDrafts, setServiceDrafts, lineSavingId,
+    lineErrors, setLineErrors, openNotes, setOpenNotes,
+    draggingServiceId, dragOverServiceId, reordering,
+    prestationsDraft, setPrestationsDraft, prestationsSaving,
+    prestationsError, prestationsDirty,
+    handleSavePrestations, handleServiceDragStart, handleServiceDragOver,
+    handleServiceDrop, handleServiceDragEnd, handleUpdateService, handleDeleteService,
+  } = useServiceManagement({
+    businessId, projectId, isAdmin, services, setServices,
+    loadServices, refetchAll, patchProject, loadProject,
+    projectPrestationsText: project?.prestationsText,
+    onBillingInfo: setBillingInfo, onBillingError: setBillingError,
+  });
+
+  // ─── Setup modals ──────────────────────────────────────────────────────────
+
+  const {
+    activeSetupModal, setActiveSetupModal, saving, modalError,
+    selectedClientId, setSelectedClientId,
+    startDateInput, setStartDateInput, endDateInput, setEndDateInput,
+    serviceSelections, setServiceSelections,
+    quickServiceDraft, setQuickServiceDraft, quickServiceSaving, quickServiceError,
+    taskAssignments, setTaskAssignments,
+    generateTasksOnAdd, setGenerateTasksOnAdd,
+    taskAssigneeId, setTaskAssigneeId, taskDueOffsetDays, setTaskDueOffsetDays,
+    inviteEmail, setInviteEmail, inviteRole, setInviteRole,
+    documentKind, setDocumentKind, setDocumentFile,
+    clientSearch, setClientSearch, clientCreateMode, setClientCreateMode,
+    newClientName, setNewClientName, newClientEmail, setNewClientEmail,
+    serviceSearch, setServiceSearch, selectedServiceIds,
+    availableTags, selectedTagIds, setSelectedTagIds, tagsLoading,
+    closeModal, handleAttachClient, handleCreateAndAttachClient,
+    handleUpdateTags, handleUpdateDates, handleAddServices,
+    handleQuickCreateService, handleAssignTasks, handleInviteMember, handleUploadDocument,
   } = useProjectSetupModals({
-    businessId,
-    projectId,
-    isAdmin,
+    businessId, projectId, isAdmin,
     projectClientId: project?.clientId ?? null,
     projectTagReferences: project?.tagReferences ?? [],
     projectStartDate: project?.startDate ?? null,
     projectEndDate: project?.endDate ?? null,
-    clients,
-    catalogSearchResults,
-    serviceTemplates,
-    templatesLoading,
-    members,
-    tasks,
-    services,
-    patchProject,
-    refetchAll,
-    loadClients,
-    loadCatalogServices,
-    loadMembers,
-    loadTasks,
-    loadDocuments,
-    loadServiceTemplates,
-    setMembers,
-    onBillingInfo: setBillingInfo,
-    onBillingError: setBillingError,
+    clients, catalogSearchResults, serviceTemplates, templatesLoading,
+    members, tasks, services, patchProject, refetchAll,
+    loadClients, loadCatalogServices, loadMembers, loadTasks,
+    loadDocuments, loadServiceTemplates, setMembers,
+    onBillingInfo: setBillingInfo, onBillingError: setBillingError,
   });
 
   const handleApplyServiceTemplates = (projectServiceId: string) =>
     applyServiceTemplatesRaw(projectServiceId, taskAssigneeId, taskDueOffsetDays);
 
+  // ─── Mark completed ─────────────────────────────────────────────────────────
+
   async function handleMarkCompleted() {
     if (!project) return;
-    if (!isAdmin) {
-      setActionError('Réservé aux admins/owners.');
-      return;
-    }
+    if (!isAdmin) { setActionError('Réservé aux admins/owners.'); return; }
     const warning = shouldWarnProjectCompletion(project.quoteStatus ?? null, project.depositStatus ?? null);
     const confirmMessage = warning
       ? 'Devis non signé ou acompte non validé. Marquer terminé quand même ?'
       : 'Marquer ce projet comme terminé ?';
     if (typeof window !== 'undefined' && !window.confirm(confirmMessage)) return;
-
-    const payload: Record<string, unknown> = { status: 'COMPLETED' };
-
     setMarkingCompleted(true);
     setActionError(null);
     try {
-      const res = await patchProject(payload);
-      if (!res.ok) {
-        setActionError(res.error ?? 'Impossible de marquer le projet terminé.');
-        return;
-      }
+      const res = await patchProject({ status: 'COMPLETED' });
+      if (!res.ok) { setActionError(res.error ?? 'Impossible de marquer le projet terminé.'); return; }
       await refetchAll();
     } catch (err) {
       setActionError(getErrorMessage(err));
@@ -571,25 +316,15 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
     }
   }
 
-  const statusLabel = useMemo(() => {
-    return getProjectStatusLabelFR(project?.status ?? null);
-  }, [project?.status]);
+  // ─── Status/scope display ──────────────────────────────────────────────────
 
-  const scopeLabel = useMemo(() => {
-    return getProjectScopeLabelFR(project?.status ?? null, project?.archivedAt ?? null);
-  }, [project?.archivedAt, project?.status]);
+  const statusLabel = useMemo(() => getProjectStatusLabelFR(project?.status ?? null), [project?.status]);
+  const scopeLabel = useMemo(() => getProjectScopeLabelFR(project?.status ?? null, project?.archivedAt ?? null), [project?.archivedAt, project?.status]);
+  const scopeVariant = useMemo(() => getProjectScopeVariant(project?.status ?? null, project?.archivedAt ?? null), [project?.archivedAt, project?.status]);
+  const showScopeBadge = useMemo(() => scopeLabel.toLowerCase() !== statusLabel.toLowerCase(), [scopeLabel, statusLabel]);
+  const isOverdue = useMemo(() => isProjectOverdue(project?.endDate ?? null, project?.status ?? null, project?.archivedAt ?? null), [project?.archivedAt, project?.endDate, project?.status]);
 
-  const scopeVariant = useMemo(() => {
-    return getProjectScopeVariant(project?.status ?? null, project?.archivedAt ?? null);
-  }, [project?.archivedAt, project?.status]);
-
-  const showScopeBadge = useMemo(() => {
-    return scopeLabel.toLowerCase() !== statusLabel.toLowerCase();
-  }, [scopeLabel, statusLabel]);
-
-  const isOverdue = useMemo(() => {
-    return isProjectOverdue(project?.endDate ?? null, project?.status ?? null, project?.archivedAt ?? null);
-  }, [project?.archivedAt, project?.endDate, project?.status]);
+  // ─── Checklist ──────────────────────────────────────────────────────────────
 
   const checklistItems: ChecklistItem[] = useMemo(() => {
     const hasClient = Boolean(project?.clientId);
@@ -610,6 +345,8 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
     ];
   }, [businessId, project?.clientId, project?.endDate, project?.tagReferences, projectId, services.length, tasks, members.length, documents.length]);
 
+  // ─── Tab sync ───────────────────────────────────────────────────────────────
+
   useEffect(() => {
     const tabParam = searchParams?.get('tab');
     if (tabParam && ['overview', 'work', 'team', 'billing', 'files'].includes(tabParam)) {
@@ -618,54 +355,37 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
   }, [searchParams]);
 
   const showSetup = (searchParams?.get('setup') ?? '') === '1';
+
+  // ─── Overview computed ──────────────────────────────────────────────────────
+
   const upcomingTasks = useMemo(() => {
     return tasks
       .filter((t) => t.status !== 'DONE' && (t.subtasksCount ?? 0) === 0)
-      .sort(
-        (a, b) =>
-          (a.dueDate ? new Date(a.dueDate).getTime() : Infinity) -
-          (b.dueDate ? new Date(b.dueDate).getTime() : Infinity)
-      );
+      .sort((a, b) => (a.dueDate ? new Date(a.dueDate).getTime() : Infinity) - (b.dueDate ? new Date(b.dueDate).getTime() : Infinity));
   }, [tasks]);
 
   const servicesWithTasks = useMemo(() => {
-    return services.map((service) => ({
-      service,
-      tasks: tasks.filter((t) => t.projectServiceId === service.id),
-    }));
+    return services.map((service) => ({ service, tasks: tasks.filter((t) => t.projectServiceId === service.id) }));
   }, [services, tasks]);
 
-  const servicesOverview = showAllServicesOverview
-    ? servicesWithTasks
-    : servicesWithTasks.slice(0, OVERVIEW_PREVIEW_COUNT);
+  const servicesOverview = showAllServicesOverview ? servicesWithTasks : servicesWithTasks.slice(0, OVERVIEW_PREVIEW_COUNT);
   const showServicesToggle = servicesWithTasks.length > OVERVIEW_PREVIEW_COUNT;
 
-  const upcomingTasksOverview = showAllActionsOverview
-    ? upcomingTasks
-    : upcomingTasks.slice(0, OVERVIEW_PREVIEW_COUNT);
+  const upcomingTasksOverview = showAllActionsOverview ? upcomingTasks : upcomingTasks.slice(0, OVERVIEW_PREVIEW_COUNT);
   const showActionsToggle = upcomingTasks.length > OVERVIEW_PREVIEW_COUNT;
 
-  const activityOverview = showAllActivity
-    ? activityItems
-    : activityItems.slice(0, OVERVIEW_ACTIVITY_COUNT);
+  const activityOverview = showAllActivity ? activityItems : activityItems.slice(0, OVERVIEW_ACTIVITY_COUNT);
   const showActivityToggle = activityItems.length > OVERVIEW_ACTIVITY_COUNT;
 
   const projectMembersPreview = projectMembers.slice(0, OVERVIEW_MEMBERS_COUNT);
   const projectMembersOverflow = Math.max(0, projectMembers.length - projectMembersPreview.length);
-  const projectMemberIds = useMemo(
-    () => new Set(projectMembers.map((member) => member.membershipId)),
-    [projectMembers]
-  );
-  const availableMembers = useMemo(
-    () =>
-      members.filter(
-        (member) =>
-          !projectMemberIds.has(member.membershipId) &&
-          member.role !== 'OWNER' &&
-          member.role !== 'ADMIN'
-      ),
+  const projectMemberIds = useMemo(() => new Set(projectMembers.map((member) => member.membershipId)), [projectMembers]);
+  const availableMembers = useMemo(() =>
+    members.filter((member) => !projectMemberIds.has(member.membershipId) && member.role !== 'OWNER' && member.role !== 'ADMIN'),
     [members, projectMemberIds]
   );
+
+  // ─── Work tab computed ──────────────────────────────────────────────────────
 
   const filteredTasks = useMemo(() => {
     if (statusFilter === 'all') return tasks;
@@ -674,12 +394,7 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
 
   const subtasksByParentId = useMemo(() => {
     const record: Record<string, TaskItem[]> = {};
-    tasks.forEach((task) => {
-      if (!task.parentTaskId) return;
-      const bucket = record[task.parentTaskId] ?? [];
-      bucket.push(task);
-      record[task.parentTaskId] = bucket;
-    });
+    tasks.forEach((task) => { if (task.parentTaskId) { (record[task.parentTaskId] ??= []).push(task); } });
     return record;
   }, [tasks]);
 
@@ -689,38 +404,24 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
       const key = task.assigneeUserId ?? 'unassigned';
       const existing = groups.get(key);
       if (!existing) {
-        const label = task.assigneeName || task.assigneeEmail || 'Non assignées';
-        groups.set(key, {
-          label,
-          name: task.assigneeName,
-          email: task.assigneeEmail,
-          tasks: [task],
-        });
+        groups.set(key, { label: task.assigneeName || task.assigneeEmail || 'Non assignées', name: task.assigneeName, email: task.assigneeEmail, tasks: [task] });
       } else {
         existing.tasks.push(task);
       }
     }
-    const list = Array.from(groups.entries()).map(([key, value]) => ({
-      key,
-      ...value,
-    }));
-    list.sort((a, b) => {
-      if (a.key === 'unassigned') return -1;
-      if (b.key === 'unassigned') return 1;
-      return a.label.localeCompare(b.label);
-    });
+    const list = Array.from(groups.entries()).map(([key, value]) => ({ key, ...value }));
+    list.sort((a, b) => { if (a.key === 'unassigned') return -1; if (b.key === 'unassigned') return 1; return a.label.localeCompare(b.label); });
     return list;
   }, [filteredTasks]);
+
+  // ─── Team computed ──────────────────────────────────────────────────────────
 
   const teamMembers = useMemo(() => {
     if (members.length) return members;
     return projectMembers.map<MemberItem>((member) => ({
-      membershipId: member.membershipId,
-      userId: member.user.id,
-      email: member.user.email ?? '',
-      name: member.user.name,
-      role: member.role,
-      organizationUnit: member.organizationUnit ?? null,
+      membershipId: member.membershipId, userId: member.user.id,
+      email: member.user.email ?? '', name: member.user.name,
+      role: member.role, organizationUnit: member.organizationUnit ?? null,
     }));
   }, [members, projectMembers]);
 
@@ -745,308 +446,72 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
     return new Map(servicesWithTasks.map((entry) => [entry.service.id, entry.tasks]));
   }, [servicesWithTasks]);
 
-  const {
-    catalogDurationById,
-    pricingLines,
-    pricingTotals,
-    isBillingEmpty,
-    missingPriceNames,
-    effectiveDepositPercent,
-    vatEnabled,
-    vatRatePercent,
-  } = usePricingEngine({
-    services,
-    serviceDrafts,
-    setServiceDrafts,
-    catalogServices,
-    billingSettings,
-  });
-
-  const billingSummary = project?.billingSummary ?? null;
-  const billingReferenceId = billingSummary?.referenceQuoteId ?? project?.billingQuoteId ?? null;
-
-  const billingReferenceQuote = useMemo(() => {
-    if (billingReferenceId) {
-      return quotes.find((quote) => quote.id === billingReferenceId) ?? null;
-    }
-    const candidates = quotes.filter((quote) => quote.status === 'SIGNED');
-    const canUseLatest =
-      project?.quoteStatus === 'SIGNED' || project?.quoteStatus === 'ACCEPTED';
-    const pool = candidates.length ? candidates : canUseLatest ? quotes : [];
-    if (!pool.length) return null;
-    return pool.sort((a, b) => {
-      const aDate = a.issuedAt ? new Date(a.issuedAt).getTime() : new Date(a.createdAt).getTime();
-      const bDate = b.issuedAt ? new Date(b.issuedAt).getTime() : new Date(b.createdAt).getTime();
-      return bDate - aDate;
-    })[0];
-  }, [billingReferenceId, project?.quoteStatus, quotes]);
-
-  const summaryTotals = useMemo(() => {
-    if (billingSummary) {
-      const totalCents = Number(billingSummary.totalCents);
-      const depositCents = Number(billingSummary.depositCents);
-      const balanceCents = Number(billingSummary.balanceCents);
-      const depositPercentValue = billingSummary.depositPercent;
-      const vatCents = vatEnabled ? Math.round(totalCents * (vatRatePercent / 100)) : 0;
-      const totalTtcCents = totalCents + vatCents;
-      return {
-        totalCents,
-        vatCents,
-        totalTtcCents,
-        depositPercent: depositPercentValue,
-        depositCents,
-        balanceCents,
-        sourceLabel: billingSummary.source === 'QUOTE' ? 'Devis signé' : 'Services projet',
-      };
-    }
-    const signedTotal = billingReferenceQuote ? Number(billingReferenceQuote.totalCents) : null;
-    const totalCents = Number.isFinite(signedTotal ?? NaN) ? (signedTotal as number) : pricingTotals.totalCents;
-    const depositPercentValue = billingReferenceQuote?.depositPercent ?? effectiveDepositPercent;
-    const depositCents = billingReferenceQuote ? Number(billingReferenceQuote.depositCents) : pricingTotals.depositCents;
-    const balanceCents = billingReferenceQuote ? Number(billingReferenceQuote.balanceCents) : pricingTotals.balanceCents;
-    const vatCents = vatEnabled ? Math.round(totalCents * (vatRatePercent / 100)) : 0;
-    const totalTtcCents = totalCents + vatCents;
-    return {
-      totalCents,
-      vatCents,
-      totalTtcCents,
-      depositPercent: depositPercentValue,
-      depositCents,
-      balanceCents,
-      sourceLabel: billingReferenceQuote ? 'Devis signé' : 'Services projet',
-    };
-  }, [
-    billingSummary,
-    billingReferenceQuote,
-    effectiveDepositPercent,
-    pricingTotals.balanceCents,
-    pricingTotals.depositCents,
-    pricingTotals.totalCents,
-    vatEnabled,
-    vatRatePercent,
-  ]);
-
-  const depositPercentLabel = Number.isFinite(summaryTotals.depositPercent) ? `${summaryTotals.depositPercent}%` : '—';
-  const depositPaidLabel = formatDate(project?.depositPaidAt ?? null);
-  const canEditDepositPaidDate = project?.depositStatus === 'PAID';
-  const alreadyInvoicedCents = useMemo(() => {
-    if (billingSummary) return Number(billingSummary.alreadyInvoicedCents);
-    return invoices
-      .filter((inv) => inv.status !== 'CANCELLED')
-      .reduce((sum, inv) => sum + Number(inv.totalCents), 0);
-  }, [billingSummary, invoices]);
-  const alreadyPaidCents = useMemo(() => {
-    if (billingSummary) return Number(billingSummary.alreadyPaidCents);
-    return invoices.reduce((sum, inv) => sum + getInvoicePaidCents(inv), 0);
-  }, [billingSummary, invoices]);
-  const remainingToCollectCents = billingSummary
-    ? Number(billingSummary.remainingToCollectCents)
-    : Math.max(0, alreadyInvoicedCents - alreadyPaidCents);
-  const remainingToInvoiceCents = billingSummary
-    ? Number(billingSummary.remainingCents)
-    : Math.max(0, summaryTotals.totalCents - alreadyInvoicedCents);
+  // ─── Pricing engine ─────────────────────────────────────────────────────────
 
   const {
-    quoteEditor,
-    setQuoteEditor,
-    invoiceEditor,
-    setInvoiceEditor,
-    quoteEditError,
-    invoiceEditError,
-    quoteEditing,
-    invoiceEditing,
-    stagedInvoiceModal,
-    setStagedInvoiceModal,
-    stagedInvoiceError,
-    stagedInvoiceLoading,
-    creatingQuote,
-    quoteActionId,
-    invoiceActionId,
-    recurringInvoiceActionId,
-    referenceUpdatingId,
-    quoteDateEditor,
-    setQuoteDateEditor,
-    cancelQuoteEditor,
-    setCancelQuoteEditor,
-    cancelQuoteError,
-    cancelQuoteSaving,
-    invoiceDateEditor,
-    setInvoiceDateEditor,
-    depositDateEditorOpen,
-    setDepositDateEditorOpen,
-    depositPaidDraft,
-    setDepositPaidDraft,
-    dateModalError,
-    setDateModalError,
-    dateModalSaving,
-    handleCreateQuote,
-    openCancelQuoteModal,
-    handleCancelQuote,
-    handleSetBillingReference,
-    handleQuoteStatus,
-    handleCreateInvoice,
-    handleGenerateRecurringInvoice,
-    openStagedInvoiceModal,
-    closeStagedInvoiceModal,
-    handleCreateStagedInvoice,
-    handleInvoiceStatus,
-    openQuoteDateModal,
-    openInvoiceDateModal,
-    handleSaveQuoteDate,
-    handleSaveInvoiceDate,
-    handleSaveDepositDate,
-    openQuoteEditor,
-    closeQuoteEditor,
-    addQuoteLine,
-    removeQuoteLine,
-    handleSaveQuoteEdit,
-    handleDeleteQuote,
-    openInvoiceEditor,
-    closeInvoiceEditor,
-    addInvoiceLine,
-    removeInvoiceLine,
-    handleSaveInvoiceEdit,
-    handleDeleteInvoice,
-  } = useBillingHandlers({
-    businessId,
-    projectId,
-    isAdmin,
-    projectDepositPaidAt: project?.depositPaidAt,
-    servicesLength: services.length,
-    pricingMissingCount: pricingTotals.missingCount,
-    summaryTotals,
-    remainingToInvoiceCents,
-    loadQuotes,
-    loadInvoices,
-    loadProject,
-    refetchAll,
-    onBillingError: setBillingError,
-    onBillingInfo: setBillingInfo,
-  });
+    catalogDurationById, pricingLines, pricingTotals,
+    isBillingEmpty, missingPriceNames,
+    effectiveDepositPercent, vatEnabled, vatRatePercent,
+  } = usePricingEngine({ services, serviceDrafts, setServiceDrafts, catalogServices, billingSettings });
 
-  const latestQuote = useMemo(() => {
-    return quotes.reduce<QuoteItem | null>((acc, quote) => {
-      if (!acc) return quote;
-      const accDate = acc.issuedAt ? new Date(acc.issuedAt).getTime() : new Date(acc.createdAt).getTime();
-      const quoteDate = quote.issuedAt ? new Date(quote.issuedAt).getTime() : new Date(quote.createdAt).getTime();
-      return quoteDate > accDate ? quote : acc;
-    }, null);
-  }, [quotes]);
-
-  const latestInvoice = useMemo(() => {
-    return invoices.reduce<InvoiceItem | null>((acc, invoice) => {
-      if (!acc) return invoice;
-      const accDate = acc.issuedAt ? new Date(acc.issuedAt).getTime() : new Date(acc.createdAt).getTime();
-      const invoiceDate = invoice.issuedAt ? new Date(invoice.issuedAt).getTime() : new Date(invoice.createdAt).getTime();
-      return invoiceDate > accDate ? invoice : acc;
-    }, null);
-  }, [invoices]);
-
-  const latestPdf = useMemo(() => {
-    if (!latestQuote && !latestInvoice) return null;
-    const quoteDate = latestQuote
-      ? latestQuote.issuedAt
-        ? new Date(latestQuote.issuedAt).getTime()
-        : new Date(latestQuote.createdAt).getTime()
-      : 0;
-    const invoiceDate = latestInvoice
-      ? latestInvoice.issuedAt
-        ? new Date(latestInvoice.issuedAt).getTime()
-        : new Date(latestInvoice.createdAt).getTime()
-      : 0;
-    if (latestInvoice && invoiceDate >= quoteDate) {
-      return {
-        url: `/api/pro/businesses/${businessId}/invoices/${latestInvoice.id}/pdf`,
-        label: latestInvoice.number ?? `Facture #${latestInvoice.id}`,
-      };
-    }
-    if (latestQuote) {
-      return {
-        url: `/api/pro/businesses/${businessId}/quotes/${latestQuote.id}/pdf`,
-        label: latestQuote.number ?? `Devis #${latestQuote.id}`,
-      };
-    }
-    return null;
-  }, [businessId, latestInvoice, latestQuote]);
-
-  const legalBlocks = useMemo(() => {
-    const blocks = [
-      { label: 'CGV', value: billingSettings?.cgvText },
-      { label: 'Paiement', value: billingSettings?.paymentTermsText },
-      { label: 'Pénalités', value: billingSettings?.lateFeesText },
-      { label: 'Indemnité', value: billingSettings?.fixedIndemnityText },
-      { label: 'Mentions', value: billingSettings?.legalMentionsText },
-    ];
-    const filled = blocks.filter((block) => (block.value ?? '').trim()).length;
-    return { blocks, filled, total: blocks.length };
-  }, [billingSettings]);
-  const legalConfigured = Boolean((billingSettings?.cgvText ?? '').trim());
-
-  const stagedMode = stagedInvoiceModal?.kind === 'FINAL' ? 'FINAL' : stagedInvoiceModal?.mode ?? 'PERCENT';
-  const stagedPercentValue =
-    stagedMode === 'PERCENT' ? Number(stagedInvoiceModal?.value ?? '') : null;
-  const stagedAmountValue =
-    stagedMode === 'AMOUNT' ? (() => { const c = parseEuroToCents(stagedInvoiceModal?.value ?? ''); return Number.isFinite(c) ? c : null; })() : null;
-  const stagedPreviewCents =
-    stagedMode === 'FINAL'
-      ? remainingToInvoiceCents
-      : stagedMode === 'PERCENT'
-        ? Number.isFinite(stagedPercentValue ?? NaN)
-          ? Math.round(summaryTotals.totalCents * ((stagedPercentValue ?? 0) / 100))
-          : 0
-        : stagedAmountValue ?? 0;
-  const stagedPreviewTooHigh = stagedPreviewCents > remainingToInvoiceCents;
-
-  const quoteEditStatus = quoteEditor?.status ?? null;
-  const canEditQuoteLines = quoteEditStatus === 'DRAFT';
-  const canEditQuoteMeta = quoteEditStatus === 'DRAFT' || quoteEditStatus === 'SENT';
-  const invoiceEditStatus = invoiceEditor?.status ?? null;
-  const canEditInvoiceLines = invoiceEditStatus === 'DRAFT';
-  const canEditInvoiceMeta = invoiceEditStatus === 'DRAFT' || invoiceEditStatus === 'SENT';
-
-  const invoiceByQuoteId = useMemo(() => {
-    const map = new Map<string, string>();
-    invoices.forEach((inv) => {
-      if (inv.quoteId) map.set(inv.quoteId, inv.id);
-    });
-    return map;
-  }, [invoices]);
-
-  const pricingByServiceId = useMemo(() => {
-    return new Map(pricingLines.map((line) => [line.id, line]));
-  }, [pricingLines]);
-
-  const projectValueCents = useMemo(() => {
-    const raw = project?.valueCents ?? project?.billingSummary?.totalCents;
-    if (raw != null) {
-      const parsed = Number(raw);
-      if (Number.isFinite(parsed)) return parsed;
-    }
-    if (services.length) return pricingTotals.totalCents;
-    return null;
-  }, [project?.billingSummary?.totalCents, project?.valueCents, pricingTotals.totalCents, services.length]);
+  // ─── Billing computed (extracted) ───────────────────────────────────────────
 
   const progressPct = useMemo(() => {
     if (project?.tasksSummary) return project.tasksSummary.progressPct ?? 0;
     if (!tasks.length) return 0;
     const total = tasks.length;
-    const sum = tasks.reduce(
-      (acc, t) => acc + (t.status === 'DONE' ? 100 : t.status === 'IN_PROGRESS' ? t.progress ?? 0 : 0),
-      0
-    );
+    const sum = tasks.reduce((acc, t) => acc + (t.status === 'DONE' ? 100 : t.status === 'IN_PROGRESS' ? t.progress ?? 0 : 0), 0);
     return Math.round(sum / total);
   }, [project?.tasksSummary, tasks]);
 
-  const kpis = useMemo(() => {
-    return [
-      { label: 'Avancement', value: `${Math.min(100, Math.max(0, progressPct))}%` },
-      {
-        label: 'Valeur',
-        value: projectValueCents !== null ? formatCurrencyEUR(projectValueCents, { minimumFractionDigits: 0 }) : '—',
-      },
-      { label: 'Échéance', value: formatDate(project?.endDate ?? null) },
-    ];
-  }, [projectValueCents, progressPct, project?.endDate]);
+  const {
+    billingReferenceId, summaryTotals,
+    depositPercentLabel, depositPaidLabel, canEditDepositPaidDate,
+    alreadyInvoicedCents, alreadyPaidCents,
+    remainingToCollectCents, remainingToInvoiceCents,
+    latestPdf, legalBlocks, legalConfigured,
+    invoiceByQuoteId, pricingByServiceId, kpis,
+  } = useBillingComputed({
+    project, quotes, invoices, services, billingSettings,
+    pricingTotals, pricingLines, effectiveDepositPercent,
+    vatEnabled, vatRatePercent, businessId, progressPct,
+  });
+
+  // ─── Billing handlers ──────────────────────────────────────────────────────
+
+  const {
+    quoteEditor, setQuoteEditor, invoiceEditor, setInvoiceEditor,
+    quoteEditError, invoiceEditError, quoteEditing, invoiceEditing,
+    stagedInvoiceModal, setStagedInvoiceModal, stagedInvoiceError, stagedInvoiceLoading,
+    creatingQuote, quoteActionId, invoiceActionId, recurringInvoiceActionId,
+    referenceUpdatingId, quoteDateEditor, setQuoteDateEditor,
+    cancelQuoteEditor, setCancelQuoteEditor, cancelQuoteError, cancelQuoteSaving,
+    invoiceDateEditor, setInvoiceDateEditor,
+    depositDateEditorOpen, setDepositDateEditorOpen,
+    depositPaidDraft, setDepositPaidDraft,
+    dateModalError, setDateModalError, dateModalSaving,
+    handleCreateQuote, openCancelQuoteModal, handleCancelQuote,
+    handleSetBillingReference, handleQuoteStatus, handleCreateInvoice,
+    handleGenerateRecurringInvoice,
+    openStagedInvoiceModal, closeStagedInvoiceModal, handleCreateStagedInvoice,
+    handleInvoiceStatus,
+    openQuoteDateModal, openInvoiceDateModal,
+    handleSaveQuoteDate, handleSaveInvoiceDate, handleSaveDepositDate,
+    openQuoteEditor, closeQuoteEditor, addQuoteLine, removeQuoteLine, handleSaveQuoteEdit,
+    handleDeleteQuote,
+    openInvoiceEditor, closeInvoiceEditor, addInvoiceLine, removeInvoiceLine, handleSaveInvoiceEdit,
+    handleDeleteInvoice,
+  } = useBillingHandlers({
+    businessId, projectId, isAdmin,
+    projectDepositPaidAt: project?.depositPaidAt,
+    servicesLength: services.length,
+    pricingMissingCount: pricingTotals.missingCount,
+    summaryTotals, remainingToInvoiceCents,
+    loadQuotes, loadInvoices, loadProject, refetchAll,
+    onBillingError: setBillingError, onBillingInfo: setBillingInfo,
+  });
+
+  // ─── Render ─────────────────────────────────────────────────────────────────
 
   if (loading) {
     return <EmptyState title="Chargement..." description="Nous récupérons le projet." />;
@@ -1056,11 +521,7 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
       <EmptyState
         title="Projet introuvable"
         description={error ?? 'Ce projet est indisponible.'}
-        action={
-          <Button asChild>
-            <Link href={`/app/pro/${businessId}/projects`}>Retour aux projets</Link>
-          </Button>
-        }
+        action={<Button asChild><Link href={`/app/pro/${businessId}/projects`}>Retour aux projets</Link></Button>}
       />
     );
   }
@@ -1089,10 +550,7 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
         latestPdf={latestPdf}
         onMarkCompleted={handleMarkCompleted}
         onPostpone={() => {
-          if (!isAdmin) {
-            setActionError('Réservé aux admins/owners.');
-            return;
-          }
+          if (!isAdmin) { setActionError('Réservé aux admins/owners.'); return; }
           setActionError(null);
           setActiveSetupModal('deadline');
         }}
@@ -1143,13 +601,9 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
           statusFilter={statusFilter}
           onStatusFilterChange={setStatusFilter}
           taskGroupExpanded={taskGroupExpanded}
-          onTaskGroupToggle={(key, expanded) =>
-            setTaskGroupExpanded((prev) => ({ ...prev, [key]: expanded }))
-          }
+          onTaskGroupToggle={(key, expanded) => setTaskGroupExpanded((prev) => ({ ...prev, [key]: expanded }))}
           taskRowExpanded={taskRowExpanded}
-          onTaskRowToggle={(taskId, expanded) =>
-            setTaskRowExpanded((prev) => ({ ...prev, [taskId]: expanded }))
-          }
+          onTaskRowToggle={(taskId, expanded) => setTaskRowExpanded((prev) => ({ ...prev, [taskId]: expanded }))}
           businessId={businessId}
           projectId={projectId}
           tasks={tasks}
@@ -1245,10 +699,7 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
           onCreateQuote={handleCreateQuote}
           onOpenStagedInvoiceModal={openStagedInvoiceModal}
           onToggleSummaryDetails={() => setShowSummaryDetails((prev) => !prev)}
-          onOpenDepositDateModal={() => {
-            setDateModalError(null);
-            setDepositDateEditorOpen(true);
-          }}
+          onOpenDepositDateModal={() => { setDateModalError(null); setDepositDateEditorOpen(true); }}
           onPrestationsDraftChange={setPrestationsDraft}
           onSavePrestations={handleSavePrestations}
           onServiceDragStart={handleServiceDragStart}
@@ -1291,136 +742,53 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
         />
       ) : null}
 
-      <StagedInvoiceModal
-        editor={stagedInvoiceModal}
-        totalCents={summaryTotals.totalCents}
-        remainingCents={remainingToInvoiceCents}
-        previewCents={stagedPreviewCents}
-        previewTooHigh={stagedPreviewTooHigh}
-        error={stagedInvoiceError}
-        loading={stagedInvoiceLoading}
+      {/* Billing modals (always mounted) */}
+      <BillingModals
         isAdmin={isAdmin}
-        onClose={closeStagedInvoiceModal}
-        onModeChange={(mode) =>
-          setStagedInvoiceModal((prev) =>
-            prev ? { ...prev, mode } : prev
-          )
-        }
-        onValueChange={(value) =>
-          setStagedInvoiceModal((prev) =>
-            prev
-              ? {
-                  ...prev,
-                  value: prev.mode === 'AMOUNT' ? sanitizeEuroInput(value) : value,
-                }
-              : prev
-          )
-        }
-        onCreate={handleCreateStagedInvoice}
-      />
-
-      <QuoteEditorModal
-        editor={quoteEditor}
-        isAdmin={isAdmin}
-        canEditMeta={canEditQuoteMeta}
-        canEditLines={canEditQuoteLines}
-        editing={quoteEditing}
-        error={quoteEditError}
-        onClose={closeQuoteEditor}
-        onSave={handleSaveQuoteEdit}
-        onAddLine={addQuoteLine}
-        onRemoveLine={removeQuoteLine}
-        onChangeIssuedAt={(value) => setQuoteEditor((prev) => (prev ? { ...prev, issuedAt: value } : prev))}
-        onChangeExpiresAt={(value) => setQuoteEditor((prev) => (prev ? { ...prev, expiresAt: value } : prev))}
-        onChangeNote={(value) => setQuoteEditor((prev) => (prev ? { ...prev, note: value } : prev))}
-        onChangeLine={(lineId, patch) =>
-          setQuoteEditor((prev) =>
-            prev
-              ? {
-                  ...prev,
-                  lines: prev.lines.map((line) =>
-                    line.id === lineId
-                      ? {
-                          ...line,
-                          ...patch,
-                          unitPrice:
-                            patch.unitPrice != null
-                              ? sanitizeEuroInput(patch.unitPrice)
-                              : line.unitPrice,
-                        }
-                      : line
-                  ),
-                }
-              : prev
-          )
-        }
-      />
-
-      <InvoiceEditorModal
-        editor={invoiceEditor}
-        isAdmin={isAdmin}
-        canEditMeta={canEditInvoiceMeta}
-        canEditLines={canEditInvoiceLines}
-        editing={invoiceEditing}
-        error={invoiceEditError}
-        onClose={closeInvoiceEditor}
-        onSave={handleSaveInvoiceEdit}
-        onAddLine={addInvoiceLine}
-        onRemoveLine={removeInvoiceLine}
-        onChangeIssuedAt={(value) => setInvoiceEditor((prev) => (prev ? { ...prev, issuedAt: value } : prev))}
-        onChangeDueAt={(value) => setInvoiceEditor((prev) => (prev ? { ...prev, dueAt: value } : prev))}
-        onChangeNote={(value) => setInvoiceEditor((prev) => (prev ? { ...prev, note: value } : prev))}
-        onChangeLine={(lineId, patch) =>
-          setInvoiceEditor((prev) =>
-            prev
-              ? {
-                  ...prev,
-                  lines: prev.lines.map((line) =>
-                    line.id === lineId
-                      ? {
-                          ...line,
-                          ...patch,
-                          unitPrice:
-                            patch.unitPrice != null
-                              ? sanitizeEuroInput(patch.unitPrice)
-                              : line.unitPrice,
-                        }
-                      : line
-                  ),
-                }
-              : prev
-          )
-        }
-      />
-
-      <QuoteDateModal
-        editor={quoteDateEditor}
-        isAdmin={isAdmin}
-        saving={dateModalSaving}
-        error={dateModalError}
-        onChangeSignedAt={(value) => setQuoteDateEditor((prev) => (prev ? { ...prev, signedAt: value } : prev))}
-        onClose={() => setQuoteDateEditor(null)}
-        onSave={handleSaveQuoteDate}
-      />
-
-      <CancelQuoteModal
-        editor={cancelQuoteEditor}
-        isAdmin={isAdmin}
-        saving={cancelQuoteSaving}
-        error={cancelQuoteError}
-        onChangeReason={(value) => setCancelQuoteEditor((prev) => (prev ? { ...prev, reason: value } : prev))}
-        onClose={() => setCancelQuoteEditor(null)}
-        onConfirm={handleCancelQuote}
-      />
-
-      <InvoiceDateModal
-        editor={invoiceDateEditor}
-        isAdmin={isAdmin}
-        saving={dateModalSaving}
-        error={dateModalError}
-        onChangePaidAt={(value) => setInvoiceDateEditor((prev) => (prev ? { ...prev, paidAt: value } : prev))}
-        onClose={() => setInvoiceDateEditor(null)}
-        onSave={handleSaveInvoiceDate}
+        summaryTotalsCents={summaryTotals.totalCents}
+        remainingToInvoiceCents={remainingToInvoiceCents}
+        stagedInvoiceModal={stagedInvoiceModal}
+        setStagedInvoiceModal={setStagedInvoiceModal}
+        stagedInvoiceError={stagedInvoiceError}
+        stagedInvoiceLoading={stagedInvoiceLoading}
+        onCloseStagedInvoice={closeStagedInvoiceModal}
+        onCreateStagedInvoice={handleCreateStagedInvoice}
+        quoteEditor={quoteEditor}
+        setQuoteEditor={setQuoteEditor}
+        quoteEditing={quoteEditing}
+        quoteEditError={quoteEditError}
+        onCloseQuoteEditor={closeQuoteEditor}
+        onSaveQuoteEdit={handleSaveQuoteEdit}
+        onAddQuoteLine={addQuoteLine}
+        onRemoveQuoteLine={removeQuoteLine}
+        invoiceEditor={invoiceEditor}
+        setInvoiceEditor={setInvoiceEditor}
+        invoiceEditing={invoiceEditing}
+        invoiceEditError={invoiceEditError}
+        onCloseInvoiceEditor={closeInvoiceEditor}
+        onSaveInvoiceEdit={handleSaveInvoiceEdit}
+        onAddInvoiceLine={addInvoiceLine}
+        onRemoveInvoiceLine={removeInvoiceLine}
+        quoteDateEditor={quoteDateEditor}
+        setQuoteDateEditor={setQuoteDateEditor}
+        dateModalSaving={dateModalSaving}
+        dateModalError={dateModalError}
+        setDateModalError={setDateModalError}
+        onSaveQuoteDate={handleSaveQuoteDate}
+        cancelQuoteEditor={cancelQuoteEditor}
+        setCancelQuoteEditor={setCancelQuoteEditor}
+        cancelQuoteSaving={cancelQuoteSaving}
+        cancelQuoteError={cancelQuoteError}
+        onCancelQuote={handleCancelQuote}
+        invoiceDateEditor={invoiceDateEditor}
+        setInvoiceDateEditor={setInvoiceDateEditor}
+        onSaveInvoiceDate={handleSaveInvoiceDate}
+        depositDateEditorOpen={depositDateEditorOpen}
+        setDepositDateEditorOpen={setDepositDateEditorOpen}
+        depositPaidDraft={depositPaidDraft}
+        setDepositPaidDraft={setDepositPaidDraft}
+        projectDepositStatus={project?.depositStatus}
+        onSaveDepositDate={handleSaveDepositDate}
       />
 
       <QuoteWizardModal
@@ -1476,25 +844,12 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
         onDeletePayment={handleDeletePayment}
         onFormChange={(patch) =>
           setPaymentForm((prev) => ({
-            ...prev,
-            ...patch,
+            ...prev, ...patch,
             amount: patch.amount != null ? sanitizeEuroInput(patch.amount) : prev.amount,
           }))
         }
         onApplyShortcut={applyPaymentShortcut}
         onSave={handleSavePayment}
-      />
-
-      <DepositDateModal
-        open={depositDateEditorOpen}
-        depositStatus={project?.depositStatus}
-        paidAt={depositPaidDraft}
-        isAdmin={isAdmin}
-        saving={dateModalSaving}
-        error={dateModalError}
-        onChangePaidAt={setDepositPaidDraft}
-        onClose={() => setDepositDateEditorOpen(false)}
-        onSave={handleSaveDepositDate}
       />
 
       <SetupModals

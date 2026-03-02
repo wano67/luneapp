@@ -13,19 +13,10 @@ import { assertSameOrigin } from '@/server/security/csrf';
 import { NextRequest, NextResponse } from 'next/server';
 import { badRequest, getRequestId, withRequestId } from '@/server/http/apiUtils';
 import { authenticateUser } from '@/server/auth/auth.service';
+import { isValidEmail, normalizeEmail } from '@/lib/validation/email';
 
 const MIN_PASSWORD_LENGTH = 8;
 const MAX_PASSWORD_LENGTH = 128;
-const MAX_EMAIL_LENGTH = 254;
-
-function normalizeEmail(email: string) {
-  return email.trim().toLowerCase();
-}
-
-function isValidEmail(email: string) {
-  if (!email || email.length > MAX_EMAIL_LENGTH) return false;
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-}
 
 export async function POST(request: NextRequest) {
   const requestId = getRequestId(request);

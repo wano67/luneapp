@@ -6,6 +6,7 @@ import { requireAuthAsync } from '@/server/auth/requireAuth';
 import { assertSameOrigin, jsonNoStore } from '@/server/security/csrf';
 import { rateLimit } from '@/server/security/rateLimit';
 import { badRequest, getRequestId, unauthorized, withRequestId } from '@/server/http/apiUtils';
+import { normalizeEmail } from '@/lib/validation/email';
 type PrismaClientKnownRequestError = Prisma.PrismaClientKnownRequestError;
 
 type Body = {
@@ -13,10 +14,6 @@ type Body = {
   lastName?: unknown;
   email?: unknown;
 };
-
-function normalizeEmail(email: string) {
-  return email.trim().toLowerCase();
-}
 
 function buildName(firstName?: string | null, lastName?: string | null) {
   const f = (firstName ?? '').trim();

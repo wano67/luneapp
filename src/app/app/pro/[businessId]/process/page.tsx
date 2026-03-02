@@ -9,6 +9,8 @@ import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableEmpty, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Modal } from '@/components/ui/modal';
+import { PageContainer } from '@/components/layouts/PageContainer';
+import { PageHeader } from '@/components/layouts/PageHeader';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import { useActiveBusiness } from '../../ActiveBusinessProvider';
 import RoleBanner from '@/components/RoleBanner';
@@ -158,19 +160,13 @@ export default function ProcessPage() {
   }
 
   return (
-    <div className="space-y-5">
+    <PageContainer>
       <RoleBanner role={actorRole} />
-      <Card className="space-y-2 p-5">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-[var(--text-secondary)]">
-          Process & SOP
-        </p>
-        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h1 className="text-xl font-semibold text-[var(--text-primary)]">Processus opératoires</h1>
-            <p className="text-sm text-[var(--text-secondary)]">
-              Centralise les SOP et checklists par business. Archive les anciens, garde la trace.
-            </p>
-          </div>
+      <div className="space-y-5">
+      <PageHeader
+        title="Processus opératoires"
+        subtitle="Centralise les SOP et checklists par business. Archive les anciens, garde la trace."
+        actions={
           <div className="flex flex-col items-start gap-1">
             <Button
               onClick={() => {
@@ -188,11 +184,13 @@ export default function ProcessPage() {
               <p className="text-[11px] text-[var(--text-secondary)]">Lecture seule : création réservée aux admins.</p>
             ) : null}
           </div>
-        </div>
-        {requestId ? (
-          <p className="text-[10px] text-[var(--text-secondary)]">Request ID: {requestId}</p>
-        ) : null}
-      </Card>
+        }
+        context={
+          requestId ? (
+            <p className="text-[10px] text-[var(--text-secondary)]">Request ID: {requestId}</p>
+          ) : undefined
+        }
+      />
 
       <Card className="space-y-3 p-5">
         <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
@@ -307,6 +305,7 @@ export default function ProcessPage() {
           </div>
         </form>
       </Modal>
-    </div>
+      </div>
+    </PageContainer>
   );
 }

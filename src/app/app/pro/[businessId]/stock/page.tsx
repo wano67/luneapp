@@ -9,6 +9,8 @@ import { Badge } from '@/components/ui/badge';
 import { Modal } from '@/components/ui/modal';
 import { Select } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
+import { PageContainer } from '@/components/layouts/PageContainer';
+import { PageHeader } from '@/components/layouts/PageHeader';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import { parseEuroToCents, sanitizeEuroInput } from '@/lib/money';
 import { useActiveBusiness } from '../../ActiveBusinessProvider';
@@ -181,21 +183,19 @@ export default function StockListPage() {
   }
 
   return (
-    <div className="space-y-4">
-      <Card className="p-5 space-y-1">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-[var(--text-secondary)]">
-          PRO · Stock
-        </p>
-        <h1 className="text-xl font-semibold text-[var(--text-primary)]">Catalogue produits & inventaire</h1>
-        <p className="text-sm text-[var(--text-secondary)]">
-          Suis les produits et leurs mouvements de stock.
-        </p>
-        <div className="flex items-center gap-2 text-xs text-[var(--text-secondary)]">
-          <Link href={`/app/pro/${businessId}/finances/ledger`} className="underline">
-            Voir les écritures comptables
-          </Link>
-        </div>
-      </Card>
+    <PageContainer>
+      <div className="space-y-5">
+      <PageHeader
+        title="Catalogue produits & inventaire"
+        subtitle="Suis les produits et leurs mouvements de stock."
+        context={
+          <div className="flex items-center gap-2 text-xs text-[var(--text-secondary)]">
+            <Link href={`/app/pro/${businessId}/finances/ledger`} className="underline">
+              Voir les écritures comptables
+            </Link>
+          </div>
+        }
+      />
 
       <Card className="p-5 space-y-3">
         <div className="flex items-center justify-between gap-2">
@@ -356,6 +356,7 @@ export default function StockListPage() {
           </div>
         </div>
       </Modal>
-    </div>
+      </div>
+    </PageContainer>
   );
 }

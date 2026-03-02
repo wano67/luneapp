@@ -109,6 +109,4 @@ export function isValidRole(role: string): role is BusinessRole {
   return role === 'OWNER' || role === 'ADMIN' || role === 'MEMBER' || role === 'VIEWER';
 }
 
-export function isValidEmail(email: string) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-}
+export { isValidEmail } from '@/lib/validation/email';

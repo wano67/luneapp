@@ -4,25 +4,7 @@ import { withBusinessRoute } from '@/server/http/routeHandler';
 import { jsonb } from '@/server/http/json';
 import { getProjectCounts } from '@/server/queries/projects';
 import { computeBusinessBillingSummary, computeBusinessProjectMetrics } from '@/server/billing/businessSummary';
-
-function startOfMonth(date: Date) {
-  const d = new Date(date);
-  d.setDate(1);
-  d.setHours(0, 0, 0, 0);
-  return d;
-}
-
-function addMonths(date: Date, count: number) {
-  const d = new Date(date);
-  d.setMonth(d.getMonth() + count);
-  return d;
-}
-
-function monthKey(date: Date) {
-  const year = date.getFullYear();
-  const month = date.getMonth() + 1;
-  return `${year}-${String(month).padStart(2, '0')}`;
-}
+import { addMonths, startOfMonth, monthKey } from '@/lib/date';
 
 // GET /api/pro/businesses/{businessId}/dashboard
 export const GET = withBusinessRoute({ minRole: 'VIEWER' }, async (ctx) => {

@@ -44,6 +44,26 @@ function roundPercent(amount: bigint, percent: number) {
   return (amount * p + BigInt(50)) / BigInt(100);
 }
 
+/** Compute the discounted unit price (returns just the bigint). */
+export function computeDiscountedPrice(params: {
+  unitPriceCents: bigint;
+  discountType?: string | null;
+  discountValue?: number | null;
+}): bigint {
+  const discountType = params.discountType ?? 'NONE';
+  const discountValue = params.discountValue ?? null;
+  if (discountType === 'PERCENT' && discountValue != null && Number.isFinite(discountValue)) {
+    const bounded = Math.min(100, Math.max(0, Math.trunc(discountValue)));
+    return (params.unitPriceCents * BigInt(100 - bounded)) / BigInt(100);
+  }
+  if (discountType === 'AMOUNT' && discountValue != null && Number.isFinite(discountValue)) {
+    const bounded = Math.max(0, Math.trunc(discountValue));
+    const final = params.unitPriceCents - BigInt(bounded);
+    return final > BigInt(0) ? final : BigInt(0);
+  }
+  return params.unitPriceCents;
+}
+
 function applyDiscount(params: {
   unitPriceCents: bigint;
   discountType?: DiscountType | null;
