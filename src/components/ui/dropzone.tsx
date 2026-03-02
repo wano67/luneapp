@@ -93,7 +93,7 @@ export function Dropzone({
         onDragLeave={onDragLeave}
         onDrop={onDrop}
         className={cn(
-          'relative flex min-h-[104px] cursor-pointer flex-col justify-center gap-2 rounded-2xl border bg-[var(--surface-2)] px-4 py-3 text-center transition-colors',
+          'relative flex min-h-[104px] cursor-pointer flex-col justify-center gap-2 rounded-xl border bg-[var(--surface-2)] px-4 py-3 text-center transition-colors',
           dragOver
             ? 'border-[var(--focus-ring)] bg-[var(--surface-hover)]/80 text-[var(--text-primary)]'
             : 'border-[var(--border)] text-[var(--text-secondary)] hover:border-[var(--border-strong)] hover:text-[var(--text-primary)]',

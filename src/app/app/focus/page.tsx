@@ -2,15 +2,17 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Card } from '@/components/ui/card';
-import { KpiCard } from '@/components/ui/kpi-card';
-import { SectionHeader } from '@/components/ui/section-header';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { ChevronRight } from 'lucide-react';
+import { fetchJson } from '@/lib/apiClient';
+import { fmtKpi, fmtDate } from '@/components/pivot-ui';
 import { PageContainer } from '@/components/layouts/PageContainer';
 import { PageHeader } from '@/components/layouts/PageHeader';
-import { fetchJson } from '@/lib/apiClient';
-import { formatCentsToEuroDisplay } from '@/lib/money';
+import { KpiCard } from '@/components/ui/kpi-card';
+import { SectionHeader } from '@/components/ui/section-header';
+import { EmptyState } from '@/components/ui/empty-state';
+import { ListRow } from '@/components/ui/list-row';
+import { Alert } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
 
 type LatestTx = {
   id: string;
@@ -50,21 +52,6 @@ type FocusSummary = {
   pro: ProSummary | null;
 };
 
-function formatDate(isoDate: string): string {
-  return new Date(isoDate).toLocaleDateString('fr-FR', {
-    day: 'numeric',
-    month: 'short',
-  });
-}
-
-function formatDueDate(isoDate: string): string {
-  return new Date(isoDate).toLocaleDateString('fr-FR', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  });
-}
-
 export default function FocusPage() {
   const [data, setData] = useState<FocusSummary | null>(null);
   const [loading, setLoading] = useState(true);
@@ -84,179 +71,140 @@ export default function FocusPage() {
 
   const personal = data?.personal;
   const pro = data?.pro;
-
   const monthNet = personal ? BigInt(personal.monthNetCents) : 0n;
 
   return (
-    <PageContainer className="space-y-8">
-      <PageHeader
-        title="Focus"
-        subtitle="Vue croisée de tes finances perso et pro."
-      />
+    <PageContainer className="gap-7">
+      <PageHeader title="Focus" />
 
-      {error ? <p className="text-sm text-[var(--danger)]">{error}</p> : null}
+      {error ? <Alert variant="danger" title={error} /> : null}
 
       {loading ? (
-        <p className="text-sm text-[var(--text-faint)]">Chargement…</p>
+        <EmptyState title="Chargement…" />
       ) : (
         <>
-          {/* ── Wallet ───────────────────────────────────────────── */}
-          <section className="space-y-4">
+          {/* ── Wallet — Personnel ── */}
+          <div className="flex flex-col gap-4">
             <SectionHeader
-              title="Wallet — Perso"
+              title="Wallet — Personnel"
               actions={
-                <div className="flex flex-wrap gap-2">
-                  <Button asChild variant="outline" size="sm">
-                    <Link href="/app/personal">Voir le wallet</Link>
-                  </Button>
-                  <Button asChild size="sm">
-                    <Link href="/app/performance/perso">Voir l&apos;analyse détaillée</Link>
-                  </Button>
-                </div>
+                <Button variant="outline" size="sm" asChild>
+                  <Link href="/app/personal">Wallet <ChevronRight size={14} /></Link>
+                </Button>
               }
             />
-            <div className="grid gap-4 sm:grid-cols-3">
+
+            <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
               <KpiCard
                 label="Solde total"
-                value={personal ? formatCentsToEuroDisplay(personal.totalBalanceCents) : '—'}
+                value={personal ? fmtKpi(personal.totalBalanceCents) : '—'}
+                delay={0}
               />
               <KpiCard
                 label="Revenus (mois)"
-                value={personal ? formatCentsToEuroDisplay(personal.monthIncomeCents) : '—'}
-                trend="up"
+                value={personal ? fmtKpi(personal.monthIncomeCents) : '—'}
+                delay={50}
               />
               <KpiCard
                 label="Net (mois)"
-                value={personal ? formatCentsToEuroDisplay(personal.monthNetCents) : '—'}
+                value={personal ? fmtKpi(personal.monthNetCents) : '—'}
+                delay={100}
+                delta={personal ? (monthNet >= 0n ? '+' : '') + fmtKpi(personal.monthNetCents) : undefined}
                 trend={monthNet >= 0n ? 'up' : 'down'}
               />
             </div>
-          </section>
+          </div>
 
-          {/* ── Studio ───────────────────────────────────────────── */}
+          {/* ── Studio — Pro ── */}
           {pro ? (
-            <section className="space-y-4">
+            <div className="flex flex-col gap-4">
               <SectionHeader
                 title={`Studio — ${pro.businessName}`}
                 actions={
-                  <div className="flex flex-wrap gap-2">
-                    <Button asChild variant="outline" size="sm">
-                      <Link href={`/app/pro/${pro.businessId}`}>Voir le studio</Link>
-                    </Button>
-                    <Button asChild size="sm">
-                      <Link href="/app/performance/pro">Voir l&apos;analyse détaillée</Link>
-                    </Button>
-                  </div>
+                  <Button variant="outline" size="sm" asChild>
+                    <Link href={`/app/pro/${pro.businessId}`}>Studio <ChevronRight size={14} /></Link>
+                  </Button>
                 }
               />
-              <div className="grid gap-4 sm:grid-cols-3">
-                <KpiCard
-                  label="CA encaissé (mois)"
-                  value={formatCentsToEuroDisplay(pro.monthRevenueCents)}
-                  trend="up"
-                />
-                <KpiCard
-                  label="Projets actifs"
-                  value={String(pro.activeProjectsCount)}
-                />
-                <KpiCard
-                  label="Factures en attente"
-                  value={String(pro.pendingInvoicesCount)}
-                  trend={pro.pendingInvoicesCount > 0 ? 'down' : 'up'}
-                />
+
+              <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
+                <KpiCard label="CA encaissé (mois)" value={fmtKpi(pro.monthRevenueCents)} delay={150} />
+                <KpiCard label="Projets actifs" value={String(pro.activeProjectsCount)} delay={200} />
+                <KpiCard label="Factures en attente" value={String(pro.pendingInvoicesCount)} delay={250} />
               </div>
 
               {/* Next due invoice */}
-              {pro.nextDueInvoice ? (
-                <Card className="flex flex-wrap items-center justify-between gap-3 p-4">
-                  <div>
-                    <p className="text-xs text-[var(--text-faint)]">Prochaine facture à encaisser</p>
-                    <p className="mt-0.5 font-semibold">{pro.nextDueInvoice.projectName}</p>
-                    <p className="text-sm text-[var(--text-faint)]">
-                      Échéance le {formatDueDate(pro.nextDueInvoice.dueAt)} —{' '}
-                      <span className="font-medium text-[var(--text)]">
-                        {formatCentsToEuroDisplay(pro.nextDueInvoice.totalCents)}
-                      </span>
-                    </p>
+              {pro.nextDueInvoice && (
+                <div
+                  className="flex flex-wrap items-center justify-between gap-4 rounded-xl p-4"
+                  style={{ background: 'var(--shell-accent)' }}
+                >
+                  <div className="min-w-0">
+                    <p className="text-xs text-white/70">Prochaine facture à encaisser</p>
+                    <p className="text-sm font-semibold text-white mt-0.5">{pro.nextDueInvoice.projectName}</p>
+                    <p className="text-xs text-white/70">Échéance le {fmtDate(pro.nextDueInvoice.dueAt)}</p>
                   </div>
-                  <Button asChild size="sm" variant="outline">
-                    <Link href={`/app/pro/${pro.businessId}/finances/invoices/${pro.nextDueInvoice.id}`}>
-                      Voir la facture
-                    </Link>
-                  </Button>
-                </Card>
-              ) : null}
-            </section>
+                  <div className="flex items-center gap-3">
+                    <span
+                      className="text-white font-extrabold"
+                      style={{ fontFamily: 'var(--font-roboto-mono), monospace', fontSize: 20 }}
+                    >
+                      {fmtKpi(pro.nextDueInvoice.totalCents)}
+                    </span>
+                    <Button variant="outline" size="sm" asChild>
+                      <Link href={`/app/pro/${pro.businessId}/finances`}>Voir</Link>
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
           ) : (
-            <section className="space-y-4">
-              <SectionHeader
-                title="Studio — Pro"
-                actions={
-                  <Button asChild size="sm">
-                    <Link href="/app/performance/pro">Voir l&apos;analyse détaillée</Link>
+            <div className="flex flex-col gap-4">
+              <SectionHeader title="Studio — Pro" />
+              <EmptyState
+                title="Aucune activité pro pour le moment."
+                action={
+                  <Button variant="outline" size="sm" asChild>
+                    <Link href="/app/pro">Créer un espace pro <ChevronRight size={14} /></Link>
                   </Button>
                 }
               />
-              <Card className="p-6 text-center">
-                <p className="text-sm text-[var(--text-faint)]">
-                  Aucune activité pro pour le moment.
-                </p>
-                <Button asChild size="sm" className="mt-3">
-                  <Link href="/app/pro">Créer un espace pro</Link>
-                </Button>
-              </Card>
-            </section>
+            </div>
           )}
 
-          {/* ── Activité récente ──────────────────────────────────── */}
-          {personal && personal.latestTransactions.length > 0 ? (
-            <section className="space-y-4">
+          {/* ── Dernières transactions perso ── */}
+          {personal && personal.latestTransactions.length > 0 && (
+            <div className="flex flex-col gap-3">
               <SectionHeader
-                title="Dernières transactions"
+                title="Dernières transactions perso"
                 actions={
-                  <Button asChild variant="outline" size="sm">
-                    <Link href="/app/personal/transactions">Toutes les transactions</Link>
-                  </Button>
+                  <Link href="/app/personal/transactions" className="text-xs font-semibold hover:underline" style={{ color: 'var(--shell-accent)' }}>
+                    Tout voir →
+                  </Link>
                 }
               />
-              <Card className="divide-y divide-[var(--border)]">
-                {personal.latestTransactions.map((tx) => {
-                  const amt = BigInt(tx.amountCents);
-                  const isPositive = amt >= 0n;
-                  return (
-                    <div
-                      key={tx.id}
-                      className="flex items-center justify-between gap-3 px-4 py-3"
-                    >
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-medium">{tx.label || '—'}</p>
-                        <p className="text-xs text-[var(--text-faint)]">
-                          {tx.accountName}
-                          {tx.categoryName ? ` · ${tx.categoryName}` : ''}
-                          {' · '}
-                          {formatDate(tx.date)}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        {tx.categoryName ? (
-                          <Badge variant="neutral" className="hidden sm:inline-flex">
-                            {tx.categoryName}
-                          </Badge>
-                        ) : null}
-                        <span
-                          className="text-sm font-semibold"
-                          style={{ color: isPositive ? 'var(--success)' : 'var(--danger)' }}
-                        >
-                          {isPositive ? '+' : ''}
-                          {formatCentsToEuroDisplay(tx.amountCents)}
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </Card>
-            </section>
-          ) : null}
+
+              {personal.latestTransactions.slice(0, 5).map((tx) => {
+                const amt = BigInt(tx.amountCents);
+                const isPositive = amt >= 0n;
+                return (
+                  <ListRow
+                    key={tx.id}
+                    left={tx.label || '—'}
+                    sub={`${tx.accountName}${tx.categoryName ? ` · ${tx.categoryName}` : ''} · ${new Date(tx.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}`}
+                    right={
+                      <span
+                        className="text-sm font-semibold"
+                        style={{ color: isPositive ? 'var(--success)' : 'var(--danger)' }}
+                      >
+                        {isPositive ? '+' : ''}{fmtKpi(tx.amountCents)}
+                      </span>
+                    }
+                  />
+                );
+              })}
+            </div>
+          )}
         </>
       )}
     </PageContainer>

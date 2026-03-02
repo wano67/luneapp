@@ -2,6 +2,8 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/cn';
+import Link from 'next/link';
+import { StaggerChildren } from './StaggerChildren';
 
 type Tier = {
   name: string;
@@ -9,6 +11,7 @@ type Tier = {
   period: string;
   description: string;
   cta: string;
+  ctaHref: string;
   highlight?: boolean;
   features: string[];
 };
@@ -18,8 +21,9 @@ const tiers: Tier[] = [
     name: 'Essentiel',
     price: 'Gratuit',
     period: 'pour démarrer',
-    description: 'Pour tester Lune avec un workspace personnel et un premier business.',
+    description: 'Pour tester Pivot avec un workspace personnel et un premier business.',
     cta: "S'inscrire",
+    ctaHref: '/register',
     features: ['Accès Perso', '1 entreprise PRO', 'Invitations équipe limitées', 'Support mail'],
   },
   {
@@ -28,6 +32,7 @@ const tiers: Tier[] = [
     period: 'par mois',
     description: 'Pour les agences/indés qui pilotent prospects, clients et finances.',
     cta: 'Essai 14 jours',
+    ctaHref: '/register',
     highlight: true,
     features: [
       'Entreprises illimitées',
@@ -43,18 +48,19 @@ const tiers: Tier[] = [
     period: '',
     description: 'Pour les équipes avec besoins avancés et intégrations personnalisées.',
     cta: 'Nous contacter',
+    ctaHref: '/contact',
     features: ['Permissions avancées', 'SLA et support dédié', 'Intégrations custom', 'Onboarding assisté'],
   },
 ];
 
 export function PricingCards() {
   return (
-    <div className="grid gap-4 lg:grid-cols-3">
+    <StaggerChildren className="grid gap-4 lg:grid-cols-3" staggerMs={120}>
       {tiers.map((tier) => (
         <Card
           key={tier.name}
           className={cn(
-            'flex h-full flex-col gap-4 border-[var(--border)] bg-[var(--surface)] p-6',
+            'feature-card-lift flex h-full flex-col gap-4 border-[var(--border)] bg-[var(--surface)] p-6',
             tier.highlight ? 'border-[var(--accent-strong)] shadow-md shadow-[var(--shadow-float)]/30' : ''
           )}
         >
@@ -69,8 +75,8 @@ export function PricingCards() {
             {tier.highlight ? <Badge variant="pro">PRO</Badge> : null}
           </div>
           <p className="text-sm leading-relaxed text-[var(--text-secondary)]">{tier.description}</p>
-          <Button variant={tier.highlight ? 'primary' : 'outline'}>
-            {tier.cta}
+          <Button asChild variant={tier.highlight ? 'primary' : 'outline'}>
+            <Link href={tier.ctaHref}>{tier.cta}</Link>
           </Button>
           <div className="space-y-2 text-sm text-[var(--text)]">
             {tier.features.map((feat) => (
@@ -82,6 +88,6 @@ export function PricingCards() {
           </div>
         </Card>
       ))}
-    </div>
+    </StaggerChildren>
   );
 }

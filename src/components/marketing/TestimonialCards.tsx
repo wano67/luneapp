@@ -1,9 +1,10 @@
 import { Card } from '@/components/ui/card';
+import { StaggerChildren } from './StaggerChildren';
 
 const testimonials = [
   {
     quote:
-      "Lune m'a permis de voir enfin où va mon argent entre mes missions et mes charges perso. Tout est au même endroit.",
+      "Pivot m'a permis de voir enfin où va mon argent entre mes missions et mes charges perso. Tout est au même endroit.",
     name: 'S. Martin',
     role: 'Développeur freelance',
     initials: 'SM',
@@ -26,11 +27,11 @@ const testimonials = [
 
 export function TestimonialCards() {
   return (
-    <div className="grid gap-4 md:grid-cols-3">
+    <StaggerChildren className="grid gap-4 md:grid-cols-3">
       {testimonials.map((t) => (
         <Card
           key={t.name}
-          className="flex flex-col gap-4 border-[var(--border)] bg-[var(--surface)] p-5"
+          className="feature-card-lift flex flex-col gap-4 border-[var(--border)] bg-[var(--surface)] p-5"
         >
           <p className="text-sm leading-relaxed text-[var(--text-secondary)]">
             &ldquo;{t.quote}&rdquo;
@@ -46,6 +47,6 @@ export function TestimonialCards() {
           </div>
         </Card>
       ))}
-    </div>
+    </StaggerChildren>
   );
 }

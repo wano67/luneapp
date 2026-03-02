@@ -1,24 +1,12 @@
 import Link from 'next/link';
-import { ArrowLeft } from 'lucide-react';
+import { ChevronLeft } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import {
-  formatDate,
-  SectionCard,
-  StatCard,
-  MetaItem,
-  StickyHeaderActions,
-} from '@/components/pro/projects/workspace-ui';
 
 type Props = {
   businessId: string;
   projectId: string;
   projectName: string | null;
-  clientId: string | null;
-  clientName: string | null;
-  startDate: string | null;
-  endDate: string | null;
-  updatedAt: string;
   archivedAt: string | null;
   statusLabel: string;
   scopeLabel: string;
@@ -28,21 +16,16 @@ type Props = {
   isAdmin: boolean;
   markingCompleted: boolean;
   actionError: string | null;
-  kpis: Array<{ label: string; value: string }>;
   latestPdf: { url: string; label: string } | null;
   onMarkCompleted: () => void;
   onPostpone: () => void;
+  onBillingClick?: () => void;
 };
 
 export function ProjectHeaderSection({
   businessId,
   projectId,
   projectName,
-  clientId,
-  clientName,
-  startDate,
-  endDate,
-  updatedAt,
   archivedAt,
   statusLabel,
   scopeLabel,
@@ -52,100 +35,99 @@ export function ProjectHeaderSection({
   isAdmin,
   markingCompleted,
   actionError,
-  kpis,
   latestPdf,
   onMarkCompleted,
   onPostpone,
+  onBillingClick,
 }: Props) {
   return (
     <>
-      <SectionCard>
-        <div className="flex flex-col gap-5">
-          <StickyHeaderActions>
-            <Button asChild variant="outline" size="sm" className="gap-2">
-              <Link href={`/app/pro/${businessId}/projects`}>
-                <ArrowLeft size={16} />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-6">
+          <Button asChild variant="outline" size="sm">
+            <Link href={`/app/pro/${businessId}/projects`}>
+              <ChevronLeft size={16} />
+              <span style={{ fontFamily: 'var(--font-barlow), sans-serif', fontWeight: 600, fontSize: 18 }}>
                 Retour
-              </Link>
-            </Button>
-            <div className="flex flex-wrap items-center gap-2">
-              <Button asChild variant="outline" size="sm">
-                <Link href={`/app/pro/${businessId}/projects/${projectId}/edit`}>Modifier</Link>
-              </Button>
-              <Button asChild size="sm">
-                <Link href={`/app/pro/${businessId}/projects/${projectId}?tab=billing`}>Facturation</Link>
-              </Button>
-              {latestPdf ? (
-                <Button asChild size="sm" variant="outline">
-                  <a href={latestPdf.url} target="_blank" rel="noreferrer">
-                    Dernier PDF
-                  </a>
-                </Button>
-              ) : null}
-            </div>
-          </StickyHeaderActions>
-
-          <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
-            <div className="space-y-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-2xl font-semibold text-[var(--text-primary)]">
-                  {projectName ?? `Projet #${projectId}`}
-                </h1>
-                <Badge variant="neutral">{statusLabel}</Badge>
-                {showScopeBadge ? <Badge variant={scopeVariant}>{scopeLabel}</Badge> : null}
-                {archivedAt ? <Badge variant="performance">Archivé</Badge> : null}
-              </div>
-              <div className="flex flex-wrap gap-4">
-                <MetaItem
-                  label="Client"
-                  value={
-                    clientName && clientId ? (
-                      <Link
-                        href={`/app/pro/${businessId}/clients/${clientId}`}
-                        className="font-medium text-[var(--text-primary)] hover:underline"
-                      >
-                        {clientName}
-                      </Link>
-                    ) : (
-                      clientName ?? 'Non renseigné'
-                    )
-                  }
-                />
-                <MetaItem
-                  label="Dates"
-                  value={`${formatDate(startDate)} → ${formatDate(endDate)}`}
-                />
-                <MetaItem label="Dernière mise à jour" value={formatDate(updatedAt)} />
-              </div>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-3">
-              {kpis.map((item) => (
-                <StatCard key={item.label} label={item.label} value={String(item.value)} />
-              ))}
-            </div>
+              </span>
+            </Link>
+          </Button>
+          <div className="flex items-center gap-3">
+            <h1
+              style={{
+                fontSize: 40,
+                fontWeight: 800,
+                lineHeight: '40px',
+                color: 'var(--text)',
+              }}
+            >
+              {projectName ?? `Projet #${projectId}`}
+            </h1>
+            <span
+              className="rounded-xl px-3 py-2 text-sm font-medium"
+              style={{ background: 'var(--surface-2)', color: '#5B3B3B' }}
+            >
+              {statusLabel}
+            </span>
+            {showScopeBadge && <Badge variant={scopeVariant}>{scopeLabel}</Badge>}
+            {archivedAt && <Badge variant="performance">Archivé</Badge>}
           </div>
         </div>
-      </SectionCard>
+        <div className="flex items-center gap-3">
+          <Button
+            asChild
+            size="sm"
+            className="!rounded-xl !border-0"
+            style={{ background: 'var(--shell-accent-dark)', color: 'white' }}
+          >
+            <Link href={`/app/pro/${businessId}/projects/${projectId}/edit`}>
+              Modifier
+            </Link>
+          </Button>
+          <button
+            type="button"
+            onClick={onBillingClick}
+            className="rounded-full px-3 py-2 text-sm font-medium transition hover:opacity-80"
+            style={{ background: 'white', color: 'rgba(0,0,0,0.6)' }}
+          >
+            Facturation
+          </button>
+          {latestPdf && (
+            <a
+              href={latestPdf.url}
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-full px-3 py-2 text-sm font-medium transition hover:opacity-80"
+              style={{ background: 'white', color: 'rgba(0,0,0,0.6)' }}
+            >
+              Dernier pdf
+            </a>
+          )}
+        </div>
+      </div>
 
-      {isOverdue ? (
-        <SectionCard className="border-[var(--danger-border)] bg-[var(--danger-bg)]">
+      {isOverdue && (
+        <div
+          className="flex flex-col gap-3 rounded-xl p-4"
+          style={{ background: 'var(--danger-bg)', border: '1px solid var(--danger-border)' }}
+        >
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="space-y-1">
-              <p className="text-sm font-semibold text-[var(--text-primary)]">Date de fin dépassée</p>
-              <p className="text-xs text-[var(--text-secondary)]">
+              <p className="text-sm font-semibold" style={{ color: 'var(--text)' }}>Date de fin dépassée</p>
+              <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
                 Terminer le projet ou repousser la fin.
               </p>
             </div>
             <Badge variant="performance">En retard</Badge>
           </div>
-          <div className="mt-3 flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button
               type="button"
               size="sm"
               onClick={onMarkCompleted}
               disabled={!isAdmin || markingCompleted}
             >
-              {markingCompleted ? 'Traitement…' : 'Marquer terminé'}
+              {markingCompleted ? 'Traitement\u2026' : 'Marquer terminé'}
             </Button>
             <Button
               type="button"
@@ -157,12 +139,12 @@ export function ProjectHeaderSection({
               Repousser
             </Button>
           </div>
-          {!isAdmin ? (
-            <p className="mt-2 text-xs text-[var(--text-secondary)]">Réservé aux admins/owners.</p>
-          ) : null}
-          {actionError ? <p className="mt-2 text-xs text-[var(--danger)]">{actionError}</p> : null}
-        </SectionCard>
-      ) : null}
+          {!isAdmin && (
+            <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>Réservé aux admins/owners.</p>
+          )}
+          {actionError && <p className="text-xs" style={{ color: 'var(--danger)' }}>{actionError}</p>}
+        </div>
+      )}
     </>
   );
 }

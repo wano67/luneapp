@@ -41,10 +41,10 @@ export function TabsPills({ items, value, onChange, ariaLabel, className, wrap =
               aria-selected={active}
               onClick={() => onChange(tab.key)}
               className={cn(
-                'cursor-pointer rounded-full px-3 py-1 text-xs font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]',
+                'cursor-pointer px-3 py-1.5 text-xs font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]',
                 active
-                  ? 'border border-[var(--border)] bg-[var(--surface)] text-[var(--text-primary)] shadow-sm'
-                  : 'text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]',
+                  ? 'rounded-xl bg-[var(--shell-accent-dark)] text-white'
+                  : 'rounded-full text-[var(--text-faint)] hover:bg-[var(--surface-hover)]',
               )}
               data-active={active ? 'true' : 'false'}
             >

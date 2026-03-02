@@ -1,10 +1,10 @@
 'use client';
+
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Menu, X } from 'lucide-react';
-import { LogoMark } from './LogoMark';
-import { Button } from '@/components/ui/button';
+import { PivotLogo, PivotWordmark } from '@/components/pivot-icons';
 import { cn } from '@/lib/cn';
 
 const navItems = [
@@ -20,12 +20,19 @@ export function MarketingHeader() {
   const [menuOpen, setMenuOpen] = useState(false);
 
   return (
-    <header className="sticky top-0 z-40 border-b border-[var(--border)] bg-[var(--bg)]/90 backdrop-blur-lg">
+    <header
+      className="sticky top-0 z-40 animate-navbar-in"
+      style={{ background: 'var(--shell-sidebar-bg)' }}
+    >
       <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 md:px-6">
-        <LogoMark />
+        {/* Logo */}
+        <Link href="/" className="flex items-center gap-2.5">
+          <PivotLogo size={32} color="var(--shell-sidebar-text)" />
+          <PivotWordmark height={16} color="var(--shell-sidebar-text)" />
+        </Link>
 
         {/* Desktop nav */}
-        <nav className="hidden items-center gap-1 text-sm font-medium text-[var(--text-muted)] md:flex">
+        <nav className="hidden items-center gap-1 md:flex">
           {navItems.map((item) => {
             const isActive = pathname === item.href;
             return (
@@ -33,11 +40,19 @@ export function MarketingHeader() {
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  'rounded-lg px-3 py-2 transition-colors',
+                  'rounded-lg px-3 py-2 text-sm transition-colors',
                   isActive
-                    ? 'bg-[var(--surface-2)] text-[var(--text)]'
-                    : 'hover:bg-[var(--surface-hover)] hover:text-[var(--text)]'
+                    ? 'font-semibold'
+                    : 'opacity-70 hover:opacity-100',
                 )}
+                style={{
+                  fontFamily: 'var(--font-barlow), sans-serif',
+                  fontWeight: 600,
+                  textTransform: 'uppercase',
+                  fontSize: 13,
+                  color: isActive ? 'var(--shell-sidebar-active-text)' : 'var(--shell-sidebar-text)',
+                  background: isActive ? 'var(--shell-sidebar-active-bg)' : 'transparent',
+                }}
               >
                 {item.label}
               </Link>
@@ -45,30 +60,62 @@ export function MarketingHeader() {
           })}
         </nav>
 
+        {/* Desktop CTAs + Mobile hamburger */}
         <div className="flex items-center gap-2">
-          <Button asChild variant="ghost" size="sm" className="hidden md:inline-flex">
-            <Link href="/login">Se connecter</Link>
-          </Button>
-          <Button asChild size="sm" className="hidden md:inline-flex">
-            <Link href="/register">Créer un compte</Link>
-          </Button>
+          <Link
+            href="/login"
+            className="hidden text-sm transition-opacity hover:opacity-80 md:inline-flex"
+            style={{
+              color: 'var(--shell-sidebar-text)',
+              fontFamily: 'var(--font-barlow), sans-serif',
+              fontWeight: 600,
+              fontSize: 13,
+              textTransform: 'uppercase',
+              padding: '8px 12px',
+            }}
+          >
+            Se connecter
+          </Link>
+          <Link
+            href="/register"
+            className="hidden items-center transition-opacity hover:opacity-90 md:inline-flex"
+            style={{
+              background: 'var(--shell-accent)',
+              color: '#fff',
+              borderRadius: 12,
+              padding: '8px 16px',
+              fontFamily: 'var(--font-barlow), sans-serif',
+              fontWeight: 600,
+              fontSize: 13,
+              textTransform: 'uppercase',
+            }}
+          >
+            Créer un compte
+          </Link>
 
           {/* Mobile hamburger */}
           <button
             type="button"
-            className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--border)] text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--text)] md:hidden"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-lg transition-opacity hover:opacity-80 md:hidden"
+            style={{ color: 'var(--shell-sidebar-text)' }}
             onClick={() => setMenuOpen((v) => !v)}
             aria-label={menuOpen ? 'Fermer le menu' : 'Ouvrir le menu'}
           >
-            {menuOpen ? <X size={18} /> : <Menu size={18} />}
+            {menuOpen ? <X size={20} /> : <Menu size={20} />}
           </button>
         </div>
       </div>
 
       {/* Mobile dropdown */}
       {menuOpen ? (
-        <div className="border-t border-[var(--border)] bg-[var(--bg)] px-4 pb-4 pt-2 md:hidden">
-          <nav className="flex flex-col gap-0.5 text-sm font-medium">
+        <div
+          className="animate-menu-in px-4 pb-4 pt-2 md:hidden"
+          style={{
+            background: 'var(--shell-sidebar-bg)',
+            borderTop: '1px solid rgba(255,255,255,0.1)',
+          }}
+        >
+          <nav className="flex flex-col gap-0.5">
             {navItems.map((item) => {
               const isActive = pathname === item.href;
               return (
@@ -78,23 +125,54 @@ export function MarketingHeader() {
                   onClick={() => setMenuOpen(false)}
                   className={cn(
                     'rounded-lg px-3 py-2.5 transition-colors',
-                    isActive
-                      ? 'bg-[var(--surface-2)] text-[var(--text)]'
-                      : 'text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--text)]'
+                    isActive ? 'font-semibold' : 'opacity-70',
                   )}
+                  style={{
+                    fontFamily: 'var(--font-barlow), sans-serif',
+                    fontWeight: 600,
+                    textTransform: 'uppercase',
+                    fontSize: 14,
+                    color: isActive ? 'var(--shell-sidebar-active-text)' : 'var(--shell-sidebar-text)',
+                    background: isActive ? 'var(--shell-sidebar-active-bg)' : 'transparent',
+                  }}
                 >
                   {item.label}
                 </Link>
               );
             })}
           </nav>
-          <div className="mt-3 flex flex-col gap-2 border-t border-[var(--border)] pt-3">
-            <Button asChild variant="outline" size="sm" className="w-full justify-center">
-              <Link href="/login" onClick={() => setMenuOpen(false)}>Se connecter</Link>
-            </Button>
-            <Button asChild size="sm" className="w-full justify-center">
-              <Link href="/register" onClick={() => setMenuOpen(false)}>Créer un compte</Link>
-            </Button>
+          <div
+            className="mt-3 flex flex-col gap-2 pt-3"
+            style={{ borderTop: '1px solid rgba(255,255,255,0.1)' }}
+          >
+            <Link
+              href="/login"
+              onClick={() => setMenuOpen(false)}
+              className="w-full rounded-xl py-2.5 text-center text-sm transition-opacity hover:opacity-80"
+              style={{
+                color: 'var(--shell-sidebar-text)',
+                border: '1px solid rgba(255,255,255,0.2)',
+                fontFamily: 'var(--font-barlow), sans-serif',
+                fontWeight: 600,
+                textTransform: 'uppercase',
+              }}
+            >
+              Se connecter
+            </Link>
+            <Link
+              href="/register"
+              onClick={() => setMenuOpen(false)}
+              className="w-full rounded-xl py-2.5 text-center text-sm transition-opacity hover:opacity-90"
+              style={{
+                background: 'var(--shell-accent)',
+                color: '#fff',
+                fontFamily: 'var(--font-barlow), sans-serif',
+                fontWeight: 600,
+                textTransform: 'uppercase',
+              }}
+            >
+              Créer un compte
+            </Link>
           </div>
         </div>
       ) : null}

@@ -40,7 +40,7 @@ export function SkeletonKpiCard({ className }: SkeletonCardProps) {
   return (
     <div
       className={cn(
-        'rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm',
+        'rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4',
         className
       )}
     >
@@ -85,7 +85,7 @@ export function SkeletonPage() {
         <SkeletonKpiCard />
       </div>
       {/* Content card */}
-      <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5 space-y-3">
+      <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5 space-y-3">
         <Skeleton width="40%" height="18px" />
         <Skeleton height="14px" />
         <Skeleton height="14px" />

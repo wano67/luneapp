@@ -16,13 +16,13 @@
   --text: #0f172a;
   --text-muted: #374151;
   --text-faint: #6b7280;
-  --accent: #2563eb;
-  --accent-strong: #1d4ed8;
+  --accent: #BF7F82;
+  --accent-strong: #71484A;
   --info: #1d4ed8;
   --success: #166534;
   --danger: #b91c1c;
   --warning: #b45309;
-  --focus-ring: #60a5fa;
+  --focus-ring: #BF7F82;
   --shadow-float: 0 18px 46px rgba(17, 24, 39, 0.14);
 
   /* Semantic state backgrounds & borders */
@@ -47,6 +47,18 @@
   --chart-6: #0f766e;
   --chart-7: #7c3aed;
   --chart-8: #c2410c;
+
+  /* Pivot Shell */
+  --shell-sidebar-bg: #343434;
+  --shell-sidebar-text: #EEEDE3;
+  --shell-sidebar-active-bg: #EEEDE3;
+  --shell-sidebar-active-text: #343434;
+  --shell-topbar-bg: #EBEBEB;
+  --shell-topbar-text: #343434;
+  --shell-accent: #BF7F82;
+  --shell-accent-dark: #71484A;
+  --shell-sidebar-width: 220px;
+  --shell-sidebar-collapsed-width: 72px;
 
   /* Legacy aliases */
   --background: var(--bg);
@@ -87,13 +99,13 @@
   --text: #f3f4f6;
   --text-muted: #d1d5db;
   --text-faint: #9ca3af;
-  --accent: #60a5fa;
-  --accent-strong: #3b82f6;
+  --accent: #BF7F82;
+  --accent-strong: #d4979a;
   --info: #93c5fd;
   --success: #22c55e;
   --danger: #ef4444;
   --warning: #f59e0b;
-  --focus-ring: #93c5fd;
+  --focus-ring: #BF7F82;
   --shadow-float: 0 18px 46px rgba(0, 0, 0, 0.52);
 
   --info-bg: rgba(59, 130, 246, 0.16);
@@ -116,6 +128,16 @@
   --chart-6: #2dd4bf;
   --chart-7: #a78bfa;
   --chart-8: #fb923c;
+
+  /* Pivot Shell — dark */
+  --shell-sidebar-bg: #1a1a1e;
+  --shell-sidebar-text: #d4d3c9;
+  --shell-sidebar-active-bg: #2a2a2e;
+  --shell-sidebar-active-text: #f3f4f6;
+  --shell-topbar-bg: #0f1014;
+  --shell-topbar-text: #f3f4f6;
+  --shell-accent: #BF7F82;
+  --shell-accent-dark: #503334;
 
   --background: var(--bg);
   --background-alt: var(--surface-2);
@@ -179,27 +201,27 @@ a {
 
 a:hover {
   text-decoration: none;
-  color: var(--accent);
+  color: var(--shell-accent);
 }
 
 @layer components {
   .card-interactive {
     @apply cursor-pointer border border-[var(--border)] bg-[var(--surface)] transition duration-200 ease-out;
-    @apply hover:bg-[var(--surface-hover)] hover:border-[var(--accent)] hover:shadow-md hover:shadow-black/10;
+    @apply hover:bg-[var(--surface-hover)] hover:border-[var(--shell-accent)] hover:shadow-md hover:shadow-black/10;
     @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)];
     @apply active:shadow-sm motion-safe:hover:-translate-y-[1px];
     text-decoration: none;
   }
   .card-interactive.is-active,
   .card-interactive[data-active='true'] {
-    @apply bg-[var(--surface-2)] border-[var(--accent)];
+    @apply bg-[var(--surface-2)] border-[var(--shell-accent)];
   }
   .card-interactive .card-interactive__icon {
     @apply transition-colors duration-200;
   }
   .card-interactive:hover .card-interactive__icon,
   .card-interactive:focus-visible .card-interactive__icon {
-    @apply border-[var(--accent)] text-[var(--accent-strong)];
+    @apply border-[var(--shell-accent)] text-[var(--shell-accent)];
   }
 }
 
@@ -232,6 +254,68 @@ a:hover {
   100% { opacity: 1; transform: scale(1); }
 }
 
+/* ─── Marketing Animations ────────────────────────────────────────────── */
+
+@keyframes reveal-up {
+  from { opacity: 0; transform: translateY(32px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes reveal-left {
+  from { opacity: 0; transform: translateX(-24px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes reveal-right {
+  from { opacity: 0; transform: translateX(24px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes reveal-scale {
+  from { opacity: 0; transform: scale(0.92); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-8px); }
+}
+
+@keyframes spin-slow {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(191, 127, 130, 0.4); }
+  50%      { box-shadow: 0 0 20px 4px rgba(191, 127, 130, 0.15); }
+}
+
+@keyframes navbar-slide-down {
+  from { opacity: 0; transform: translateY(-100%); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes menu-slide-down {
+  from { opacity: 0; max-height: 0; }
+  to   { opacity: 1; max-height: 500px; }
+}
+
+@keyframes stagger-in {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes bar-grow {
+  from { transform: scaleY(0); }
+  to   { transform: scaleY(1); }
+}
+
+@keyframes kpi-appear {
+  from { opacity: 0; transform: scale(0.8) translateY(8px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
 @layer utilities {
   .animate-skeleton-pulse {
     animation: skeleton-pulse 1.8s ease-in-out infinite;
@@ -245,4 +329,60 @@ a:hover {
   .animate-count-up {
     animation: count-up-flash 0.5s ease-out both;
   }
+  .animate-reveal-up {
+    animation: reveal-up 0.6s ease-out both;
+  }
+  .animate-reveal-left {
+    animation: reveal-left 0.5s ease-out both;
+  }
+  .animate-reveal-right {
+    animation: reveal-right 0.5s ease-out both;
+  }
+  .animate-reveal-scale {
+    animation: reveal-scale 0.5s ease-out both;
+  }
+  .animate-float {
+    animation: float 4s ease-in-out infinite;
+  }
+  .animate-spin-slow {
+    animation: spin-slow 12s linear infinite;
+  }
+  .animate-pulse-glow {
+    animation: pulse-glow 2.5s ease-in-out infinite;
+  }
+  .animate-navbar-in {
+    animation: navbar-slide-down 0.4s ease-out both;
+  }
+  .animate-menu-in {
+    animation: menu-slide-down 0.25s ease-out both;
+  }
+  .animate-stagger-in {
+    animation: stagger-in 0.4s ease-out both;
+    animation-delay: calc(var(--stagger-index, 0) * 80ms);
+  }
+  .animate-bar-grow {
+    animation: bar-grow 0.8s ease-out both;
+    transform-origin: bottom;
+  }
+  .animate-kpi-appear {
+    animation: kpi-appear 0.5s ease-out both;
+  }
+}
+
+/* Feature card hover lift */
+.feature-card-lift {
+  transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
+}
+.feature-card-lift:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-lg);
+  border-color: var(--shell-accent);
+}
+
+.footer-link {
+  color: rgba(238,237,227,0.5);
+  transition: color 0.2s ease;
+}
+.footer-link:hover {
+  color: var(--shell-accent);
 }

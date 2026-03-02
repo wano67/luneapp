@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { PageContainer } from '@/components/layouts/PageContainer';
 import { PageHeader } from '@/components/layouts/PageHeader';
 import { TabsPills } from '@/components/pro/TabsPills';
-import { cn } from '@/lib/cn';
+
 
 type TabItem = { key: string; label: ReactNode };
 
@@ -36,7 +36,7 @@ export function ProPageShell({
   const resolvedActiveTab = hasTabs ? activeTab ?? tabs[0]?.key : undefined;
 
   return (
-    <PageContainer className={cn('space-y-4', className)}>
+    <PageContainer className={className ?? 'gap-5'}>
       <PageHeader
         backHref={backHref}
         backLabel={backLabel}

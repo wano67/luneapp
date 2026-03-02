@@ -22,7 +22,7 @@ type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
 };
 
 const baseStyles =
-  'inline-flex items-center justify-center gap-2 rounded-xl border font-semibold transition-colors shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)] disabled:cursor-not-allowed disabled:opacity-60';
+  'inline-flex items-center justify-center gap-2 rounded-xl border font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)] disabled:cursor-not-allowed disabled:opacity-60';
 
 const variantStyles: Record<ButtonVariant, string> = {
   primary:
@@ -52,6 +52,8 @@ export function Button({
 }: ButtonProps) {
   const classes = cn(baseStyles, variantStyles[variant], sizeStyles[size], className);
 
+  const style = { fontFamily: 'var(--font-barlow), sans-serif' };
+
   if (asChild && isValidElement(children)) {
     const child = children as ReactElement<Record<string, unknown>>;
     const childProps = child.props ?? {};
@@ -59,11 +61,12 @@ export function Button({
       ...childProps,
       ...props,
       className: cn(classes, childProps.className as string | undefined),
+      style: { ...style, ...(childProps.style as Record<string, unknown> | undefined) },
     });
   }
 
   return (
-    <button className={classes} {...props}>
+    <button className={classes} style={style} {...props}>
       {children}
     </button>
   );

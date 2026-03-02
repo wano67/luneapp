@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { LogoMark } from './LogoMark';
+import { PivotLogo, PivotWordmark } from '@/components/pivot-icons';
 
 const primaryLinks = [
   { href: '/features', label: 'Fonctionnalités' },
@@ -17,25 +17,38 @@ const legalLinks = [
 
 export function MarketingFooter() {
   return (
-    <footer className="border-t border-[var(--border)] bg-[var(--bg)]">
+    <footer style={{ background: 'var(--shell-sidebar-bg)' }}>
       <div className="mx-auto grid max-w-6xl gap-10 px-4 py-12 md:grid-cols-[1.2fr_1fr] md:px-6">
         <div className="space-y-4">
-          <LogoMark />
-          <p className="max-w-md text-sm text-[var(--text-secondary)]">
-            Lune, l’OS calme pour orchestrer vos finances personnelles et votre activité
+          <div className="flex items-center gap-2.5">
+            <PivotLogo size={32} color="var(--shell-accent)" />
+            <PivotWordmark height={16} color="var(--shell-sidebar-text)" />
+          </div>
+          <p
+            className="max-w-md text-sm"
+            style={{ color: 'var(--shell-sidebar-text)', opacity: 0.6 }}
+          >
+            Pivot structure vos finances personnelles et votre activité
             professionnelle, en toute sécurité.
           </p>
-          <div className="text-xs text-[var(--text-faint)]">© {new Date().getFullYear()} Lune</div>
+          <div className="text-xs" style={{ color: 'var(--shell-sidebar-text)', opacity: 0.3 }}>
+            © {new Date().getFullYear()} Pivot
+          </div>
         </div>
-        <div className="grid grid-cols-2 gap-6 text-sm text-[var(--text)] sm:grid-cols-3">
+        <div className="grid grid-cols-2 gap-6 text-sm sm:grid-cols-3">
           <div className="space-y-3">
-            <div className="font-semibold">Produit</div>
+            <div
+              className="font-semibold"
+              style={{ color: 'var(--shell-sidebar-text)' }}
+            >
+              Produit
+            </div>
             <div className="space-y-2">
               {primaryLinks.map((link) => (
                 <Link
                   key={link.href}
                   href={link.href}
-                  className="block text-[var(--text-secondary)] hover:text-[var(--text)]"
+                  className="footer-link block"
                 >
                   {link.label}
                 </Link>
@@ -43,13 +56,18 @@ export function MarketingFooter() {
             </div>
           </div>
           <div className="space-y-3">
-            <div className="font-semibold">Légal</div>
+            <div
+              className="font-semibold"
+              style={{ color: 'var(--shell-sidebar-text)' }}
+            >
+              Légal
+            </div>
             <div className="space-y-2">
               {legalLinks.map((link) => (
                 <Link
                   key={link.href}
                   href={link.href}
-                  className="block text-[var(--text-secondary)] hover:text-[var(--text)]"
+                  className="footer-link block"
                 >
                   {link.label}
                 </Link>
@@ -57,13 +75,28 @@ export function MarketingFooter() {
             </div>
           </div>
           <div className="space-y-3">
-            <div className="font-semibold">Ressources</div>
+            <div
+              className="font-semibold"
+              style={{ color: 'var(--shell-sidebar-text)' }}
+            >
+              Ressources
+            </div>
             <div className="space-y-2">
-              <span className="block text-[var(--text-secondary)]">Statut (bientôt)</span>
-              <span className="block text-[var(--text-secondary)]">Blog (bientôt)</span>
+              <span
+                className="block"
+                style={{ color: 'rgba(238,237,227,0.3)' }}
+              >
+                Statut (bientôt)
+              </span>
+              <span
+                className="block"
+                style={{ color: 'rgba(238,237,227,0.3)' }}
+              >
+                Blog (bientôt)
+              </span>
               <Link
                 href="/login"
-                className="block text-[var(--text-secondary)] hover:text-[var(--text)]"
+                className="footer-link block"
               >
                 Accès app
               </Link>

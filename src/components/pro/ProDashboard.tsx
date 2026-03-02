@@ -1,22 +1,19 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { Card } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { KpiCard } from '@/components/ui/kpi-card';
-import { PageContainer } from '@/components/layouts/PageContainer';
-import { BackButton } from '@/components/layouts/BackButton';
-import { ArrowRight, MoreVertical } from 'lucide-react';
+import { ChevronLeft } from 'lucide-react';
 import dynamic from 'next/dynamic';
-
-const CashflowChart = dynamic(() => import('./charts/CashflowChart'), { ssr: false });
-const TasksDonut = dynamic(() => import('./charts/TasksDonut'), { ssr: false });
+import { Button } from '@/components/ui/button';
+import { KpiCard } from '@/components/ui/kpi-card';
+import { Card } from '@/components/ui/card';
+import { PageContainer } from '@/components/layouts/PageContainer';
+import { fmtKpi } from '@/components/pivot-ui';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
-import { formatCurrency } from '@/app/app/pro/pro-data';
 import { useActiveBusiness } from '@/app/app/pro/ActiveBusinessProvider';
-import { normalizeWebsiteUrl } from '@/lib/website';
+
+const TreasuryCashflowChart = dynamic(() => import('./charts/TreasuryCashflowChart'), { ssr: false });
+const TasksDonut = dynamic(() => import('./charts/TasksDonut'), { ssr: false });
 
 type TaskStatus = 'TODO' | 'IN_PROGRESS' | 'DONE';
 
@@ -33,6 +30,7 @@ type DashboardPayload = {
     allTimeIncomeCents?: string;
     allTimeExpenseCents?: string;
     balanceCents?: string;
+    openingBalanceCents?: string;
   };
   billing?: {
     totalInvoicedCents?: string;
@@ -87,31 +85,6 @@ type TaskItem = {
   projectName?: string | null;
 };
 
-const STATUS_LABELS: Record<TaskStatus, string> = {
-  TODO: 'À faire',
-  IN_PROGRESS: 'En cours',
-  DONE: 'Terminé',
-};
-
-
-function parseCents(value?: string | number) {
-  if (typeof value === 'number') return value / 100;
-  if (typeof value === 'string') {
-    const n = Number(value);
-    return Number.isFinite(n) ? n / 100 : 0;
-  }
-  return 0;
-}
-
-function formatDate(value: string | null | undefined) {
-  if (!value) return '—';
-  try {
-    return new Intl.DateTimeFormat('fr-FR').format(new Date(value));
-  } catch {
-    return value;
-  }
-}
-
 function countByStatus(tasks: TaskItem[]) {
   const counts: Record<TaskStatus, number> = { TODO: 0, IN_PROGRESS: 0, DONE: 0 };
   for (const t of tasks) {
@@ -121,10 +94,38 @@ function countByStatus(tasks: TaskItem[]) {
   return counts;
 }
 
-function countLateTasks(tasks: TaskItem[]) {
-  const now = new Date();
-  return tasks.filter((t) => t.dueDate && new Date(t.dueDate) < now && t.status !== 'DONE').length;
+/* ═══ Period pills ═══ */
+
+const PERIODS = [
+  { value: 30, label: '30 jours' },
+  { value: 60, label: '60 jours' },
+  { value: 90, label: '90 jours' },
+  { value: 180, label: '6 mois' },
+  { value: 365, label: '12 mois' },
+] as const;
+
+function PeriodPills({ value, onChange }: { value: number; onChange: (v: number) => void }) {
+  return (
+    <div className="flex items-center gap-2">
+      {PERIODS.map((p) => (
+        <button
+          key={p.value}
+          type="button"
+          onClick={() => onChange(p.value)}
+          className="cursor-pointer rounded-xl px-3 py-1.5 text-sm font-medium transition"
+          style={{
+            background: value === p.value ? 'var(--shell-accent-dark)' : 'var(--surface)',
+            color: value === p.value ? 'white' : 'rgba(0,0,0,0.6)',
+          }}
+        >
+          {p.label}
+        </button>
+      ))}
+    </div>
+  );
 }
+
+/* ═══ Dashboard ═══ */
 
 export default function ProDashboard({ businessId }: { businessId: string }) {
   const [periodDays, setPeriodDays] = useState(30);
@@ -133,9 +134,6 @@ export default function ProDashboard({ businessId }: { businessId: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const activeCtx = useActiveBusiness({ optional: true });
-
-  const active = useActiveBusiness({ optional: true });
-  const role = active?.activeBusiness?.role ?? null;
 
   useEffect(() => {
     let cancelled = false;
@@ -151,7 +149,7 @@ export default function ProDashboard({ businessId }: { businessId: string }) {
         if (cancelled) return;
 
         if (!dashRes.ok) throw new Error(dashRes.error || 'Dashboard indisponible');
-        if (!tasksRes.ok) throw new Error(tasksRes.error || 'Tâches indisponibles');
+        if (!tasksRes.ok) throw new Error(tasksRes.error || 'Taches indisponibles');
 
         setDashboard(dashRes.data ?? null);
         setTasks(tasksRes.data?.items ?? []);
@@ -170,281 +168,98 @@ export default function ProDashboard({ businessId }: { businessId: string }) {
   }, [businessId, periodDays]);
 
   const tasksByStatus = useMemo(() => countByStatus(tasks), [tasks]);
-  const lateTasksCount = useMemo(() => countLateTasks(tasks), [tasks]);
-  const upcomingTasks = dashboard?.latestTasks ?? dashboard?.nextActions?.tasks ?? [];
   const monthlySeries = dashboard?.monthlySeries ?? [];
-
-  const treasuryBalance = parseCents(dashboard?.treasury?.balanceCents);
-  const pendingCollection = parseCents(dashboard?.billing?.pendingCollectionCents);
   const avgProfitability = dashboard?.projectMetrics?.avgProfitabilityPercent ?? 0;
-  const avgDuration = dashboard?.projectMetrics?.avgDurationDays ?? 0;
 
   return (
-    <PageContainer className="space-y-5">
-      <BusinessHeader
-        businessName={activeCtx?.activeBusiness?.name ?? 'Entreprise'}
-        websiteUrl={activeCtx?.activeBusiness?.websiteUrl ?? null}
-        role={role}
-        businessId={businessId}
-      />
-
-      <div className="flex w-fit items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2">
-        <span className="text-xs text-[var(--text-secondary)]">Période</span>
-        <select
-          value={periodDays}
-          onChange={(e) => setPeriodDays(Number(e.target.value))}
-          className="cursor-pointer rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-2 py-1 text-sm"
-        >
-          <option value={7}>7 jours</option>
-          <option value={30}>30 jours</option>
-          <option value={90}>90 jours</option>
-        </select>
+    <PageContainer className="gap-5">
+      {/* Top row: Retour + Period pills */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Button asChild variant="outline" size="sm">
+          <Link href="/app/pro">
+            <ChevronLeft size={16} />
+            Retour
+          </Link>
+        </Button>
+        <PeriodPills value={periodDays} onChange={setPeriodDays} />
       </div>
 
-      <BusinessKpis
-        items={[
-          { label: 'Trésorerie', value: formatCurrency(treasuryBalance) },
-          { label: 'En attente', value: formatCurrency(pendingCollection) },
-          { label: 'Rentabilité', value: `${avgProfitability}%` },
-          { label: 'Durée moy.', value: avgDuration > 0 ? `${avgDuration}j` : '—' },
-        ]}
-      />
+      {/* KPIs — 3 cards */}
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
+        <KpiCard label="Tresorerie" value={fmtKpi(dashboard?.treasury?.balanceCents)} loading={loading} delay={0} />
+        <KpiCard label="En attente" value={fmtKpi(dashboard?.billing?.pendingCollectionCents)} loading={loading} delay={50} />
+        <KpiCard label="Rentabilite" value={`${avgProfitability}%`} loading={loading} delay={100} />
+      </div>
 
       {loading ? (
         <Card className="p-5">
-          <p className="text-sm text-[var(--text-secondary)]">Chargement du dashboard…</p>
+          <p className="text-sm text-[var(--text-secondary)]">Chargement du dashboard\u2026</p>
         </Card>
       ) : error ? (
         <Card className="space-y-2 p-5">
           <p className="text-sm font-semibold text-[var(--danger)]">{error}</p>
-          <p className="text-xs text-[var(--text-secondary)]">Vérifie la connexion ou réessaie.</p>
+          <p className="text-xs text-[var(--text-secondary)]">Verifie la connexion ou reessaie.</p>
         </Card>
       ) : (
-        <>
-          <div className="grid gap-4 lg:grid-cols-3">
-            <Card className="lg:col-span-2 space-y-3 border border-[var(--border)]/80 bg-[var(--surface)] p-5">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-semibold text-[var(--text-primary)]">Cash flow (12 mois)</p>
-                <Button asChild size="sm" variant="primary">
-                  <Link href={`/app/pro/${businessId}/finances`}>Finances</Link>
-                </Button>
-              </div>
-              <CashflowChart series={monthlySeries} />
-            </Card>
-
-            <Card className="space-y-3 border border-[var(--border)]/80 bg-[var(--surface)] p-5">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-semibold text-[var(--text-primary)]">Tâches par statut</p>
-                <Button asChild size="sm" variant="outline">
-                  <Link href={`/app/pro/${businessId}/tasks`}>Voir tâches</Link>
-                </Button>
-              </div>
-              <TasksDonut
-                data={[
-                  { name: 'À faire', value: tasksByStatus.TODO },
-                  { name: 'En cours', value: tasksByStatus.IN_PROGRESS },
-                  { name: 'Terminées', value: tasksByStatus.DONE },
-                ]}
-              />
-            </Card>
+        <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
+          {/* Cashflow card — accent background */}
+          <div
+            className="flex flex-col gap-3 rounded-xl p-4 animate-fade-in-up"
+            style={{
+              background: 'var(--shell-accent)',
+              animationDelay: '200ms',
+              animationFillMode: 'backwards',
+            }}
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium text-white">Cash flow</span>
+              <Button asChild variant="outline" size="sm" className="!bg-white !text-black !border-0">
+                <Link href={`/app/pro/${businessId}/finances`}>
+                  <span style={{ fontFamily: 'var(--font-barlow), sans-serif', fontWeight: 600, fontSize: 16 }}>
+                    Voir mes finances
+                  </span>
+                  <ChevronLeft size={14} className="rotate-180" />
+                </Link>
+              </Button>
+            </div>
+            <TreasuryCashflowChart
+              series={monthlySeries}
+              openingBalanceCents={dashboard?.treasury?.openingBalanceCents}
+              variant="accent"
+            />
           </div>
 
-          <div className="grid gap-4 lg:grid-cols-3">
-            <Card className="space-y-3 border border-[var(--border)]/80 bg-[var(--surface)] p-5">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-semibold text-[var(--text-primary)]">Actions rapides</p>
-              </div>
-              <div className="grid gap-2 grid-cols-2 sm:grid-cols-4">
-                <QuickLink href={`/app/pro/${businessId}/clients`} label="Clients" />
-                <QuickLink href={`/app/pro/${businessId}/prospects`} label="Prospects" />
-                <QuickLink href={`/app/pro/${businessId}/projects`} label="Projets" />
-                <QuickLink href={`/app/pro/${businessId}/tasks`} label="Tâches" />
-                <QuickLink href={`/app/pro/${businessId}/agenda`} label="Agenda" />
-                <QuickLink href={`/app/pro/${businessId}/services`} label="Services" />
-                <QuickLink href={`/app/pro/${businessId}/stock`} label="Stock" />
-                <QuickLink href={`/app/pro/${businessId}/finances`} label="Finances" />
-              </div>
-            </Card>
-
-            <Card className="space-y-3 border border-[var(--border)]/80 bg-[var(--surface)] p-5 lg:col-span-2">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-semibold text-[var(--text-primary)]">Focus</p>
-                <Badge variant="neutral">{lateTasksCount > 0 ? `${lateTasksCount} urgences` : 'Prêt'}</Badge>
-              </div>
-              <div className="space-y-2 text-sm text-[var(--text-secondary)]">
-                {upcomingTasks.slice(0, 3).map((t) => (
-                  <div key={t.id} className="flex items-center justify-between rounded-xl border border-[var(--border)]/60 bg-[var(--surface)]/70 px-3 py-2">
-                    <div className="min-w-0">
-                      <p className="truncate text-[var(--text-primary)]">{t.title}</p>
-                      <p className="text-[11px]">{t.projectName ?? 'Projet'} · {formatDate(t.dueDate)}</p>
-                    </div>
-                    <Badge variant="neutral" className="shrink-0">
-                      {STATUS_LABELS[t.status]}
-                    </Badge>
-                  </div>
-                ))}
-                {upcomingTasks.length === 0 ? <p>Aucune action imminente.</p> : null}
-              </div>
-            </Card>
+          {/* Tasks donut — accent background */}
+          <div
+            className="flex flex-col gap-3 rounded-xl p-4 animate-fade-in-up"
+            style={{
+              background: 'var(--shell-accent)',
+              animationDelay: '300ms',
+              animationFillMode: 'backwards',
+            }}
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium text-white">Taches</span>
+              <Button asChild variant="outline" size="sm" className="!bg-white !text-black !border-0">
+                <Link href={`/app/pro/${businessId}/tasks`}>
+                  <span style={{ fontFamily: 'var(--font-barlow), sans-serif', fontWeight: 600, fontSize: 16 }}>
+                    Taches a faire
+                  </span>
+                  <ChevronLeft size={14} className="rotate-180" />
+                </Link>
+              </Button>
+            </div>
+            <TasksDonut
+              data={[
+                { name: 'A faire', value: tasksByStatus.TODO },
+                { name: 'En cours', value: tasksByStatus.IN_PROGRESS },
+                { name: 'Terminees', value: tasksByStatus.DONE },
+              ]}
+              variant="accent"
+            />
           </div>
-        </>
+        </div>
       )}
     </PageContainer>
-  );
-}
-
-function BusinessHeader({
-  businessName,
-  websiteUrl,
-  role,
-  businessId,
-}: {
-  businessName: string;
-  websiteUrl: string | null | undefined;
-  role: string | null;
-  businessId: string;
-}) {
-  const normalized = normalizeWebsiteUrl(websiteUrl).value;
-  const src = normalized ? `/api/logo?url=${encodeURIComponent(normalized)}` : null;
-  return (
-    <div className="flex flex-col gap-3 rounded-3xl border border-[var(--border)]/80 bg-[var(--surface)]/80 p-4">
-      <BackButton href="/app/pro" label="Studio" />
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="flex items-start gap-3">
-          <LogoBlock src={src} fallback={businessName} />
-          <div className="min-w-0">
-            <p className="text-xl font-semibold text-[var(--text-primary)]">{businessName}</p>
-            {role ? (
-              <Badge variant="neutral" className="mt-1 text-[11px]">
-                {role}
-              </Badge>
-            ) : null}
-          </div>
-        </div>
-        <div className="flex flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:justify-end">
-          <Button asChild size="sm" variant="primary" className="w-full sm:w-auto">
-            <Link href={`/app/pro/${businessId}/projects`}>Nouveau projet</Link>
-          </Button>
-          <HeaderMenu businessId={businessId} />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function BusinessKpis({ items }: { items: Array<{ label: string; value: string }> }) {
-  return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-      {items.slice(0, 4).map((item) => (
-        <KpiCard key={item.label} label={item.label} value={item.value} />
-      ))}
-    </div>
-  );
-}
-
-function HeaderMenu({ businessId }: { businessId: string }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (!ref.current) return;
-      if (!ref.current.contains(e.target as Node)) setOpen(false);
-    }
-    function handleKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') setOpen(false);
-    }
-    document.addEventListener('mousedown', handleClick);
-    document.addEventListener('keydown', handleKey);
-    return () => {
-      document.removeEventListener('mousedown', handleClick);
-      document.removeEventListener('keydown', handleKey);
-    };
-  }, []);
-
-  const items = [
-    { label: 'Projets', href: `/app/pro/${businessId}/projects` },
-    { label: 'Tâches', href: `/app/pro/${businessId}/tasks` },
-    { label: 'Clients', href: `/app/pro/${businessId}/clients` },
-    { label: 'Prospects', href: `/app/pro/${businessId}/prospects` },
-    { label: 'Agenda', href: `/app/pro/${businessId}/agenda` },
-    { label: 'Services', href: `/app/pro/${businessId}/services` },
-    { label: 'Stock', href: `/app/pro/${businessId}/stock` },
-    { label: 'Finances', href: `/app/pro/${businessId}/finances` },
-    { label: 'Paramètres', href: `/app/pro/${businessId}/settings` },
-  ];
-
-  return (
-    <div className="relative" ref={ref}>
-      <button
-        type="button"
-        aria-haspopup="menu"
-        aria-expanded={open}
-        aria-label="Actions"
-        className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full text-[var(--text-secondary)] transition hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
-        onClick={() => setOpen((v) => !v)}
-      >
-        <MoreVertical size={18} />
-      </button>
-      {open ? (
-        <div className="absolute right-0 z-20 mt-2 w-44 overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--surface)] shadow-md">
-          {items.map((item) => (
-            <Link
-              key={item.label}
-              href={item.href}
-              role="menuitem"
-              className="block cursor-pointer px-3 py-2 text-sm text-[var(--text-primary)] transition hover:bg-[var(--surface-hover)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
-              onClick={() => setOpen(false)}
-            >
-              {item.label}
-            </Link>
-          ))}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function LogoBlock({ src, fallback }: { src: string | null; fallback: string }) {
-  const initials =
-    fallback
-      ?.trim()
-      .split(/\s+/)
-      .map((p) => p[0] || '')
-      .join('')
-      .slice(0, 2)
-      .toUpperCase() || '??';
-  const [errored, setErrored] = useState(false);
-  return (
-    <span
-      className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-[var(--surface-2)] text-[var(--text-secondary)]"
-      aria-hidden
-    >
-      {src && !errored ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={src}
-          alt=""
-          className="h-full w-full rounded-xl object-cover"
-          onError={() => setErrored(true)}
-        />
-      ) : (
-        <span className="text-sm font-semibold text-[var(--text-primary)]">{initials}</span>
-      )}
-    </span>
-  );
-}
-
-function QuickLink({ href, label }: { href: string; label: string }) {
-  return (
-    <Link
-      href={href}
-      className="card-interactive block cursor-pointer rounded-xl border border-[var(--border)]/70 bg-[var(--surface)]/80 px-3 py-2 text-sm text-[var(--text-primary)] transition hover:-translate-y-[1px] hover:shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
-    >
-      <div className="flex items-center justify-between">
-        <span>{label}</span>
-        <ArrowRight size={14} />
-      </div>
-    </Link>
   );
 }

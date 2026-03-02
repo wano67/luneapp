@@ -35,7 +35,7 @@ export function PageHeader({
         <div className="flex min-w-0 items-start gap-3">
           {leading ? <div className="shrink-0">{leading}</div> : null}
           <div className="min-w-0 space-y-1">
-            <h1 className="truncate text-xl font-semibold text-[var(--text)]">{title}</h1>
+            <h1 style={{ color: 'var(--text)', fontSize: 28, fontWeight: 700 }}>{title}</h1>
             {subtitle ? (
               <div className="text-sm text-[var(--text-faint)]">{subtitle}</div>
             ) : null}

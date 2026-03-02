@@ -199,7 +199,7 @@ export function Modal({ open, onCloseAction, title, description, children }: Mod
           {/* Header */}
           <div className="relative shrink-0 border-b border-[var(--border)] px-6 py-5">
             <div className="pr-14">
-              <h3 id={titleId} className="text-xl font-semibold">
+              <h3 id={titleId} className="text-xl font-semibold" style={{ fontFamily: 'var(--font-barlow), sans-serif' }}>
                 {title}
               </h3>
               {description ? (
@@ -212,7 +212,7 @@ export function Modal({ open, onCloseAction, title, description, children }: Mod
             <button
               type="button"
               onClick={requestClose}
-              className="absolute right-4 top-4 inline-flex h-11 w-11 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface-2)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
+              className="absolute right-4 top-4 inline-flex h-11 w-11 items-center justify-center rounded-full bg-[var(--shell-accent)] text-white hover:opacity-90 transition-opacity focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
               aria-label="Fermer la fenêtre"
               title="Fermer"
             >
@@ -245,7 +245,7 @@ export function ModalFooterSticky({ children }: ModalFooterStickyProps) {
   return (
     <div className="sticky bottom-0 -mx-6 mt-6 px-6 pb-5 pt-3">
       {/* barre flottante centrée */}
-      <div className="mx-auto w-fit rounded-2xl border border-[var(--border)] bg-[var(--background-alt)]/80 px-3 py-3 shadow-lg shadow-black/30 backdrop-blur-md">
+      <div className="mx-auto w-fit rounded-xl border border-[var(--border)] bg-[var(--background-alt)]/80 px-3 py-3 shadow-lg shadow-black/30 backdrop-blur-md">
         <div className="flex items-center justify-center gap-2">
           {children}
         </div>

@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { cn } from '@/lib/cn';
+import { TrendingUp, TrendingDown } from 'lucide-react';
 
 type Trend = 'up' | 'down' | 'neutral';
 
@@ -9,29 +10,82 @@ type KpiCardProps = {
   delta?: string | null;
   trend?: Trend;
   hint?: ReactNode;
+  loading?: boolean;
+  /** Stagger animation delay in ms */
+  delay?: number;
+  /** "default" = 200px dashboard card ; "compact" = auto-height for marketing/inline */
+  size?: 'default' | 'compact';
   className?: string;
 };
 
-const trendColor: Record<Trend, string> = {
-  up: 'text-[var(--success)]',
-  down: 'text-[var(--danger)]',
-  neutral: 'text-[var(--text-muted)]',
-};
+export function KpiCard({ label, value, delta, trend = 'neutral', hint, loading, delay, size = 'default', className }: KpiCardProps) {
+  const isCompact = size === 'compact';
 
-export function KpiCard({ label, value, delta, trend = 'neutral', hint, className }: KpiCardProps) {
   return (
     <div
       className={cn(
-        'rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm',
+        'flex flex-col rounded-xl animate-fade-in-up',
+        isCompact ? 'gap-2' : 'justify-between',
         className
       )}
+      style={{
+        minHeight: isCompact ? undefined : 200,
+        padding: isCompact ? '16px' : 12,
+        background: 'var(--surface)',
+        outline: '0.5px solid var(--border)',
+        animationDelay: delay ? `${delay}ms` : undefined,
+        animationFillMode: delay ? 'backwards' : undefined,
+      }}
     >
-      <div className="text-sm font-medium text-[var(--text-muted)]">{label}</div>
-      <div className="mt-2 text-2xl font-semibold text-[var(--text)]">{value}</div>
-      <div className="mt-2 flex items-center gap-2 text-sm">
-        {delta ? <span className={trendColor[trend]}>{delta}</span> : null}
-        {hint ? <span className="text-[var(--text-secondary)]">{hint}</span> : null}
+      <div className="flex items-start justify-between gap-2">
+        <span className="text-sm font-medium" style={{ color: 'var(--text)' }}>
+          {label}
+        </span>
+        {delta ? (
+          <div
+            className="flex items-center gap-1 px-3 py-1.5 rounded-xl"
+            style={{ background: 'var(--shell-accent-dark)' }}
+          >
+            <span
+              className="text-white font-bold"
+              style={{
+                fontFamily: 'var(--font-roboto-mono), monospace',
+                fontSize: 14,
+                lineHeight: '14px',
+              }}
+            >
+              {delta}
+            </span>
+            {trend === 'down' ? (
+              <TrendingDown size={14} className="text-white" />
+            ) : trend === 'up' ? (
+              <TrendingUp size={14} className="text-white" />
+            ) : null}
+          </div>
+        ) : null}
       </div>
+      <div>
+        {loading ? (
+          <div
+            className="h-10 w-32 rounded-lg animate-skeleton-pulse"
+            style={{ background: 'var(--surface-2)' }}
+          />
+        ) : (
+          <span
+            style={{
+              color: 'var(--shell-accent)',
+              fontSize: isCompact ? 20 : 40,
+              fontWeight: 800,
+              lineHeight: isCompact ? '24px' : '40px',
+            }}
+          >
+            {value}
+          </span>
+        )}
+      </div>
+      {hint && isCompact ? (
+        <p className="text-xs" style={{ color: 'var(--text-faint)' }}>{hint}</p>
+      ) : null}
     </div>
   );
 }

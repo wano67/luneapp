@@ -92,6 +92,17 @@ export const GET = withBusinessRoute({ minRole: 'VIEWER' }, async (ctx) => {
     }),
   ]);
 
+  // Opening balance: all finances BEFORE seriesStart
+  const priorRows = await prisma.finance.findMany({
+    where: { businessId: ctx.businessId, deletedAt: null, date: { lt: seriesStart } },
+    select: { type: true, amountCents: true },
+  });
+  let openingBalanceCents = BigInt(0);
+  for (const row of priorRows) {
+    if (row.type === FinanceType.INCOME) openingBalanceCents += row.amountCents;
+    else openingBalanceCents -= row.amountCents;
+  }
+
   let mtdIncome = BigInt(0);
   let mtdExpense = BigInt(0);
   const monthBuckets = new Map<string, { income: bigint; expense: bigint }>();
@@ -158,6 +169,7 @@ export const GET = withBusinessRoute({ minRole: 'VIEWER' }, async (ctx) => {
       allTimeIncomeCents,
       allTimeExpenseCents,
       balanceCents: allTimeIncomeCents - allTimeExpenseCents,
+      openingBalanceCents,
     },
     billing: {
       totalInvoicedCents: billingSummary.totalInvoicedCents,

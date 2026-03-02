@@ -6,7 +6,9 @@ export default function MarketingLayout({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen bg-[var(--bg)] text-[var(--text)]">
       <MarketingHeader />
-      <main className="mx-auto max-w-6xl px-4 py-10 md:px-6 md:py-14">{children}</main>
+      <main className="mx-auto max-w-6xl px-4 py-10 md:px-6 md:py-14 animate-fade-in-up">
+        {children}
+      </main>
       <MarketingFooter />
     </div>
   );

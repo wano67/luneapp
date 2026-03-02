@@ -1,13 +1,15 @@
 import type { Metadata } from 'next';
 import { FeatureGrid } from '@/components/marketing/FeatureGrid';
+import { ScrollReveal } from '@/components/marketing/ScrollReveal';
+import { StaggerChildren } from '@/components/marketing/StaggerChildren';
 import { SectionHeader } from '@/components/ui/section-header';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 
 export const metadata: Metadata = {
-  title: 'Fonctionnalités • Lune',
-  description: 'Découvrez les modules PRO et personnels de Lune, prêts à l’usage.',
+  title: 'Fonctionnalités • Pivot',
+  description: "Découvrez les modules PRO et personnels de Pivot, prêts à l'usage.",
 };
 
 const proFeatures = [
@@ -79,10 +81,12 @@ const personalFeatures = [
 export default function FeaturesPage() {
   return (
     <div className="space-y-12">
-      <SectionHeader
-        title="Fonctionnalités clés"
-        description="Un produit unique pour couvrir vos besoins pro et perso, avec un design calme et sécurisé."
-      />
+      <ScrollReveal>
+        <SectionHeader variant="marketing"
+          title="Fonctionnalités clés"
+          description="Un produit unique pour couvrir vos besoins pro et perso, avec un design calme et sécurisé."
+        />
+      </ScrollReveal>
 
       <FeatureGrid
         title="Espace PRO"
@@ -96,11 +100,13 @@ export default function FeaturesPage() {
         items={personalFeatures}
       />
 
-      <SectionHeader
-        title="Productivité au quotidien"
-        description="Cockpits, hubs et modals pensés pour éviter les frictions et les boucles de fetch."
-      />
-      <div className="grid gap-4 md:grid-cols-3">
+      <ScrollReveal>
+        <SectionHeader variant="marketing"
+          title="Productivité au quotidien"
+          description="Cockpits, hubs et modals pensés pour éviter les frictions et les boucles de fetch."
+        />
+      </ScrollReveal>
+      <StaggerChildren className="grid gap-4 md:grid-cols-3">
         {[
           {
             title: 'Cockpit entreprise',
@@ -108,37 +114,39 @@ export default function FeaturesPage() {
           },
           {
             title: 'Hub /app/pro',
-            desc: 'Switch d’entreprise, invites, création et reprise rapide.',
+            desc: "Switch d'entreprise, invites, création et reprise rapide.",
           },
           {
             title: 'Stabilité technique',
             desc: 'AbortController, request-id surfacés, no-store, CSRF, rate-limit.',
           },
         ].map((item) => (
-          <Card key={item.title} className="border-[var(--border)] bg-[var(--surface)] p-5">
+          <Card key={item.title} className="feature-card-lift border-[var(--border)] bg-[var(--surface)] p-5">
             <div className="text-base font-semibold text-[var(--text)]">{item.title}</div>
             <p className="mt-2 text-sm text-[var(--text-secondary)] leading-relaxed">{item.desc}</p>
           </Card>
         ))}
-      </div>
+      </StaggerChildren>
 
-      <div className="flex flex-wrap gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-6">
-        <div className="flex-1 space-y-2">
-          <div className="text-lg font-semibold text-[var(--text)]">Prêt à essayer Lune ?</div>
-          <p className="text-sm text-[var(--text-secondary)]">
-            Créez un compte en quelques secondes. Vous pourrez ensuite inviter votre équipe et
-            configurer vos entreprises.
-          </p>
+      <ScrollReveal>
+        <div className="flex flex-wrap gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-6">
+          <div className="flex-1 space-y-2">
+            <div className="text-lg font-semibold text-[var(--text)]">Prêt à essayer Pivot ?</div>
+            <p className="text-sm text-[var(--text-secondary)]">
+              Créez un compte en quelques secondes. Vous pourrez ensuite inviter votre équipe et
+              configurer vos entreprises.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button asChild>
+              <Link href="/register">Créer un compte</Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link href="/login">Se connecter</Link>
+            </Button>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Button asChild>
-            <Link href="/register">Créer un compte</Link>
-          </Button>
-          <Button asChild variant="outline">
-            <Link href="/login">Se connecter</Link>
-          </Button>
-        </div>
-      </div>
+      </ScrollReveal>
     </div>
   );
 }

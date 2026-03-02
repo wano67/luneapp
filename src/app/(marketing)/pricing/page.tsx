@@ -1,5 +1,7 @@
 import type { Metadata } from 'next';
 import { PricingCards } from '@/components/marketing/PricingCards';
+import { ScrollReveal } from '@/components/marketing/ScrollReveal';
+import { StaggerChildren } from '@/components/marketing/StaggerChildren';
 import { SectionHeader } from '@/components/ui/section-header';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -8,7 +10,7 @@ import { Faq } from '@/components/marketing/Faq';
 import Link from 'next/link';
 
 export const metadata: Metadata = {
-  title: 'Tarifs • Lune',
+  title: 'Tarifs • Pivot',
   description: 'Des plans clairs pour démarrer ou passer en mode équipe.',
 };
 
@@ -63,7 +65,7 @@ function CellValue({ value }: { value: string | boolean }) {
 export default function PricingPage() {
   return (
     <div className="space-y-12">
-      <SectionHeader
+      <SectionHeader variant="marketing"
         title="Des plans clairs et progressifs"
         description="Commencez gratuitement, passez à Pro quand vos besoins augmentent, contactez-nous pour Equipe."
       />
@@ -71,48 +73,50 @@ export default function PricingPage() {
       <PricingCards />
 
       {/* Comparison table */}
-      <section className="space-y-4">
-        <SectionHeader title="Comparaison détaillée" />
-        <div className="overflow-x-auto rounded-2xl border border-[var(--border)]">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-[var(--border)] bg-[var(--surface-2)]">
-                <th className="px-4 py-3 text-left font-medium text-[var(--text-muted)]">Fonctionnalité</th>
-                <th className="px-4 py-3 text-center font-medium text-[var(--text-muted)]">Essentiel</th>
-                <th className="px-4 py-3 text-center font-semibold text-[var(--accent)]">
-                  Pro
-                  <Badge variant="pro" className="ml-2 align-middle text-xs">Populaire</Badge>
-                </th>
-                <th className="px-4 py-3 text-center font-medium text-[var(--text-muted)]">Equipe</th>
-              </tr>
-            </thead>
-            <tbody>
-              {comparisonRows.map((row, i) => (
-                <tr
-                  key={row.feature}
-                  className={`border-b border-[var(--border)] last:border-0 ${
-                    i % 2 === 0 ? 'bg-[var(--surface)]' : 'bg-[var(--surface-2)]'
-                  }`}
-                >
-                  <td className="px-4 py-3 text-[var(--text)]">{row.feature}</td>
-                  <td className="px-4 py-3 text-center">
-                    <CellValue value={row.essential} />
-                  </td>
-                  <td className="px-4 py-3 text-center font-medium">
-                    <CellValue value={row.pro} />
-                  </td>
-                  <td className="px-4 py-3 text-center">
-                    <CellValue value={row.team} />
-                  </td>
+      <ScrollReveal>
+        <section className="space-y-4">
+          <SectionHeader variant="marketing" title="Comparaison détaillée" />
+          <div className="overflow-x-auto rounded-xl border border-[var(--border)]">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-[var(--border)] bg-[var(--surface-2)]">
+                  <th className="px-4 py-3 text-left font-medium text-[var(--text-muted)]">Fonctionnalité</th>
+                  <th className="px-4 py-3 text-center font-medium text-[var(--text-muted)]">Essentiel</th>
+                  <th className="px-4 py-3 text-center font-semibold text-[var(--accent)]">
+                    Pro
+                    <Badge variant="pro" className="ml-2 align-middle text-xs">Populaire</Badge>
+                  </th>
+                  <th className="px-4 py-3 text-center font-medium text-[var(--text-muted)]">Equipe</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
+              </thead>
+              <tbody>
+                {comparisonRows.map((row, i) => (
+                  <tr
+                    key={row.feature}
+                    className={`border-b border-[var(--border)] last:border-0 ${
+                      i % 2 === 0 ? 'bg-[var(--surface)]' : 'bg-[var(--surface-2)]'
+                    }`}
+                  >
+                    <td className="px-4 py-3 text-[var(--text)]">{row.feature}</td>
+                    <td className="px-4 py-3 text-center">
+                      <CellValue value={row.essential} />
+                    </td>
+                    <td className="px-4 py-3 text-center font-medium">
+                      <CellValue value={row.pro} />
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <CellValue value={row.team} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </ScrollReveal>
 
       {/* Benefits */}
-      <div className="grid gap-4 md:grid-cols-3">
+      <StaggerChildren className="grid gap-4 md:grid-cols-3">
         {[
           {
             title: 'Facturation simple',
@@ -127,36 +131,38 @@ export default function PricingPage() {
             desc: 'Aide produit, onboarding, et réponses rapides par mail.',
           },
         ].map((item) => (
-          <Card key={item.title} className="border-[var(--border)] bg-[var(--surface)] p-5">
+          <Card key={item.title} className="feature-card-lift border-[var(--border)] bg-[var(--surface)] p-5">
             <div className="text-base font-semibold text-[var(--text)]">{item.title}</div>
             <p className="mt-2 text-sm leading-relaxed text-[var(--text-secondary)]">{item.desc}</p>
           </Card>
         ))}
-      </div>
+      </StaggerChildren>
 
       {/* FAQ pricing */}
       <section className="space-y-4">
-        <SectionHeader title="Questions fréquentes sur les tarifs" />
+        <SectionHeader variant="marketing" title="Questions fréquentes sur les tarifs" />
         <Faq items={pricingFaq} />
       </section>
 
       {/* CTA */}
-      <Card className="flex flex-col gap-3 border-[var(--border)] bg-[var(--surface-2)] p-6 md:flex-row md:items-center md:justify-between">
-        <div>
-          <div className="text-lg font-semibold text-[var(--text)]">Questions sur les tarifs ?</div>
-          <p className="text-sm text-[var(--text-secondary)]">
-            Parlons des besoins de votre équipe et des intégrations spécifiques.
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button asChild>
-            <Link href="/register">Démarrer</Link>
-          </Button>
-          <Button asChild variant="outline">
-            <Link href="/contact">Nous contacter</Link>
-          </Button>
-        </div>
-      </Card>
+      <ScrollReveal>
+        <Card className="flex flex-col gap-3 border-[var(--border)] bg-[var(--surface-2)] p-6 md:flex-row md:items-center md:justify-between">
+          <div>
+            <div className="text-lg font-semibold text-[var(--text)]">Questions sur les tarifs ?</div>
+            <p className="text-sm text-[var(--text-secondary)]">
+              Parlons des besoins de votre équipe et des intégrations spécifiques.
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <Button asChild>
+              <Link href="/register">Démarrer</Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link href="/contact">Nous contacter</Link>
+            </Button>
+          </div>
+        </Card>
+      </ScrollReveal>
     </div>
   );
 }

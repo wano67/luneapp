@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
+import { KpiCard } from '@/components/ui/kpi-card';
+import { PageContainer } from '@/components/layouts/PageContainer';
 import { TabsPills } from '@/components/pro/TabsPills';
 import {
   UI,
@@ -527,16 +529,11 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
   }
 
   return (
-    <div className={UI.page}>
+    <PageContainer className="gap-5">
       <ProjectHeaderSection
         businessId={businessId}
         projectId={projectId}
         projectName={project.name}
-        clientId={project.clientId}
-        clientName={project.clientName}
-        startDate={project.startDate}
-        endDate={project.endDate}
-        updatedAt={project.updatedAt}
         archivedAt={project.archivedAt ?? null}
         statusLabel={statusLabel}
         scopeLabel={scopeLabel}
@@ -546,7 +543,6 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
         isAdmin={isAdmin}
         markingCompleted={markingCompleted}
         actionError={actionError}
-        kpis={kpis}
         latestPdf={latestPdf}
         onMarkCompleted={handleMarkCompleted}
         onPostpone={() => {
@@ -554,16 +550,28 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
           setActionError(null);
           setActiveSetupModal('deadline');
         }}
+        onBillingClick={() => setActiveTab('billing')}
       />
 
-      <TabsPills
-        items={tabs}
-        value={activeTab}
-        onChange={(key) => setActiveTab(key as typeof activeTab)}
-        ariaLabel="Onglets projet"
-        className="rounded-2xl bg-[var(--surface)]/70 p-2"
-        wrap={false}
-      />
+      {/* KPI cards */}
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
+        {kpis.map((item, i) => (
+          <KpiCard key={item.label} label={item.label} value={item.value} delay={i * 50} />
+        ))}
+      </div>
+
+      {/* Main content card */}
+      <div
+        className="flex flex-1 flex-col gap-4 rounded-3xl p-3"
+        style={{ background: 'var(--surface)', outline: '0.5px solid var(--border)' }}
+      >
+        <TabsPills
+          items={tabs}
+          value={activeTab}
+          onChange={(key) => setActiveTab(key as typeof activeTab)}
+          ariaLabel="Onglets projet"
+          wrap={false}
+        />
 
       {activeTab === 'overview' ? (
         <OverviewTab
@@ -741,6 +749,7 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
           onDelete={deleteDocument}
         />
       ) : null}
+      </div>
 
       {/* Billing modals (always mounted) */}
       <BillingModals
@@ -948,6 +957,6 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
         onCloseAccessModal={() => setAccessModalOpen(false)}
         onCloseUnitsModal={() => setUnitsModalOpen(false)}
       />
-    </div>
+    </PageContainer>
   );
 }

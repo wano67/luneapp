@@ -9,7 +9,7 @@ export function Table({ children, className, wrapperClassName, ...props }: Table
   return (
     <div
       className={cn(
-        'w-full overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-sm',
+        'w-full overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]',
         wrapperClassName
       )}
     >

@@ -1,8 +1,8 @@
 "use client";
 
+import { useState } from 'react';
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
-import { Plus } from 'lucide-react';
+import { FolderOpen, Plus, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { KpiCard } from '@/components/ui/kpi-card';
@@ -10,29 +10,35 @@ import { ProPageShell } from '@/components/pro/ProPageShell';
 import { ProjectCard } from '@/components/pro/projects/ProjectCard';
 import { useProjects, type ProjectScope } from '@/lib/hooks/useProjects';
 
+const SCOPES = [
+  { key: 'ACTIVE' as const, label: 'Actifs' },
+  { key: 'PLANNED' as const, label: 'En attente' },
+  { key: 'INACTIVE' as const, label: 'Terminé' },
+] as const;
+
 type Props = { businessId: string };
 
 export default function ProjectsPage({ businessId }: Props) {
   const [scope, setScope] = useState<ProjectScope>('ACTIVE');
-  const { data, counts, isLoading, error, refetch } = useProjects(businessId, { scope });
+  const [search, setSearch] = useState('');
+  const { data, counts, isLoading, error, refetch } = useProjects(businessId, {
+    scope,
+    q: search || undefined,
+  });
 
-  const kpis = useMemo(() => {
-    const snapshot = counts ?? { active: 0, planned: 0, inactive: 0 };
-    const taskSnapshot = counts?.activeTasks ?? { total: 0, done: 0 };
-    return [
-      { label: 'Actifs', value: snapshot.active },
-      { label: 'En attente', value: snapshot.planned },
-      { label: 'Tâches (projets en cours)', value: `${taskSnapshot.done} / ${taskSnapshot.total}` },
-    ];
-  }, [counts]);
+  const taskSnapshot = counts?.activeTasks ?? { total: 0, done: 0 };
+  const taskPct =
+    taskSnapshot.total > 0
+      ? Math.round((taskSnapshot.done / taskSnapshot.total) * 100)
+      : 0;
 
   const items = data ?? [];
   const emptyLabel =
     scope === 'ACTIVE'
-      ? 'Aucun projet actif pour l’instant.'
+      ? 'Aucun projet actif pour l\u2019instant.'
       : scope === 'PLANNED'
-        ? 'Aucun projet en attente pour l’instant.'
-        : 'Aucun projet inactif pour l’instant.';
+        ? 'Aucun projet en attente pour l\u2019instant.'
+        : 'Aucun projet terminé pour l\u2019instant.';
 
   return (
     <ProPageShell
@@ -48,41 +54,122 @@ export default function ProjectsPage({ businessId }: Props) {
           </Link>
         </Button>
       }
-      tabs={[
-        { key: 'ACTIVE', label: 'Actifs' },
-        { key: 'PLANNED', label: 'En attente' },
-        { key: 'INACTIVE', label: 'Inactifs' },
-      ]}
-      activeTab={scope}
-      onTabChange={(key) => setScope(key as ProjectScope)}
     >
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {kpis.map((item) => (
-          <KpiCard key={item.label} label={item.label} value={item.value} />
-        ))}
+      {/* KPI cards */}
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
+        <KpiCard label="Actifs" value={counts?.active ?? 0} loading={isLoading} delay={0} />
+        <KpiCard label="En attente" value={counts?.planned ?? 0} loading={isLoading} delay={50} />
+        {/* Tasks KPI with progress bar */}
+        <div
+          className="flex flex-col justify-between rounded-xl animate-fade-in-up"
+          style={{
+            minHeight: 200,
+            padding: 12,
+            background: 'var(--surface)',
+            outline: '0.5px solid var(--border)',
+            animationDelay: '100ms',
+            animationFillMode: 'backwards',
+          }}
+        >
+          <span className="text-sm font-medium" style={{ color: 'var(--text)' }}>
+            Tâches (projets en cours)
+          </span>
+          <div className="flex flex-col gap-2">
+            {isLoading ? (
+              <div
+                className="h-10 w-32 rounded-lg animate-skeleton-pulse"
+                style={{ background: 'var(--surface-2)' }}
+              />
+            ) : (
+              <>
+                <span
+                  style={{
+                    color: 'var(--shell-accent)',
+                    fontSize: 40,
+                    fontWeight: 800,
+                    lineHeight: '40px',
+                  }}
+                >
+                  {taskSnapshot.done} / {taskSnapshot.total}
+                </span>
+                <div className="flex flex-col gap-1">
+                  <span className="text-xs" style={{ color: 'var(--text-faint)' }}>
+                    {taskPct}% complété
+                  </span>
+                  <div className="h-2 w-full rounded-full" style={{ background: 'var(--surface-2)' }}>
+                    <div
+                      className="h-2 rounded-full transition-all"
+                      style={{ width: `${taskPct}%`, background: 'var(--shell-accent)' }}
+                    />
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
       </div>
 
+      {/* Section header: Projet label + search + filter pills */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <FolderOpen size={18} style={{ color: 'var(--text-secondary)' }} />
+          <span className="text-sm font-semibold" style={{ color: 'var(--text)' }}>Projet</span>
+        </div>
+        <div className="flex items-center gap-3">
+          <div
+            className="flex items-center gap-2 rounded-full overflow-hidden"
+            style={{ background: 'var(--surface-2)', padding: '6px 12px' }}
+          >
+            <Search size={14} style={{ color: 'var(--text-faint)' }} />
+            <input
+              type="text"
+              placeholder="Rechercher..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="bg-transparent text-sm outline-none placeholder:text-[var(--text-faint)]"
+              style={{ color: 'var(--text)', width: 160 }}
+            />
+          </div>
+          <div className="flex items-center gap-1.5">
+            {SCOPES.map((s) => (
+              <button
+                key={s.key}
+                type="button"
+                onClick={() => setScope(s.key)}
+                className="cursor-pointer rounded-xl px-3 py-1.5 text-sm font-medium transition"
+                style={{
+                  background: scope === s.key ? 'var(--shell-accent-dark)' : 'var(--surface)',
+                  color: scope === s.key ? 'white' : 'rgba(0,0,0,0.6)',
+                }}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Project cards grid */}
       {isLoading ? (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {[0, 1, 2].map((key) => (
-            <Card
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {[0, 1, 2, 3].map((key) => (
+            <div
               key={key}
-              className="min-h-[220px] animate-pulse rounded-3xl border border-[var(--border)] bg-[var(--surface)]"
-            >
-              <div className="h-full w-full rounded-2xl bg-[var(--surface-hover)]" />
-            </Card>
+              className="rounded-xl animate-skeleton-pulse"
+              style={{ height: 200, background: 'var(--surface-2)' }}
+            />
           ))}
         </div>
       ) : error ? (
-        <Card className="flex items-center justify-between gap-3 rounded-3xl border border-[var(--border)] bg-[var(--surface)] p-4 text-sm text-[var(--danger)]">
+        <Card className="flex items-center justify-between gap-3 p-4 text-sm text-[var(--danger)]">
           <span>{error}</span>
           <Button type="button" variant="outline" size="sm" onClick={refetch}>
             Réessayer
           </Button>
         </Card>
-      ) : !items || items.length === 0 ? (
-        <Card className="flex flex-col gap-3 rounded-3xl border border-[var(--border)] bg-[var(--surface)] p-5">
-          <p className="text-sm font-semibold text-[var(--text-primary)]">{emptyLabel}</p>
+      ) : items.length === 0 ? (
+        <Card className="flex flex-col gap-3 p-5">
+          <p className="text-sm font-semibold" style={{ color: 'var(--text)' }}>{emptyLabel}</p>
           <div className="flex gap-2">
             <Button asChild size="sm">
               <Link href={`/app/pro/${businessId}/projects/new`}>Créer un projet</Link>
@@ -90,9 +177,9 @@ export default function ProjectsPage({ businessId }: Props) {
           </div>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {items.map((project) => (
-            <ProjectCard key={project.id} businessId={businessId} project={project} onMutate={refetch} />
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {items.map((project, i) => (
+            <ProjectCard key={project.id} businessId={businessId} project={project} onMutate={refetch} index={i} />
           ))}
         </div>
       )}

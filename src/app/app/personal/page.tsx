@@ -2,15 +2,17 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { Card } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { KpiCard } from '@/components/ui/kpi-card';
+import { fetchJson } from '@/lib/apiClient';
+import { onWalletRefresh } from '@/lib/personalEvents';
+import { fmtKpi } from '@/components/pivot-ui';
 import { PageContainer } from '@/components/layouts/PageContainer';
 import { PageHeader } from '@/components/layouts/PageHeader';
-import { fetchJson } from '@/lib/apiClient';
-import { formatCentsToEuroDisplay } from '@/lib/money';
-import { onWalletRefresh } from '@/lib/personalEvents';
-import { Skeleton, SkeletonKpiCard } from '@/components/ui/skeleton';
+import { KpiCard } from '@/components/ui/kpi-card';
+import { SectionHeader } from '@/components/ui/section-header';
+import { EmptyState } from '@/components/ui/empty-state';
+import { ListRow } from '@/components/ui/list-row';
+import { Alert } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
 
 type SummaryResponse = {
   kpis: {
@@ -91,169 +93,119 @@ export default function WalletHomePage() {
   }, [load]);
 
   const kpi = useMemo(() => {
-    const s = data?.kpis;
-    if (!s) return null;
-    const net = BigInt(s.monthNetCents ?? '0');
+    if (!data?.kpis) return null;
+    const net = BigInt(data.kpis.monthNetCents ?? '0');
     return {
-      total: formatCentsToEuroDisplay(s.totalBalanceCents),
-      income: formatCentsToEuroDisplay(s.monthIncomeCents),
-      expense: formatCentsToEuroDisplay(s.monthExpenseCents),
-      net: formatCentsToEuroDisplay(s.monthNetCents),
-      netTrend: net > 0n ? ('up' as const) : net < 0n ? ('down' as const) : ('neutral' as const),
-      accountsCount: data?.accounts?.length ?? 0,
+      total: fmtKpi(data.kpis.totalBalanceCents),
+      income: fmtKpi(data.kpis.monthIncomeCents),
+      expense: fmtKpi(data.kpis.monthExpenseCents),
+      net: fmtKpi(data.kpis.monthNetCents),
+      netPositive: net >= 0n,
     };
   }, [data]);
 
   return (
-    <PageContainer className="space-y-6">
+    <PageContainer className="gap-7">
       <PageHeader
         title="Wallet"
-        subtitle="Vue rapide : solde, cashflow du mois, comptes."
         actions={
-          <div className="flex flex-wrap gap-2">
-            <Button asChild variant="outline" size="sm">
+          <>
+            <Button variant="outline" size="sm" asChild>
               <Link href="/app/personal/comptes">Comptes</Link>
             </Button>
-            <Button asChild variant="outline" size="sm">
+            <Button variant="outline" size="sm" asChild>
               <Link href="/app/personal/transactions">Transactions</Link>
             </Button>
-          </div>
+          </>
         }
       />
 
-      {error ? (
-        <Card className="p-4 text-sm text-[var(--danger)]">{error}</Card>
-      ) : null}
+      {error ? <Alert variant="danger" title={error} /> : null}
 
-      <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-4">
+      {/* KPIs */}
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+        <KpiCard label="Solde total" value={kpi?.total ?? '—'} loading={loading} delay={0} />
+        <KpiCard label="Revenus (mois)" value={kpi?.income ?? '—'} loading={loading} delay={50} />
+        <KpiCard label="Dépenses (mois)" value={kpi?.expense ?? '—'} loading={loading} delay={100} />
+        <KpiCard
+          label="Net (mois)"
+          value={kpi?.net ?? '—'}
+          loading={loading}
+          delay={150}
+          delta={kpi ? (kpi.netPositive ? '+' : '') + kpi.net : undefined}
+          trend={kpi?.netPositive ? 'up' : 'down'}
+        />
+      </div>
+
+      {/* Accounts */}
+      <div className="flex flex-col gap-3">
+        <SectionHeader
+          title={`Comptes (${data?.accounts?.length ?? 0})`}
+          actions={
+            <Link href="/app/personal/comptes" className="text-xs font-semibold hover:underline" style={{ color: 'var(--shell-accent)' }}>
+              Gérer →
+            </Link>
+          }
+        />
+
         {loading ? (
-          <>
-            <SkeletonKpiCard />
-            <SkeletonKpiCard />
-            <SkeletonKpiCard />
-            <SkeletonKpiCard />
-          </>
+          <EmptyState title="Chargement…" />
+        ) : !data?.accounts?.length ? (
+          <EmptyState title="Aucun compte. Créez-en un dans Comptes." />
         ) : (
-          <>
-            <KpiCard
-              label="Solde total"
-              value={kpi?.total ?? '—'}
-              className="animate-fade-in-up"
+          data.accounts.map((a) => (
+            <ListRow
+              key={a.id}
+              href={`/app/personal/comptes/${a.id}`}
+              left={a.name}
+              sub={`${a.type} · ${a.currency}`}
+              right={
+                <span className="text-sm font-semibold" style={{ color: 'var(--shell-accent)' }}>
+                  {fmtKpi(a.balanceCents)}
+                </span>
+              }
             />
-            <KpiCard
-              label="Revenus (mois)"
-              value={kpi?.income ?? '—'}
-              trend="up"
-              className="animate-fade-in-up [animation-delay:50ms]"
-            />
-            <KpiCard
-              label="Dépenses (mois)"
-              value={kpi?.expense ?? '—'}
-              trend="down"
-              className="animate-fade-in-up [animation-delay:100ms]"
-            />
-            <KpiCard
-              label="Net (mois)"
-              value={kpi?.net ?? '—'}
-              trend={kpi?.netTrend ?? 'neutral'}
-              className="animate-fade-in-up [animation-delay:150ms]"
-            />
-          </>
+          ))
         )}
       </div>
 
-      <Card className="p-5">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="text-sm font-semibold">Comptes</p>
-            <p className="text-xs text-[var(--text-faint)]">
-              {loading ? '…' : `${kpi?.accountsCount ?? 0} compte(s)`}
-            </p>
-          </div>
-        </div>
+      {/* Latest transactions */}
+      <div className="flex flex-col gap-3">
+        <SectionHeader
+          title="Dernières transactions"
+          actions={
+            <Link href="/app/personal/transactions" className="text-xs font-semibold hover:underline" style={{ color: 'var(--shell-accent)' }}>
+              Tout voir →
+            </Link>
+          }
+        />
 
-        <div className="mt-4 divide-y divide-[var(--border)]">
-          {loading ? (
-            Array.from({ length: 3 }).map((_, i) => (
-              <div key={i} className="flex items-center justify-between gap-3 py-3">
-                <div className="space-y-2">
-                  <Skeleton width="120px" height="14px" />
-                  <Skeleton width="80px" height="10px" />
-                </div>
-                <Skeleton width="70px" height="14px" />
-              </div>
-            ))
-          ) : (data?.accounts?.length ?? 0) === 0 ? (
-            <p className="py-3 text-sm text-[var(--text-faint)]">
-              Aucun compte. Commence par créer un compte dans &quot;Comptes&quot;.
-            </p>
-          ) : (
-            data!.accounts.map((a) => (
-              <div key={a.id} className="flex items-center justify-between gap-3 py-3 animate-fade-in-up">
-                <div className="min-w-0">
-                  <p className="truncate font-semibold">{a.name}</p>
-                  <p className="text-xs text-[var(--text-faint)]">
-                    {a.type} · {a.currency}
-                  </p>
-                </div>
-                <div className="shrink-0 text-right">
-                  <p className="font-semibold">{formatCentsToEuroDisplay(a.balanceCents)}</p>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      </Card>
-
-      <Card className="p-5">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <p className="text-sm font-semibold">Dernières transactions</p>
-            <p className="text-xs text-[var(--text-faint)]">12 dernières</p>
-          </div>
-          <Link
-            href="/app/personal/transactions"
-            className="text-xs font-semibold text-[var(--accent)] hover:underline"
-          >
-            Tout voir →
-          </Link>
-        </div>
-
-        <div className="mt-4 divide-y divide-[var(--border)]">
-          {loading ? (
-            Array.from({ length: 5 }).map((_, i) => (
-              <div key={i} className="flex items-center justify-between gap-3 py-3">
-                <div className="space-y-2">
-                  <Skeleton width="140px" height="14px" />
-                  <Skeleton width="100px" height="10px" />
-                </div>
-                <div className="space-y-2 text-right">
-                  <Skeleton width="60px" height="14px" />
-                  <Skeleton width="40px" height="10px" />
-                </div>
-              </div>
-            ))
-          ) : (data?.latestTransactions?.length ?? 0) === 0 ? (
-            <p className="py-3 text-sm text-[var(--text-faint)]">Aucune transaction.</p>
-          ) : (
-            data!.latestTransactions.map((t) => (
-              <div key={t.id} className="flex items-center justify-between gap-3 py-3 animate-fade-in-up">
-                <div className="min-w-0">
-                  <p className="truncate font-semibold">{t.label}</p>
-                  <p className="text-xs text-[var(--text-faint)]">
-                    {new Date(t.date).toLocaleDateString('fr-FR')} · {t.account.name}
-                    {t.category ? ` · ${t.category.name}` : ''}
-                  </p>
-                </div>
-                <div className="shrink-0 text-right">
-                  <p className="font-semibold">{formatCentsToEuroDisplay(t.amountCents)}</p>
-                  <p className="text-[11px] text-[var(--text-faint)]">{t.type}</p>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      </Card>
+        {loading ? (
+          <EmptyState title="Chargement…" />
+        ) : !data?.latestTransactions?.length ? (
+          <EmptyState title="Aucune transaction." />
+        ) : (
+          data.latestTransactions.map((t) => {
+            const amt = BigInt(t.amountCents);
+            const isPositive = amt >= 0n;
+            return (
+              <ListRow
+                key={t.id}
+                left={t.label || '—'}
+                sub={`${t.account.name}${t.category ? ` · ${t.category.name}` : ''} · ${new Date(t.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}`}
+                right={
+                  <span
+                    className="text-sm font-semibold"
+                    style={{ color: isPositive ? 'var(--success)' : 'var(--danger)' }}
+                  >
+                    {isPositive ? '+' : ''}{fmtKpi(t.amountCents)}
+                  </span>
+                }
+              />
+            );
+          })
+        )}
+      </div>
     </PageContainer>
   );
 }

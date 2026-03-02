@@ -21,6 +21,7 @@ export const GET = withBusinessRoute(
       : startOfMonth(addMonths(end, -11));
     if (Number.isNaN(start.getTime())) return withIdNoStore(badRequest('from invalide.'), requestId);
 
+    // Finances within range
     const finances = await prisma.finance.findMany({
       where: {
         businessId: businessIdBigInt,
@@ -29,6 +30,21 @@ export const GET = withBusinessRoute(
       },
       select: { date: true, type: true, amountCents: true, category: true },
     });
+
+    // Opening balance: sum of all finances BEFORE the range start
+    const priorFinances = await prisma.finance.findMany({
+      where: {
+        businessId: businessIdBigInt,
+        deletedAt: null,
+        date: { lt: start },
+      },
+      select: { type: true, amountCents: true },
+    });
+    let openingBalance = BigInt(0);
+    for (const row of priorFinances) {
+      if (row.type === FinanceType.INCOME) openingBalance += row.amountCents;
+      else openingBalance -= row.amountCents;
+    }
 
     const buckets = new Map<string, { income: bigint; expense: bigint }>();
     for (let i = 0; i < 12; i += 1) {
@@ -73,6 +89,7 @@ export const GET = withBusinessRoute(
     return jsonb({
       businessId: businessIdBigInt.toString(),
       range: { from: start.toISOString(), to: end.toISOString() },
+      openingBalanceCents: openingBalance.toString(),
       totals: {
         incomeCents: incomeTotal.toString(),
         expenseCents: expenseTotal.toString(),

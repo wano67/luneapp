@@ -17,7 +17,7 @@ export function Select({ label, error, className, children, ...props }: SelectPr
       <div className="relative">
         <select
           className={cn(
-            'w-full appearance-none rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 pr-12 text-base text-[var(--text-primary)] transition-colors',
+            'w-full appearance-none rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 pr-12 text-base text-[var(--text-primary)] transition-colors',
             'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]',
             error
               ? 'border-[var(--danger)] focus-visible:outline-[var(--danger)]'

@@ -31,7 +31,7 @@ export function Alert({
   return (
     <div
       className={cn(
-        'flex flex-col gap-2 rounded-2xl border px-4 py-3 text-sm',
+        'flex flex-col gap-2 rounded-xl border px-4 py-3 text-sm',
         variantClasses[variant],
         className
       )}

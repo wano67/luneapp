@@ -1,23 +1,27 @@
 import type { Metadata } from 'next';
+import { ScrollReveal } from '@/components/marketing/ScrollReveal';
 import { SectionHeader } from '@/components/ui/section-header';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 
 export const metadata: Metadata = {
-  title: 'Contact • Lune',
+  title: 'Contact • Pivot',
   description: 'Parlez-nous de vos besoins : pro, perso, équipe.',
 };
 
 export default function ContactPage() {
   return (
     <div className="space-y-8">
-      <SectionHeader
-        title="Contact"
-        description="Un besoin spécifique, une question sur la sécurité ou les tarifs ?"
-      />
+      <ScrollReveal>
+        <SectionHeader variant="marketing"
+          title="Contact"
+          description="Un besoin spécifique, une question sur la sécurité ou les tarifs ?"
+        />
+      </ScrollReveal>
 
-      <Card className="border-[var(--border)] bg-[var(--surface)] p-6">
+      <ScrollReveal delay={100}>
+        <Card className="border-[var(--border)] bg-[var(--surface)] p-6">
         <form className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2">
             <Input label="Nom" placeholder="Votre nom" required />
@@ -28,7 +32,7 @@ export default function ContactPage() {
             <span className="text-sm font-medium text-[var(--text-secondary)]">Message</span>
             <textarea
               rows={5}
-              className="w-full rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-base text-[var(--text)] placeholder:text-[var(--text-faint)] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
+              className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-base text-[var(--text)] placeholder:text-[var(--text-faint)] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
               placeholder="Décrivez votre besoin. Aucun envoi n'est déclenché côté serveur dans cette page publique."
             />
           </label>
@@ -37,6 +41,7 @@ export default function ContactPage() {
           </div>
         </form>
       </Card>
+      </ScrollReveal>
     </div>
   );
 }
