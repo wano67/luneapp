@@ -91,6 +91,7 @@ export async function applyServiceProcessTemplateToProjectService({
               status: 'TODO',
               dueDate: dueDate ?? undefined,
               assigneeUserId: assigneeUserId ?? undefined,
+              estimatedMinutes: task.estimatedMinutes ?? undefined,
             },
           });
           createdTasksCount += 1;

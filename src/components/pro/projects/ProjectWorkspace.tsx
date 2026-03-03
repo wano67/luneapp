@@ -617,6 +617,7 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
           tasks={tasks}
           members={members}
           isAdmin={isAdmin}
+          currentUserId={currentUserId}
           onQuickAddTask={createTask}
           onUpdateTask={updateTask}
           onDeleteTask={deleteTask}

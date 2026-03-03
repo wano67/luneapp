@@ -3,7 +3,7 @@ import { TaskPhase, TaskStatus } from '@/generated/prisma';
 import { validateCategoryAndTags } from '@/server/http/validators';
 import { withBusinessRoute } from '@/server/http/routeHandler';
 import { jsonb, jsonbNoContent } from '@/server/http/json';
-import { badRequest, notFound } from '@/server/http/apiUtils';
+import { badRequest, forbidden, notFound } from '@/server/http/apiUtils';
 import { ensureDelegate } from '@/server/http/delegates';
 import { parseIdOpt } from '@/server/http/parsers';
 
@@ -27,6 +27,9 @@ function serializeTask(task: {
   startDate: Date | null;
   completedAt: Date | null;
   notes: string | null;
+  estimatedMinutes?: number | null;
+  isBlocked?: boolean;
+  blockedReason?: string | null;
   createdAt: Date;
   updatedAt: Date;
   project?: { name: string | null } | null;
@@ -69,6 +72,9 @@ function serializeTask(task: {
     startDate: task.startDate ? task.startDate.toISOString() : null,
     completedAt: task.completedAt ? task.completedAt.toISOString() : null,
     notes: task.notes,
+    estimatedMinutes: task.estimatedMinutes ?? null,
+    isBlocked: task.isBlocked ?? false,
+    blockedReason: task.blockedReason ?? null,
     createdAt: task.createdAt.toISOString(),
     updatedAt: task.updatedAt.toISOString(),
     subtasksCount: typeof task._count?.subtasks === 'number' ? task._count.subtasks : undefined,
@@ -132,7 +138,7 @@ export const GET = withBusinessRoute<{ businessId: string; taskId: string }>(
 // PATCH /api/pro/businesses/{businessId}/tasks/{taskId}
 export const PATCH = withBusinessRoute<{ businessId: string; taskId: string }>(
   {
-    minRole: 'ADMIN',
+    minRole: 'MEMBER',
     rateLimit: {
       key: (ctx) => `pro:tasks:update:${ctx.businessId}:${ctx.userId}`,
       limit: 120,
@@ -159,9 +165,24 @@ export const PATCH = withBusinessRoute<{ businessId: string; taskId: string }>(
     });
     if (!existing) return notFound('Tâche introuvable.');
 
+    const isMember = ctx.membership.role === 'MEMBER';
     const body = await req.json().catch(() => null);
     if (!body || typeof body !== 'object') {
       return badRequest('Payload invalide.');
+    }
+
+    if (isMember) {
+      if (existing.assigneeUserId !== userId) {
+        return forbidden('Vous ne pouvez modifier que les tâches qui vous sont assignées.');
+      }
+      const allowedFields = new Set([
+        'status', 'progress', 'notes', 'isBlocked', 'blockedReason', 'estimatedMinutes',
+      ]);
+      const bodyKeys = Object.keys(body as Record<string, unknown>);
+      const disallowed = bodyKeys.filter((k) => !allowedFields.has(k));
+      if (disallowed.length > 0) {
+        return forbidden(`Champs non autorisés : ${disallowed.join(', ')}`);
+      }
     }
 
     const data: Record<string, unknown> = {};
@@ -311,6 +332,38 @@ export const PATCH = withBusinessRoute<{ businessId: string; taskId: string }>(
         data.notes = trimmed || null;
       } else {
         return badRequest('notes invalides.');
+      }
+    }
+
+    if ('estimatedMinutes' in body) {
+      const raw = (body as { estimatedMinutes?: unknown }).estimatedMinutes;
+      if (raw === null || raw === undefined) {
+        data.estimatedMinutes = null;
+      } else if (typeof raw === 'number' && Number.isFinite(raw) && raw >= 0 && raw <= 99999) {
+        data.estimatedMinutes = Math.trunc(raw);
+      } else {
+        return badRequest('estimatedMinutes invalide.');
+      }
+    }
+
+    if ('isBlocked' in body) {
+      const raw = (body as { isBlocked?: unknown }).isBlocked;
+      if (typeof raw !== 'boolean') {
+        return badRequest('isBlocked invalide.');
+      }
+      data.isBlocked = raw;
+      if (!raw) data.blockedReason = null;
+    }
+
+    if ('blockedReason' in body) {
+      const raw = (body as { blockedReason?: unknown }).blockedReason;
+      if (raw === null || raw === undefined || raw === '') {
+        data.blockedReason = null;
+      } else if (typeof raw === 'string') {
+        if (raw.trim().length > 500) return badRequest('blockedReason trop long (500 max).');
+        data.blockedReason = raw.trim() || null;
+      } else {
+        return badRequest('blockedReason invalide.');
       }
     }
 

@@ -23,6 +23,9 @@ function serializeTask(task: {
   startDate: Date | null;
   completedAt: Date | null;
   notes: string | null;
+  estimatedMinutes?: number | null;
+  isBlocked?: boolean;
+  blockedReason?: string | null;
   createdAt: Date;
   updatedAt: Date;
   project?: { name: string | null } | null;
@@ -69,6 +72,9 @@ function serializeTask(task: {
     startDate: task.startDate ? task.startDate.toISOString() : null,
     completedAt: task.completedAt ? task.completedAt.toISOString() : null,
     notes: task.notes,
+    estimatedMinutes: task.estimatedMinutes ?? null,
+    isBlocked: task.isBlocked ?? false,
+    blockedReason: task.blockedReason ?? null,
     createdAt: task.createdAt.toISOString(),
     updatedAt: task.updatedAt.toISOString(),
     subtasksCount: typeof task._count?.subtasks === 'number' ? task._count.subtasks : undefined,
@@ -148,7 +154,7 @@ export const GET = withBusinessRoute<{ businessId: string }>(
 // POST /api/pro/businesses/{businessId}/tasks
 export const POST = withBusinessRoute<{ businessId: string }>(
   {
-    minRole: 'ADMIN',
+    minRole: 'MEMBER',
     rateLimit: {
       key: (ctx) => `pro:tasks:create:${ctx.businessId}:${ctx.userId}`,
       limit: 200,
@@ -286,6 +292,17 @@ export const POST = withBusinessRoute<{ businessId: string }>(
       startDate = parsed;
     }
 
+    let estimatedMinutes: number | undefined;
+    if ('estimatedMinutes' in body) {
+      const raw = (body as { estimatedMinutes?: unknown }).estimatedMinutes;
+      if (raw !== null && raw !== undefined) {
+        if (typeof raw !== 'number' || !Number.isFinite(raw) || raw < 0 || raw > 99999) {
+          return badRequest('estimatedMinutes invalide.');
+        }
+        estimatedMinutes = Math.trunc(raw);
+      }
+    }
+
     const categoryProvided = Object.prototype.hasOwnProperty.call(body, 'categoryReferenceId');
     const categoryReferenceId =
       categoryProvided && typeof (body as { categoryReferenceId?: unknown }).categoryReferenceId === 'string'
@@ -328,6 +345,7 @@ export const POST = withBusinessRoute<{ businessId: string }>(
         completedAt: status === TaskStatus.DONE ? new Date() : undefined,
         dueDate,
         startDate,
+        estimatedMinutes,
         categoryReferenceId: validated.categoryId ?? undefined,
         tags:
           validated.tagIds.length > 0

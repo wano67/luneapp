@@ -143,7 +143,7 @@ export function ProjectCard({ businessId, project, onMutate, index = 0 }: Props)
       {/* Top row: name + menu */}
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-white truncate">{project.name || 'Sans nom'}</p>
+          <p className="text-sm font-semibold text-white truncate underline">{project.name || 'Sans nom'}</p>
           <p className="text-xs text-white/70 truncate mt-0.5">{project.clientName ?? 'Sans client'}</p>
         </div>
         <div className="relative" onClick={(e) => e.stopPropagation()}>

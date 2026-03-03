@@ -2,6 +2,7 @@ import { CheckCircle2, Circle, ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { cn } from '@/lib/cn';
 
 export type ChecklistItem = {
   key: string;
@@ -32,10 +33,13 @@ export function ProjectSetupChecklist({
         </span>
       </div>
       <div className="mt-3 space-y-2">
-        {items.map((item) => (
+        {items.map((item, index) => (
           <div
             key={item.key}
-            className="flex items-center justify-between rounded-xl border border-[var(--border)]/70 bg-[var(--surface-2)]/70 px-3 py-2"
+            className={cn(
+              'flex items-center justify-between rounded-xl px-3 py-2',
+              index % 2 === 0 ? 'bg-[var(--surface-2)]/70' : ''
+            )}
           >
             <div className="flex items-center gap-2">
               {item.done ? (

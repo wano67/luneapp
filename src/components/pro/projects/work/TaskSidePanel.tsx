@@ -34,6 +34,7 @@ type TaskSidePanelProps = {
   onClose: () => void;
   members: MemberItem[];
   isAdmin: boolean;
+  currentUserId?: string | null;
   onUpdate: (taskId: string, payload: Record<string, unknown>) => Promise<void>;
   onDelete: (taskId: string) => Promise<void>;
   services?: ServiceOption[];
@@ -45,12 +46,17 @@ export function TaskSidePanel({
   onClose,
   members,
   isAdmin,
+  currentUserId,
   onUpdate,
   onDelete,
   services,
 }: TaskSidePanelProps) {
   const [title, setTitle] = useState('');
   const [deleting, setDeleting] = useState(false);
+
+  const isAssignedToMe = Boolean(task && currentUserId && task.assigneeUserId === currentUserId);
+  const canEdit = isAdmin || isAssignedToMe;
+  const canDelete = isAdmin;
 
   useEffect(() => {
     if (task) setTitle(task.title);
@@ -68,10 +74,10 @@ export function TaskSidePanel({
 
   const patchField = useCallback(
     (field: string, value: unknown) => {
-      if (!task || !isAdmin) return;
+      if (!task || !canEdit) return;
       void onUpdate(task.id, { [field]: value });
     },
-    [task, isAdmin, onUpdate]
+    [task, canEdit, onUpdate]
   );
 
   const handleTitleBlur = useCallback(() => {
@@ -81,7 +87,7 @@ export function TaskSidePanel({
   }, [title, task, patchField]);
 
   const handleDelete = useCallback(async () => {
-    if (!task || !isAdmin) return;
+    if (!task || !canDelete) return;
     setDeleting(true);
     try {
       await onDelete(task.id);
@@ -89,7 +95,7 @@ export function TaskSidePanel({
     } finally {
       setDeleting(false);
     }
-  }, [task, isAdmin, onDelete, onClose]);
+  }, [task, canDelete, onDelete, onClose]);
 
   if (!open || !task) return null;
 
@@ -122,7 +128,7 @@ export function TaskSidePanel({
 
         {/* Body */}
         <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4">
-          {/* Title */}
+          {/* Title — admin only */}
           <input
             type="text"
             value={title}
@@ -139,7 +145,7 @@ export function TaskSidePanel({
               label="Statut"
               value={task.status}
               onChange={(e) => patchField('status', e.target.value)}
-              disabled={!isAdmin}
+              disabled={!canEdit}
             >
               {STATUS_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>{o.label}</option>
@@ -157,7 +163,7 @@ export function TaskSidePanel({
             </Select>
           </div>
 
-          {/* Assignee */}
+          {/* Assignee — admin only */}
           <Select
             label="Assigné à"
             value={task.assigneeUserId ?? ''}
@@ -172,7 +178,7 @@ export function TaskSidePanel({
             ))}
           </Select>
 
-          {/* Service lié */}
+          {/* Service lié — admin only */}
           {services && services.length > 0 ? (
             <Select
               label="Service lié"
@@ -187,7 +193,7 @@ export function TaskSidePanel({
             </Select>
           ) : null}
 
-          {/* Dates */}
+          {/* Dates — admin only */}
           <div className="grid grid-cols-2 gap-3">
             <Input
               label="Date début"
@@ -217,9 +223,52 @@ export function TaskSidePanel({
               step={5}
               value={task.progress ?? 0}
               onChange={(e) => patchField('progress', Number(e.target.value))}
-              disabled={!isAdmin}
+              disabled={!canEdit}
               className="w-full accent-[var(--accent)]"
             />
+          </div>
+
+          {/* Temps estimé */}
+          <Input
+            label="Temps estimé (min)"
+            type="number"
+            min={0}
+            max={99999}
+            value={task.estimatedMinutes ?? ''}
+            onChange={(e) => {
+              const v = e.target.value;
+              patchField('estimatedMinutes', v === '' ? null : Number(v));
+            }}
+            disabled={!canEdit}
+            placeholder="Ex: 120"
+          />
+
+          {/* Tâche bloquée */}
+          <div className="space-y-2">
+            <label className="flex items-center gap-2 text-sm text-[var(--text-primary)]">
+              <input
+                type="checkbox"
+                checked={task.isBlocked ?? false}
+                onChange={(e) => {
+                  patchField('isBlocked', e.target.checked);
+                  if (!e.target.checked) patchField('blockedReason', null);
+                }}
+                disabled={!canEdit}
+                className="accent-[var(--danger)]"
+              />
+              Tâche bloquée
+            </label>
+            {task.isBlocked ? (
+              <textarea
+                value={task.blockedReason ?? ''}
+                onChange={(e) => patchField('blockedReason', e.target.value || null)}
+                disabled={!canEdit}
+                rows={2}
+                maxLength={500}
+                className="w-full rounded-xl border border-[var(--danger-border)] bg-[var(--danger-bg)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-[var(--danger)] focus:ring-2 focus:ring-[var(--danger)]/30"
+                placeholder="Raison du blocage…"
+              />
+            ) : null}
           </div>
 
           {/* Notes */}
@@ -228,7 +277,7 @@ export function TaskSidePanel({
             <textarea
               value={task.notes ?? ''}
               onChange={(e) => patchField('notes', e.target.value || null)}
-              disabled={!isAdmin}
+              disabled={!canEdit}
               rows={4}
               className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent)]/30"
               placeholder="Notes…"
@@ -247,7 +296,7 @@ export function TaskSidePanel({
         </div>
 
         {/* Footer */}
-        {isAdmin ? (
+        {canDelete ? (
           <div className="border-t border-[var(--border)] px-4 py-3">
             <Button
               variant="danger"

@@ -17,6 +17,13 @@ import { RoadmapView } from '@/components/pro/projects/work/RoadmapView';
 import { GanttChart } from '@/components/pro/projects/work/GanttChart';
 import type { TaskItem, MemberItem } from '@/components/pro/projects/hooks/useProjectDataLoaders';
 
+function formatEstimatedTime(minutes: number): string {
+  if (minutes < 60) return `${minutes}m`;
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return m > 0 ? `${h}h${String(m).padStart(2, '0')}` : `${h}h`;
+}
+
 type ServiceOption = { id: string; name: string };
 
 type WorkTabTask = {
@@ -29,6 +36,8 @@ type WorkTabTask = {
   projectServiceName?: string | null;
   checklistCount?: number;
   checklistDoneCount?: number;
+  estimatedMinutes?: number | null;
+  isBlocked?: boolean;
 };
 
 type TaskGroup = {
@@ -56,6 +65,7 @@ export type WorkTabProps = {
   tasks: TaskItem[];
   members: MemberItem[];
   isAdmin: boolean;
+  currentUserId?: string | null;
   onQuickAddTask: (title: string, projectServiceId?: string) => Promise<void>;
   onUpdateTask: (taskId: string, payload: Record<string, unknown>) => Promise<void>;
   onDeleteTask: (taskId: string) => Promise<void>;
@@ -74,6 +84,7 @@ export function WorkTab({
   tasks,
   members,
   isAdmin,
+  currentUserId,
   onQuickAddTask,
   onUpdateTask,
   onDeleteTask,
@@ -94,20 +105,29 @@ export function WorkTab({
     setSelectedTaskId(null);
   }, []);
 
+  const totalEstimatedMinutes = tasks.reduce((sum, t) => sum + (t.estimatedMinutes ?? 0), 0);
+
   return (
     <div className="space-y-4">
       {/* Sub-navigation: List / Roadmap / Gantt */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <TabsPills
-          items={[
-            { key: 'list', label: 'Liste' },
-            { key: 'roadmap', label: 'Roadmap' },
-            { key: 'gantt', label: 'Gantt' },
-          ]}
-          value={workView}
-          onChange={(key) => setWorkView(key as WorkView)}
-          ariaLabel="Vue travail"
-        />
+        <div className="flex items-center gap-3">
+          <TabsPills
+            items={[
+              { key: 'list', label: 'Liste' },
+              { key: 'roadmap', label: 'Roadmap' },
+              { key: 'gantt', label: 'Gantt' },
+            ]}
+            value={workView}
+            onChange={(key) => setWorkView(key as WorkView)}
+            ariaLabel="Vue travail"
+          />
+          {totalEstimatedMinutes > 0 ? (
+            <span className="text-xs text-[var(--text-secondary)]">
+              ~{formatEstimatedTime(totalEstimatedMinutes)} estimées
+            </span>
+          ) : null}
+        </div>
         {workView === 'list' ? (
           <TabsPills
             items={[
@@ -123,10 +143,8 @@ export function WorkTab({
         ) : null}
       </div>
 
-      {/* Quick-add */}
-      {isAdmin ? (
-        <TaskQuickAdd onAdd={onQuickAddTask} services={services} />
-      ) : null}
+      {/* Quick-add — visible for MEMBER and above */}
+      <TaskQuickAdd onAdd={onQuickAddTask} services={services} />
 
       {/* Views */}
       {workView === 'list' ? (
@@ -152,6 +170,7 @@ export function WorkTab({
         onClose={closePanel}
         members={members}
         isAdmin={isAdmin}
+        currentUserId={currentUserId}
         onUpdate={onUpdateTask}
         onDelete={onDeleteTask}
         services={services}
@@ -250,20 +269,34 @@ function ListView({
                           size={22}
                         />
                         <div className="min-w-0">
-                          <p className="truncate text-[var(--text-primary)]">{task.title}</p>
-                          <span
-                            className={cn(
-                              'inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide',
-                              getStatusBadgeClasses(task.status)
-                            )}
-                          >
-                            {formatTaskStatus(task.status)}
-                          </span>
-                          {task.projectServiceName ? (
-                            <span className="inline-flex rounded-full border border-[var(--border)]/50 bg-[var(--surface-2)] px-2 py-0.5 text-[10px] text-[var(--text-secondary)]">
-                              {task.projectServiceName}
+                          <p className="truncate text-[var(--text-primary)]">
+                            {task.isBlocked ? (
+                              <span className="mr-1.5 inline-flex items-center rounded-full border border-[var(--danger-border)] bg-[var(--danger-bg)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--danger)]">
+                                Bloqué
+                              </span>
+                            ) : null}
+                            {task.title}
+                          </p>
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span
+                              className={cn(
+                                'inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide',
+                                getStatusBadgeClasses(task.status)
+                              )}
+                            >
+                              {formatTaskStatus(task.status)}
                             </span>
-                          ) : null}
+                            {task.estimatedMinutes ? (
+                              <span className="inline-flex rounded-full border border-[var(--border)]/50 bg-[var(--surface-2)] px-2 py-0.5 text-[10px] text-[var(--text-secondary)]">
+                                {formatEstimatedTime(task.estimatedMinutes)}
+                              </span>
+                            ) : null}
+                            {task.projectServiceName ? (
+                              <span className="inline-flex rounded-full border border-[var(--border)]/50 bg-[var(--surface-2)] px-2 py-0.5 text-[10px] text-[var(--text-secondary)]">
+                                {task.projectServiceName}
+                              </span>
+                            ) : null}
+                          </div>
                           {indicator ? (
                             <p className="text-[11px] text-[var(--text-secondary)]">{indicator}</p>
                           ) : null}

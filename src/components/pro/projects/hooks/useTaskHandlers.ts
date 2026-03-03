@@ -41,10 +41,6 @@ export function useTaskHandlers(params: UseTaskHandlersParams) {
 
   const updateTask = useCallback(
     async (taskId: string, payload: Record<string, unknown>) => {
-      if (!isAdmin) {
-        onBillingError('Réservé aux admins/owners.');
-        return;
-      }
       setTaskUpdating((prev) => ({ ...prev, [taskId]: true }));
       try {
         onBillingError(null);
@@ -67,15 +63,11 @@ export function useTaskHandlers(params: UseTaskHandlersParams) {
         setTaskUpdating((prev) => ({ ...prev, [taskId]: false }));
       }
     },
-    [isAdmin, businessId, loadTasks, loadActivity, onBillingError]
+    [businessId, loadTasks, loadActivity, onBillingError]
   );
 
   const createTask = useCallback(
     async (title: string, projectServiceId?: string) => {
-      if (!isAdmin) {
-        onBillingError('Réservé aux admins/owners.');
-        return;
-      }
       onBillingError(null);
       try {
         const body: Record<string, unknown> = { title, projectId: params.projectId };
@@ -94,7 +86,7 @@ export function useTaskHandlers(params: UseTaskHandlersParams) {
         onBillingError(getErrorMessage(err));
       }
     },
-    [isAdmin, businessId, params.projectId, loadTasks, onBillingError]
+    [businessId, params.projectId, loadTasks, onBillingError]
   );
 
   const deleteTask = useCallback(

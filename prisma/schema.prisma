@@ -546,7 +546,10 @@ model Task {
   phase          TaskPhase?
   progress       Int         @default(0)
   completedAt    DateTime?
-  notes          String?
+  notes            String?
+  estimatedMinutes Int?
+  isBlocked        Boolean  @default(false)
+  blockedReason    String?
 
   business Business @relation(fields: [businessId], references: [id])
   project  Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
@@ -916,6 +919,7 @@ model ServiceProcessTaskTemplate {
   description String?
   dueOffsetDays Int?
   defaultAssigneeRole String?
+  estimatedMinutes Int?
 
   step ServiceProcessStepTemplate @relation(fields: [stepId], references: [id], onDelete: Cascade)
 

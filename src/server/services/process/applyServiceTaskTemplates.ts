@@ -56,6 +56,7 @@ export async function applyServiceTaskTemplatesToProjectService({
           status: 'TODO',
           dueDate,
           assigneeUserId: assigneeUserId ?? undefined,
+          estimatedMinutes: tpl.estimatedMinutes ?? undefined,
         },
       });
       createdTasksCount += 1;

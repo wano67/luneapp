@@ -96,6 +96,9 @@ export type TaskItem = {
   projectServiceId: string | null;
   projectId: string | null;
   progress?: number;
+  estimatedMinutes?: number | null;
+  isBlocked?: boolean;
+  blockedReason?: string | null;
   subtasksCount?: number;
   checklistCount?: number;
   checklistDoneCount?: number;

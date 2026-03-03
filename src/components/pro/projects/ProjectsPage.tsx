@@ -61,45 +61,28 @@ export default function ProjectsPage({ businessId }: Props) {
         <KpiCard label="En attente" value={counts?.planned ?? 0} loading={isLoading} delay={50} />
         {/* Tasks KPI with progress bar */}
         <div
-          className="flex flex-col justify-between rounded-xl animate-fade-in-up"
-          style={{
-            minHeight: 200,
-            padding: 12,
-            background: 'var(--surface)',
-            outline: '0.5px solid var(--border)',
-            animationDelay: '100ms',
-            animationFillMode: 'backwards',
-          }}
+          className="flex min-h-[200px] flex-col justify-between rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3 animate-fade-in-up"
+          style={{ animationDelay: '100ms', animationFillMode: 'backwards' }}
         >
-          <span className="text-sm font-medium" style={{ color: 'var(--text)' }}>
+          <span className="text-sm font-medium text-[var(--text)]">
             Tâches (projets en cours)
           </span>
           <div className="flex flex-col gap-2">
             {isLoading ? (
-              <div
-                className="h-10 w-32 rounded-lg animate-skeleton-pulse"
-                style={{ background: 'var(--surface-2)' }}
-              />
+              <div className="h-10 w-32 rounded-lg bg-[var(--surface-2)] animate-skeleton-pulse" />
             ) : (
               <>
-                <span
-                  style={{
-                    color: 'var(--shell-accent)',
-                    fontSize: 40,
-                    fontWeight: 800,
-                    lineHeight: '40px',
-                  }}
-                >
+                <span className="text-[40px] font-extrabold leading-[40px] text-[var(--shell-accent)]">
                   {taskSnapshot.done} / {taskSnapshot.total}
                 </span>
                 <div className="flex flex-col gap-1">
-                  <span className="text-xs" style={{ color: 'var(--text-faint)' }}>
+                  <span className="text-xs text-[var(--text-faint)]">
                     {taskPct}% complété
                   </span>
-                  <div className="h-2 w-full rounded-full" style={{ background: 'var(--surface-2)' }}>
+                  <div className="h-2 w-full rounded-full bg-[var(--surface-2)]">
                     <div
-                      className="h-2 rounded-full transition-all"
-                      style={{ width: `${taskPct}%`, background: 'var(--shell-accent)' }}
+                      className="h-2 rounded-full bg-[var(--shell-accent)] transition-all"
+                      style={{ width: `${taskPct}%` }}
                     />
                   </div>
                 </div>
