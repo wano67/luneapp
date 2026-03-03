@@ -5,7 +5,8 @@ import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Alert } from '@/components/ui/alert';
-import { SectionHeader } from '@/components/ui/section-header';
+import { PageContainer } from '@/components/layouts/PageContainer';
+import { PageHeader } from '@/components/layouts/PageHeader';
 import { fetchJson } from '@/lib/apiClient';
 
 type MeResponse = {
@@ -83,8 +84,8 @@ export default function SecurityPage() {
   }, [lastUpdate]);
 
   return (
-    <div className="space-y-4">
-      <SectionHeader title="Sécurité" description={subtitle} />
+    <PageContainer className="gap-4">
+      <PageHeader title="Sécurité" subtitle={subtitle} backHref="/app/account" backLabel="Compte" />
 
       <Alert
         variant="info"
@@ -146,6 +147,6 @@ export default function SecurityPage() {
           </div>
         </form>
       </Card>
-    </div>
+    </PageContainer>
   );
 }

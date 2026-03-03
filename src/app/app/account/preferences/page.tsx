@@ -2,8 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import { Card } from '@/components/ui/card';
-import { SectionHeader } from '@/components/ui/section-header';
 import { Alert } from '@/components/ui/alert';
+import { PageContainer } from '@/components/layouts/PageContainer';
+import { PageHeader } from '@/components/layouts/PageHeader';
+import { Select } from '@/components/ui/select';
 import { fetchJson } from '@/lib/apiClient';
 import { Button } from '@/components/ui/button';
 import { applyThemePref, resolveTheme, type ThemePref } from '@/lib/theme';
@@ -69,10 +71,12 @@ export default function PreferencesPage() {
   }
 
   return (
-    <div className="space-y-4">
-      <SectionHeader
+    <PageContainer className="gap-4">
+      <PageHeader
         title="Préférences"
-        description="Langue et thème de l’interface. Sauvegarde immédiate."
+        subtitle="Langue et thème de l’interface. Sauvegarde immédiate."
+        backHref="/app/account"
+        backLabel="Compte"
       />
 
       {error ? (
@@ -86,34 +90,26 @@ export default function PreferencesPage() {
 
       <Card className="space-y-4 border-[var(--border)] bg-[var(--surface)] p-5">
         <div className="space-y-2">
-          <label className="flex w-full flex-col gap-1">
-            <span className="text-sm font-semibold text-[var(--text-secondary)]">Langue</span>
-            <select
-              value={language}
-              onChange={(e) => void save({ language: e.target.value as Prefs['language'] })}
-              className="w-full rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-sm text-[var(--text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
-            >
-              <option value="fr">Français</option>
-              <option value="en">English</option>
-            </select>
-          </label>
+          <Select
+            label="Langue"
+            value={language}
+            onChange={(e) => void save({ language: e.target.value as Prefs['language'] })}
+          >
+            <option value="fr">Français</option>
+            <option value="en">English</option>
+          </Select>
         </div>
 
         <div className="space-y-2">
-          <label className="flex w-full flex-col gap-1">
-            <span className="text-sm font-semibold text-[var(--text-secondary)]">
-              Thème {resolved ? `(actuellement: ${resolved})` : ''}
-            </span>
-            <select
-              value={theme}
-              onChange={(e) => void save({ theme: e.target.value as Prefs['theme'] })}
-              className="w-full rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-sm text-[var(--text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
-            >
-              <option value="system">Système</option>
-              <option value="light">Clair</option>
-              <option value="dark">Sombre</option>
-            </select>
-          </label>
+          <Select
+            label={<>Thème {resolved ? `(actuellement: ${resolved})` : ''}</>}
+            value={theme}
+            onChange={(e) => void save({ theme: e.target.value as Prefs['theme'] })}
+          >
+            <option value="system">Système</option>
+            <option value="light">Clair</option>
+            <option value="dark">Sombre</option>
+          </Select>
         </div>
 
         <div className="flex items-center justify-between gap-3">
@@ -130,6 +126,6 @@ export default function PreferencesPage() {
           </Button>
         </div>
       </Card>
-    </div>
+    </PageContainer>
   );
 }

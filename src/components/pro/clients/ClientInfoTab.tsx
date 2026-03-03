@@ -304,21 +304,18 @@ export function ClientInfoTab({ businessId, clientId, client, onUpdated }: Props
                 onChange={(e) => setForm((p) => ({ ...p, mainContactName: e.target.value }))}
                 disabled={!isAdmin}
               />
-              <label className="space-y-1 text-sm text-[var(--text-primary)]">
-                <span className="text-xs text-[var(--text-secondary)]">Statut</span>
-                <select
-                  value={form.status}
-                  onChange={(e) => setForm((p) => ({ ...p, status: e.target.value }))}
-                  className="w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
-                  disabled={!isAdmin}
-                >
-                  {STATUS_OPTIONS.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <Select
+                label="Statut"
+                value={form.status}
+                onChange={(e) => setForm((p) => ({ ...p, status: e.target.value }))}
+                disabled={!isAdmin}
+              >
+                {STATUS_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </Select>
               <Input
                 label="Secteur"
                 value={form.sector}
@@ -353,21 +350,18 @@ export function ClientInfoTab({ businessId, clientId, client, onUpdated }: Props
                 onChange={(e) => setForm((p) => ({ ...p, phone: e.target.value }))}
                 disabled={!isAdmin}
               />
-              <label className="space-y-1 text-sm text-[var(--text-primary)]">
-                <span className="text-xs text-[var(--text-secondary)]">Source</span>
-                <select
-                  value={form.leadSource}
-                  onChange={(e) => setForm((p) => ({ ...p, leadSource: e.target.value }))}
-                  className="w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
-                  disabled={!isAdmin}
-                >
-                  {LEAD_SOURCES.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <Select
+                label="Source"
+                value={form.leadSource}
+                onChange={(e) => setForm((p) => ({ ...p, leadSource: e.target.value }))}
+                disabled={!isAdmin}
+              >
+                {LEAD_SOURCES.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </Select>
             </div>
           ) : (
             <div className="space-y-2 text-sm text-[var(--text-secondary)]">

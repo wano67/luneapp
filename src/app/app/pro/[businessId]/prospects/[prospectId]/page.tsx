@@ -8,6 +8,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Modal } from '@/components/ui/modal';
+import { Select } from '@/components/ui/select';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import { LogoAvatar } from '@/components/pro/LogoAvatar';
 import { MoreVertical } from 'lucide-react';
@@ -454,36 +455,30 @@ export default function ProspectDetailPage() {
               <p className="text-xs uppercase tracking-wide text-[var(--text-secondary)]">Pipeline</p>
               {editing ? (
                 <div className="mt-3 space-y-3">
-                  <label className="space-y-1 text-sm text-[var(--text-primary)]">
-                    <span className="text-xs text-[var(--text-secondary)]">Statut pipeline</span>
-                    <select
-                      value={form.pipelineStatus}
-                      onChange={(e) => setForm((prev) => ({ ...prev, pipelineStatus: e.target.value }))}
-                      className="w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
-                      disabled={!isAdmin}
-                    >
-                      {PIPELINE_OPTIONS.map((opt) => (
-                        <option key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="space-y-1 text-sm text-[var(--text-primary)]">
-                    <span className="text-xs text-[var(--text-secondary)]">Statut</span>
-                    <select
-                      value={form.status}
-                      onChange={(e) => setForm((prev) => ({ ...prev, status: e.target.value }))}
-                      className="w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
-                      disabled={!isAdmin}
-                    >
-                      {STATUS_OPTIONS.map((opt) => (
-                        <option key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                  <Select
+                    label="Statut pipeline"
+                    value={form.pipelineStatus}
+                    onChange={(e) => setForm((prev) => ({ ...prev, pipelineStatus: e.target.value }))}
+                    disabled={!isAdmin}
+                  >
+                    {PIPELINE_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </Select>
+                  <Select
+                    label="Statut"
+                    value={form.status}
+                    onChange={(e) => setForm((prev) => ({ ...prev, status: e.target.value }))}
+                    disabled={!isAdmin}
+                  >
+                    {STATUS_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </Select>
                   <Input
                     label="Probabilité (%)"
                     type="number"

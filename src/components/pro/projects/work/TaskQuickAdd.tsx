@@ -2,6 +2,7 @@
 
 import { useCallback, useState } from 'react';
 import { Plus, Loader2 } from 'lucide-react';
+import { Select } from '@/components/ui/select';
 
 type ServiceOption = { id: string; name: string };
 
@@ -50,17 +51,17 @@ export function TaskQuickAdd({ onAdd, services, disabled }: TaskQuickAddProps) {
         className="min-w-0 flex-1 bg-transparent text-sm text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] outline-none"
       />
       {services && services.length > 0 ? (
-        <select
+        <Select
           value={serviceId}
           onChange={(e) => setServiceId(e.target.value)}
           disabled={disabled || submitting}
-          className="min-w-0 max-w-[160px] shrink-0 rounded-lg border border-[var(--border)]/60 bg-[var(--surface-2)] px-2 py-1 text-xs text-[var(--text-secondary)] outline-none"
+          className="min-w-0 max-w-[160px] shrink-0 px-2 py-1 text-xs"
         >
           <option value="">Sans service</option>
           {services.map((s) => (
             <option key={s.id} value={s.id}>{s.name}</option>
           ))}
-        </select>
+        </Select>
       ) : null}
     </div>
   );

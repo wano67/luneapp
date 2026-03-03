@@ -7,6 +7,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Modal } from '@/components/ui/modal';
+import { Select } from '@/components/ui/select';
 import { KpiCard } from '@/components/ui/kpi-card';
 import { ContactCard } from '@/components/pro/crm/ContactCard';
 import { ProPageShell } from '@/components/pro/ProPageShell';
@@ -581,18 +582,15 @@ export default function AgendaPage({ businessId }: Props) {
             placeholder="https://exemple.com"
             disabled={!canWrite}
           />
-          <label className="space-y-1 text-sm text-[var(--text-primary)]">
-            <span className="text-xs text-[var(--text-secondary)]">Type</span>
-            <select
-              className="w-full cursor-pointer rounded-md border border-[var(--border)] bg-[var(--surface)] p-2 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
-              value={form.type}
-              onChange={(e) => setForm((prev) => ({ ...prev, type: e.target.value as 'client' | 'prospect' }))}
-              disabled={!canWrite}
-            >
-              <option value="client">Client</option>
-              <option value="prospect">Prospect</option>
-            </select>
-          </label>
+          <Select
+            label="Type"
+            value={form.type}
+            onChange={(e) => setForm((prev) => ({ ...prev, type: e.target.value as 'client' | 'prospect' }))}
+            disabled={!canWrite}
+          >
+            <option value="client">Client</option>
+            <option value="prospect">Prospect</option>
+          </Select>
           {createError ? <p className="text-xs text-[var(--danger)]">{createError}</p> : null}
           {createSuccess ? <p className="text-xs text-[var(--success)]">{createSuccess}</p> : null}
           {!canWrite ? <p className="text-xs text-[var(--text-secondary)]">{readOnlyMessage}</p> : null}

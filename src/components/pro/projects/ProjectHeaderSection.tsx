@@ -65,7 +65,7 @@ export function ProjectHeaderSection({
             </h1>
             <span
               className="rounded-xl px-3 py-2 text-sm font-medium"
-              style={{ background: 'var(--surface-2)', color: '#5B3B3B' }}
+              style={{ background: 'var(--surface-2)', color: 'var(--shell-accent-dark)' }}
             >
               {statusLabel}
             </span>

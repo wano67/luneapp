@@ -2,6 +2,7 @@ import { useMemo, useState, type FormEvent } from 'react';
 import { Modal } from '@/components/ui/modal';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { Select } from '@/components/ui/select';
 import { SearchSelect } from '@/components/ui/search-select';
 import { OptionCard } from '@/components/ui/option-card';
 import { COUNTRIES, CURRENCIES } from '@/lib/constants/geo';
@@ -117,47 +118,38 @@ export function CreateBusinessWizard({ open, loading, error, draft, onChangeDraf
               onChange={(e) => onChangeDraft({ ...draft, websiteUrl: e.target.value })}
               placeholder="https://exemple.com"
             />
-            <label className="space-y-1 text-sm text-[var(--text-primary)]">
-              <span className="text-xs text-[var(--text-secondary)]">Secteur / activité</span>
-              <select
-                value={draft.sector}
-                onChange={(e) => onChangeDraft({ ...draft, sector: e.target.value })}
-                className="w-full rounded-md border border-[var(--border)] bg-[var(--surface)] p-2 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
-              >
-                <option value="service">Services</option>
-                <option value="product">Produits</option>
-                <option value="commerce">Commerce</option>
-                <option value="agency">Agence</option>
-                <option value="freelance">Freelance</option>
-                <option value="other">Autre</option>
-              </select>
-            </label>
-            <label className="space-y-1 text-sm text-[var(--text-primary)]">
-              <span className="text-xs text-[var(--text-secondary)]">Taille</span>
-              <select
-                value={draft.size}
-                onChange={(e) => onChangeDraft({ ...draft, size: e.target.value })}
-                className="w-full rounded-md border border-[var(--border)] bg-[var(--surface)] p-2 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
-              >
-                <option value="solo">Solo</option>
-                <option value="2-5">2-5</option>
-                <option value="6-20">6-20</option>
-                <option value="20+">20+</option>
-              </select>
-            </label>
-            <label className="space-y-1 text-sm text-[var(--text-primary)]">
-              <span className="text-xs text-[var(--text-secondary)]">Objectif principal</span>
-              <select
-                value={draft.goal}
-                onChange={(e) => onChangeDraft({ ...draft, goal: e.target.value })}
-                className="w-full rounded-md border border-[var(--border)] bg-[var(--surface)] p-2 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
-              >
-                <option value="services">Vendre des services</option>
-                <option value="products">Vendre des produits</option>
-                <option value="projects">Gérer des projets clients</option>
-                <option value="finance">Suivre les finances</option>
-              </select>
-            </label>
+            <Select
+              label="Secteur / activité"
+              value={draft.sector}
+              onChange={(e) => onChangeDraft({ ...draft, sector: e.target.value })}
+            >
+              <option value="service">Services</option>
+              <option value="product">Produits</option>
+              <option value="commerce">Commerce</option>
+              <option value="agency">Agence</option>
+              <option value="freelance">Freelance</option>
+              <option value="other">Autre</option>
+            </Select>
+            <Select
+              label="Taille"
+              value={draft.size}
+              onChange={(e) => onChangeDraft({ ...draft, size: e.target.value })}
+            >
+              <option value="solo">Solo</option>
+              <option value="2-5">2-5</option>
+              <option value="6-20">6-20</option>
+              <option value="20+">20+</option>
+            </Select>
+            <Select
+              label="Objectif principal"
+              value={draft.goal}
+              onChange={(e) => onChangeDraft({ ...draft, goal: e.target.value })}
+            >
+              <option value="services">Vendre des services</option>
+              <option value="products">Vendre des produits</option>
+              <option value="projects">Gérer des projets clients</option>
+              <option value="finance">Suivre les finances</option>
+            </Select>
           </div>
         ) : (
           <div className="space-y-3">

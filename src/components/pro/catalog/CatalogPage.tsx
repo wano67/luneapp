@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Modal } from '@/components/ui/modal';
+import { Select } from '@/components/ui/select';
 import { KpiCirclesBlock } from '@/components/pro/KpiCirclesBlock';
 import { ProPageShell } from '@/components/pro/ProPageShell';
 import { fetchJson } from '@/lib/apiClient';
@@ -496,30 +497,24 @@ export function CatalogPage({
                 onChange={(e) => setServiceForm((prev) => ({ ...prev, type: e.target.value }))}
               />
               <div className="grid gap-2 sm:grid-cols-2">
-                <label className="flex flex-col gap-1 text-sm text-[var(--text-secondary)]">
-                  Billing type
-                  <select
-                    className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm"
-                    value={serviceForm.billingType}
-                    onChange={(e) =>
-                      setServiceForm((prev) => ({ ...prev, billingType: e.target.value as ServiceForm['billingType'] }))
-                    }
-                  >
-                    <option value="ONE_OFF">Ponctuel</option>
-                    <option value="RECURRING">Abonnement</option>
-                  </select>
-                </label>
-                <label className="flex flex-col gap-1 text-sm text-[var(--text-secondary)]">
-                  Intervalle
-                  <select
-                    className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm"
-                    value={serviceForm.recurrenceInterval}
-                    onChange={(e) => setServiceForm((prev) => ({ ...prev, recurrenceInterval: e.target.value }))}
-                    disabled={serviceForm.billingType !== 'RECURRING'}
-                  >
-                    <option value="MONTH">Mensuel</option>
-                  </select>
-                </label>
+                <Select
+                  label="Billing type"
+                  value={serviceForm.billingType}
+                  onChange={(e) =>
+                    setServiceForm((prev) => ({ ...prev, billingType: e.target.value as ServiceForm['billingType'] }))
+                  }
+                >
+                  <option value="ONE_OFF">Ponctuel</option>
+                  <option value="RECURRING">Abonnement</option>
+                </Select>
+                <Select
+                  label="Intervalle"
+                  value={serviceForm.recurrenceInterval}
+                  onChange={(e) => setServiceForm((prev) => ({ ...prev, recurrenceInterval: e.target.value }))}
+                  disabled={serviceForm.billingType !== 'RECURRING'}
+                >
+                  <option value="MONTH">Mensuel</option>
+                </Select>
               </div>
               {serviceForm.billingType === 'RECURRING' ? (
                 <Input

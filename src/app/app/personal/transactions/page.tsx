@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Select } from '@/components/ui/select';
 import { PageContainer } from '@/components/layouts/PageContainer';
 import { PageHeader } from '@/components/layouts/PageHeader';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
@@ -420,46 +421,44 @@ export default function PersoTransactionsPage() {
           <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-6">
             <div className="lg:col-span-2">
               <label className="mb-1 block text-xs text-[var(--text-faint)]">Compte</label>
-              <select
+              <Select
                 value={accountId}
                 onChange={(e) => setAccountId(e.target.value)}
-                className="h-12 w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 text-base text-[var(--text)]"
                 disabled={loadingAccounts}
               >
                 <option value="">Tous les comptes</option>
                 {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-              </select>
+              </Select>
             </div>
 
             <div>
               <label className="mb-1 block text-xs text-[var(--text-faint)]">Type</label>
-              <select
+              <Select
                 value={type}
                 onChange={(e) => setType(e.target.value)}
-                className="h-12 w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 text-base text-[var(--text)]"
                 disabled={loadingAccounts || loadingList}
               >
                 <option value="">Tous</option>
                 <option value="INCOME">Revenus</option>
                 <option value="EXPENSE">Dépenses</option>
                 <option value="TRANSFER">Virements</option>
-              </select>
+              </Select>
             </div>
 
             <div>
-              <label className="mb-1 block text-xs text-[var(--text-faint)]">Du</label>
-              <input
+              <Input
+                label="Du"
                 type="date" value={from} onChange={(e) => setFrom(e.target.value)}
-                className="h-12 w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 text-base text-[var(--text)]"
+                className="h-12 rounded-2xl"
                 disabled={loadingAccounts || loadingList}
               />
             </div>
 
             <div>
-              <label className="mb-1 block text-xs text-[var(--text-faint)]">Au</label>
-              <input
+              <Input
+                label="Au"
                 type="date" value={to} onChange={(e) => setTo(e.target.value)}
-                className="h-12 w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 text-base text-[var(--text)]"
+                className="h-12 rounded-2xl"
                 disabled={loadingAccounts || loadingList}
               />
             </div>

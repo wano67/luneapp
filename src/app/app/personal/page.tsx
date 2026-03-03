@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { fetchJson } from '@/lib/apiClient';
 import { onWalletRefresh } from '@/lib/personalEvents';
-import { fmtKpi } from '@/components/pivot-ui';
+import { fmtKpi } from '@/lib/format';
 import { PageContainer } from '@/components/layouts/PageContainer';
 import { PageHeader } from '@/components/layouts/PageHeader';
 import { KpiCard } from '@/components/ui/kpi-card';

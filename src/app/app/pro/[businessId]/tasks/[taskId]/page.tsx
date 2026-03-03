@@ -7,6 +7,7 @@ import { useParams } from 'next/navigation';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { fetchJson } from '@/lib/apiClient';
 import { ReferencePicker } from '../../references/ReferencePicker';
 import { useActiveBusiness } from '../../../ActiveBusinessProvider';
@@ -458,8 +459,8 @@ export default function TaskDetailPage() {
             )}
             {canEditTask ? (
               <div className="flex flex-wrap items-center gap-2">
-                <input
-                  className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] sm:flex-1"
+                <Input
+                  className="sm:flex-1"
                   placeholder="Nouvelle sous-tâche"
                   value={subtaskTitle}
                   onChange={(e) => setSubtaskTitle(e.target.value)}
@@ -530,8 +531,8 @@ export default function TaskDetailPage() {
             )}
             {canEditTask ? (
               <div className="flex flex-wrap items-center gap-2">
-                <input
-                  className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] sm:flex-1"
+                <Input
+                  className="sm:flex-1"
                   placeholder="Nouvel item"
                   value={checklistTitle}
                   onChange={(e) => setChecklistTitle(e.target.value)}

@@ -6,7 +6,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { SectionHeader } from '@/components/ui/section-header';
+import { PageContainer } from '@/components/layouts/PageContainer';
+import { PageHeader } from '@/components/layouts/PageHeader';
 import Modal from '@/components/ui/modal';
 import { fetchJson } from '@/lib/apiClient';
 
@@ -128,10 +129,12 @@ export default function AccountPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <SectionHeader
+    <PageContainer className="gap-5">
+      <PageHeader
         title="Compte"
-        description="Gérez votre profil, votre sécurité et vos préférences."
+        subtitle="Gérez votre profil, votre sécurité et vos préférences."
+        backHref="/app"
+        backLabel="Accueil"
       />
 
       <div className="grid gap-4 md:grid-cols-3">
@@ -257,6 +260,6 @@ export default function AccountPage() {
           </div>
         </div>
       </Modal>
-    </div>
+    </PageContainer>
   );
 }

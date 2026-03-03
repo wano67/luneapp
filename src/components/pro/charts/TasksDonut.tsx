@@ -3,7 +3,7 @@
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 
 const COLORS_DEFAULT = ['var(--warning)', 'var(--accent)', 'var(--success)'];
-const COLORS_ACCENT = ['#FF808B', 'var(--shell-accent-dark)', 'white'];
+const COLORS_ACCENT = ['var(--accent-light)', 'var(--shell-accent-dark)', 'white'];
 
 export type TasksDonutProps = {
   data: { name: string; value: number }[];

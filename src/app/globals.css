@@ -17,6 +17,7 @@
   --text-muted: #374151;
   --text-faint: #6b7280;
   --accent: #BF7F82;
+  --accent-light: #FF808B;
   --accent-strong: #71484A;
   --info: #1d4ed8;
   --success: #166534;
@@ -89,17 +90,18 @@
 
 [data-theme="dark"],
 .dark {
-  /* DARK MODE — noir profond */
-  --bg: #05060a;
-  --surface: #0a0b10;
-  --surface-2: #11121a;
-  --surface-hover: #171924;
-  --border: #232530;
-  --border-strong: #323548;
+  /* DARK MODE — gris foncé */
+  --bg: #1a1b1f;
+  --surface: #222328;
+  --surface-2: #2a2b31;
+  --surface-hover: #32333a;
+  --border: #3a3b44;
+  --border-strong: #4a4b55;
   --text: #f3f4f6;
   --text-muted: #d1d5db;
   --text-faint: #9ca3af;
   --accent: #BF7F82;
+  --accent-light: #d4979a;
   --accent-strong: #d4979a;
   --info: #93c5fd;
   --success: #22c55e;
@@ -130,14 +132,14 @@
   --chart-8: #fb923c;
 
   /* Pivot Shell — dark */
-  --shell-sidebar-bg: #1a1a1e;
+  --shell-sidebar-bg: #141518;
   --shell-sidebar-text: #d4d3c9;
   --shell-sidebar-active-bg: #2a2a2e;
   --shell-sidebar-active-text: #f3f4f6;
-  --shell-topbar-bg: #0f1014;
+  --shell-topbar-bg: #1a1b1f;
   --shell-topbar-text: #f3f4f6;
   --shell-accent: #BF7F82;
-  --shell-accent-dark: #503334;
+  --shell-accent-dark: #71484A;
 
   --background: var(--bg);
   --background-alt: var(--surface-2);

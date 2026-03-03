@@ -568,11 +568,10 @@ export default function CsvImportModal({
                 <div className="grid gap-3 sm:grid-cols-3">
                   {mappingFields.map((f) => (
                     <div key={f.key}>
-                      <label className="mb-1.5 block text-sm text-[var(--text-faint)]">{f.label}</label>
-                      <select
+                      <Select
+                        label={f.label}
                         value={mapping[f.key]}
                         onChange={(e) => setMapping((m) => ({ ...m, [f.key]: e.target.value }))}
-                        className="h-12 w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 text-base text-[var(--text)]"
                       >
                         <option value="">—</option>
                         {rawHeaders.map((h) => (
@@ -580,7 +579,7 @@ export default function CsvImportModal({
                             {h}
                           </option>
                         ))}
-                      </select>
+                      </Select>
                     </div>
                   ))}
                 </div>

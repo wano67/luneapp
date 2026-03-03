@@ -4,6 +4,7 @@ import { useState, type ChangeEvent, type FormEvent } from 'react';
 import Papa from 'papaparse';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
+import { Select } from '@/components/ui/select';
 import { fetchJson } from '@/lib/apiClient';
 
 type CsvRow = Record<string, string>;
@@ -193,25 +194,21 @@ export function ServiceImportModal({ open, businessId, isAdmin, onClose, onAfter
         {importColumns.length ? (
           <div className="grid gap-3 md:grid-cols-2">
             {IMPORT_FIELDS.map((field) => (
-              <div key={field.key} className="space-y-1">
-                <label className="text-xs font-semibold text-[var(--text-secondary)]">
-                  {field.label}
-                </label>
-                <select
-                  value={importMapping[field.key]}
-                  onChange={(e) =>
-                    setImportMapping((prev) => ({ ...prev, [field.key]: e.target.value }))
-                  }
-                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm"
-                >
-                  <option value="">—</option>
-                  {importColumns.map((col) => (
-                    <option key={col} value={col}>
-                      {col}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <Select
+                key={field.key}
+                label={field.label}
+                value={importMapping[field.key]}
+                onChange={(e) =>
+                  setImportMapping((prev) => ({ ...prev, [field.key]: e.target.value }))
+                }
+              >
+                <option value="">—</option>
+                {importColumns.map((col) => (
+                  <option key={col} value={col}>
+                    {col}
+                  </option>
+                ))}
+              </Select>
             ))}
           </div>
         ) : null}

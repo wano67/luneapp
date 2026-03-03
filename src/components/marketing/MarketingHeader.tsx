@@ -81,7 +81,7 @@ export function MarketingHeader() {
             className="hidden items-center transition-opacity hover:opacity-90 md:inline-flex"
             style={{
               background: 'var(--shell-accent)',
-              color: '#fff',
+              color: 'white',
               borderRadius: 12,
               padding: '8px 16px',
               fontFamily: 'var(--font-barlow), sans-serif',
@@ -165,7 +165,7 @@ export function MarketingHeader() {
               className="w-full rounded-xl py-2.5 text-center text-sm transition-opacity hover:opacity-90"
               style={{
                 background: 'var(--shell-accent)',
-                color: '#fff',
+                color: 'white',
                 fontFamily: 'var(--font-barlow), sans-serif',
                 fontWeight: 600,
                 textTransform: 'uppercase',

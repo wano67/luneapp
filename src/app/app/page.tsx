@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { ChevronRight } from 'lucide-react';
 import { fetchJson } from '@/lib/apiClient';
 import { IconPerso, IconEntreprise } from '@/components/pivot-icons';
-import { fmtKpi } from '@/components/pivot-ui';
+import { fmtKpi } from '@/lib/format';
 import { PageContainer } from '@/components/layouts/PageContainer';
 import { PageHeader } from '@/components/layouts/PageHeader';
 import { KpiCard } from '@/components/ui/kpi-card';

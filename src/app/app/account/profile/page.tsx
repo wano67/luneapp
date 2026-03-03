@@ -5,7 +5,8 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Alert } from '@/components/ui/alert';
-import { SectionHeader } from '@/components/ui/section-header';
+import { PageContainer } from '@/components/layouts/PageContainer';
+import { PageHeader } from '@/components/layouts/PageHeader';
 import { fetchJson } from '@/lib/apiClient';
 
 type MeResponse = {
@@ -111,8 +112,8 @@ export default function ProfilePage() {
   }, [updatedAt]);
 
   return (
-    <div className="space-y-4">
-      <SectionHeader title="Profil" description={subtitle} />
+    <PageContainer className="gap-4">
+      <PageHeader title="Profil" subtitle={subtitle} backHref="/app/account" backLabel="Compte" />
       {error ? (
         <Alert
           variant="danger"
@@ -159,6 +160,6 @@ export default function ProfilePage() {
           </div>
         </form>
       </Card>
-    </div>
+    </PageContainer>
   );
 }

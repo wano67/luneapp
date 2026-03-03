@@ -407,75 +407,57 @@ export default function BusinessTeamSettingsPage() {
       >
         <div className="space-y-4">
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            <label className="text-sm text-[var(--text-primary)]">
-              <span className="block text-xs text-[var(--text-secondary)]">Intitulé de poste</span>
-              <input
-                className="mt-1 w-full rounded-md border border-[var(--border)] bg-[var(--surface)] p-2 text-sm"
-                value={employeeDraft.jobTitle ?? ''}
-                onChange={(e) => setEmployeeDraft((prev) => ({ ...prev, jobTitle: e.target.value }))}
-                disabled={actionLoading}
-              />
-            </label>
-            <label className="text-sm text-[var(--text-primary)]">
-              <span className="block text-xs text-[var(--text-secondary)]">Type de contrat</span>
-              <input
-                className="mt-1 w-full rounded-md border border-[var(--border)] bg-[var(--surface)] p-2 text-sm"
-                value={employeeDraft.contractType ?? ''}
-                onChange={(e) => setEmployeeDraft((prev) => ({ ...prev, contractType: e.target.value }))}
-                disabled={actionLoading}
-              />
-            </label>
-            <label className="text-sm text-[var(--text-primary)]">
-              <span className="block text-xs text-[var(--text-secondary)]">Date de début</span>
-              <input
-                type="date"
-                className="mt-1 w-full rounded-md border border-[var(--border)] bg-[var(--surface)] p-2 text-sm"
-                value={employeeDraft.startDate ?? ''}
-                onChange={(e) => setEmployeeDraft((prev) => ({ ...prev, startDate: e.target.value }))}
-                disabled={actionLoading}
-              />
-            </label>
-            <label className="text-sm text-[var(--text-primary)]">
-              <span className="block text-xs text-[var(--text-secondary)]">Date de fin</span>
-              <input
-                type="date"
-                className="mt-1 w-full rounded-md border border-[var(--border)] bg-[var(--surface)] p-2 text-sm"
-                value={employeeDraft.endDate ?? ''}
-                onChange={(e) => setEmployeeDraft((prev) => ({ ...prev, endDate: e.target.value }))}
-                disabled={actionLoading}
-              />
-            </label>
-            <label className="text-sm text-[var(--text-primary)]">
-              <span className="block text-xs text-[var(--text-secondary)]">Heures hebdo</span>
-              <input
-                type="number"
-                className="mt-1 w-full rounded-md border border-[var(--border)] bg-[var(--surface)] p-2 text-sm"
-                value={employeeDraft.weeklyHours ?? ''}
-                onChange={(e) =>
-                  setEmployeeDraft((prev) => ({
-                    ...prev,
-                    weeklyHours: e.target.value ? Number(e.target.value) : null,
-                  }))
-                }
-                disabled={actionLoading}
-              />
-            </label>
-            <label className="text-sm text-[var(--text-primary)]">
-              <span className="block text-xs text-[var(--text-secondary)]">Coût horaire (€)</span>
-              <input
-                type="text"
-                inputMode="decimal"
-                className="mt-1 w-full rounded-md border border-[var(--border)] bg-[var(--surface)] p-2 text-sm"
-                value={employeeDraft.hourlyCostCents ?? ''}
-                onChange={(e) =>
-                  setEmployeeDraft((prev) => ({
-                    ...prev,
-                    hourlyCostCents: sanitizeEuroInput(e.target.value) || '',
-                  }))
-                }
-                disabled={actionLoading}
-              />
-            </label>
+            <Input
+              label="Intitulé de poste"
+              value={employeeDraft.jobTitle ?? ''}
+              onChange={(e) => setEmployeeDraft((prev) => ({ ...prev, jobTitle: e.target.value }))}
+              disabled={actionLoading}
+            />
+            <Input
+              label="Type de contrat"
+              value={employeeDraft.contractType ?? ''}
+              onChange={(e) => setEmployeeDraft((prev) => ({ ...prev, contractType: e.target.value }))}
+              disabled={actionLoading}
+            />
+            <Input
+              label="Date de début"
+              type="date"
+              value={employeeDraft.startDate ?? ''}
+              onChange={(e) => setEmployeeDraft((prev) => ({ ...prev, startDate: e.target.value }))}
+              disabled={actionLoading}
+            />
+            <Input
+              label="Date de fin"
+              type="date"
+              value={employeeDraft.endDate ?? ''}
+              onChange={(e) => setEmployeeDraft((prev) => ({ ...prev, endDate: e.target.value }))}
+              disabled={actionLoading}
+            />
+            <Input
+              label="Heures hebdo"
+              type="number"
+              value={employeeDraft.weeklyHours ?? ''}
+              onChange={(e) =>
+                setEmployeeDraft((prev) => ({
+                  ...prev,
+                  weeklyHours: e.target.value ? Number(e.target.value) : null,
+                }))
+              }
+              disabled={actionLoading}
+            />
+            <Input
+              label="Coût horaire (€)"
+              type="text"
+              inputMode="decimal"
+              value={employeeDraft.hourlyCostCents ?? ''}
+              onChange={(e) =>
+                setEmployeeDraft((prev) => ({
+                  ...prev,
+                  hourlyCostCents: sanitizeEuroInput(e.target.value) || '',
+                }))
+              }
+              disabled={actionLoading}
+            />
             <label className="text-sm text-[var(--text-primary)]">
               <span className="block text-xs text-[var(--text-secondary)]">Statut</span>
               <Select

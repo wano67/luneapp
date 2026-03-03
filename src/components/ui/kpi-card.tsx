@@ -24,35 +24,24 @@ export function KpiCard({ label, value, delta, trend = 'neutral', hint, loading,
   return (
     <div
       className={cn(
-        'flex flex-col rounded-xl animate-fade-in-up',
-        isCompact ? 'gap-2' : 'justify-between',
+        'flex flex-col rounded-xl bg-[var(--surface)] outline outline-[0.5px] outline-[var(--border)] animate-fade-in-up',
+        isCompact ? 'gap-2 p-4' : 'min-h-[200px] justify-between p-3',
         className
       )}
       style={{
-        minHeight: isCompact ? undefined : 200,
-        padding: isCompact ? '16px' : 12,
-        background: 'var(--surface)',
-        outline: '0.5px solid var(--border)',
         animationDelay: delay ? `${delay}ms` : undefined,
         animationFillMode: delay ? 'backwards' : undefined,
       }}
     >
       <div className="flex items-start justify-between gap-2">
-        <span className="text-sm font-medium" style={{ color: 'var(--text)' }}>
+        <span className="text-sm font-medium text-[var(--text)]">
           {label}
         </span>
         {delta ? (
-          <div
-            className="flex items-center gap-1 px-3 py-1.5 rounded-xl"
-            style={{ background: 'var(--shell-accent-dark)' }}
-          >
+          <div className="flex items-center gap-1 rounded-xl bg-[var(--shell-accent-dark)] px-3 py-1.5">
             <span
-              className="text-white font-bold"
-              style={{
-                fontFamily: 'var(--font-roboto-mono), monospace',
-                fontSize: 14,
-                lineHeight: '14px',
-              }}
+              className="text-white font-bold text-[14px] leading-[14px]"
+              style={{ fontFamily: 'var(--font-roboto-mono), monospace' }}
             >
               {delta}
             </span>
@@ -66,25 +55,20 @@ export function KpiCard({ label, value, delta, trend = 'neutral', hint, loading,
       </div>
       <div>
         {loading ? (
-          <div
-            className="h-10 w-32 rounded-lg animate-skeleton-pulse"
-            style={{ background: 'var(--surface-2)' }}
-          />
+          <div className="h-10 w-32 rounded-lg bg-[var(--surface-2)] animate-skeleton-pulse" />
         ) : (
           <span
-            style={{
-              color: 'var(--shell-accent)',
-              fontSize: isCompact ? 20 : 40,
-              fontWeight: 800,
-              lineHeight: isCompact ? '24px' : '40px',
-            }}
+            className={cn(
+              'font-extrabold text-[var(--shell-accent)]',
+              isCompact ? 'text-[20px] leading-[24px]' : 'text-[40px] leading-[40px]'
+            )}
           >
             {value}
           </span>
         )}
       </div>
       {hint && isCompact ? (
-        <p className="text-xs" style={{ color: 'var(--text-faint)' }}>{hint}</p>
+        <p className="text-xs text-[var(--text-faint)]">{hint}</p>
       ) : null}
     </div>
   );

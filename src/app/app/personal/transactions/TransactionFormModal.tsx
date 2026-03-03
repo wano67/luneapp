@@ -2,7 +2,9 @@
 
 import type { RefObject } from 'react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Modal } from '@/components/ui/modal';
+import { Select } from '@/components/ui/select';
 import { formatCents, sanitizeEuroInput } from '@/lib/money';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -193,63 +195,62 @@ export function TransactionFormModal({
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
             <div>
               <label className="mb-1.5 block text-sm text-[var(--text-faint)]">Compte</label>
-              <select
+              <Select
                 value={accountId}
                 onChange={(e) => onAccountChange(e.target.value)}
-                className={[inputBase, fieldCls(required.account, attemptedSubmit)].join(' ')}
+                className={fieldCls(required.account, attemptedSubmit)}
                 disabled={loading}
               >
                 {accounts.map((a) => (
                   <option key={a.id} value={a.id}>{a.name}</option>
                 ))}
-              </select>
+              </Select>
             </div>
 
             <div>
-              <label className="mb-1.5 block text-sm text-[var(--text-faint)]">Date</label>
-              <input
+              <Input
+                label="Date"
                 type="date"
                 value={date}
                 onChange={(e) => onDateChange(e.target.value)}
-                className={[inputBase, fieldCls(required.date, attemptedSubmit)].join(' ')}
+                className={['h-12 rounded-2xl', fieldCls(required.date, attemptedSubmit)].join(' ')}
                 disabled={loading}
               />
             </div>
 
             <div className="sm:col-span-2">
-              <label className="mb-1.5 block text-sm text-[var(--text-faint)]">Libellé</label>
-              <input
+              <Input
+                label="Libellé"
                 value={label}
                 onChange={(e) => onLabelChange(e.target.value)}
                 placeholder="ex: Courses, Loyer, Salaire…"
-                className={[inputBase, fieldCls(required.label, attemptedSubmit)].join(' ')}
+                className={['h-12 rounded-2xl', fieldCls(required.label, attemptedSubmit)].join(' ')}
                 disabled={loading}
               />
             </div>
 
             <div>
-              <label className="mb-1.5 block text-sm text-[var(--text-faint)]">Devise</label>
-              <input
+              <Input
+                label="Devise"
                 value={currency}
                 onChange={(e) => onCurrencyChange(e.target.value.toUpperCase())}
-                className={inputBase + ' ' + inputOk}
+                className="h-12 rounded-2xl"
                 disabled={loading}
               />
             </div>
 
             <div>
               <label className="mb-1.5 block text-sm text-[var(--text-faint)]">Catégorie (optionnel)</label>
-              <select
+              <Select
                 value={categoryId}
                 onChange={(e) => onCategoryChange(e.target.value)}
-                className={inputBase + ' ' + inputOk}
                 disabled={loading || loadingCategories}
               >
                 <option value="">Aucune catégorie</option>
                 {categories.map((c) => (
                   <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
-              </select>
+              </Select>
               <p className="mt-1 text-xs text-[var(--text-muted)]">
                 {loadingCategories ? 'Chargement des catégories…' : 'Optionnel'}
               </p>

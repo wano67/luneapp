@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { cn } from '@/lib/cn';
 import Link from 'next/link';
 import { ChevronLeft } from 'lucide-react';
 import dynamic from 'next/dynamic';
@@ -8,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { KpiCard } from '@/components/ui/kpi-card';
 import { Card } from '@/components/ui/card';
 import { PageContainer } from '@/components/layouts/PageContainer';
-import { fmtKpi } from '@/components/pivot-ui';
+import { fmtKpi } from '@/lib/format';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import { useActiveBusiness } from '@/app/app/pro/ActiveBusinessProvider';
 
@@ -112,11 +113,12 @@ function PeriodPills({ value, onChange }: { value: number; onChange: (v: number)
           key={p.value}
           type="button"
           onClick={() => onChange(p.value)}
-          className="cursor-pointer rounded-xl px-3 py-1.5 text-sm font-medium transition"
-          style={{
-            background: value === p.value ? 'var(--shell-accent-dark)' : 'var(--surface)',
-            color: value === p.value ? 'white' : 'rgba(0,0,0,0.6)',
-          }}
+          className={cn(
+            'cursor-pointer rounded-xl px-3 py-1.5 text-sm font-medium transition',
+            value === p.value
+              ? 'bg-[var(--shell-accent-dark)] text-white'
+              : 'bg-[var(--surface)] text-[var(--text-faint)]'
+          )}
         >
           {p.label}
         </button>
@@ -204,18 +206,14 @@ export default function ProDashboard({ businessId }: { businessId: string }) {
         <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
           {/* Cashflow card — accent background */}
           <div
-            className="flex flex-col gap-3 rounded-xl p-4 animate-fade-in-up"
-            style={{
-              background: 'var(--shell-accent)',
-              animationDelay: '200ms',
-              animationFillMode: 'backwards',
-            }}
+            className="flex flex-col gap-3 rounded-xl bg-[var(--shell-accent)] p-4 animate-fade-in-up"
+            style={{ animationDelay: '200ms', animationFillMode: 'backwards' }}
           >
             <div className="flex items-center justify-between">
               <span className="text-sm font-medium text-white">Cash flow</span>
               <Button asChild variant="outline" size="sm" className="!bg-white !text-black !border-0">
                 <Link href={`/app/pro/${businessId}/finances`}>
-                  <span style={{ fontFamily: 'var(--font-barlow), sans-serif', fontWeight: 600, fontSize: 16 }}>
+                  <span className="font-semibold text-[16px]" style={{ fontFamily: 'var(--font-barlow), sans-serif' }}>
                     Voir mes finances
                   </span>
                   <ChevronLeft size={14} className="rotate-180" />
@@ -231,18 +229,14 @@ export default function ProDashboard({ businessId }: { businessId: string }) {
 
           {/* Tasks donut — accent background */}
           <div
-            className="flex flex-col gap-3 rounded-xl p-4 animate-fade-in-up"
-            style={{
-              background: 'var(--shell-accent)',
-              animationDelay: '300ms',
-              animationFillMode: 'backwards',
-            }}
+            className="flex flex-col gap-3 rounded-xl bg-[var(--shell-accent)] p-4 animate-fade-in-up"
+            style={{ animationDelay: '300ms', animationFillMode: 'backwards' }}
           >
             <div className="flex items-center justify-between">
               <span className="text-sm font-medium text-white">Taches</span>
               <Button asChild variant="outline" size="sm" className="!bg-white !text-black !border-0">
                 <Link href={`/app/pro/${businessId}/tasks`}>
-                  <span style={{ fontFamily: 'var(--font-barlow), sans-serif', fontWeight: 600, fontSize: 16 }}>
+                  <span className="font-semibold text-[16px]" style={{ fontFamily: 'var(--font-barlow), sans-serif' }}>
                     Taches a faire
                   </span>
                   <ChevronLeft size={14} className="rotate-180" />
