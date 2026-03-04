@@ -14,7 +14,7 @@ export default function PrivacyPage() {
       <Card className="space-y-4 border-[var(--border)] bg-[var(--surface)] p-6 text-sm leading-relaxed text-[var(--text-secondary)]">
         <p>
           Les données que vous stockez (prospects, clients, finances, transactions) restent
-          privées. Nous utilisons des cookies techniques pour l'authentification (HttpOnly) et ne
+          privées. Nous utilisons des cookies techniques pour l&apos;authentification (HttpOnly) et ne
           revendons aucune donnée.
         </p>
         <p>

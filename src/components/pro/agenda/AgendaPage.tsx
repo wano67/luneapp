@@ -422,7 +422,7 @@ export default function AgendaPage({ businessId }: Props) {
   ) : currentList.length === 0 ? (
     <Card className="flex flex-col gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5">
       <p className="text-sm font-semibold text-[var(--text-primary)]">
-        {isProspectView ? 'Aucun prospect' : 'Aucun client'} pour l'instant.
+        {isProspectView ? 'Aucun prospect' : 'Aucun client'} pour l&apos;instant.
       </p>
       <div className="flex flex-col gap-1 sm:flex-row sm:items-center">
         <Button

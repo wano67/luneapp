@@ -1,5 +1,6 @@
 'use client';
 
+import { useMemo } from 'react';
 import {
   ResponsiveContainer,
   ComposedChart,
@@ -53,20 +54,26 @@ export default function TreasuryCashflowChart({
   height = 'h-56 sm:h-72',
   variant = 'default',
 }: TreasuryCashflowChartProps) {
-  let cumulative = toEuro(openingBalanceCents ?? 0);
   const isAccent = variant === 'accent';
 
-  const data = (series ?? []).map((m) => {
-    const income = toEuro(m.incomeCents);
-    const expense = toEuro(m.expenseCents);
-    cumulative += income - expense;
-    return {
-      month: formatMonth(m.month),
-      income,
-      expense,
-      treasury: Math.round(cumulative * 100) / 100,
-    };
-  });
+  const data = useMemo(() => {
+    const opening = toEuro(openingBalanceCents ?? 0);
+    return (series ?? []).reduce<{ items: { month: string; income: number; expense: number; treasury: number }[]; running: number }>(
+      (acc, m) => {
+        const income = toEuro(m.incomeCents);
+        const expense = toEuro(m.expenseCents);
+        const running = acc.running + income - expense;
+        acc.items.push({
+          month: formatMonth(m.month),
+          income,
+          expense,
+          treasury: Math.round(running * 100) / 100,
+        });
+        return { items: acc.items, running };
+      },
+      { items: [], running: opening }
+    ).items;
+  }, [series, openingBalanceCents]);
 
   const tickFill = isAccent ? 'white' : 'var(--text-faint)';
   const gridStroke = isAccent ? 'rgba(255,255,255,0.4)' : 'var(--border)';

@@ -18,7 +18,7 @@ export default function TermsPage() {
           données que vous ajoutez restent les vôtres.
         </p>
         <p>
-          Nous pouvons suspendre un compte en cas d'abus ou de non-paiement. Les changements
+          Nous pouvons suspendre un compte en cas d&apos;abus ou de non-paiement. Les changements
           importants seront communiqués. Pour toute question, écrivez-nous via la page Contact.
         </p>
       </Card>

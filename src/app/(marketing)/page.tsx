@@ -96,13 +96,13 @@ export default function HomePage() {
         <div className="space-y-6">
           <ScrollReveal animation="reveal-scale">
             <Badge variant="neutral" className="w-fit">
-              Nouvelle génération d'OS
+              Nouvelle génération d&apos;OS
             </Badge>
           </ScrollReveal>
           <ScrollReveal animation="reveal-up" delay={100}>
             <div className="space-y-4">
               <h1 className="text-4xl font-semibold leading-tight md:text-5xl">
-                Pivot, l'OS qui structure votre activité pro et vos finances perso.
+                Pivot, l&apos;OS qui structure votre activité pro et vos finances perso.
               </h1>
               <p className="max-w-2xl text-lg leading-relaxed text-[var(--text-secondary)]">
                 Un seul espace pour gérer prospects, clients, projets, finances et dépenses
@@ -208,7 +208,7 @@ export default function HomePage() {
               description="Les mêmes garde-fous que dans l'app : CSRF, auth unifiée, rate-limit, request-id."
             />
             <ul className="space-y-3 text-sm text-[var(--text-secondary)]">
-              <li>• Cookies HttpOnly et middleware d'auth pour toutes les routes sensibles.</li>
+              <li>• Cookies HttpOnly et middleware d&apos;auth pour toutes les routes sensibles.</li>
               <li>• CSRF sur les mutations, rate-limit et cache-control no-store quand nécessaire.</li>
               <li>• Request-id surfacés côté client pour diagnostiquer facilement.</li>
             </ul>
