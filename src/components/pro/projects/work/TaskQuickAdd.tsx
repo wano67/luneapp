@@ -7,7 +7,7 @@ import { Select } from '@/components/ui/select';
 type ServiceOption = { id: string; name: string };
 
 type TaskQuickAddProps = {
-  onAdd: (title: string, projectServiceId?: string) => Promise<void>;
+  onAdd: (title: string, opts?: { projectServiceId?: string; assigneeUserIds?: string[]; organizationUnitId?: string }) => Promise<void>;
   services?: ServiceOption[];
   disabled?: boolean;
 };
@@ -22,7 +22,7 @@ export function TaskQuickAdd({ onAdd, services, disabled }: TaskQuickAddProps) {
     if (!trimmed || submitting) return;
     setSubmitting(true);
     try {
-      await onAdd(trimmed, serviceId || undefined);
+      await onAdd(trimmed, serviceId ? { projectServiceId: serviceId } : undefined);
       setTitle('');
     } finally {
       setSubmitting(false);

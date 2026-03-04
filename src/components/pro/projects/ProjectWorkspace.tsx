@@ -622,6 +622,7 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
           onUpdateTask={updateTask}
           onDeleteTask={deleteTask}
           services={services.map((s) => ({ id: s.id, name: s.service?.name ?? s.titleOverride ?? '' }))}
+          organizationUnits={organizationUnits}
         />
       ) : null}
 

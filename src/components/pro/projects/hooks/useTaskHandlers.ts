@@ -67,11 +67,13 @@ export function useTaskHandlers(params: UseTaskHandlersParams) {
   );
 
   const createTask = useCallback(
-    async (title: string, projectServiceId?: string) => {
+    async (title: string, opts?: { projectServiceId?: string; assigneeUserIds?: string[]; organizationUnitId?: string }) => {
       onBillingError(null);
       try {
         const body: Record<string, unknown> = { title, projectId: params.projectId };
-        if (projectServiceId) body.projectServiceId = projectServiceId;
+        if (opts?.projectServiceId) body.projectServiceId = opts.projectServiceId;
+        if (opts?.assigneeUserIds && opts.assigneeUserIds.length > 0) body.assigneeUserIds = opts.assigneeUserIds;
+        if (opts?.organizationUnitId) body.organizationUnitId = opts.organizationUnitId;
         const res = await fetchJson(`/api/pro/businesses/${businessId}/tasks`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

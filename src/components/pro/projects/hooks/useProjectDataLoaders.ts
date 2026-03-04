@@ -81,6 +81,12 @@ export type ServiceTemplate = {
   defaultDueOffsetDays: number | null;
 };
 
+export type TaskAssigneeItem = {
+  userId: string;
+  email: string;
+  name: string | null;
+};
+
 export type TaskItem = {
   id: string;
   title: string;
@@ -93,6 +99,9 @@ export type TaskItem = {
   assigneeName: string | null;
   assigneeEmail: string | null;
   assigneeUserId: string | null;
+  organizationUnitId: string | null;
+  organizationUnitName: string | null;
+  assignees: TaskAssigneeItem[];
   projectServiceId: string | null;
   projectId: string | null;
   progress?: number;

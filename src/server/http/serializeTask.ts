@@ -8,6 +8,9 @@ type TaskRow = {
   projectServiceStepId?: bigint | null;
   parentTaskId?: bigint | null;
   assigneeUserId: bigint | null;
+  organizationUnitId?: bigint | null;
+  organizationUnit?: { id: bigint; name: string } | null;
+  assignees?: Array<{ userId: bigint; user: { id: bigint; email: string; name: string | null } }>;
   title: string;
   phase: TaskPhase | null;
   status: TaskStatus;
@@ -51,6 +54,13 @@ export function serializeTask(task: TaskRow) {
     assigneeUserId: task.assigneeUserId ? task.assigneeUserId.toString() : null,
     assigneeEmail: task.assignee?.email ?? null,
     assigneeName: task.assignee?.name ?? null,
+    organizationUnitId: task.organizationUnitId ? task.organizationUnitId.toString() : null,
+    organizationUnitName: task.organizationUnit?.name ?? null,
+    assignees: task.assignees?.map((a) => ({
+      userId: a.user.id.toString(),
+      email: a.user.email,
+      name: a.user.name,
+    })) ?? [],
     categoryReferenceId: task.categoryReferenceId ? task.categoryReferenceId.toString() : null,
     categoryReferenceName: task.categoryReference?.name ?? null,
     tagReferences: task.tags

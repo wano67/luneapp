@@ -7,6 +7,7 @@ import { badRequest, forbidden, notFound } from '@/server/http/apiUtils';
 import { ensureDelegate } from '@/server/http/delegates';
 import { parseIdOpt } from '@/server/http/parsers';
 import { serializeTask } from '@/server/http/serializeTask';
+import { notifyTaskAssigned, notifyPoleAssigned, notifyTaskStatusChanged, notifyTaskBlocked } from '@/server/services/notifications';
 
 function isValidStatus(status: unknown): status is TaskStatus {
   return status === 'TODO' || status === 'IN_PROGRESS' || status === 'DONE';
@@ -33,6 +34,8 @@ export const GET = withBusinessRoute<{ businessId: string; taskId: string }>(
           select: { id: true, name: true, phaseName: true, isBillableMilestone: true },
         },
         assignee: { select: { id: true, email: true, name: true } },
+        organizationUnit: { select: { id: true, name: true } },
+        assignees: { include: { user: { select: { id: true, email: true, name: true } } }, orderBy: { assignedAt: 'asc' as const } },
         categoryReference: { select: { id: true, name: true } },
         tags: { include: { reference: { select: { id: true, name: true } } } },
         _count: { select: { subtasks: true, checklistItems: true } },
@@ -44,6 +47,8 @@ export const GET = withBusinessRoute<{ businessId: string; taskId: string }>(
               select: { id: true, name: true, phaseName: true, isBillableMilestone: true },
             },
             assignee: { select: { id: true, email: true, name: true } },
+            organizationUnit: { select: { id: true, name: true } },
+            assignees: { include: { user: { select: { id: true, email: true, name: true } } }, orderBy: { assignedAt: 'asc' as const } },
             categoryReference: { select: { id: true, name: true } },
             tags: { include: { reference: { select: { id: true, name: true } } } },
             _count: { select: { subtasks: true, checklistItems: true } },
@@ -89,6 +94,7 @@ export const PATCH = withBusinessRoute<{ businessId: string; taskId: string }>(
       include: {
         project: { select: { name: true } },
         assignee: { select: { id: true, email: true, name: true } },
+        assignees: { select: { userId: true } },
         categoryReference: { select: { id: true, name: true } },
         tags: { include: { reference: { select: { id: true, name: true } } } },
       },
@@ -102,7 +108,11 @@ export const PATCH = withBusinessRoute<{ businessId: string; taskId: string }>(
     }
 
     if (isMember) {
-      if (existing.assigneeUserId !== userId) {
+      const isDirectAssignee = existing.assigneeUserId === userId;
+      const isMultiAssignee = existing.assignees.some((a) => a.userId === userId);
+      const isPoleMember = existing.organizationUnitId != null &&
+        ctx.membership.organizationUnitId === existing.organizationUnitId;
+      if (!isDirectAssignee && !isMultiAssignee && !isPoleMember) {
         return forbidden('Vous ne pouvez modifier que les tâches qui vous sont assignées.');
       }
       const allowedFields = new Set([
@@ -297,6 +307,50 @@ export const PATCH = withBusinessRoute<{ businessId: string; taskId: string }>(
       }
     }
 
+    if ('organizationUnitId' in body) {
+      const raw = (body as { organizationUnitId?: unknown }).organizationUnitId;
+      if (raw === null || raw === undefined || raw === '') {
+        data.organizationUnitId = null;
+      } else if (typeof raw === 'string' && /^\d+$/.test(raw)) {
+        const orgUnitId = BigInt(raw);
+        const unit = await prisma.organizationUnit.findFirst({
+          where: { id: orgUnitId, businessId: businessIdBigInt },
+          select: { id: true },
+        });
+        if (!unit) return badRequest('organizationUnitId doit appartenir au business.');
+        data.organizationUnitId = orgUnitId;
+      } else {
+        return badRequest('organizationUnitId invalide.');
+      }
+    }
+
+    let newAssigneeUserIds: bigint[] | undefined;
+    if ('assigneeUserIds' in body) {
+      const rawIds = (body as { assigneeUserIds?: unknown }).assigneeUserIds;
+      if (rawIds === null || (Array.isArray(rawIds) && rawIds.length === 0)) {
+        newAssigneeUserIds = [];
+      } else if (Array.isArray(rawIds)) {
+        const parsed: bigint[] = [];
+        for (const raw of rawIds as unknown[]) {
+          if (typeof raw !== 'string' || !/^\d+$/.test(raw)) {
+            return badRequest('assigneeUserIds contient un id invalide.');
+          }
+          parsed.push(BigInt(raw));
+        }
+        const count = await prisma.businessMembership.count({
+          where: { businessId: businessIdBigInt, userId: { in: parsed } },
+        });
+        if (count !== parsed.length) {
+          return badRequest('Tous les assigneeUserIds doivent être membres du business.');
+        }
+        newAssigneeUserIds = parsed;
+        // Update primary assignee to first if not already set
+        if (!('assigneeUserId' in body) && parsed.length > 0) {
+          data.assigneeUserId = parsed[0];
+        }
+      }
+    }
+
     const categoryProvided = Object.prototype.hasOwnProperty.call(body, 'categoryReferenceId');
     const categoryReferenceId =
       categoryProvided && typeof (body as { categoryReferenceId?: unknown }).categoryReferenceId === 'string'
@@ -348,7 +402,7 @@ export const PATCH = withBusinessRoute<{ businessId: string; taskId: string }>(
       }
     }
 
-    if (!tagsInstruction && Object.keys(data).length === 0) {
+    if (!tagsInstruction && newAssigneeUserIds === undefined && Object.keys(data).length === 0) {
       return badRequest('Aucune modification.');
     }
 
@@ -360,13 +414,30 @@ export const PATCH = withBusinessRoute<{ businessId: string; taskId: string }>(
       } else if (existing.status === TaskStatus.DONE) {
         data.completedAt = null;
       }
+      // Auto-set startDate when moving to IN_PROGRESS
+      if (newStatus === TaskStatus.IN_PROGRESS && existing.status === TaskStatus.TODO && !existing.startDate && !('startDate' in data)) {
+        data.startDate = new Date();
+      }
       if (newStatus !== existing.status) {
         data.statusUpdatedAt = new Date();
         data.statusUpdatedByUserId = userId;
       }
     }
 
-    const updateData = tagsInstruction ? { ...data, tags: tagsInstruction } : data;
+    // Build assignees instruction if provided
+    let assigneesInstruction: { deleteMany: { taskId: bigint }; create: Array<{ userId: bigint }> } | undefined;
+    if (newAssigneeUserIds !== undefined) {
+      assigneesInstruction = {
+        deleteMany: { taskId: taskIdBigInt },
+        create: newAssigneeUserIds.map((uid) => ({ userId: uid })),
+      };
+    }
+
+    const updateData = {
+      ...data,
+      ...(tagsInstruction ? { tags: tagsInstruction } : {}),
+      ...(assigneesInstruction ? { assignees: assigneesInstruction } : {}),
+    };
 
     const updated = await prisma.task.update({
       where: { id: taskIdBigInt },
@@ -378,10 +449,30 @@ export const PATCH = withBusinessRoute<{ businessId: string; taskId: string }>(
           select: { id: true, name: true, phaseName: true, isBillableMilestone: true },
         },
         assignee: { select: { id: true, email: true, name: true } },
+        organizationUnit: { select: { id: true, name: true } },
+        assignees: { include: { user: { select: { id: true, email: true, name: true } } }, orderBy: { assignedAt: 'asc' as const } },
         categoryReference: { select: { id: true, name: true } },
         tags: { include: { reference: { select: { id: true, name: true } } } },
       },
     });
+
+    // Fire-and-forget notifications
+    if ('status' in data && data.status !== existing.status) {
+      void notifyTaskStatusChanged(taskIdBigInt, userId, businessIdBigInt, existing.title, data.status as string, existing.projectId);
+    }
+    if (newAssigneeUserIds && newAssigneeUserIds.length > 0) {
+      const existingIds = new Set(existing.assignees.map((a) => a.userId));
+      const newlyAdded = newAssigneeUserIds.filter((id) => !existingIds.has(id));
+      if (newlyAdded.length > 0) {
+        void notifyTaskAssigned(newlyAdded, userId, businessIdBigInt, existing.title, taskIdBigInt, existing.projectId);
+      }
+    }
+    if ('organizationUnitId' in data && data.organizationUnitId && data.organizationUnitId !== existing.organizationUnitId) {
+      void notifyPoleAssigned(data.organizationUnitId as bigint, userId, businessIdBigInt, existing.title, taskIdBigInt, existing.projectId);
+    }
+    if ('isBlocked' in data && data.isBlocked === true && !existing.isBlocked) {
+      void notifyTaskBlocked(taskIdBigInt, userId, businessIdBigInt, existing.title, (data.blockedReason as string | null) ?? null, existing.projectId);
+    }
 
     return jsonb({ item: serializeTask(updated) }, requestId);
   }

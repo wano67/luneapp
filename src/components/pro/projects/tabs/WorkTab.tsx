@@ -19,7 +19,7 @@ import { RoadmapView } from '@/components/pro/projects/work/RoadmapView';
 import { GanttChart } from '@/components/pro/projects/work/GanttChart';
 import { useRowSelection } from '@/app/app/components/selection/useRowSelection';
 import { BulkActionBar } from '@/app/app/components/selection/BulkActionBar';
-import type { TaskItem, MemberItem } from '@/components/pro/projects/hooks/useProjectDataLoaders';
+import type { TaskItem, MemberItem, OrganizationUnitItem } from '@/components/pro/projects/hooks/useProjectDataLoaders';
 
 function formatEstimatedTime(minutes: number): string {
   if (minutes < 60) return `${minutes}m`;
@@ -37,6 +37,8 @@ type WorkTabTask = {
   dueDate: string | null;
   assigneeName: string | null;
   assigneeEmail: string | null;
+  assignees?: Array<{ userId: string; email: string; name: string | null }>;
+  organizationUnitName?: string | null;
   projectServiceName?: string | null;
   checklistCount?: number;
   checklistDoneCount?: number;
@@ -70,10 +72,11 @@ export type WorkTabProps = {
   members: MemberItem[];
   isAdmin: boolean;
   currentUserId?: string | null;
-  onQuickAddTask: (title: string, projectServiceId?: string) => Promise<void>;
+  onQuickAddTask: (title: string, opts?: { projectServiceId?: string; assigneeUserIds?: string[]; organizationUnitId?: string }) => Promise<void>;
   onUpdateTask: (taskId: string, payload: Record<string, unknown>) => Promise<void>;
   onDeleteTask: (taskId: string) => Promise<void>;
   services?: ServiceOption[];
+  organizationUnits?: OrganizationUnitItem[];
 };
 
 export function WorkTab({
@@ -93,6 +96,7 @@ export function WorkTab({
   onUpdateTask,
   onDeleteTask,
   services,
+  organizationUnits,
 }: WorkTabProps) {
   const [workView, setWorkView] = useState<WorkView>('list');
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
@@ -214,6 +218,7 @@ export function WorkTab({
         onUpdate={onUpdateTask}
         onDelete={onDeleteTask}
         services={services}
+        organizationUnits={organizationUnits}
       />
 
       {/* Bulk action bar */}
@@ -462,11 +467,21 @@ function ListView({
                       className="flex w-full flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--border)]/60 bg-[var(--surface-2)]/70 px-3 py-2 text-left text-sm transition hover:border-[var(--border)] hover:bg-[var(--surface)]"
                     >
                       <div className="flex min-w-0 items-center gap-2">
-                        <InitialsAvatar
-                          name={task.assigneeName}
-                          email={task.assigneeEmail}
-                          size={22}
-                        />
+                        {/* Multi-assignee stacked avatars */}
+                        {task.assignees && task.assignees.length > 0 ? (
+                          <div className="flex shrink-0 -space-x-1.5">
+                            {task.assignees.slice(0, 3).map((a) => (
+                              <InitialsAvatar key={a.userId} name={a.name} email={a.email} size={22} />
+                            ))}
+                            {task.assignees.length > 3 ? (
+                              <span className="flex h-[22px] w-[22px] items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface-2)] text-[9px] font-semibold text-[var(--text-secondary)]">
+                                +{task.assignees.length - 3}
+                              </span>
+                            ) : null}
+                          </div>
+                        ) : (
+                          <InitialsAvatar name={task.assigneeName} email={task.assigneeEmail} size={22} />
+                        )}
                         <div className="min-w-0">
                           <p className="truncate text-[var(--text-primary)]">
                             {task.isBlocked ? (
@@ -485,6 +500,11 @@ function ListView({
                             >
                               {formatTaskStatus(task.status)}
                             </span>
+                            {task.organizationUnitName ? (
+                              <span className="inline-flex rounded-full border border-[var(--accent)]/30 bg-[var(--accent)]/10 px-2 py-0.5 text-[10px] font-medium text-[var(--accent)]">
+                                {task.organizationUnitName}
+                              </span>
+                            ) : null}
                             {task.estimatedMinutes ? (
                               <span className="inline-flex rounded-full border border-[var(--border)]/50 bg-[var(--surface-2)] px-2 py-0.5 text-[10px] text-[var(--text-secondary)]">
                                 {formatEstimatedTime(task.estimatedMinutes)}

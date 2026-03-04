@@ -144,8 +144,10 @@ model User {
   // Entreprises auxquelles il appartient (via membership)
   businessMemberships BusinessMembership[]
   assignedTasks       Task[]
+  taskAssignments     TaskAssignee[] @relation("TaskAssignees")
   statusUpdatedTasks  Task[] @relation("TaskStatusUpdatedBy")
   completedChecklistItems TaskChecklistItem[] @relation("ChecklistCompletedBy")
+  notifications       Notification[]
   quotesCreated       Quote[]   @relation("QuoteCreatedBy")
   invoicesCreated     Invoice[] @relation("InvoiceCreatedBy")
   paymentsCreated     Payment[] @relation("PaymentCreatedBy")
@@ -220,6 +222,7 @@ model Business {
   ledgerEntries        LedgerEntry[]
   projectServiceRecurringRules ProjectServiceRecurringRule[]
   conversations Conversation[]
+  notifications Notification[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -255,6 +258,7 @@ model OrganizationUnit {
 
   business    Business           @relation(fields: [businessId], references: [id], onDelete: Cascade)
   memberships BusinessMembership[]
+  tasks       Task[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -504,6 +508,7 @@ model Project {
   subscriptions Subscription[]
   documents     BusinessDocument[]
   conversations Conversation[]
+  notifications Notification[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -536,6 +541,7 @@ model Task {
   projectServiceStepId BigInt?
   parentTaskId BigInt?
   assigneeUserId BigInt?
+  organizationUnitId BigInt?
   statusUpdatedAt DateTime?
   statusUpdatedByUserId BigInt?
   categoryReferenceId BigInt?
@@ -558,10 +564,13 @@ model Task {
   parentTask Task? @relation("TaskHierarchy", fields: [parentTaskId], references: [id], onDelete: SetNull)
   subtasks Task[] @relation("TaskHierarchy")
   assignee User?    @relation(fields: [assigneeUserId], references: [id], onDelete: SetNull)
+  organizationUnit OrganizationUnit? @relation(fields: [organizationUnitId], references: [id], onDelete: SetNull)
   statusUpdatedByUser User? @relation("TaskStatusUpdatedBy", fields: [statusUpdatedByUserId], references: [id], onDelete: SetNull)
   categoryReference BusinessReference? @relation("TaskCategoryReference", fields: [categoryReferenceId], references: [id], onDelete: SetNull)
-  tags     TaskTag[]
+  assignees  TaskAssignee[]
+  tags       TaskTag[]
   checklistItems TaskChecklistItem[]
+  notifications Notification[]
   messages Message[]
 
   createdAt DateTime @default(now())
@@ -575,6 +584,7 @@ model Task {
   @@index([businessId, categoryReferenceId])
   @@index([projectId, statusUpdatedAt])
   @@index([parentTaskId])
+  @@index([businessId, organizationUnitId])
 }
 
 model Process {
@@ -1142,6 +1152,19 @@ model TaskChecklistItem {
   @@index([taskId, position])
 }
 
+model TaskAssignee {
+  id         BigInt   @id @default(autoincrement())
+  taskId     BigInt
+  userId     BigInt
+  assignedAt DateTime @default(now())
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user User @relation("TaskAssignees", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, userId])
+  @@index([userId])
+}
+
 model FinanceTag {
   id          BigInt @id @default(autoincrement())
   financeId   BigInt
@@ -1645,4 +1668,36 @@ model SavingsGoal {
   updatedAt DateTime @updatedAt
 
   @@index([userId])
+}
+
+// ────────── Notifications ──────────
+
+enum NotificationType {
+  TASK_ASSIGNED
+  TASK_STATUS_CHANGED
+  TASK_DUE_SOON
+  TASK_BLOCKED
+}
+
+model Notification {
+  id         BigInt           @id @default(autoincrement())
+  userId     BigInt
+  businessId BigInt
+  type       NotificationType
+  title      String
+  body       String?
+  taskId     BigInt?
+  projectId  BigInt?
+  isRead     Boolean          @default(false)
+  readAt     DateTime?
+  createdAt  DateTime         @default(now())
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  task     Task?    @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  project  Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  @@index([userId, isRead, createdAt])
+  @@index([businessId, userId])
+  @@index([taskId])
 }

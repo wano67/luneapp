@@ -7,6 +7,7 @@ import { badRequest } from '@/server/http/apiUtils';
 import { ensureDelegate } from '@/server/http/delegates';
 import { parseIdOpt } from '@/server/http/parsers';
 import { serializeTask } from '@/server/http/serializeTask';
+import { notifyTaskAssigned, notifyPoleAssigned } from '@/server/services/notifications';
 
 function isValidStatus(status: unknown): status is TaskStatus {
   return status === 'TODO' || status === 'IN_PROGRESS' || status === 'DONE';
@@ -65,6 +66,8 @@ export const GET = withBusinessRoute<{ businessId: string }>(
           select: { id: true, name: true, phaseName: true, isBillableMilestone: true },
         },
         assignee: { select: { id: true, email: true, name: true } },
+        organizationUnit: { select: { id: true, name: true } },
+        assignees: { include: { user: { select: { id: true, email: true, name: true } } }, orderBy: { assignedAt: 'asc' as const } },
         categoryReference: { select: { id: true, name: true } },
         tags: { include: { reference: { select: { id: true, name: true } } } },
         _count: { select: { subtasks: true, checklistItems: true } },
@@ -217,6 +220,43 @@ export const POST = withBusinessRoute<{ businessId: string }>(
       startDate = parsed;
     }
 
+    let organizationUnitId: bigint | undefined;
+    if ('organizationUnitId' in body && (body as { organizationUnitId?: unknown }).organizationUnitId) {
+      const raw = (body as { organizationUnitId?: unknown }).organizationUnitId;
+      if (typeof raw !== 'string' || !/^\d+$/.test(raw)) {
+        return badRequest('organizationUnitId invalide.');
+      }
+      organizationUnitId = BigInt(raw);
+      const unit = await prisma.organizationUnit.findFirst({
+        where: { id: organizationUnitId, businessId: businessIdBigInt },
+        select: { id: true },
+      });
+      if (!unit) return badRequest('organizationUnitId doit appartenir au business.');
+    }
+
+    let assigneeUserIds: bigint[] | undefined;
+    if ('assigneeUserIds' in body && Array.isArray((body as { assigneeUserIds?: unknown }).assigneeUserIds)) {
+      const rawIds = (body as { assigneeUserIds: unknown[] }).assigneeUserIds;
+      const parsed: bigint[] = [];
+      for (const raw of rawIds) {
+        if (typeof raw !== 'string' || !/^\d+$/.test(raw)) {
+          return badRequest('assigneeUserIds contient un id invalide.');
+        }
+        parsed.push(BigInt(raw));
+      }
+      if (parsed.length > 0) {
+        const count = await prisma.businessMembership.count({
+          where: { businessId: businessIdBigInt, userId: { in: parsed } },
+        });
+        if (count !== parsed.length) {
+          return badRequest('Tous les assigneeUserIds doivent être membres du business.');
+        }
+        assigneeUserIds = parsed;
+        // Use first as primary assignee if none specified
+        if (!assigneeUserId) assigneeUserId = parsed[0];
+      }
+    }
+
     let estimatedMinutes: number | undefined;
     if ('estimatedMinutes' in body) {
       const raw = (body as { estimatedMinutes?: unknown }).estimatedMinutes;
@@ -257,6 +297,9 @@ export const POST = withBusinessRoute<{ businessId: string }>(
       return badRequest(validated.error);
     }
 
+    // Auto startDate when created as IN_PROGRESS
+    const effectiveStartDate = startDate ?? (status === TaskStatus.IN_PROGRESS ? new Date() : undefined);
+
     const task = await prisma.task.create({
       data: {
         businessId: businessIdBigInt,
@@ -264,12 +307,13 @@ export const POST = withBusinessRoute<{ businessId: string }>(
         projectServiceId,
         parentTaskId,
         assigneeUserId,
+        organizationUnitId,
         title,
         status,
         progress: status === TaskStatus.DONE ? 100 : undefined,
         completedAt: status === TaskStatus.DONE ? new Date() : undefined,
         dueDate,
-        startDate,
+        startDate: effectiveStartDate,
         estimatedMinutes,
         categoryReferenceId: validated.categoryId ?? undefined,
         tags:
@@ -277,6 +321,10 @@ export const POST = withBusinessRoute<{ businessId: string }>(
             ? {
                 create: validated.tagIds.map((id) => ({ referenceId: id })),
               }
+            : undefined,
+        assignees:
+          assigneeUserIds && assigneeUserIds.length > 0
+            ? { create: assigneeUserIds.map((uid) => ({ userId: uid })) }
             : undefined,
       },
       include: {
@@ -286,11 +334,23 @@ export const POST = withBusinessRoute<{ businessId: string }>(
           select: { id: true, name: true, phaseName: true, isBillableMilestone: true },
         },
         assignee: { select: { id: true, email: true, name: true } },
+        organizationUnit: { select: { id: true, name: true } },
+        assignees: { include: { user: { select: { id: true, email: true, name: true } } }, orderBy: { assignedAt: 'asc' as const } },
         categoryReference: { select: { id: true, name: true } },
         tags: { include: { reference: { select: { id: true, name: true } } } },
         _count: { select: { subtasks: true, checklistItems: true } },
       },
     });
+
+    // Fire-and-forget notifications
+    if (assigneeUserIds && assigneeUserIds.length > 0) {
+      void notifyTaskAssigned(assigneeUserIds, ctx.userId, businessIdBigInt, title, task.id, projectId ?? null);
+    } else if (assigneeUserId) {
+      void notifyTaskAssigned([assigneeUserId], ctx.userId, businessIdBigInt, title, task.id, projectId ?? null);
+    }
+    if (organizationUnitId) {
+      void notifyPoleAssigned(organizationUnitId, ctx.userId, businessIdBigInt, title, task.id, projectId ?? null);
+    }
 
     return jsonbCreated({ item: serializeTask(task) }, requestId);
   }

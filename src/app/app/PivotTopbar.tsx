@@ -292,65 +292,40 @@ function Separator() {
 
 function NotificationsDropdown({ businessId }: { businessId: string }) {
   const [open, setOpen] = useState(false);
-  const [items, setItems] = useState<ActivityItem[]>([]);
+  const [items, setItems] = useState<Array<{ id: string; type: string; title: string; body: string | null; taskId: string | null; projectId: string | null; isRead: boolean; createdAt: string }>>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
-  const [hasLoaded, setHasLoaded] = useState(false);
 
+  // Poll unread count every 60s
+  useEffect(() => {
+    async function poll() {
+      try {
+        const res = await fetchJson<{ items: unknown[]; unreadCount: number }>(
+          `/api/pro/businesses/${businessId}/notifications?limit=0`
+        );
+        if (res.ok && res.data) setUnreadCount(res.data.unreadCount);
+      } catch { /* silent */ }
+    }
+    void poll();
+    const interval = setInterval(() => void poll(), 60_000);
+    return () => clearInterval(interval);
+  }, [businessId]);
+
+  // Load full list when opened
   useEffect(() => {
     if (!open) return;
     const controller = new AbortController();
     async function load() {
       setLoading(true);
       try {
-        const res = await fetchJson<{
-          nextActions?: {
-            tasks?: DashboardTask[];
-            interactions?: DashboardInteraction[];
-          };
-        }>(`/api/pro/businesses/${businessId}/dashboard`, {}, controller.signal);
-
+        const res = await fetchJson<{ items: typeof items; unreadCount: number }>(
+          `/api/pro/businesses/${businessId}/notifications?limit=30`, {}, controller.signal
+        );
         if (controller.signal.aborted) return;
-        if (!res.ok || !res.data) {
-          setItems([]);
-          return;
+        if (res.ok && res.data) {
+          setItems(res.data.items);
+          setUnreadCount(res.data.unreadCount);
         }
-
-        const mapped: ActivityItem[] = [];
-
-        for (const t of res.data.nextActions?.tasks ?? []) {
-          mapped.push({
-            id: `task-${t.id}`,
-            icon: 'task',
-            title: t.title,
-            subtitle: t.projectName,
-            date: t.dueDate,
-            href: t.projectId ? `/app/pro/${businessId}/projects/${t.projectId}` : `/app/pro/${businessId}/tasks`,
-          });
-        }
-
-        for (const i of res.data.nextActions?.interactions ?? []) {
-          mapped.push({
-            id: `interaction-${i.id}`,
-            icon: 'interaction',
-            title: INTERACTION_LABELS[i.type] ?? i.type,
-            subtitle: null,
-            date: i.nextActionDate,
-            href: i.projectId
-              ? `/app/pro/${businessId}/projects/${i.projectId}`
-              : i.clientId
-                ? `/app/pro/${businessId}/clients/${i.clientId}`
-                : null,
-          });
-        }
-
-        mapped.sort((a, b) => {
-          const aT = a.date ? new Date(a.date).getTime() : Infinity;
-          const bT = b.date ? new Date(b.date).getTime() : Infinity;
-          return aT - bT;
-        });
-
-        setItems(mapped);
-        setHasLoaded(true);
       } catch {
         if (!controller.signal.aborted) setItems([]);
       } finally {
@@ -361,10 +336,42 @@ function NotificationsDropdown({ businessId }: { businessId: string }) {
     return () => controller.abort();
   }, [open, businessId]);
 
+  const markAllRead = useCallback(async () => {
+    try {
+      await fetchJson(`/api/pro/businesses/${businessId}/notifications/read-all`, { method: 'POST' });
+      setItems((prev) => prev.map((n) => ({ ...n, isRead: true })));
+      setUnreadCount(0);
+    } catch { /* silent */ }
+  }, [businessId]);
+
+  const markRead = useCallback(async (notifId: string) => {
+    try {
+      await fetchJson(`/api/pro/businesses/${businessId}/notifications/${notifId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isRead: true }),
+      });
+      setItems((prev) => prev.map((n) => n.id === notifId ? { ...n, isRead: true } : n));
+      setUnreadCount((c) => Math.max(0, c - 1));
+    } catch { /* silent */ }
+  }, [businessId]);
+
+  const NOTIF_ICONS: Record<string, 'task' | 'interaction'> = {
+    TASK_ASSIGNED: 'task',
+    TASK_STATUS_CHANGED: 'task',
+    TASK_DUE_SOON: 'task',
+    TASK_BLOCKED: 'interaction',
+  };
+
   return (
     <div className="relative">
       <NavIconBtn onClick={() => setOpen((v) => !v)}>
-        <IconAlert size={20} color="var(--shell-topbar-text)" showDot={hasLoaded && items.length > 0} />
+        <IconAlert size={20} color="var(--shell-topbar-text)" showDot={unreadCount > 0} />
+        {unreadCount > 0 ? (
+          <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--danger)] px-1 text-[9px] font-bold text-white">
+            {unreadCount > 99 ? '99+' : unreadCount}
+          </span>
+        ) : null}
       </NavIconBtn>
 
       {open && (
@@ -386,11 +393,22 @@ function NotificationsDropdown({ businessId }: { businessId: string }) {
               style={{ borderBottom: '1px solid var(--border)' }}
             >
               <span className="text-sm font-semibold" style={{ color: 'var(--text)' }}>
-                Activité récente
+                Notifications
               </span>
-              <span className="text-xs" style={{ color: 'var(--text-faint)' }}>
-                {items.length} à venir
-              </span>
+              {unreadCount > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => void markAllRead()}
+                  className="text-xs font-medium transition-colors hover:underline"
+                  style={{ color: 'var(--accent)' }}
+                >
+                  Tout marquer lu
+                </button>
+              ) : (
+                <span className="text-xs" style={{ color: 'var(--text-faint)' }}>
+                  Aucune nouvelle
+                </span>
+              )}
             </div>
 
             {/* List */}
@@ -401,58 +419,77 @@ function NotificationsDropdown({ businessId }: { businessId: string }) {
                 </div>
               ) : items.length === 0 ? (
                 <div className="px-4 py-8 text-center">
-                  <p className="text-sm" style={{ color: 'var(--text-faint)' }}>Aucune activité à venir</p>
+                  <p className="text-sm" style={{ color: 'var(--text-faint)' }}>Aucune notification</p>
                 </div>
               ) : (
-                items.map((item) => {
+                items.map((notif) => {
+                  const iconType = NOTIF_ICONS[notif.type] ?? 'task';
+                  const href = notif.projectId
+                    ? `/app/pro/${businessId}/projects/${notif.projectId}`
+                    : notif.taskId
+                      ? `/app/pro/${businessId}/tasks`
+                      : null;
+
                   const inner = (
                     <div className="flex items-start gap-3">
+                      {/* Unread dot */}
+                      <div className="shrink-0 pt-2">
+                        <div
+                          className="h-2 w-2 rounded-full"
+                          style={{ background: notif.isRead ? 'transparent' : 'var(--accent)' }}
+                        />
+                      </div>
                       <div
                         className="shrink-0 flex items-center justify-center rounded-full mt-0.5"
                         style={{
                           width: 28,
                           height: 28,
-                          background: item.icon === 'task' ? 'var(--shell-accent)' : 'var(--surface-2)',
+                          background: iconType === 'task' ? 'var(--shell-accent)' : 'var(--danger-bg)',
                         }}
                       >
-                        {item.icon === 'task' ? (
+                        {iconType === 'task' ? (
                           <CheckSquare size={14} style={{ color: 'white' }} />
                         ) : (
-                          <Calendar size={14} style={{ color: 'var(--text-faint)' }} />
+                          <Calendar size={14} style={{ color: 'var(--danger)' }} />
                         )}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm truncate" style={{ color: 'var(--text)' }}>{item.title}</p>
-                        {item.subtitle && (
-                          <p className="text-xs truncate" style={{ color: 'var(--text-faint)' }}>{item.subtitle}</p>
+                        <p className="text-sm truncate" style={{ color: 'var(--text)', fontWeight: notif.isRead ? 400 : 600 }}>{notif.title}</p>
+                        {notif.body && (
+                          <p className="text-xs truncate" style={{ color: 'var(--text-faint)' }}>{notif.body}</p>
                         )}
                       </div>
-                      {item.date && (
-                        <span className="text-[10px] shrink-0 mt-1" style={{ color: 'var(--text-faint)' }}>
-                          {formatRelativeDate(item.date)}
-                        </span>
-                      )}
+                      <span className="text-[10px] shrink-0 mt-1" style={{ color: 'var(--text-faint)' }}>
+                        {formatRelativeDate(notif.createdAt)}
+                      </span>
                     </div>
                   );
 
-                  return item.href ? (
+                  const handleClick = () => {
+                    if (!notif.isRead) void markRead(notif.id);
+                    setOpen(false);
+                  };
+
+                  return href ? (
                     <Link
-                      key={item.id}
-                      href={item.href}
-                      onClick={() => setOpen(false)}
+                      key={notif.id}
+                      href={href}
+                      onClick={handleClick}
                       className="block px-4 py-3 transition-colors hover:bg-[var(--surface-hover)]"
                       style={{ borderBottom: '1px solid var(--border)' }}
                     >
                       {inner}
                     </Link>
                   ) : (
-                    <div
-                      key={item.id}
-                      className="px-4 py-3"
+                    <button
+                      key={notif.id}
+                      type="button"
+                      onClick={handleClick}
+                      className="block w-full px-4 py-3 text-left transition-colors hover:bg-[var(--surface-hover)]"
                       style={{ borderBottom: '1px solid var(--border)' }}
                     >
                       {inner}
-                    </div>
+                    </button>
                   );
                 })
               )}
