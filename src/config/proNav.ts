@@ -42,8 +42,7 @@ export const proNavSections: ProNavSectionConfig[] = [
         icon: LayoutDashboard,
         href: (biz) => `/app/pro/${biz}`,
         activePatterns: (biz) => [
-          startsWithRegex(`/app/pro/${biz}`),
-          startsWithRegex(`/app/pro/${biz}/dash`),
+          new RegExp(`^/app/pro/${biz}/?$`),
         ],
       },
     ],

@@ -6,12 +6,19 @@ import { getProjectCounts } from '@/server/queries/projects';
 import { computeBusinessBillingSummary, computeBusinessProjectMetrics } from '@/server/billing/businessSummary';
 import { addMonths, startOfMonth, monthKey } from '@/lib/date';
 
-// GET /api/pro/businesses/{businessId}/dashboard
-export const GET = withBusinessRoute({ minRole: 'VIEWER' }, async (ctx) => {
+// GET /api/pro/businesses/{businessId}/dashboard?days=30
+export const GET = withBusinessRoute({ minRole: 'VIEWER' }, async (ctx, req) => {
+  // Period filter: 30, 60, 90, 180, 365, or 0 = all-time
+  const daysParam = req.nextUrl.searchParams.get('days');
+  const days = daysParam !== null ? Math.max(0, Math.min(3650, parseInt(daysParam, 10) || 30)) : 30;
+
   const now = new Date();
   const monthStart = startOfMonth(now);
   const nextMonthStart = addMonths(monthStart, 1);
-  const seriesStart = addMonths(monthStart, -11);
+  const monthsBack = days === 0 ? 60 : Math.max(1, Math.ceil(days / 30));
+  const seriesStart = addMonths(monthStart, -(monthsBack - 1));
+  const periodStart = days > 0 ? new Date(now.getTime() - days * 24 * 60 * 60 * 1000) : null;
+  const periodDateFilter = periodStart ? { gte: periodStart } : undefined;
   const horizon = addMonths(now, 0);
   horizon.setDate(now.getDate() + 7);
   horizon.setHours(23, 59, 59, 999);
@@ -77,15 +84,15 @@ export const GET = withBusinessRoute({ minRole: 'VIEWER' }, async (ctx) => {
     computeBusinessBillingSummary(ctx.businessId),
     computeBusinessProjectMetrics(ctx.businessId),
     prisma.finance.aggregate({
-      where: { businessId: ctx.businessId, deletedAt: null, type: FinanceType.INCOME },
+      where: { businessId: ctx.businessId, deletedAt: null, type: FinanceType.INCOME, ...(periodDateFilter ? { date: periodDateFilter } : {}) },
       _sum: { amountCents: true },
     }),
     prisma.finance.aggregate({
-      where: { businessId: ctx.businessId, deletedAt: null, type: FinanceType.EXPENSE },
+      where: { businessId: ctx.businessId, deletedAt: null, type: FinanceType.EXPENSE, ...(periodDateFilter ? { date: periodDateFilter } : {}) },
       _sum: { amountCents: true },
     }),
     prisma.finance.findMany({
-      where: { businessId: ctx.businessId, deletedAt: null },
+      where: { businessId: ctx.businessId, deletedAt: null, ...(periodDateFilter ? { date: periodDateFilter } : {}) },
       orderBy: { date: 'desc' },
       take: 5,
       select: { id: true, type: true, amountCents: true, category: true, vendor: true, date: true, projectId: true },
@@ -106,7 +113,7 @@ export const GET = withBusinessRoute({ minRole: 'VIEWER' }, async (ctx) => {
   let mtdIncome = BigInt(0);
   let mtdExpense = BigInt(0);
   const monthBuckets = new Map<string, { income: bigint; expense: bigint }>();
-  for (let i = 0; i < 12; i += 1) {
+  for (let i = 0; i < monthsBack; i += 1) {
     const key = monthKey(addMonths(seriesStart, i));
     monthBuckets.set(key, { income: BigInt(0), expense: BigInt(0) });
   }
@@ -157,6 +164,7 @@ export const GET = withBusinessRoute({ minRole: 'VIEWER' }, async (ctx) => {
   const allTimeExpenseCents = allTimeExpenseAgg._sum.amountCents ?? BigInt(0);
 
   const payload = {
+    days,
     kpis: {
       projectsActiveCount,
       projectsCompletedCount,

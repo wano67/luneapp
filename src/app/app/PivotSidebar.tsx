@@ -29,9 +29,7 @@ type Props = {
 
 function isActive(pathname: string, href: string, patterns?: RegExp[]): boolean {
   if (patterns) {
-    for (const re of patterns) {
-      if (re.test(pathname)) return true;
-    }
+    return patterns.some((re) => re.test(pathname));
   }
   const clean = href.split('?')[0];
   return pathname === clean || pathname.startsWith(`${clean}/`);

@@ -103,6 +103,7 @@ const PERIODS = [
   { value: 90, label: '90 jours' },
   { value: 180, label: '6 mois' },
   { value: 365, label: '12 mois' },
+  { value: 0, label: 'Tout' },
 ] as const;
 
 function PeriodPills({ value, onChange }: { value: number; onChange: (v: number) => void }) {
@@ -144,7 +145,7 @@ export default function ProDashboard({ businessId }: { businessId: string }) {
       setError(null);
       try {
         const [dashRes, tasksRes] = await Promise.all([
-          fetchJson<DashboardPayload>(`/api/pro/businesses/${businessId}/dashboard`, { cache: 'no-store' }),
+          fetchJson<DashboardPayload>(`/api/pro/businesses/${businessId}/dashboard?days=${periodDays}`, { cache: 'no-store' }),
           fetchJson<{ items: TaskItem[] }>(`/api/pro/businesses/${businessId}/tasks`, { cache: 'no-store' }),
         ]);
 
@@ -167,9 +168,17 @@ export default function ProDashboard({ businessId }: { businessId: string }) {
     return () => {
       cancelled = true;
     };
-  }, [businessId]);
+  }, [businessId, periodDays]);
 
-  const tasksByStatus = useMemo(() => countByStatus(tasks), [tasks]);
+  const filteredTasks = useMemo(() => {
+    if (periodDays === 0) return tasks;
+    const cutoff = new Date(Date.now() - periodDays * 24 * 60 * 60 * 1000);
+    return tasks.filter((t) => {
+      const d = t.createdAt ? new Date(t.createdAt) : null;
+      return !d || d >= cutoff;
+    });
+  }, [tasks, periodDays]);
+  const tasksByStatus = useMemo(() => countByStatus(filteredTasks), [filteredTasks]);
   const monthlySeries = dashboard?.monthlySeries ?? [];
   const avgProfitability = dashboard?.projectMetrics?.avgProfitabilityPercent ?? 0;
 
