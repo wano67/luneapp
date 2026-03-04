@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { X, ArrowLeft, Send, Plus, Users, User, MessageSquare } from 'lucide-react';
+import { X, ArrowLeft, Send, Plus, Users, User, MessageSquare, FolderKanban, Hash } from 'lucide-react';
 import { useGlobalMessaging } from './hooks/useGlobalMessaging';
 import type { ConversationItem, MessageItem } from './hooks/useGlobalMessaging';
 import { fetchJson } from '@/lib/apiClient';
@@ -19,23 +19,195 @@ type TeamMember = {
   role: string;
 };
 
+type ProjectItem = {
+  id: string;
+  name: string;
+  clientName: string | null;
+};
+
+type Tab = 'messages' | 'projets';
+
 export default function GlobalInboxPanel({ businessId, open, onClose }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [showNewConv, setShowNewConv] = useState(false);
+  const [tab, setTab] = useState<Tab>('messages');
 
+  // Business-level conversations
   const messaging = useGlobalMessaging({
     businessId,
     enabled: open,
     onError: setError,
   });
 
+  // Project conversations state
+  const [projects, setProjects] = useState<ProjectItem[]>([]);
+  const [loadingProjects, setLoadingProjects] = useState(false);
+  const [activeProject, setActiveProject] = useState<ProjectItem | null>(null);
+  const [projectConversations, setProjectConversations] = useState<ConversationItem[]>([]);
+  const [loadingProjectConvs, setLoadingProjectConvs] = useState(false);
+  const [projectMessages, setProjectMessages] = useState<MessageItem[]>([]);
+  const [loadingProjectMessages, setLoadingProjectMessages] = useState(false);
+  const [sendingProject, setSendingProject] = useState(false);
+  const [activeProjectConvId, setActiveProjectConvId] = useState<string | null>(null);
+  const [projectHasMore, setProjectHasMore] = useState(false);
+  const [projectNextCursor, setProjectNextCursor] = useState<string | null>(null);
+
+  // Load projects when Projets tab is active
+  useEffect(() => {
+    if (!open || tab !== 'projets') return;
+    setLoadingProjects(true);
+    const ctrl = new AbortController();
+    fetchJson<{ items: Array<{ id: string; name: string; clientName: string | null }> }>(
+      `/api/pro/businesses/${businessId}/projects`,
+      {},
+      ctrl.signal
+    ).then((res) => {
+      if (res.ok && res.data?.items) {
+        setProjects(res.data.items);
+      }
+    }).finally(() => setLoadingProjects(false));
+    return () => ctrl.abort();
+  }, [open, tab, businessId]);
+
+  // Load conversations for selected project
+  const loadProjectConversations = useCallback(async (projectId: string) => {
+    setLoadingProjectConvs(true);
+    try {
+      const res = await fetchJson<{ items: ConversationItem[] }>(
+        `/api/pro/businesses/${businessId}/projects/${projectId}/conversations`
+      );
+      if (res.ok && res.data?.items) {
+        setProjectConversations(res.data.items);
+      }
+    } finally {
+      setLoadingProjectConvs(false);
+    }
+  }, [businessId]);
+
+  // Open a project -> load its conversations
+  const openProject = useCallback((project: ProjectItem) => {
+    setActiveProject(project);
+    setActiveProjectConvId(null);
+    setProjectMessages([]);
+    loadProjectConversations(project.id);
+  }, [loadProjectConversations]);
+
+  // Load messages for a project conversation
+  const loadProjectMsgs = useCallback(async (projectId: string, convId: string, cursor?: string) => {
+    setLoadingProjectMessages(true);
+    try {
+      const qs = cursor ? `?cursor=${cursor}&limit=50` : '?limit=50';
+      const res = await fetchJson<{ items: MessageItem[]; hasMore: boolean; nextCursor: string | null }>(
+        `/api/pro/businesses/${businessId}/projects/${projectId}/conversations/${convId}/messages${qs}`
+      );
+      if (res.ok && res.data) {
+        const ordered = [...res.data.items].reverse();
+        if (cursor) {
+          setProjectMessages((prev) => [...ordered, ...prev]);
+        } else {
+          setProjectMessages(ordered);
+        }
+        setProjectHasMore(!!res.data.hasMore);
+        setProjectNextCursor(res.data.nextCursor ?? null);
+      }
+    } finally {
+      setLoadingProjectMessages(false);
+    }
+  }, [businessId]);
+
+  const openProjectConversation = useCallback((convId: string) => {
+    if (!activeProject) return;
+    setActiveProjectConvId(convId);
+    setProjectMessages([]);
+    setProjectNextCursor(null);
+    setProjectHasMore(false);
+    loadProjectMsgs(activeProject.id, convId);
+  }, [activeProject, loadProjectMsgs]);
+
+  const sendProjectMessage = useCallback(async (content: string) => {
+    if (!activeProject || !activeProjectConvId) return;
+    setSendingProject(true);
+    try {
+      const res = await fetchJson<{ item: MessageItem }>(
+        `/api/pro/businesses/${businessId}/projects/${activeProject.id}/conversations/${activeProjectConvId}/messages`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content: content || null }),
+        }
+      );
+      if (res.ok && res.data?.item) {
+        setProjectMessages((prev) => [...prev, res.data!.item]);
+      }
+      loadProjectConversations(activeProject.id);
+    } finally {
+      setSendingProject(false);
+    }
+  }, [activeProject, activeProjectConvId, businessId, loadProjectConversations]);
+
+  // Create a project conversation (auto GROUP with project name)
+  const createProjectConversation = useCallback(async (project: ProjectItem) => {
+    try {
+      const res = await fetchJson<{ item: { id: string } }>(
+        `/api/pro/businesses/${businessId}/projects/${project.id}/conversations`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: 'GROUP',
+            memberUserIds: [],
+            name: `Discussion — ${project.name}`,
+          }),
+        }
+      );
+      if (res.ok && res.data?.item?.id) {
+        await loadProjectConversations(project.id);
+        openProjectConversation(String(res.data.item.id));
+      }
+    } catch {
+      // silent
+    }
+  }, [businessId, loadProjectConversations, openProjectConversation]);
+
   const handleBack = useCallback(() => {
-    messaging.setActiveConversationId(null);
-  }, [messaging]);
+    if (tab === 'messages') {
+      messaging.setActiveConversationId(null);
+    } else {
+      if (activeProjectConvId) {
+        setActiveProjectConvId(null);
+        setProjectMessages([]);
+      } else {
+        setActiveProject(null);
+        setProjectConversations([]);
+      }
+    }
+  }, [tab, messaging, activeProjectConvId]);
 
   const activeConv = messaging.conversations.find(
     (c) => String(c.id) === messaging.activeConversationId
   );
+
+  // Determine if we're in a "deep" view (showing back button)
+  const isDeep =
+    tab === 'messages'
+      ? !!messaging.activeConversationId
+      : !!activeProject;
+
+  // Header title
+  const headerTitle = (() => {
+    if (tab === 'messages') {
+      if (messaging.activeConversationId) {
+        return activeConv?.name || activeConv?.members.map((m) => m.name || m.email).slice(0, 2).join(', ') || 'Conversation';
+      }
+      return 'Messages';
+    }
+    if (activeProjectConvId) {
+      const conv = projectConversations.find((c) => String(c.id) === activeProjectConvId);
+      return conv?.name || 'Discussion';
+    }
+    if (activeProject) return activeProject.name;
+    return 'Projets';
+  })();
 
   return (
     <>
@@ -48,7 +220,7 @@ export default function GlobalInboxPanel({ businessId, open, onClose }: Props) {
       <div
         className="fixed right-0 top-0 z-70 flex h-full flex-col transition-transform duration-200"
         style={{
-          width: 400,
+          width: 420,
           maxWidth: '100vw',
           background: 'var(--surface)',
           borderLeft: '1px solid var(--border)',
@@ -59,29 +231,37 @@ export default function GlobalInboxPanel({ businessId, open, onClose }: Props) {
         {/* Header */}
         <div
           className="flex items-center justify-between shrink-0"
-          style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)' }}
+          style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)' }}
         >
-          <div className="flex items-center gap-2">
-            {messaging.activeConversationId && (
-              <button type="button" onClick={handleBack} className="hover:opacity-70">
+          <div className="flex items-center gap-2 min-w-0">
+            {isDeep && (
+              <button type="button" onClick={handleBack} className="shrink-0 hover:opacity-70">
                 <ArrowLeft size={18} style={{ color: 'var(--text)' }} />
               </button>
             )}
-            <h2 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>
-              {messaging.activeConversationId
-                ? activeConv?.name || 'Conversation'
-                : 'Messages'}
+            <h2 className="text-sm font-semibold truncate" style={{ color: 'var(--text)' }}>
+              {headerTitle}
             </h2>
           </div>
-          <div className="flex items-center gap-2">
-            {!messaging.activeConversationId && (
+          <div className="flex items-center gap-2 shrink-0">
+            {tab === 'messages' && !messaging.activeConversationId && (
               <button
                 type="button"
                 onClick={() => setShowNewConv(true)}
                 className="flex items-center justify-center rounded-lg hover:opacity-70"
-                style={{ width: 32, height: 32, background: 'var(--shell-accent)', color: 'white' }}
+                style={{ width: 30, height: 30, background: 'var(--shell-accent)', color: 'white' }}
               >
-                <Plus size={16} />
+                <Plus size={14} />
+              </button>
+            )}
+            {tab === 'projets' && activeProject && !activeProjectConvId && projectConversations.length === 0 && !loadingProjectConvs && (
+              <button
+                type="button"
+                onClick={() => createProjectConversation(activeProject)}
+                className="flex items-center justify-center rounded-lg hover:opacity-70"
+                style={{ width: 30, height: 30, background: 'var(--shell-accent)', color: 'white' }}
+              >
+                <Plus size={14} />
               </button>
             )}
             <button type="button" onClick={onClose} className="hover:opacity-70">
@@ -89,6 +269,14 @@ export default function GlobalInboxPanel({ businessId, open, onClose }: Props) {
             </button>
           </div>
         </div>
+
+        {/* Tabs (only when not in a deep view) */}
+        {!isDeep && (
+          <div className="flex shrink-0" style={{ borderBottom: '1px solid var(--border)' }}>
+            <TabButton active={tab === 'messages'} onClick={() => setTab('messages')} icon={<MessageSquare size={14} />} label="Messages" badge={messaging.totalUnread} />
+            <TabButton active={tab === 'projets'} onClick={() => setTab('projets')} icon={<FolderKanban size={14} />} label="Projets" />
+          </div>
+        )}
 
         {/* Error */}
         {error && (
@@ -99,20 +287,70 @@ export default function GlobalInboxPanel({ businessId, open, onClose }: Props) {
 
         {/* Content */}
         <div className="flex-1 overflow-hidden flex flex-col">
-          {messaging.activeConversationId ? (
+          {tab === 'messages' ? (
+            messaging.activeConversationId ? (
+              <ChatView
+                messages={messaging.messages}
+                loading={messaging.loadingMessages}
+                sending={messaging.sending}
+                hasMore={messaging.hasMoreMessages}
+                onLoadMore={messaging.loadOlderMessages}
+                onSend={messaging.sendMessage}
+              />
+            ) : (
+              <ConversationList
+                conversations={messaging.conversations}
+                loading={messaging.loadingConversations}
+                onOpen={(id) => messaging.openConversation(String(id))}
+                emptyLabel="Aucune conversation. Créez-en une pour commencer."
+              />
+            )
+          ) : activeProjectConvId ? (
             <ChatView
-              messages={messaging.messages}
-              loading={messaging.loadingMessages}
-              sending={messaging.sending}
-              hasMore={messaging.hasMoreMessages}
-              onLoadMore={messaging.loadOlderMessages}
-              onSend={messaging.sendMessage}
+              messages={projectMessages}
+              loading={loadingProjectMessages}
+              sending={sendingProject}
+              hasMore={projectHasMore}
+              onLoadMore={() => {
+                if (activeProject && projectNextCursor && projectHasMore) {
+                  loadProjectMsgs(activeProject.id, activeProjectConvId, projectNextCursor);
+                }
+              }}
+              onSend={sendProjectMessage}
             />
+          ) : activeProject ? (
+            projectConversations.length > 0 ? (
+              <ConversationList
+                conversations={projectConversations}
+                loading={loadingProjectConvs}
+                onOpen={openProjectConversation}
+                emptyLabel="Aucune discussion pour ce projet."
+              />
+            ) : loadingProjectConvs ? (
+              <div className="flex-1 flex items-center justify-center">
+                <p className="text-sm" style={{ color: 'var(--text-faint)' }}>Chargement…</p>
+              </div>
+            ) : (
+              <div className="flex-1 flex flex-col items-center justify-center gap-3 px-8">
+                <Hash size={32} style={{ color: 'var(--text-faint)' }} />
+                <p className="text-sm text-center" style={{ color: 'var(--text-faint)' }}>
+                  Aucune discussion pour ce projet.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => createProjectConversation(activeProject)}
+                  className="rounded-lg text-xs font-semibold px-4 py-2"
+                  style={{ background: 'var(--shell-accent)', color: 'white' }}
+                >
+                  Créer une discussion
+                </button>
+              </div>
+            )
           ) : (
-            <ConversationList
-              conversations={messaging.conversations}
-              loading={messaging.loadingConversations}
-              onOpen={(id) => messaging.openConversation(String(id))}
+            <ProjectList
+              projects={projects}
+              loading={loadingProjects}
+              onOpen={openProject}
             />
           )}
         </div>
@@ -133,16 +371,119 @@ export default function GlobalInboxPanel({ businessId, open, onClose }: Props) {
   );
 }
 
+/* ═══ Tab Button ═══ */
+
+function TabButton({
+  active,
+  onClick,
+  icon,
+  label,
+  badge,
+}: {
+  active: boolean;
+  onClick: () => void;
+  icon: React.ReactNode;
+  label: string;
+  badge?: number;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-medium transition-colors"
+      style={{
+        color: active ? 'var(--shell-accent)' : 'var(--text-faint)',
+        borderBottom: active ? '2px solid var(--shell-accent)' : '2px solid transparent',
+      }}
+    >
+      {icon}
+      {label}
+      {badge && badge > 0 ? (
+        <span
+          className="flex items-center justify-center rounded-full text-[9px] font-bold text-white"
+          style={{ width: 16, height: 16, background: 'var(--shell-accent)' }}
+        >
+          {badge}
+        </span>
+      ) : null}
+    </button>
+  );
+}
+
+/* ═══ Project List ═══ */
+
+function ProjectList({
+  projects,
+  loading,
+  onOpen,
+}: {
+  projects: ProjectItem[];
+  loading: boolean;
+  onOpen: (project: ProjectItem) => void;
+}) {
+  if (loading && projects.length === 0) {
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <p className="text-sm" style={{ color: 'var(--text-faint)' }}>Chargement…</p>
+      </div>
+    );
+  }
+
+  if (projects.length === 0) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center gap-3 px-8">
+        <FolderKanban size={32} style={{ color: 'var(--text-faint)' }} />
+        <p className="text-sm text-center" style={{ color: 'var(--text-faint)' }}>
+          Aucun projet.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex-1 overflow-y-auto">
+      {projects.map((p) => (
+        <button
+          key={p.id}
+          type="button"
+          className="w-full flex items-center gap-3 text-left transition-colors hover:bg-[var(--surface-hover)]"
+          style={{ padding: '12px 20px', borderBottom: '1px solid var(--border)' }}
+          onClick={() => onOpen(p)}
+        >
+          <div
+            className="shrink-0 flex items-center justify-center rounded-lg"
+            style={{ width: 36, height: 36, background: 'var(--shell-accent)', color: 'white' }}
+          >
+            <FolderKanban size={16} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium truncate" style={{ color: 'var(--text)' }}>
+              {p.name}
+            </p>
+            {p.clientName && (
+              <p className="text-[11px] truncate" style={{ color: 'var(--text-faint)' }}>
+                {p.clientName}
+              </p>
+            )}
+          </div>
+        </button>
+      ))}
+    </div>
+  );
+}
+
 /* ═══ Conversation List ═══ */
 
 function ConversationList({
   conversations,
   loading,
   onOpen,
+  emptyLabel,
 }: {
   conversations: ConversationItem[];
   loading: boolean;
   onOpen: (id: string) => void;
+  emptyLabel: string;
 }) {
   if (loading && conversations.length === 0) {
     return (
@@ -157,7 +498,7 @@ function ConversationList({
       <div className="flex-1 flex flex-col items-center justify-center gap-3 px-8">
         <MessageSquare size={32} style={{ color: 'var(--text-faint)' }} />
         <p className="text-sm text-center" style={{ color: 'var(--text-faint)' }}>
-          Aucune conversation. Créez-en une pour commencer.
+          {emptyLabel}
         </p>
       </div>
     );
@@ -254,7 +595,6 @@ function ChatView({
 }) {
   const [draft, setDraft] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -271,7 +611,7 @@ function ChatView({
   return (
     <>
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto" style={{ padding: '12px 20px' }} ref={scrollContainerRef}>
+      <div className="flex-1 overflow-y-auto" style={{ padding: '12px 20px' }}>
         {hasMore && (
           <button
             type="button"
@@ -380,7 +720,7 @@ function NewConversationOverlay({
 
   useEffect(() => {
     const ctrl = new AbortController();
-    fetchJson<{ items: Array<{ user: { id: string; name: string | null; email: string }; role: string }> }>(
+    fetchJson<{ items: Array<{ userId: string; name: string | null; email: string; role: string }> }>(
       `/api/pro/businesses/${businessId}/members`,
       {},
       ctrl.signal
@@ -388,9 +728,9 @@ function NewConversationOverlay({
       if (res.ok && res.data?.items) {
         setMembers(
           res.data.items.map((m) => ({
-            userId: String(m.user.id),
-            name: m.user.name,
-            email: m.user.email,
+            userId: m.userId,
+            name: m.name,
+            email: m.email,
             role: m.role,
           }))
         );
@@ -424,7 +764,7 @@ function NewConversationOverlay({
     >
       <div
         className="flex items-center justify-between shrink-0"
-        style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)' }}
+        style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)' }}
       >
         <h3 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>
           Nouvelle conversation

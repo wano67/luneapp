@@ -3,7 +3,7 @@ import { withBusinessRoute } from '@/server/http/routeHandler';
 import { jsonb } from '@/server/http/json';
 
 // GET /api/pro/businesses/{businessId}/members
-export const GET = withBusinessRoute({ minRole: 'ADMIN' }, async (ctx) => {
+export const GET = withBusinessRoute({ minRole: 'MEMBER' }, async (ctx) => {
   const { requestId, businessId: businessIdBigInt } = ctx;
 
   const members = await prisma.businessMembership.findMany({
