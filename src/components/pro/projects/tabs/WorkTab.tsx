@@ -143,8 +143,9 @@ export function WorkTab({
 
   return (
     <div className="space-y-4">
-      {/* Sub-navigation: List / Roadmap / Gantt */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      {/* Sub-navigation */}
+      <div className="flex flex-col gap-3">
+        {/* Row 1: View mode + estimated time */}
         <div className="flex items-center gap-3">
           <TabsPills
             items={[
@@ -162,17 +163,20 @@ export function WorkTab({
             </span>
           ) : null}
         </div>
+
+        {/* Row 2: Status filter (list view only) */}
         {workView === 'list' ? (
           <TabsPills
             items={[
+              { key: 'all', label: 'Toutes' },
               { key: 'TODO', label: 'À faire' },
               { key: 'IN_PROGRESS', label: 'En cours' },
               { key: 'DONE', label: 'Terminées' },
-              { key: 'all', label: 'Toutes' },
             ]}
             value={statusFilter}
             onChange={(key) => onStatusFilterChange(key as typeof statusFilter)}
             ariaLabel="Filtrer tâches"
+            variant="secondary"
           />
         ) : null}
       </div>
