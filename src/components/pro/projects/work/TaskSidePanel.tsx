@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -99,7 +100,7 @@ export function TaskSidePanel({
 
   if (!open || !task) return null;
 
-  return (
+  const panel = (
     <>
       {/* Backdrop */}
       <div
@@ -313,4 +314,7 @@ export function TaskSidePanel({
       </aside>
     </>
   );
+
+  if (typeof document === 'undefined') return panel;
+  return createPortal(panel, document.body);
 }
