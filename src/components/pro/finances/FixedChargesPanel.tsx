@@ -77,6 +77,7 @@ export function FixedChargesPanel({ businessId }: { businessId: string }) {
     openCreateRecurringRule,
     handleSaveRecurringRule,
     handleCreateRecurringRule,
+    handleDeleteRecurringRule,
     isCreateMode,
   } = useRecurringRule({ businessId, loadFinances: loadRules });
 
@@ -176,6 +177,7 @@ export function FixedChargesPanel({ businessId }: { businessId: string }) {
         loading={recurringRuleLoading}
         error={recurringRuleError}
         onSave={isCreateMode ? handleCreateRecurringRule : handleSaveRecurringRule}
+        onDelete={isCreateMode ? undefined : handleDeleteRecurringRule}
         onEditOccurrence={() => {/* handled via FinanceEntriesPanel */}}
       />
     </div>

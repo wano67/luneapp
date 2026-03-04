@@ -185,6 +185,28 @@ export function useRecurringRule({ businessId, loadFinances }: UseRecurringRuleO
     }
   }
 
+  async function handleDeleteRecurringRule() {
+    if (!recurringRule) return;
+    setRecurringRuleError(null);
+    setRecurringRuleLoading(true);
+    try {
+      const res = await fetchJson(
+        `/api/pro/businesses/${businessId}/finances/recurring/${recurringRule.id}`,
+        { method: 'DELETE' }
+      );
+      if (!res.ok && res.status !== 204) {
+        setRecurringRuleError(res.error ?? 'Suppression impossible.');
+        return;
+      }
+      setRecurringModalOpen(false);
+      await loadFinances();
+    } catch (err) {
+      setRecurringRuleError(getErrorMessage(err));
+    } finally {
+      setRecurringRuleLoading(false);
+    }
+  }
+
   async function handleSaveRecurringRule() {
     if (!recurringRule) return;
     setRecurringRuleError(null);
@@ -255,6 +277,7 @@ export function useRecurringRule({ businessId, loadFinances }: UseRecurringRuleO
     openCreateRecurringRule,
     handleSaveRecurringRule,
     handleCreateRecurringRule,
+    handleDeleteRecurringRule,
     isCreateMode: recurringRule === null,
   };
 }

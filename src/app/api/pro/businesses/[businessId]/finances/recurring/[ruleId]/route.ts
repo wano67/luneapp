@@ -1,7 +1,7 @@
 import { prisma } from '@/server/db/client';
 import { FinanceType, PaymentMethod, RecurringUnit } from '@/generated/prisma';
 import { withBusinessRoute } from '@/server/http/routeHandler';
-import { jsonb } from '@/server/http/json';
+import { jsonb, jsonbNoContent } from '@/server/http/json';
 import { badRequest, notFound, withIdNoStore } from '@/server/http/apiUtils';
 import { parseCentsInput, parseEuroToCents } from '@/lib/money';
 import { addMonths, enumerateMonthlyDates } from '@/server/finances/recurring';
@@ -322,5 +322,43 @@ export const PATCH = withBusinessRoute<{ businessId: string; ruleId: string }>(
     }
 
     return jsonb({ item: updated }, requestId);
+  }
+);
+
+// DELETE /api/pro/businesses/{businessId}/finances/recurring/{ruleId}
+export const DELETE = withBusinessRoute<{ businessId: string; ruleId: string }>(
+  {
+    minRole: 'ADMIN',
+    rateLimit: {
+      key: (ctx) => `pro:finances:recurring:delete:${ctx.businessId}:${ctx.userId}`,
+      limit: 30,
+      windowMs: 60 * 60 * 1000,
+    },
+  },
+  async (ctx, _request, params) => {
+    const { requestId, businessId: businessIdBigInt } = ctx;
+    const { ruleId } = await params;
+    const ruleIdBigInt = parseIdOpt(ruleId);
+    if (!ruleIdBigInt) {
+      return withIdNoStore(badRequest('ruleId invalide.'), requestId);
+    }
+
+    const existing = await prisma.financeRecurringRule.findFirst({
+      where: { id: ruleIdBigInt, businessId: businessIdBigInt },
+    });
+    if (!existing) return withIdNoStore(notFound('Règle introuvable.'), requestId);
+
+    // Soft-delete all linked finance entries
+    await prisma.finance.updateMany({
+      where: { recurringRuleId: ruleIdBigInt, deletedAt: null },
+      data: { deletedAt: new Date() },
+    });
+
+    // Delete the rule itself
+    await prisma.financeRecurringRule.delete({
+      where: { id: ruleIdBigInt },
+    });
+
+    return jsonbNoContent(requestId);
   }
 );
