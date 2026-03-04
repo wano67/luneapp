@@ -131,7 +131,7 @@ function PeriodPills({ value, onChange }: { value: number; onChange: (v: number)
 /* ═══ Dashboard ═══ */
 
 export default function ProDashboard({ businessId }: { businessId: string }) {
-  const [periodDays, setPeriodDays] = useState(30);
+  const [periodDays, setPeriodDays] = useState(0);
   const [dashboard, setDashboard] = useState<DashboardPayload | null>(null);
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [loading, setLoading] = useState(true);
