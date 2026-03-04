@@ -9,6 +9,7 @@ type NotificationRow = {
   body: string | null;
   taskId: bigint | null;
   projectId: bigint | null;
+  conversationId: bigint | null;
   isRead: boolean;
   readAt: Date | null;
   createdAt: Date;
@@ -24,6 +25,7 @@ export function serializeNotification(n: NotificationRow) {
     body: n.body,
     taskId: n.taskId?.toString() ?? null,
     projectId: n.projectId?.toString() ?? null,
+    conversationId: n.conversationId?.toString() ?? null,
     isRead: n.isRead,
     readAt: n.readAt?.toISOString() ?? null,
     createdAt: n.createdAt.toISOString(),

@@ -8,6 +8,7 @@ type NotifyParams = {
   body?: string | null;
   taskId?: bigint | null;
   projectId?: bigint | null;
+  conversationId?: bigint | null;
 };
 
 /**
@@ -32,6 +33,7 @@ export async function notify(
         body: params.body ?? null,
         taskId: params.taskId ?? null,
         projectId: params.projectId ?? null,
+        conversationId: params.conversationId ?? null,
       })),
     });
   } catch {
@@ -158,6 +160,100 @@ export async function notifyTaskBlocked(
     type: 'TASK_BLOCKED',
     title: `Tâche bloquée : ${taskTitle}`,
     body: blockedReason,
+    taskId,
+    projectId,
+  });
+}
+
+/** Notify conversation members when a new message is sent. */
+export async function notifyMessageReceived(
+  conversationId: bigint,
+  actorUserId: bigint,
+  businessId: bigint,
+  senderName: string,
+  messagePreview: string | null,
+  projectId: bigint | null,
+) {
+  const members = await prisma.conversationMember.findMany({
+    where: { conversationId },
+    select: { userId: true },
+  });
+  const userIds = members.map((m) => m.userId);
+
+  const body = messagePreview
+    ? messagePreview.length > 100
+      ? messagePreview.slice(0, 100) + '\u2026'
+      : messagePreview
+    : null;
+
+  await notify(userIds, actorUserId, {
+    businessId,
+    type: 'MESSAGE_RECEIVED',
+    title: `Nouveau message de ${senderName}`,
+    body,
+    conversationId,
+    projectId,
+  });
+}
+
+/** Notify project members when a project is past its endDate. */
+export async function notifyProjectOverdue(
+  projectId: bigint,
+  businessId: bigint,
+  projectName: string,
+) {
+  const projectMembers = await prisma.projectMember.findMany({
+    where: { projectId },
+    select: { membership: { select: { userId: true } } },
+  });
+  const userIds = projectMembers.map((pm) => pm.membership.userId);
+  if (userIds.length === 0) return;
+
+  const SYSTEM_USER = 0n;
+  await notify(userIds, SYSTEM_USER, {
+    businessId,
+    type: 'PROJECT_OVERDUE',
+    title: `Projet en retard : ${projectName}`,
+    body: 'La date de fin prévue est dépassée.',
+    projectId,
+  });
+}
+
+/** Notify task assignees when a task is due within 24 hours. */
+export async function notifyTaskDueSoon(
+  taskId: bigint,
+  businessId: bigint,
+  taskTitle: string,
+  projectId: bigint | null,
+) {
+  const task = await prisma.task.findUnique({
+    where: { id: taskId },
+    select: {
+      assigneeUserId: true,
+      organizationUnitId: true,
+      assignees: { select: { userId: true } },
+    },
+  });
+  if (!task) return;
+
+  const userIds = new Set<bigint>();
+  if (task.assigneeUserId) userIds.add(task.assigneeUserId);
+  for (const a of task.assignees) userIds.add(a.userId);
+
+  if (task.organizationUnitId) {
+    const members = await prisma.businessMembership.findMany({
+      where: { businessId, organizationUnitId: task.organizationUnitId },
+      select: { userId: true },
+    });
+    for (const m of members) userIds.add(m.userId);
+  }
+
+  const SYSTEM_USER = 0n;
+  await notify(Array.from(userIds), SYSTEM_USER, {
+    businessId,
+    type: 'TASK_DUE_SOON',
+    title: `Tâche bientôt due : ${taskTitle}`,
+    body: 'Échéance dans moins de 24 heures.',
     taskId,
     projectId,
   });

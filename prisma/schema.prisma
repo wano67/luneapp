@@ -1492,8 +1492,9 @@ model Conversation {
   business  Business              @relation(fields: [businessId], references: [id], onDelete: Cascade)
   project   Project?              @relation(fields: [projectId], references: [id], onDelete: Cascade)
   createdBy User                  @relation("ConversationCreatedBy", fields: [createdByUserId], references: [id])
-  members   ConversationMember[]
-  messages  Message[]
+  members       ConversationMember[]
+  messages      Message[]
+  notifications Notification[]
 
   @@index([businessId, projectId])
   @@index([projectId])
@@ -1677,6 +1678,8 @@ enum NotificationType {
   TASK_STATUS_CHANGED
   TASK_DUE_SOON
   TASK_BLOCKED
+  MESSAGE_RECEIVED
+  PROJECT_OVERDUE
 }
 
 model Notification {
@@ -1686,18 +1689,21 @@ model Notification {
   type       NotificationType
   title      String
   body       String?
-  taskId     BigInt?
-  projectId  BigInt?
+  taskId         BigInt?
+  projectId      BigInt?
+  conversationId BigInt?
   isRead     Boolean          @default(false)
   readAt     DateTime?
   createdAt  DateTime         @default(now())
 
-  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  task     Task?    @relation(fields: [taskId], references: [id], onDelete: SetNull)
-  project  Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  business     Business      @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  task         Task?         @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  project      Project?      @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  conversation Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
 
   @@index([userId, isRead, createdAt])
   @@index([businessId, userId])
   @@index([taskId])
+  @@index([conversationId])
 }

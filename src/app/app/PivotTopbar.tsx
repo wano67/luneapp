@@ -3,7 +3,7 @@
 import type { ReactNode } from 'react';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
-import { ChevronDown, Search, CheckSquare, Calendar, X, Loader2 } from 'lucide-react';
+import { ChevronDown, Search, CheckSquare, Calendar, MessageSquare, AlertTriangle, X, Loader2 } from 'lucide-react';
 import {
   IconAlert,
   IconMessage,
@@ -171,7 +171,7 @@ export default function PivotTopbar({ space, pathname, businessId, businesses, o
       {/* Right: Actions */}
       <div className="flex items-center gap-2 justify-end">
         {inBusiness && businessId ? (
-          <NotificationsDropdown businessId={businessId} />
+          <NotificationsDropdown businessId={businessId} onToggleMessaging={onToggleMessaging} />
         ) : (
           <NavIconBtn onClick={handleComingSoon}><IconAlert size={20} color="var(--shell-topbar-text)" /></NavIconBtn>
         )}
@@ -290,9 +290,9 @@ function Separator() {
 
 /* ═══ Notifications Dropdown ═══ */
 
-function NotificationsDropdown({ businessId }: { businessId: string }) {
+function NotificationsDropdown({ businessId, onToggleMessaging }: { businessId: string; onToggleMessaging?: () => void }) {
   const [open, setOpen] = useState(false);
-  const [items, setItems] = useState<Array<{ id: string; type: string; title: string; body: string | null; taskId: string | null; projectId: string | null; isRead: boolean; createdAt: string }>>([]);
+  const [items, setItems] = useState<Array<{ id: string; type: string; title: string; body: string | null; taskId: string | null; projectId: string | null; conversationId: string | null; isRead: boolean; createdAt: string }>>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
 
@@ -356,11 +356,13 @@ function NotificationsDropdown({ businessId }: { businessId: string }) {
     } catch { /* silent */ }
   }, [businessId]);
 
-  const NOTIF_ICONS: Record<string, 'task' | 'interaction'> = {
+  const NOTIF_ICONS: Record<string, 'task' | 'interaction' | 'message' | 'project'> = {
     TASK_ASSIGNED: 'task',
     TASK_STATUS_CHANGED: 'task',
     TASK_DUE_SOON: 'task',
     TASK_BLOCKED: 'interaction',
+    MESSAGE_RECEIVED: 'message',
+    PROJECT_OVERDUE: 'project',
   };
 
   return (
@@ -444,11 +446,18 @@ function NotificationsDropdown({ businessId }: { businessId: string }) {
                         style={{
                           width: 28,
                           height: 28,
-                          background: iconType === 'task' ? 'var(--shell-accent)' : 'var(--danger-bg)',
+                          background:
+                            iconType === 'task' || iconType === 'message'
+                              ? 'var(--shell-accent)'
+                              : 'var(--danger-bg)',
                         }}
                       >
                         {iconType === 'task' ? (
                           <CheckSquare size={14} style={{ color: 'white' }} />
+                        ) : iconType === 'message' ? (
+                          <MessageSquare size={14} style={{ color: 'white' }} />
+                        ) : iconType === 'project' ? (
+                          <AlertTriangle size={14} style={{ color: 'var(--danger)' }} />
                         ) : (
                           <Calendar size={14} style={{ color: 'var(--danger)' }} />
                         )}
@@ -468,6 +477,9 @@ function NotificationsDropdown({ businessId }: { businessId: string }) {
                   const handleClick = () => {
                     if (!notif.isRead) void markRead(notif.id);
                     setOpen(false);
+                    if (notif.type === 'MESSAGE_RECEIVED' && onToggleMessaging) {
+                      onToggleMessaging();
+                    }
                   };
 
                   return href ? (

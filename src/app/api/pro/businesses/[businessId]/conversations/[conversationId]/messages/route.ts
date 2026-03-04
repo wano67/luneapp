@@ -3,6 +3,7 @@ import { withBusinessRoute } from '@/server/http/routeHandler';
 import { jsonb, jsonbCreated } from '@/server/http/json';
 import { badRequest, notFound } from '@/server/http/apiUtils';
 import { parseId, parseStr, parseIdOpt } from '@/server/http/parsers';
+import { notifyMessageReceived } from '@/server/services/notifications';
 
 function serializeMessage(m: {
   id: bigint;
@@ -137,6 +138,20 @@ export const POST = withBusinessRoute<{ businessId: string; conversationId: stri
       where: { conversationId_userId: { conversationId, userId: ctx.userId } },
       data: { lastReadAt: new Date() },
     });
+
+    // Fire-and-forget: notify other conversation members
+    const conv = await prisma.conversation.findUnique({
+      where: { id: conversationId },
+      select: { projectId: true },
+    });
+    void notifyMessageReceived(
+      conversationId,
+      ctx.userId,
+      ctx.businessId,
+      message.sender.name || message.sender.email,
+      content,
+      conv?.projectId ?? null,
+    );
 
     return jsonbCreated({ item: serializeMessage(message) }, ctx.requestId);
   }
