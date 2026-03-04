@@ -436,9 +436,11 @@ export const PATCH = withBusinessRoute<{ businessId: string; taskId: string }>(
       }
     }
 
+    const updateData = tagsInstruction ? { ...data, tags: tagsInstruction } : data;
+
     const updated = await prisma.task.update({
       where: { id: taskIdBigInt },
-      data,
+      data: updateData,
       include: {
         project: { select: { name: true } },
         projectService: { select: { id: true, service: { select: { name: true } } } },
@@ -449,7 +451,6 @@ export const PATCH = withBusinessRoute<{ businessId: string; taskId: string }>(
         categoryReference: { select: { id: true, name: true } },
         tags: { include: { reference: { select: { id: true, name: true } } } },
       },
-      ...(tagsInstruction ? { data: { ...data, tags: tagsInstruction } } : {}),
     });
 
     return jsonb({ item: serializeTask(updated) }, requestId);

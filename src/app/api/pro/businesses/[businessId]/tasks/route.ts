@@ -356,9 +356,14 @@ export const POST = withBusinessRoute<{ businessId: string }>(
       },
       include: {
         project: { select: { name: true } },
+        projectService: { select: { id: true, service: { select: { name: true } } } },
+        projectServiceStep: {
+          select: { id: true, name: true, phaseName: true, isBillableMilestone: true },
+        },
         assignee: { select: { id: true, email: true, name: true } },
         categoryReference: { select: { id: true, name: true } },
         tags: { include: { reference: { select: { id: true, name: true } } } },
+        _count: { select: { subtasks: true, checklistItems: true } },
       },
     });
 
