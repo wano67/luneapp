@@ -167,7 +167,7 @@ export default function ProDashboard({ businessId }: { businessId: string }) {
     return () => {
       cancelled = true;
     };
-  }, [businessId, periodDays]);
+  }, [businessId]);
 
   const tasksByStatus = useMemo(() => countByStatus(tasks), [tasks]);
   const monthlySeries = dashboard?.monthlySeries ?? [];
