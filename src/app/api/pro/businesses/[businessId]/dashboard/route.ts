@@ -208,6 +208,8 @@ export const GET = withBusinessRoute({ minRole: 'VIEWER' }, async (ctx, req) => 
       mtdExpenseCents: mtdExpense,
       mtdNetCents: mtdIncome - mtdExpense,
     },
+    periodRevenueCents: allTimeIncomeCents,
+    periodExpenseCents: allTimeExpenseCents,
     treasury: {
       allTimeIncomeCents,
       allTimeExpenseCents,

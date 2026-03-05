@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { ChevronLeft } from 'lucide-react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 
@@ -7,6 +7,8 @@ type Props = {
   businessId: string;
   projectId: string;
   projectName: string | null;
+  clientId: string | null;
+  clientName: string | null;
   archivedAt: string | null;
   statusLabel: string;
   scopeLabel: string;
@@ -26,6 +28,8 @@ export function ProjectHeaderSection({
   businessId,
   projectId,
   projectName,
+  clientId,
+  clientName,
   archivedAt,
   statusLabel,
   scopeLabel,
@@ -71,6 +75,16 @@ export function ProjectHeaderSection({
             </span>
             {showScopeBadge && <Badge variant={scopeVariant}>{scopeLabel}</Badge>}
             {archivedAt && <Badge variant="performance">Archivé</Badge>}
+            {clientId && clientName && (
+              <Link
+                href={`/app/pro/${businessId}/clients/${clientId}`}
+                className="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-medium transition hover:opacity-80"
+                style={{ background: 'var(--shell-accent)', color: 'white' }}
+              >
+                {clientName}
+                <ChevronRight size={14} />
+              </Link>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-3">

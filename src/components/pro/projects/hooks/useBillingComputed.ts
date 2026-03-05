@@ -135,6 +135,7 @@ type UseBillingComputedInput = {
   vatRatePercent: number;
   businessId: string;
   progressPct: number;
+  chargesGrandTotalCents?: number | null;
 };
 
 export function useBillingComputed(input: UseBillingComputedInput) {
@@ -151,6 +152,7 @@ export function useBillingComputed(input: UseBillingComputedInput) {
     vatRatePercent,
     businessId,
     progressPct,
+    chargesGrandTotalCents,
   } = input;
 
   const billingSummary = project?.billingSummary ?? null;
@@ -278,13 +280,21 @@ export function useBillingComputed(input: UseBillingComputedInput) {
     return null;
   }, [project?.billingSummary?.totalCents, project?.valueCents, pricingTotals.totalCents, services.length]);
 
+  const projectMarginPct = useMemo(() => {
+    if (projectValueCents == null || projectValueCents === 0 || chargesGrandTotalCents == null) return null;
+    return Math.round(((projectValueCents - chargesGrandTotalCents) / projectValueCents) * 100);
+  }, [projectValueCents, chargesGrandTotalCents]);
+
   const kpis = useMemo(() => {
-    return [
+    const items = [
       { label: 'Avancement', value: `${Math.min(100, Math.max(0, progressPct))}%` },
       { label: 'Valeur', value: projectValueCents !== null ? formatCurrencyEUR(projectValueCents, { minimumFractionDigits: 0 }) : '—' },
+      { label: 'Coût', value: chargesGrandTotalCents != null ? formatCurrencyEUR(chargesGrandTotalCents, { minimumFractionDigits: 0 }) : '—' },
+      { label: 'Marge', value: projectMarginPct !== null ? `${projectMarginPct}%` : '—' },
       { label: 'Échéance', value: formatDate(project?.endDate ?? null) },
     ];
-  }, [projectValueCents, progressPct, project?.endDate]);
+    return items;
+  }, [projectValueCents, chargesGrandTotalCents, projectMarginPct, progressPct, project?.endDate]);
 
   return {
     billingReferenceId,

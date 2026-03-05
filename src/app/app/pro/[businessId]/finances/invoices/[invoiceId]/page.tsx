@@ -386,7 +386,7 @@ export default function InvoiceDetailPage() {
               )}
               <div className="flex flex-wrap items-center gap-2">
                 <Button asChild variant="outline" size="sm">
-                  <Link href={`/app/pro/${businessId}/settings/billing`}>Compléter les paramètres de facturation</Link>
+                  <Link href={`/app/pro/${businessId}/settings?section=facturation`}>Compléter les paramètres de facturation</Link>
                 </Button>
                 <p className="text-[11px] text-[var(--text-secondary)]">
                   Contrôle effectué le {formatDateTime(invoice.compliance.checkedAt)}.

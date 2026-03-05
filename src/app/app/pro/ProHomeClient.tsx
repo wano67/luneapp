@@ -624,7 +624,7 @@ function BusinessCardMenu({ businessId }: { businessId: string }) {
     { label: 'Projets', href: `/app/pro/${businessId}/projects` },
     { label: 'Clients', href: `/app/pro/${businessId}/clients` },
     { label: 'Finances', href: `/app/pro/${businessId}/finances` },
-    { label: 'Membres', href: `/app/pro/${businessId}/settings/team` },
+    { label: 'Membres', href: `/app/pro/${businessId}/team` },
     { label: 'Parametres', href: `/app/pro/${businessId}/settings` },
   ];
 

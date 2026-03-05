@@ -69,15 +69,9 @@ export default function TasksPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<TaskStatus | 'ALL'>('ALL');
-  const [categoryFilter, _setCategoryFilter] = useState('');
-  const [tagFilter, _setTagFilter] = useState('');
-  const [_categoryOptions, setCategoryOptions] = useState<Array<{ id: string; name: string }>>([]);
-  const [_tagOptions, setTagOptions] = useState<Array<{ id: string; name: string }>>([]);
   const [referenceError, setReferenceError] = useState<string | null>(null);
-  const [_referenceRequestId, setReferenceRequestId] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [_requestId, setRequestId] = useState<string | null>(null);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Task | null>(null);
@@ -148,14 +142,12 @@ function openEdit(task: Task) {
       setError(null);
       const query = new URLSearchParams();
       if (statusFilter !== 'ALL') query.set('status', statusFilter);
-      if (categoryFilter) query.set('categoryReferenceId', categoryFilter);
-      if (tagFilter) query.set('tagReferenceId', tagFilter);
       const res = await fetchJson<TaskListResponse>(
         `/api/pro/businesses/${businessId}/tasks${query.toString() ? `?${query.toString()}` : ''}`,
         {},
         effectiveSignal
       );
-      setRequestId(res.requestId);
+  
 
       if (effectiveSignal?.aborted) return;
       if (res.status === 401) {
@@ -181,7 +173,6 @@ function openEdit(task: Task) {
       setTasks(normalized);
     } catch (err) {
       if (effectiveSignal?.aborted) return;
-      console.error(err);
       setError(getErrorMessage(err));
     } finally {
       if (!effectiveSignal?.aborted) setLoading(false);
@@ -192,13 +183,12 @@ function openEdit(task: Task) {
     void loadTasks();
     return () => fetchController.current?.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [businessId, statusFilter, categoryFilter, tagFilter]);
+  }, [businessId, statusFilter]);
 
   useEffect(() => {
     const controller = new AbortController();
     async function loadRefs() {
       setReferenceError(null);
-      setReferenceRequestId(null);
       const [catRes, tagRes] = await Promise.all([
         fetchJson<{ items: Array<{ id: string; name: string }> }>(
           `/api/pro/businesses/${businessId}/references?type=CATEGORY`,
@@ -212,16 +202,12 @@ function openEdit(task: Task) {
         ),
       ]);
       if (controller.signal.aborted) return;
-      setReferenceRequestId(catRes.requestId || tagRes.requestId || null);
       if (!catRes.ok || !catRes.data || !tagRes.ok || !tagRes.data) {
         const msg = catRes.error || tagRes.error || 'Impossible de charger les références.';
         setReferenceError(
           catRes.requestId || tagRes.requestId ? `${msg} (Ref: ${catRes.requestId || tagRes.requestId})` : msg
         );
-        return;
       }
-      setCategoryOptions(catRes.data.items);
-      setTagOptions(tagRes.data.items);
     }
     void loadRefs();
     return () => controller.abort();
@@ -263,7 +249,7 @@ function openEdit(task: Task) {
       body: JSON.stringify(payload),
     });
 
-    setRequestId(res.requestId);
+
 
     if (res.status === 401) {
       const from = window.location.pathname + window.location.search;
@@ -298,7 +284,7 @@ function openEdit(task: Task) {
       `/api/pro/businesses/${businessId}/tasks/${deleteModal.id}`,
       { method: 'DELETE' }
     );
-    setRequestId(res.requestId);
+
     if (res.status === 401) {
       const from = window.location.pathname + window.location.search;
       window.location.href = `/login?from=${encodeURIComponent(from)}`;

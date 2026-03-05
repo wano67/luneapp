@@ -1,5 +1,5 @@
 import { prisma } from '@/server/db/client';
-import { InvoiceStatus, ProjectStatus, QuoteStatus } from '@/generated/prisma';
+import { FinanceType, InvoiceStatus, ProjectStatus, QuoteStatus } from '@/generated/prisma';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -92,28 +92,29 @@ export async function computeBusinessProjectMetrics(
     }
   }
 
-  // Profitability: for projects with a signed quote, ratio paid/planned
-  const projectIds = completedProjects
-    .filter((p) => p.billingQuoteId !== null)
-    .map((p) => p.id);
+  // Profitability: real margin = (revenue - costs) / revenue × 100
+  const projectIds = completedProjects.map((p) => p.id);
 
   let avgProfitabilityPercent = 0;
   if (projectIds.length > 0) {
-    const [quoteAgg, paymentAgg] = await Promise.all([
-      prisma.quote.aggregate({
-        where: { businessId, status: QuoteStatus.SIGNED, projectId: { in: projectIds } },
-        _sum: { totalCents: true },
-      }),
+    const [paymentAgg, expenseAgg] = await Promise.all([
+      // Revenue = payments received
       prisma.payment.aggregate({
         where: { businessId, deletedAt: null, projectId: { in: projectIds } },
         _sum: { amountCents: true },
       }),
+      // Costs = direct expenses (Finance EXPENSE)
+      prisma.finance.aggregate({
+        where: { businessId, projectId: { in: projectIds }, type: FinanceType.EXPENSE, deletedAt: null },
+        _sum: { amountCents: true },
+      }),
     ]);
 
-    const planned = quoteAgg._sum.totalCents ?? BigInt(0);
-    const paid = paymentAgg._sum.amountCents ?? BigInt(0);
-    if (planned > BigInt(0)) {
-      avgProfitabilityPercent = Math.round((Number(paid) / Number(planned)) * 100);
+    const revenue = paymentAgg._sum.amountCents ?? 0n;
+    const costs = expenseAgg._sum.amountCents ?? 0n;
+    const absCosts = costs < 0n ? -costs : costs;
+    if (revenue > 0n) {
+      avgProfitabilityPercent = Math.round(Number((revenue - absCosts) * 100n / revenue));
     }
   }
 

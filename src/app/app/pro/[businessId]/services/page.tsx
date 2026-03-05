@@ -80,7 +80,7 @@ export default function ServicesPage() {
             <Button onClick={openCreate} disabled={!isAdmin}>Nouveau service</Button>
             <Button variant="outline" onClick={openImport} disabled={!isAdmin}>Importer CSV</Button>
             <Button variant="outline" asChild>
-              <Link href={`/app/pro/${businessId}/settings/team`}>Équipes</Link>
+              <Link href={`/app/pro/${businessId}/team`}>Équipes</Link>
             </Button>
           </div>
         }

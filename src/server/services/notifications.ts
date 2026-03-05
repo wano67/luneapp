@@ -24,8 +24,22 @@ export async function notify(
   if (recipients.length === 0) return;
 
   try {
+    // Filter out users who disabled this notification type
+    const disabledPrefs = await prisma.notificationPreference.findMany({
+      where: {
+        userId: { in: recipients },
+        businessId: params.businessId,
+        type: params.type,
+        enabled: false,
+      },
+      select: { userId: true },
+    });
+    const disabledSet = new Set(disabledPrefs.map((p) => p.userId));
+    const finalRecipients = recipients.filter((id) => !disabledSet.has(id));
+    if (finalRecipients.length === 0) return;
+
     await prisma.notification.createMany({
-      data: recipients.map((userId) => ({
+      data: finalRecipients.map((userId) => ({
         userId,
         businessId: params.businessId,
         type: params.type,

@@ -13,6 +13,7 @@ import { PageContainer } from '@/components/layouts/PageContainer';
 import { PageHeader } from '@/components/layouts/PageHeader';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import { formatCentsToEuroDisplay, parseEuroToCents, sanitizeEuroInput } from '@/lib/money';
+import { useUserPreferences } from '@/lib/hooks/useUserPreferences';
 
 type Category = { id: string; name: string };
 
@@ -87,6 +88,7 @@ function toDateInput(iso: string | null): string {
 }
 
 export default function SubscriptionsPage() {
+  const { prefs } = useUserPreferences();
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
@@ -115,7 +117,7 @@ export default function SubscriptionsPage() {
 
   function openCreate() {
     setEditingId(null);
-    setForm(EMPTY_FORM);
+    setForm({ ...EMPTY_FORM, frequency: prefs.defaultSubscriptionFrequency as FormState['frequency'] });
     setSaveError(null);
     setModalOpen(true);
   }

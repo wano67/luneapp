@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Users, Briefcase } from 'lucide-react';
+import Link from 'next/link';
+import { Users, Briefcase, ArrowUpRight } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/cn';
@@ -76,6 +77,8 @@ export type WorkTabProps = {
   onDeleteTask: (taskId: string) => Promise<void>;
   services?: ServiceOption[];
   organizationUnits?: OrganizationUnitItem[];
+  initialOpenTaskId?: string | null;
+  onInitialTaskConsumed?: () => void;
 };
 
 export function WorkTab({
@@ -87,6 +90,8 @@ export function WorkTab({
   onTaskGroupToggle,
   taskRowExpanded,
   onTaskRowToggle,
+  businessId,
+  projectId,
   tasks,
   members,
   isAdmin,
@@ -96,6 +101,8 @@ export function WorkTab({
   onDeleteTask,
   services,
   organizationUnits,
+  initialOpenTaskId,
+  onInitialTaskConsumed,
 }: WorkTabProps) {
   const [workView, setWorkView] = useState<WorkView>('list');
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
@@ -113,6 +120,14 @@ export function WorkTab({
   const closePanel = useCallback(() => {
     setSelectedTaskId(null);
   }, []);
+
+  // Auto-open task from other tabs (e.g. OverviewTab click)
+  useEffect(() => {
+    if (initialOpenTaskId) {
+      setSelectedTaskId(initialOpenTaskId);
+      onInitialTaskConsumed?.();
+    }
+  }, [initialOpenTaskId, onInitialTaskConsumed]);
 
   const allTaskIds = useMemo(() => tasks.map((t) => t.id), [tasks]);
 
@@ -148,7 +163,7 @@ export function WorkTab({
     <div className="space-y-4">
       {/* Sub-navigation */}
       <div className="flex flex-col gap-3">
-        {/* Row 1: View mode + estimated time */}
+        {/* Row 1: View mode + estimated time + link to global tasks */}
         <div className="flex items-center gap-3">
           <TabsPills
             items={[
@@ -165,6 +180,13 @@ export function WorkTab({
               ~{formatEstimatedTime(totalEstimatedMinutes)} estimées
             </span>
           ) : null}
+          <Link
+            href={`/app/pro/${businessId}/tasks?projectId=${projectId}`}
+            className="ml-auto inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] transition hover:bg-[var(--surface-2)] hover:text-[var(--text-primary)]"
+          >
+            Toutes les tâches
+            <ArrowUpRight size={12} />
+          </Link>
         </div>
 
         {/* Row 2: Status filter (list view only) */}

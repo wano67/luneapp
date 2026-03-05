@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
@@ -41,6 +41,7 @@ import { useDocumentUpload } from '@/components/pro/projects/hooks/useDocumentUp
 import { useMessaging } from '@/components/pro/projects/hooks/useMessaging';
 import { usePricingEngine } from '@/components/pro/projects/hooks/usePricingEngine';
 import { ProjectHeaderSection } from '@/components/pro/projects/ProjectHeaderSection';
+import { ChargesTab } from '@/components/pro/projects/tabs/ChargesTab';
 
 type ProjectDetail = {
   id: string;
@@ -113,9 +114,10 @@ type MemberItem = {
 
 const tabs = [
   { key: 'overview', label: "Vue d\u2019ensemble" },
-  { key: 'work', label: 'Travail' },
+  { key: 'work', label: 'Tâches' },
   { key: 'team', label: 'Équipe' },
   { key: 'billing', label: 'Facturation' },
+  { key: 'charges', label: 'Charges' },
   { key: 'files', label: 'Documents' },
 ];
 
@@ -131,7 +133,8 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
   const [billingError, setBillingError] = useState<string | null>(null);
   const [billingInfo, setBillingInfo] = useState<string | null>(null);
 
-  const [activeTab, setActiveTab] = useState<'overview' | 'work' | 'team' | 'billing' | 'files'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'work' | 'team' | 'billing' | 'charges' | 'files'>('overview');
+  const [pendingTaskId, setPendingTaskId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<'TODO' | 'IN_PROGRESS' | 'DONE' | 'all'>('all');
   const [showAllServicesOverview, setShowAllServicesOverview] = useState(false);
   const [showAllActionsOverview, setShowAllActionsOverview] = useState(false);
@@ -347,7 +350,7 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
 
   useEffect(() => {
     const tabParam = searchParams?.get('tab');
-    if (tabParam && ['overview', 'work', 'team', 'billing', 'files'].includes(tabParam)) {
+    if (tabParam && ['overview', 'work', 'team', 'billing', 'charges', 'files'].includes(tabParam)) {
       setActiveTab(tabParam as typeof activeTab);
     }
   }, [searchParams]);
@@ -444,6 +447,21 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
     return new Map(servicesWithTasks.map((entry) => [entry.service.id, entry.tasks]));
   }, [servicesWithTasks]);
 
+  // ─── Charges totals (for project KPIs) ─────────────────────────────────────
+
+  const [chargesGrandTotalCents, setChargesGrandTotalCents] = useState<number | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetchJson<{ totals: { grandTotalCents: string } }>(`/api/pro/businesses/${businessId}/projects/${projectId}/charges`)
+      .then((res) => {
+        if (!cancelled && res.ok && res.data?.totals) {
+          setChargesGrandTotalCents(Number(res.data.totals.grandTotalCents));
+        }
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [businessId, projectId]);
+
   // ─── Pricing engine ─────────────────────────────────────────────────────────
 
   const {
@@ -473,6 +491,7 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
     project, quotes, invoices, services, billingSettings,
     pricingTotals, pricingLines, effectiveDepositPercent,
     vatEnabled, vatRatePercent, businessId, progressPct,
+    chargesGrandTotalCents,
   });
 
   // ─── Billing handlers ──────────────────────────────────────────────────────
@@ -509,6 +528,13 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
     onBillingError: setBillingError, onBillingInfo: setBillingInfo,
   });
 
+  // ─── Task click from overview → switch to work tab ─────────────────────────
+
+  const handleTaskClick = useCallback((taskId: string) => {
+    setPendingTaskId(taskId);
+    setActiveTab('work');
+  }, []);
+
   // ─── Render ─────────────────────────────────────────────────────────────────
 
   if (loading) {
@@ -530,6 +556,8 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
         businessId={businessId}
         projectId={projectId}
         projectName={project.name}
+        clientId={project.clientId}
+        clientName={project.clientName}
         archivedAt={project.archivedAt ?? null}
         statusLabel={statusLabel}
         scopeLabel={scopeLabel}
@@ -550,7 +578,7 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
       />
 
       {/* KPI cards */}
-      <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
+      <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
         {kpis.map((item, i) => (
           <KpiCard key={item.label} label={item.label} value={item.value} delay={i * 50} />
         ))}
@@ -595,6 +623,7 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
           onToggleActivity={() => setShowAllActivity((prev) => !prev)}
           businessId={businessId}
           projectId={projectId}
+          onTaskClick={handleTaskClick}
         />
       ) : null}
 
@@ -619,6 +648,8 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
           onDeleteTask={deleteTask}
           services={services.map((s) => ({ id: s.id, name: s.service?.name ?? s.titleOverride ?? '' }))}
           organizationUnits={organizationUnits}
+          initialOpenTaskId={pendingTaskId}
+          onInitialTaskConsumed={() => setPendingTaskId(null)}
         />
       ) : null}
 
@@ -732,6 +763,10 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
           onInvoiceStatus={handleInvoiceStatus}
           onDeleteInvoice={handleDeleteInvoice}
         />
+      ) : null}
+
+      {activeTab === 'charges' ? (
+        <ChargesTab businessId={businessId} projectId={projectId} isAdmin={isAdmin} />
       ) : null}
 
       {activeTab === 'files' ? (

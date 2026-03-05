@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { ChevronRight, ChartNoAxesColumnIncreasing, ChartNoAxesColumnDecreasing, Landmark, ArrowRight } from 'lucide-react';
 import { fetchJson } from '@/lib/apiClient';
+import { useUserPreferences } from '@/lib/hooks/useUserPreferences';
 import { onWalletRefresh } from '@/lib/personalEvents';
 import { fmtKpi } from '@/lib/format';
 import { formatCentsToEuroDisplay } from '@/lib/money';
@@ -77,11 +78,13 @@ function absBigInt(v: bigint) {
 /* ═══ Page ═══ */
 
 export default function WalletHomePage() {
+  const { prefs } = useUserPreferences();
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<SummaryResponse | null>(null);
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [periodDays, setPeriodDays] = useState(30);
+  const [periodOverride, setPeriodOverride] = useState<number | null>(null);
+  const periodDays = periodOverride ?? prefs.dashboardPeriodDays;
 
   const load = useCallback(async (days: number) => {
     setLoading(true);
@@ -193,7 +196,7 @@ export default function WalletHomePage() {
           <button
             key={p.days}
             type="button"
-            onClick={() => setPeriodDays(p.days)}
+            onClick={() => setPeriodOverride(p.days)}
             className="rounded-full px-3 py-1.5 text-sm font-medium transition-colors"
             style={
               periodDays === p.days

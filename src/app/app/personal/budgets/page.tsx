@@ -13,6 +13,7 @@ import { PageContainer } from '@/components/layouts/PageContainer';
 import { PageHeader } from '@/components/layouts/PageHeader';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import { formatCentsToEuroDisplay, parseEuroToCents, sanitizeEuroInput } from '@/lib/money';
+import { useUserPreferences } from '@/lib/hooks/useUserPreferences';
 
 type Category = { id: string; name: string };
 
@@ -47,6 +48,7 @@ function centsToInputValue(cents: string): string {
 }
 
 export default function BudgetsPage() {
+  const { prefs } = useUserPreferences();
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
@@ -97,7 +99,7 @@ export default function BudgetsPage() {
 
   function openCreate() {
     setEditingId(null);
-    setForm(EMPTY_FORM);
+    setForm({ ...EMPTY_FORM, period: prefs.defaultBudgetPeriod as FormState['period'] });
     setSaveError(null);
     setModalOpen(true);
   }

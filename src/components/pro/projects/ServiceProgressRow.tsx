@@ -61,11 +61,13 @@ export function ServiceProgressRow({
   tasks,
   businessId,
   projectId,
+  onTaskClick,
 }: {
   service: ServiceRow;
   tasks: ServiceTask[];
   businessId: string;
   projectId: string;
+  onTaskClick?: (taskId: string) => void;
 }) {
   const total = tasks.length;
   const done = tasks.filter((t) => t.status === 'DONE').length;
@@ -108,10 +110,11 @@ export function ServiceProgressRow({
       {expanded ? (
         <div className="mt-3 space-y-2 text-sm text-[var(--text-secondary)]">
           {previewTasks.map((task) => (
-            <Link
+            <button
               key={task.id}
-              href={`/app/pro/${businessId}/tasks/${task.id}`}
-              className="block rounded-lg border border-[var(--border)]/60 bg-[var(--surface-2)]/70 px-3 py-2 transition hover:border-[var(--border)] hover:bg-[var(--surface)]"
+              type="button"
+              onClick={() => onTaskClick?.(task.id)}
+              className="block w-full rounded-lg border border-[var(--border)]/60 bg-[var(--surface-2)]/70 px-3 py-2 text-left transition hover:border-[var(--border)] hover:bg-[var(--surface)]"
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
@@ -132,7 +135,7 @@ export function ServiceProgressRow({
                   <span>{formatDate(task.dueDate)}</span>
                 </div>
               </div>
-            </Link>
+            </button>
           ))}
           {tasks.length === 0 ? (
             <p className="text-xs text-[var(--text-secondary)]">Aucune tâche associée.</p>

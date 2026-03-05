@@ -138,16 +138,16 @@ async function main() {
   await assertRedirect(`/app/pro/${bizId}/finances/vat`, `/app/pro/${bizId}/finances?tab=vat`);
   console.log('OK finances legacy redirect');
 
-  // Settings surface (tabbed)
-  await assertOk(`/app/pro/${bizId}/settings?tab=team`);
-  console.log('OK settings surface');
+  // Team page (standalone)
+  await assertOk(`/app/pro/${bizId}/team`);
+  console.log('OK team page');
 
-  // Legacy settings route should redirect to surface tab
+  // Legacy settings/team route should redirect to standalone team page
   await assertRedirect(
     `/app/pro/${bizId}/settings/team`,
-    `/app/pro/${bizId}/settings?tab=team`
+    `/app/pro/${bizId}/team`
   );
-  console.log('OK settings legacy redirect');
+  console.log('OK settings/team legacy redirect');
 
   console.log('smoke-nav-surface OK');
 }

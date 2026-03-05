@@ -136,6 +136,17 @@ model User {
   name         String?
   role         UserRole @default(USER)
   isActive     Boolean  @default(true)
+  language     String   @default("fr")
+  theme        String   @default("system")
+
+  // Finances personnelles — préférences
+  defaultCurrency              String  @default("EUR")
+  defaultTransactionType       String  @default("EXPENSE")
+  defaultBudgetPeriod          String  @default("MONTHLY")
+  defaultSubscriptionFrequency String  @default("MONTHLY")
+  dashboardPeriodDays          Int     @default(30)
+  itemsPerPage                 Int     @default(50)
+
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -148,6 +159,7 @@ model User {
   statusUpdatedTasks  Task[] @relation("TaskStatusUpdatedBy")
   completedChecklistItems TaskChecklistItem[] @relation("ChecklistCompletedBy")
   notifications       Notification[]
+  notificationPreferences NotificationPreference[]
   quotesCreated       Quote[]   @relation("QuoteCreatedBy")
   invoicesCreated     Invoice[] @relation("InvoiceCreatedBy")
   paymentsCreated     Payment[] @relation("PaymentCreatedBy")
@@ -224,6 +236,7 @@ model Business {
   projectServiceRecurringRules ProjectServiceRecurringRule[]
   conversations Conversation[]
   notifications Notification[]
+  notificationPreferences NotificationPreference[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1755,4 +1768,20 @@ model Notification {
   @@index([taskId])
   @@index([projectId])
   @@index([conversationId])
+}
+
+model NotificationPreference {
+  id         BigInt           @id @default(autoincrement())
+  userId     BigInt
+  businessId BigInt
+  type       NotificationType
+  enabled    Boolean          @default(true)
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, businessId, type])
+  @@index([userId, businessId])
 }

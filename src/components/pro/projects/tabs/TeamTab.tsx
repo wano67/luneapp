@@ -178,7 +178,7 @@ export function TeamTab({
             <GuidedCtaCard
               title="Aucun membre disponible."
               description="Invitez un membre pour commencer."
-              primary={{ label: 'Ajouter un membre', href: `/app/pro/${businessId}/settings/team` }}
+              primary={{ label: 'Ajouter un membre', href: `/app/pro/${businessId}/team` }}
             />
           )}
         </>

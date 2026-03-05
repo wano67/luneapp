@@ -67,6 +67,7 @@ export type OverviewTabProps = {
   onToggleActivity: () => void;
   businessId: string;
   projectId: string;
+  onTaskClick?: (taskId: string) => void;
 };
 
 export function OverviewTab({
@@ -94,6 +95,7 @@ export function OverviewTab({
   onToggleActivity,
   businessId,
   projectId,
+  onTaskClick,
 }: OverviewTabProps) {
   return (
     <div className="space-y-4">
@@ -114,7 +116,7 @@ export function OverviewTab({
               </Button>
             ) : null}
             <Button asChild size="sm" variant="outline">
-              <Link href={`/app/pro/${businessId}/projects/${projectId}?tab=work`}>Ouvrir Travail</Link>
+              <Link href={`/app/pro/${businessId}/projects/${projectId}?tab=work`}>Ouvrir Tâches</Link>
             </Button>
           </div>
         </div>
@@ -127,6 +129,7 @@ export function OverviewTab({
                 tasks={svcTasks}
                 businessId={businessId}
                 projectId={projectId}
+                onTaskClick={onTaskClick}
               />
             ))}
           </div>
@@ -151,10 +154,11 @@ export function OverviewTab({
         {upcomingTasks.length ? (
           <div className="space-y-2 text-sm text-[var(--text-secondary)]">
             {upcomingTasksOverview.map((task) => (
-              <Link
+              <button
                 key={task.id}
-                href={`/app/pro/${businessId}/tasks/${task.id}`}
-                className="block rounded-lg border border-[var(--border)]/60 bg-[var(--surface-2)]/70 px-3 py-2 transition hover:border-[var(--border)] hover:bg-[var(--surface)]"
+                type="button"
+                onClick={() => onTaskClick?.(task.id)}
+                className="block w-full rounded-lg border border-[var(--border)]/60 bg-[var(--surface-2)]/70 px-3 py-2 text-left transition hover:border-[var(--border)] hover:bg-[var(--surface)]"
               >
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -175,7 +179,7 @@ export function OverviewTab({
                     <span>{formatDate(task.dueDate)}</span>
                   </div>
                 </div>
-              </Link>
+              </button>
             ))}
           </div>
         ) : (

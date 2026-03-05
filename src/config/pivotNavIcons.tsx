@@ -20,5 +20,6 @@ export const pivotIconMap: Record<string, (color: string) => ReactNode> = {
   catalog: (c) => <IconCatalogue size={20} color={c} />,
   stock: (c) => <IconStock size={20} color={c} />,
   finances: (c) => <IconFinance size={20} color={c} />,
+  team: (c) => <IconCrm size={20} color={c} />,
   settings: (c) => <IconSettings size={20} color={c} />,
 };

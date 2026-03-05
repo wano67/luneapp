@@ -25,6 +25,8 @@ type DashboardPayload = {
     mtdIncomeCents?: string;
     mtdExpenseCents?: string;
   };
+  periodRevenueCents?: string;
+  periodExpenseCents?: string;
   treasury?: {
     allTimeIncomeCents?: string;
     allTimeExpenseCents?: string;
@@ -192,11 +194,13 @@ export default function ProDashboard({ businessId }: { businessId: string }) {
         <PeriodPills value={periodDays} onChange={setPeriodDays} />
       </div>
 
-      {/* KPIs — 3 cards */}
-      <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
-        <KpiCard label="Tresorerie" value={fmtKpi(dashboard?.treasury?.balanceCents)} loading={loading} delay={0} />
-        <KpiCard label="En attente" value={fmtKpi(dashboard?.billing?.pendingCollectionCents)} loading={loading} delay={50} />
-        <KpiCard label="Rentabilite" value={`${avgProfitability}%`} loading={loading} delay={100} />
+      {/* KPIs — 5 cards */}
+      <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
+        <KpiCard label="Trésorerie" value={fmtKpi(dashboard?.treasury?.balanceCents)} loading={loading} delay={0} />
+        <KpiCard label="CA période" value={fmtKpi(dashboard?.periodRevenueCents)} loading={loading} delay={50} />
+        <KpiCard label="Charges période" value={fmtKpi(dashboard?.periodExpenseCents)} loading={loading} delay={100} />
+        <KpiCard label="En attente" value={fmtKpi(dashboard?.billing?.pendingCollectionCents)} loading={loading} delay={150} />
+        <KpiCard label="Marge brute" value={`${avgProfitability}%`} loading={loading} delay={200} />
       </div>
 
       {loading ? (

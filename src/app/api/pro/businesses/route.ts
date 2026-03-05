@@ -17,6 +17,7 @@ export const GET = withPersonalRoute(async (ctx) => {
   const items = memberships.map((membership) => ({
     business: membership.business,
     role: membership.role,
+    joinedAt: membership.createdAt,
   }));
 
   return jsonb({ items }, ctx.requestId);

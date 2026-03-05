@@ -551,7 +551,7 @@ export function BillingTab({
           subtitle="Ces éléments sont intégrés automatiquement aux PDF."
           actions={
             <Button asChild size="sm" variant="outline">
-              <Link href={`/app/pro/${businessId}/settings/billing`}>Configurer</Link>
+              <Link href={`/app/pro/${businessId}/settings?section=facturation`}>Configurer</Link>
             </Button>
           }
         />
