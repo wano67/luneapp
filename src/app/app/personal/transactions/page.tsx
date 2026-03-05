@@ -155,6 +155,7 @@ export default function PersoTransactionsPage() {
   const [q, setQ] = useState('');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   // Selection
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -447,7 +448,9 @@ export default function PersoTransactionsPage() {
     }
   }
 
-  function resetFilters() { setAccountId(''); setType(''); setQ(''); setFrom(''); setTo(''); }
+  function resetFilters() { setAccountId(''); setType(''); setQ(''); setFrom(''); setTo(''); setFiltersOpen(false); }
+
+  const activeFilterCount = [accountId, type, from, to].filter(Boolean).length;
 
   // ─── Render ─────────────────────────────────────────────────────────────────
 
@@ -471,62 +474,92 @@ export default function PersoTransactionsPage() {
           }
         />
 
-        {/* Filters */}
-        <Card>
-          <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-6">
-            <div className="lg:col-span-2">
-              <label className="mb-1 block text-xs text-[var(--text-faint)]">Compte</label>
-              <Select
-                value={accountId}
-                onChange={(e) => setAccountId(e.target.value)}
-                disabled={loadingAccounts}
-              >
-                <option value="">Tous les comptes</option>
-                {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-              </Select>
-            </div>
-
-            <div>
-              <label className="mb-1 block text-xs text-[var(--text-faint)]">Type</label>
-              <Select
-                value={type}
-                onChange={(e) => setType(e.target.value)}
-                disabled={loadingAccounts || loadingList}
-              >
-                <option value="">Tous</option>
-                <option value="INCOME">Revenus</option>
-                <option value="EXPENSE">Dépenses</option>
-                <option value="TRANSFER">Virements</option>
-              </Select>
-            </div>
-
-            <div>
-              <Input
-                label="Du"
-                type="date" value={from} onChange={(e) => setFrom(e.target.value)}
-                className="h-12 rounded-2xl"
-                disabled={loadingAccounts || loadingList}
+        {/* Filters — compact on mobile, full on desktop */}
+        <div className="space-y-3">
+          {/* Search bar + toggle (always visible) */}
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1">
+              <svg className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[var(--text-faint)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" />
+              </svg>
+              <input
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Rechercher une transaction…"
+                className="h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] pl-10 pr-4 text-sm text-[var(--text)] outline-none placeholder:text-[var(--text-faint)] focus:border-[var(--focus-ring)]"
               />
             </div>
-
-            <div>
-              <Input
-                label="Au"
-                type="date" value={to} onChange={(e) => setTo(e.target.value)}
-                className="h-12 rounded-2xl"
-                disabled={loadingAccounts || loadingList}
-              />
-            </div>
-
-            <div className="lg:col-span-1">
-              <label className="mb-1 block text-xs text-[var(--text-faint)]">Recherche</label>
-              <Input
-                value={q} onChange={(e) => setQ(e.target.value)}
-                placeholder="Label / note…" className="h-12 rounded-2xl px-4 text-base"
-              />
-            </div>
+            <button
+              type="button"
+              onClick={() => setFiltersOpen((v) => !v)}
+              className="relative flex h-11 items-center gap-1.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3.5 text-sm font-medium text-[var(--text)] transition-colors hover:bg-[var(--surface-2)]/50 lg:hidden"
+            >
+              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <line x1="4" x2="20" y1="6" y2="6" /><line x1="7" x2="17" y1="12" y2="12" /><line x1="10" x2="14" y1="18" y2="18" />
+              </svg>
+              <span className="hidden sm:inline">Filtres</span>
+              {activeFilterCount > 0 ? (
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[var(--shell-accent)] text-[11px] font-bold text-white">
+                  {activeFilterCount}
+                </span>
+              ) : null}
+            </button>
           </div>
-        </Card>
+
+          {/* Expandable filter grid — always visible on lg, toggle on mobile */}
+          <div className={[
+            'overflow-hidden transition-all duration-200',
+            filtersOpen ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0 lg:max-h-[500px] lg:opacity-100',
+          ].join(' ')}>
+            <Card>
+              <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-5">
+                <div className="lg:col-span-2">
+                  <label className="mb-1 block text-xs text-[var(--text-faint)]">Compte</label>
+                  <Select
+                    value={accountId}
+                    onChange={(e) => setAccountId(e.target.value)}
+                    disabled={loadingAccounts}
+                  >
+                    <option value="">Tous les comptes</option>
+                    {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+                  </Select>
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-xs text-[var(--text-faint)]">Type</label>
+                  <Select
+                    value={type}
+                    onChange={(e) => setType(e.target.value)}
+                    disabled={loadingAccounts || loadingList}
+                  >
+                    <option value="">Tous</option>
+                    <option value="INCOME">Revenus</option>
+                    <option value="EXPENSE">Dépenses</option>
+                    <option value="TRANSFER">Virements</option>
+                  </Select>
+                </div>
+
+                <div>
+                  <Input
+                    label="Du"
+                    type="date" value={from} onChange={(e) => setFrom(e.target.value)}
+                    className="h-12 rounded-2xl"
+                    disabled={loadingAccounts || loadingList}
+                  />
+                </div>
+
+                <div>
+                  <Input
+                    label="Au"
+                    type="date" value={to} onChange={(e) => setTo(e.target.value)}
+                    className="h-12 rounded-2xl"
+                    disabled={loadingAccounts || loadingList}
+                  />
+                </div>
+              </div>
+            </Card>
+          </div>
+        </div>
 
         {error ? <Card><div className="p-4 text-sm text-[var(--danger)]">{error}</div></Card> : null}
 

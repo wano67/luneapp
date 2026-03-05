@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { cn } from '@/lib/cn';
 import Link from 'next/link';
 import { ChevronLeft } from 'lucide-react';
 import dynamic from 'next/dynamic';
@@ -100,27 +99,24 @@ function countByStatus(tasks: TaskItem[]) {
 
 const PERIODS = [
   { value: 30, label: '30 jours' },
-  { value: 60, label: '60 jours' },
   { value: 90, label: '90 jours' },
-  { value: 180, label: '6 mois' },
-  { value: 365, label: '12 mois' },
-  { value: 0, label: 'Tout' },
+  { value: 365, label: '1 an' },
 ] as const;
 
 function PeriodPills({ value, onChange }: { value: number; onChange: (v: number) => void }) {
   return (
-    <div className="flex items-center gap-2 overflow-x-auto">
+    <div className="flex items-center gap-2 flex-wrap">
       {PERIODS.map((p) => (
         <button
           key={p.value}
           type="button"
           onClick={() => onChange(p.value)}
-          className={cn(
-            'cursor-pointer shrink-0 rounded-xl px-3 py-1.5 text-sm font-medium transition',
+          className="rounded-full px-3 py-1.5 text-sm font-medium transition-colors"
+          style={
             value === p.value
-              ? 'bg-[var(--shell-accent-dark)] text-white'
-              : 'bg-[var(--surface)] text-[var(--text-faint)]'
-          )}
+              ? { background: 'var(--shell-accent-dark)', color: 'white' }
+              : { background: 'var(--surface)', color: 'rgba(0,0,0,0.6)' }
+          }
         >
           {p.label}
         </button>
@@ -132,7 +128,7 @@ function PeriodPills({ value, onChange }: { value: number; onChange: (v: number)
 /* ═══ Dashboard ═══ */
 
 export default function ProDashboard({ businessId }: { businessId: string }) {
-  const [periodDays, setPeriodDays] = useState(0);
+  const [periodDays, setPeriodDays] = useState(30);
   const [dashboard, setDashboard] = useState<DashboardPayload | null>(null);
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [loading, setLoading] = useState(true);

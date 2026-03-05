@@ -3,7 +3,7 @@
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 import Link from 'next/link';
-import { Menu, X, Plus, Home, Wallet2, Banknote, BarChart3, FileText, PiggyBank, Target, CreditCard, Landmark } from 'lucide-react';
+import { Menu, X, Plus, Home, Banknote, BarChart3, Landmark } from 'lucide-react';
 import { useBodyScrollLock } from '@/lib/scrollLock';
 import {
   IconPerso,
@@ -13,6 +13,11 @@ import {
   IconOperation,
   IconFinance,
   IconUser,
+  IconHome,
+  IconTransaction,
+  IconBudget,
+  IconSubscription,
+  IconSavings,
   PivotLogo,
 } from '@/components/pivot-icons';
 import { proNavSections } from '@/config/proNav';
@@ -48,7 +53,7 @@ export default function PivotMobileNav({ space, pathname, businessId, businesses
         <div className="flex items-center justify-around" style={{ height: 56, paddingBottom: 'env(safe-area-inset-bottom)' }}>
           {effectiveSpace === 'perso' ? (
             <>
-              <BottomTab href="/app/personal" icon={<Wallet2 size={20} />} label="Accueil" active={pathname === '/app/personal'} />
+              <BottomTab href="/app/personal" icon={<IconHome size={20} color="currentColor" />} label="Accueil" active={pathname === '/app/personal'} />
               <BottomTab href="/app/personal/comptes" icon={<Banknote size={20} />} label="Comptes" active={pathname.startsWith('/app/personal/comptes')} />
               <CenterActionButton onClick={() => setActionMenuOpen(true)} />
               <BottomTab href="/app/performance/perso" icon={<BarChart3 size={20} />} label="Stats" active={pathname.startsWith('/app/performance/perso')} />
@@ -89,19 +94,19 @@ export default function PivotMobileNav({ space, pathname, businessId, businesses
               onClick={() => setActionMenuOpen(false)}
             />
             <ActionMenuItem
-              icon={<FileText size={20} style={{ color: 'var(--shell-accent)' }} />}
+              icon={<IconTransaction size={20} color="var(--shell-accent)" />}
               label="Ajouter une transaction"
               href="/app/personal/transactions?add=true"
               onClick={() => setActionMenuOpen(false)}
             />
             <ActionMenuItem
-              icon={<CreditCard size={20} style={{ color: 'var(--shell-accent)' }} />}
+              icon={<IconSubscription size={20} color="var(--shell-accent)" />}
               label="Ajouter un abonnement"
               href="/app/personal/subscriptions"
               onClick={() => setActionMenuOpen(false)}
             />
             <ActionMenuItem
-              icon={<Target size={20} style={{ color: 'var(--shell-accent)' }} />}
+              icon={<IconSavings size={20} color="var(--shell-accent)" />}
               label="Objectif d'épargne"
               href="/app/personal/epargne"
               onClick={() => setActionMenuOpen(false)}
@@ -132,10 +137,10 @@ export default function PivotMobileNav({ space, pathname, businessId, businesses
             <div className="flex flex-col gap-6 flex-1">
               {effectiveSpace === 'perso' && (
                 <DrawerSection title="Navigation">
-                  <DrawerItem icon={(c) => <FileText size={20} color={c} />} label="Transactions" href="/app/personal/transactions" onClick={closeDrawer} />
-                  <DrawerItem icon={(c) => <PiggyBank size={20} color={c} />} label="Budgets" href="/app/personal/budgets" onClick={closeDrawer} />
-                  <DrawerItem icon={(c) => <CreditCard size={20} color={c} />} label="Abonnements" href="/app/personal/subscriptions" onClick={closeDrawer} />
-                  <DrawerItem icon={(c) => <Target size={20} color={c} />} label="Épargne" href="/app/personal/epargne" onClick={closeDrawer} />
+                  <DrawerItem icon={(c) => <IconTransaction size={20} color={c} />} label="Transactions" href="/app/personal/transactions" onClick={closeDrawer} />
+                  <DrawerItem icon={(c) => <IconBudget size={20} color={c} />} label="Budgets" href="/app/personal/budgets" onClick={closeDrawer} />
+                  <DrawerItem icon={(c) => <IconSubscription size={20} color={c} />} label="Abonnements" href="/app/personal/subscriptions" onClick={closeDrawer} />
+                  <DrawerItem icon={(c) => <IconSavings size={20} color={c} />} label="Épargne" href="/app/personal/epargne" onClick={closeDrawer} />
                 </DrawerSection>
               )}
 

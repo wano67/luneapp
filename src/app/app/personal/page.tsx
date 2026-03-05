@@ -7,6 +7,8 @@ import { fetchJson } from '@/lib/apiClient';
 import { onWalletRefresh } from '@/lib/personalEvents';
 import { fmtKpi } from '@/lib/format';
 import { formatCentsToEuroDisplay } from '@/lib/money';
+import { BANK_MAP } from '@/config/banks';
+import { FaviconAvatar } from '@/app/app/components/FaviconAvatar';
 import { PageContainer } from '@/components/layouts/PageContainer';
 import { Alert } from '@/components/ui/alert';
 
@@ -29,6 +31,7 @@ type SummaryResponse = {
     type: string;
     currency: string;
     institution: string | null;
+    bankCode: string | null;
     balanceCents: string;
   }>;
   latestTransactions: Array<{
@@ -131,7 +134,8 @@ export default function WalletHomePage() {
     const prevExpense = absBigInt(BigInt(data.kpis.prevExpenseCents ?? '0'));
 
     function pctChange(cur: bigint, prev: bigint): number | null {
-      if (prev === 0n) return null;
+      if (prev === 0n && cur === 0n) return null;
+      if (prev === 0n) return cur > 0n ? 100 : -100;
       const raw = Number(((cur - prev) * 100n) / absBigInt(prev));
       return Math.max(-999, Math.min(999, raw));
     }
@@ -145,6 +149,9 @@ export default function WalletHomePage() {
     // Revenus: period income vs previous period income
     const incomePctVal = pctChange(income, prevIncome);
 
+    const expenseDiff = expense - prevExpense;
+    const incomeDiff = income - prevIncome;
+
     return {
       total: fmtKpi(totalBalance.toString()),
       income: fmtKpi(income.toString()),
@@ -156,11 +163,11 @@ export default function WalletHomePage() {
       treasuryDelta: fmtDelta(periodNet),
       treasuryPositive: treasuryPctVal != null ? treasuryPctVal >= 0 : periodNet >= 0n,
       expensePct: expensePctVal,
-      expenseDelta: fmtDelta(expense - prevExpense),
-      chargesPositive: expensePctVal != null ? expensePctVal <= 0 : true,
+      expenseDelta: fmtDelta(expenseDiff),
+      chargesPositive: expenseDiff <= 0n,
       incomePct: incomePctVal,
-      incomeDelta: fmtDelta(income - prevIncome),
-      revenusPositive: incomePctVal != null ? incomePctVal >= 0 : true,
+      incomeDelta: fmtDelta(incomeDiff),
+      revenusPositive: incomeDiff >= 0n,
     };
   }, [data]);
 
@@ -287,20 +294,40 @@ export default function WalletHomePage() {
             <div className="flex gap-3 overflow-x-auto px-3 pb-1 scrollbar-none">
               {[...data.accounts]
                 .sort((a, b) => (ACCOUNT_TYPE_ORDER[a.type] ?? 9) - (ACCOUNT_TYPE_ORDER[b.type] ?? 9))
-                .map((a) => (
-                <Link
-                  key={a.id}
-                  href={`/app/personal/comptes/${a.id}`}
-                  className="shrink-0 w-[160px] h-[100px] rounded-lg p-3 flex flex-col justify-between transition-opacity hover:opacity-80"
-                  style={{ background: 'var(--shell-accent-dark)' }}
-                >
-                  <div className="flex items-center justify-between gap-1">
-                    <span className="text-white/70 text-xs truncate">{a.name}</span>
-                    <span className="text-white/40 text-[10px] shrink-0">{ACCOUNT_TYPE_LABEL[a.type] ?? a.type}</span>
-                  </div>
-                  <span className="text-white text-lg font-bold">{fmtKpi(a.balanceCents)}</span>
-                </Link>
-              ))}
+                .map((a) => {
+                  const bank = a.bankCode ? BANK_MAP.get(a.bankCode) : null;
+                  const bankName = bank?.shortName ?? a.institution ?? null;
+                  const bankUrl = bank?.websiteUrl ?? null;
+                  return (
+                    <Link
+                      key={a.id}
+                      href={`/app/personal/comptes/${a.id}`}
+                      className="shrink-0 w-[175px] rounded-lg p-3 flex flex-col gap-2 transition-opacity hover:opacity-80"
+                      style={{ background: 'var(--shell-accent-dark)' }}
+                    >
+                      <div className="flex items-center gap-2">
+                        {bankUrl ? (
+                          <FaviconAvatar name={bankName ?? ''} websiteUrl={bankUrl} size={22} className="rounded-md" />
+                        ) : bankName ? (
+                          <span className="inline-flex items-center justify-center rounded-md bg-white/15 text-[9px] font-bold text-white" style={{ width: 22, height: 22 }}>
+                            {bankName.slice(0, 2).toUpperCase()}
+                          </span>
+                        ) : null}
+                        <span className="text-white/70 text-xs truncate flex-1">{bankName ?? a.name}</span>
+                      </div>
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="text-white text-xs truncate">{a.name}</span>
+                        <span className="text-white/40 text-[10px] shrink-0">{ACCOUNT_TYPE_LABEL[a.type] ?? a.type}</span>
+                      </div>
+                      <span
+                        className="text-lg font-bold"
+                        style={{ color: BigInt(a.balanceCents) >= 0n ? '#45D195' : '#FF808B' }}
+                      >
+                        {BigInt(a.balanceCents) > 0n ? '+' : ''}{fmtKpi(a.balanceCents)}
+                      </span>
+                    </Link>
+                  );
+                })}
             </div>
           ) : (
             <p className="px-3 text-white/60 text-sm">Aucun compte.</p>

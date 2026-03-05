@@ -112,6 +112,77 @@ export function IconFinance({ size = 24, color = 'white' }: IconProps) {
   );
 }
 
+/* ═══ Wallet Category Icons ═══ */
+
+export function IconHome({ size = 24, color = '#EEEDE3' }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <path d="M3 9L12 2L21 9V20C21 20.5304 20.7893 21.0391 20.4142 21.4142C20.0391 21.7893 19.5304 22 19 22H5C4.46957 22 3.96086 21.7893 3.58579 21.4142C3.21071 21.0391 3 20.5304 3 20V9Z" stroke={color} {...S} />
+      <path d="M9 22V12H15V22" stroke={color} {...S} />
+    </svg>
+  );
+}
+
+export function IconBankAccount({ size = 24, color = '#EEEDE3' }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <path d="M2 10L12 3L22 10" stroke={color} {...S} />
+      <path d="M4 10V19" stroke={color} {...S} />
+      <path d="M20 10V19" stroke={color} {...S} />
+      <path d="M8 10V19" stroke={color} {...S} />
+      <path d="M12 10V19" stroke={color} {...S} />
+      <path d="M16 10V19" stroke={color} {...S} />
+      <path d="M2 19H22" stroke={color} {...S} />
+      <path d="M2 22H22" stroke={color} {...S} />
+    </svg>
+  );
+}
+
+export function IconTransaction({ size = 24, color = '#EEEDE3' }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <path d="M7 10L3 6L7 2" stroke={color} {...S} />
+      <path d="M3 6H21" stroke={color} {...S} />
+      <path d="M17 14L21 18L17 22" stroke={color} {...S} />
+      <path d="M21 18H3" stroke={color} {...S} />
+    </svg>
+  );
+}
+
+export function IconBudget({ size = 24, color = '#EEEDE3' }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <path d="M21.21 15.89C20.5738 17.3945 19.5788 18.7203 18.3119 19.7514C17.045 20.7825 15.5448 21.4874 13.9424 21.8049C12.34 22.1223 10.6844 22.0422 9.12014 21.5718C7.55586 21.1015 6.1306 20.2551 4.96902 19.1067C3.80744 17.9583 2.94479 16.5428 2.45661 14.9839C1.96843 13.425 1.86954 11.7706 2.16857 10.1651C2.4676 8.55961 3.15547 7.05195 4.17202 5.77346C5.18857 4.49497 6.50286 3.48472 8 2.83" stroke={color} {...S} />
+      <path d="M22 12C22 10.6868 21.7413 9.38642 21.2388 8.17317C20.7362 6.95991 19.9997 5.85752 19.0711 4.92893C18.1425 4.00035 17.0401 3.26375 15.8268 2.7612C14.6136 2.25866 13.3132 2 12 2V12H22Z" stroke={color} {...S} />
+    </svg>
+  );
+}
+
+export function IconSubscription({ size = 24, color = '#EEEDE3' }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <path d="M17 1L21 5L17 9" stroke={color} {...S} />
+      <path d="M3 11V9C3 7.93913 3.42143 6.92172 4.17157 6.17157C4.92172 5.42143 5.93913 5 7 5H21" stroke={color} {...S} />
+      <path d="M7 23L3 19L7 15" stroke={color} {...S} />
+      <path d="M21 13V15C21 16.0609 20.5786 17.0783 19.8284 17.8284C19.0783 18.5786 18.0609 19 17 19H3" stroke={color} {...S} />
+    </svg>
+  );
+}
+
+export function IconSavings({ size = 24, color = '#EEEDE3' }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <path d="M19 5C17.53 4.36 16 4 14 4C8 4 4 8 4 14C4 15.2 4.22 16.4 4.62 17.5" stroke={color} {...S} />
+      <path d="M9 9C9.8 8 11 7 14 7C16.2 7 18 8 19 9.5" stroke={color} {...S} />
+      <path d="M2 17L4.62 17.5L5.5 20" stroke={color} {...S} />
+      <path d="M22 17L19.38 17.5L18.5 20" stroke={color} {...S} />
+      <path d="M10 15H10.01" stroke={color} strokeWidth={2} strokeLinecap="round" />
+      <path d="M20 10C20 14 17.5 19 14 19C10.5 19 8 14 8 10" stroke={color} {...S} />
+      <path d="M14 4V2" stroke={color} {...S} />
+    </svg>
+  );
+}
+
 export function IconUser({ size = 24, color = 'white' }: IconProps) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
