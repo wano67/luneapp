@@ -176,6 +176,7 @@ export function ServiceImportModal({ open, businessId, isAdmin, onClose, onAfter
       onCloseAction={handleClose}
       title="Importer des services (CSV)"
       description="Prévisualise, mappe les colonnes puis importe dans le catalogue."
+      size="lg"
     >
       <form className="space-y-4" onSubmit={submitImport}>
         <div className="space-y-2">

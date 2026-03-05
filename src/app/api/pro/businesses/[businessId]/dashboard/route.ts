@@ -4,7 +4,7 @@ import { withBusinessRoute } from '@/server/http/routeHandler';
 import { jsonb } from '@/server/http/json';
 import { getProjectCounts } from '@/server/queries/projects';
 import { computeBusinessBillingSummary, computeBusinessProjectMetrics } from '@/server/billing/businessSummary';
-import { addMonths, startOfMonth, monthKey } from '@/lib/date';
+import { addMonths, addDays, startOfMonth, startOfWeek, monthKey, dayKey, weekKey } from '@/lib/date';
 
 // GET /api/pro/businesses/{businessId}/dashboard?days=30
 export const GET = withBusinessRoute({ minRole: 'VIEWER' }, async (ctx, req) => {
@@ -15,8 +15,20 @@ export const GET = withBusinessRoute({ minRole: 'VIEWER' }, async (ctx, req) => 
   const now = new Date();
   const monthStart = startOfMonth(now);
   const nextMonthStart = addMonths(monthStart, 1);
+
+  // Granularity: daily ≤60d, weekly ≤180d, monthly otherwise
+  const granularity: 'daily' | 'weekly' | 'monthly' =
+    days > 0 && days <= 60 ? 'daily' : days > 60 && days <= 180 ? 'weekly' : 'monthly';
+
   const monthsBack = days === 0 ? 60 : Math.max(1, Math.ceil(days / 30));
-  const seriesStart = addMonths(monthStart, -(monthsBack - 1));
+  const seriesStart =
+    granularity === 'monthly'
+      ? addMonths(monthStart, -(monthsBack - 1))
+      : days > 0
+        ? new Date(now.getTime() - days * 24 * 60 * 60 * 1000)
+        : addMonths(monthStart, -59);
+  seriesStart.setHours(0, 0, 0, 0);
+
   const periodStart = days > 0 ? new Date(now.getTime() - days * 24 * 60 * 60 * 1000) : null;
   const periodDateFilter = periodStart ? { gte: periodStart } : undefined;
   const horizon = addMonths(now, 0);
@@ -112,15 +124,38 @@ export const GET = withBusinessRoute({ minRole: 'VIEWER' }, async (ctx, req) => 
 
   let mtdIncome = BigInt(0);
   let mtdExpense = BigInt(0);
-  const monthBuckets = new Map<string, { income: bigint; expense: bigint }>();
-  for (let i = 0; i < monthsBack; i += 1) {
-    const key = monthKey(addMonths(seriesStart, i));
-    monthBuckets.set(key, { income: BigInt(0), expense: BigInt(0) });
+
+  // Build buckets based on granularity
+  const buckets = new Map<string, { income: bigint; expense: bigint }>();
+
+  if (granularity === 'daily') {
+    const totalDays = (days > 0 ? days : 60) + 1; // +1 to include today
+    for (let i = 0; i < totalDays; i += 1) {
+      buckets.set(dayKey(addDays(seriesStart, i)), { income: BigInt(0), expense: BigInt(0) });
+    }
+  } else if (granularity === 'weekly') {
+    const weekStart = startOfWeek(seriesStart);
+    const endDate = now;
+    let cursor = new Date(weekStart);
+    while (cursor <= endDate) {
+      buckets.set(weekKey(cursor), { income: BigInt(0), expense: BigInt(0) });
+      cursor = addDays(cursor, 7);
+    }
+  } else {
+    for (let i = 0; i < monthsBack; i += 1) {
+      buckets.set(monthKey(addMonths(seriesStart, i)), { income: BigInt(0), expense: BigInt(0) });
+    }
+  }
+
+  function bucketKey(date: Date): string {
+    if (granularity === 'daily') return dayKey(date);
+    if (granularity === 'weekly') return weekKey(date);
+    return monthKey(startOfMonth(date));
   }
 
   for (const row of financeRows) {
-    const key = monthKey(startOfMonth(row.date));
-    const bucket = monthBuckets.get(key);
+    const key = bucketKey(row.date);
+    const bucket = buckets.get(key);
     if (!bucket) continue;
     if (row.type === FinanceType.INCOME) {
       bucket.income += row.amountCents;
@@ -135,8 +170,8 @@ export const GET = withBusinessRoute({ minRole: 'VIEWER' }, async (ctx, req) => 
     }
   }
 
-  const monthlySeries = Array.from(monthBuckets.entries()).map(([month, values]) => ({
-    month,
+  const timeSeries = Array.from(buckets.entries()).map(([label, values]) => ({
+    label,
     incomeCents: values.income,
     expenseCents: values.expense,
   }));
@@ -198,9 +233,6 @@ export const GET = withBusinessRoute({ minRole: 'VIEWER' }, async (ctx, req) => 
       totalCount: projectCounts.total,
     },
     clientsCount,
-    projectsActiveCount,
-    activeProjectsCount: projectsActiveCount,
-    openTasksCount,
     monthFinance,
     latestTasks,
     latestFinances: latestFinanceRows,
@@ -214,7 +246,9 @@ export const GET = withBusinessRoute({ minRole: 'VIEWER' }, async (ctx, req) => 
         projectId: i.projectId,
       })),
     },
-    monthlySeries,
+    granularity,
+    timeSeries,
+    monthlySeries: timeSeries,
   };
 
   return jsonb(payload, ctx.requestId);

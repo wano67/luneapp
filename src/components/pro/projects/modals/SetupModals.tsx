@@ -419,6 +419,7 @@ export function SetupModals({
         onCloseAction={onCloseModal}
         title="Ajouter des services au projet"
         description="Sélectionne les services du catalogue."
+        size="lg"
       >
         <div className="space-y-3">
           <div className="rounded-2xl border border-[var(--border)]/70 bg-[var(--surface-2)]/60 p-3">

@@ -69,15 +69,15 @@ export default function TasksPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<TaskStatus | 'ALL'>('ALL');
-  const [categoryFilter, setCategoryFilter] = useState('');
-  const [tagFilter, setTagFilter] = useState('');
-  const [categoryOptions, setCategoryOptions] = useState<Array<{ id: string; name: string }>>([]);
-  const [tagOptions, setTagOptions] = useState<Array<{ id: string; name: string }>>([]);
+  const [categoryFilter, _setCategoryFilter] = useState('');
+  const [tagFilter, _setTagFilter] = useState('');
+  const [_categoryOptions, setCategoryOptions] = useState<Array<{ id: string; name: string }>>([]);
+  const [_tagOptions, setTagOptions] = useState<Array<{ id: string; name: string }>>([]);
   const [referenceError, setReferenceError] = useState<string | null>(null);
-  const [referenceRequestId, setReferenceRequestId] = useState<string | null>(null);
+  const [_referenceRequestId, setReferenceRequestId] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [requestId, setRequestId] = useState<string | null>(null);
+  const [_requestId, setRequestId] = useState<string | null>(null);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Task | null>(null);

@@ -157,7 +157,8 @@ model User {
   personalTransactions PersonalTransaction[]
   personalCategories   PersonalCategory[]
   personalBudgets      PersonalBudget[]
-  savingsGoals         SavingsGoal[]
+  savingsGoals          SavingsGoal[]
+  personalSubscriptions PersonalSubscription[]
   interactionsCreated  Interaction[] @relation("InteractionCreatedBy")
   inventoryMovements   InventoryMovement[]
   ledgerEntriesCreated LedgerEntry[]
@@ -1593,8 +1594,9 @@ model PersonalCategory {
   createdAt DateTime @default(now())
 
   // ✅ inverse relations
-  transactions PersonalTransaction[]
-  budgets      PersonalBudget[]
+  transactions  PersonalTransaction[]
+  budgets       PersonalBudget[]
+  subscriptions PersonalSubscription[]
 
   @@unique([userId, name])
 }
@@ -1630,6 +1632,13 @@ model PersonalTransaction {
  */
 enum BudgetPeriod {
   MONTHLY
+  YEARLY
+}
+
+enum SubscriptionFrequency {
+  WEEKLY
+  MONTHLY
+  QUARTERLY
   YEARLY
 }
 
@@ -1671,6 +1680,31 @@ model SavingsGoal {
   @@index([userId])
 }
 
+/**
+ * Abonnements / charges fixes déclaratives (Wallet perso)
+ */
+model PersonalSubscription {
+  id     BigInt @id @default(autoincrement())
+  userId BigInt
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  categoryId BigInt?
+  category   PersonalCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  name        String
+  amountCents BigInt
+  frequency   SubscriptionFrequency @default(MONTHLY)
+  startDate   DateTime
+  endDate     DateTime?
+  isActive    Boolean               @default(true)
+  note        String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+}
+
 // ────────── Notifications ──────────
 
 enum NotificationType {
@@ -1705,5 +1739,6 @@ model Notification {
   @@index([userId, isRead, createdAt])
   @@index([businessId, userId])
   @@index([taskId])
+  @@index([projectId])
   @@index([conversationId])
 }

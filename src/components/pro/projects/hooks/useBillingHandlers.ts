@@ -704,7 +704,7 @@ export function useBillingHandlers({
     if (quoteEditor.status === 'DRAFT') {
       const items = validateLineItems(quoteEditor.lines, setQuoteEditError);
       if (!items) return;
-      payload.items = items.map(({ productId: _, ...rest }) => rest);
+      payload.items = items.map(({ productId: _productId, ...rest }) => rest);
     }
 
     setQuoteEditing(true);

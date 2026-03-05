@@ -122,15 +122,6 @@ export default function AgendaPage({ businessId }: Props) {
     [canWrite]
   );
 
-  const openAction = useCallback((type: 'client' | 'prospect', id: string, name?: string | null) => {
-    const label = name?.trim() || (type === 'client' ? 'Client' : 'Prospect');
-    setActionTarget({ type, id, name: label });
-    setActionName(`Projet - ${label}`);
-    setActionError(null);
-    setActionResult(null);
-    setActionOpen(true);
-  }, []);
-
   const closeAction = useCallback(() => {
     if (actionLoading) return;
     setActionOpen(false);

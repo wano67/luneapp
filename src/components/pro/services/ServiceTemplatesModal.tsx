@@ -330,6 +330,7 @@ export function ServiceTemplatesModal({
       onCloseAction={handleClose}
       title={`Gérer templates${service ? ` · ${service.code}` : ''}`}
       description="Ces templates deviennent les tâches générées automatiquement quand le service est ajouté à un projet."
+      size="lg"
     >
       <div className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-2">

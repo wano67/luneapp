@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Modal } from '@/components/ui/modal';
 import { Select } from '@/components/ui/select';
-import { formatCents, sanitizeEuroInput } from '@/lib/money';
+import { sanitizeEuroInput } from '@/lib/money';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -65,8 +65,6 @@ export type TransactionFormModalProps = {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const inputBase =
-  'h-12 w-full rounded-2xl border bg-[var(--surface)] px-4 text-base text-[var(--text)]';
 const inputOk = 'border-[var(--border)]';
 const inputBad = 'border-[var(--danger-border)] ring-2 ring-[var(--danger-border)]';
 

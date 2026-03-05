@@ -28,7 +28,6 @@ export default function EpargnePage() {
     return () => ctrl.abort();
   }, []);
 
-  const totalTarget = goals.reduce((s, g) => s + Number(g.targetCents || 0), 0);
   const totalCurrent = goals.reduce((s, g) => s + Number(g.currentCents || 0), 0);
   const completedCount = goals.filter((g) => g.completedAt).length;
 

@@ -8,10 +8,6 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { KpiCard } from '@/components/ui/kpi-card';
 import { PageContainer } from '@/components/layouts/PageContainer';
 import { TabsPills } from '@/components/pro/TabsPills';
-import {
-  UI,
-  formatDate,
-} from '@/components/pro/projects/workspace-ui';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import { useActiveBusiness } from '@/app/app/pro/ActiveBusinessProvider';
 import type { ChecklistItem } from '@/components/pro/projects/ProjectSetupChecklist';

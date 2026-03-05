@@ -3,10 +3,20 @@
 import React, { useEffect, useId, useRef } from 'react';
 import { useBodyScrollLock } from '@/lib/scrollLock';
 
+type ModalSize = 'md' | 'lg' | 'xl' | 'full';
+
+const SIZE_CLASS: Record<ModalSize, string> = {
+  md: 'max-w-2xl',
+  lg: 'max-w-4xl',
+  xl: 'max-w-6xl',
+  full: 'max-w-[96vw]',
+};
+
 type ModalProps = {
   open: boolean;
   title: string;
   description?: string;
+  size?: ModalSize;
   children: React.ReactNode;
   onCloseAction: () => void;
 };
@@ -26,7 +36,7 @@ function getFocusableElements(root: HTMLElement | null) {
   });
 }
 
-export function Modal({ open, onCloseAction, title, description, children }: ModalProps) {
+export function Modal({ open, onCloseAction, title, description, size = 'md', children }: ModalProps) {
   const baseId = useId();
   const titleId = `modal-title-${baseId}`;
   const descId = description ? `modal-desc-${baseId}` : undefined;
@@ -184,7 +194,7 @@ export function Modal({ open, onCloseAction, title, description, children }: Mod
 
       {/* panel */}
       <div
-        className="absolute left-1/2 top-1/2 w-[92vw] max-w-2xl -translate-x-1/2 -translate-y-1/2 px-2"
+        className={`absolute left-1/2 top-1/2 w-[92vw] ${SIZE_CLASS[size]} -translate-x-1/2 -translate-y-1/2 px-2`}
         style={{
           paddingTop: 'env(safe-area-inset-top, 0px)',
           paddingBottom: 'env(safe-area-inset-bottom, 0px)',

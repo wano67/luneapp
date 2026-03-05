@@ -516,6 +516,7 @@ export default function CsvImportModal({
       onCloseAction={handleClose}
       title="Importer un CSV"
       description="Prévisualise puis importe tes transactions."
+      size="lg"
     >
       <div className="max-h-[78vh] overflow-hidden">
         {externalError || serverError ? (

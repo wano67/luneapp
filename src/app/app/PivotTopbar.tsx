@@ -22,34 +22,6 @@ type Props = {
   onToggleMessaging?: () => void;
 };
 
-/* ═══ Notification types ═══ */
-
-type DashboardTask = {
-  id: string | bigint;
-  title: string;
-  status: string;
-  dueDate: string | null;
-  projectId: string | bigint | null;
-  projectName: string | null;
-};
-
-type DashboardInteraction = {
-  id: string | bigint;
-  type: string;
-  nextActionDate: string | null;
-  clientId: string | bigint | null;
-  projectId: string | bigint | null;
-};
-
-type ActivityItem = {
-  id: string;
-  icon: 'task' | 'interaction';
-  title: string;
-  subtitle: string | null;
-  date: string | null;
-  href: string | null;
-};
-
 /* ═══ Search types ═══ */
 
 type SearchResultGroup = {
@@ -65,17 +37,6 @@ type SearchResultItem = {
 };
 
 /* ═══ Helpers ═══ */
-
-const INTERACTION_LABELS: Record<string, string> = {
-  CALL: 'Appel',
-  EMAIL: 'Email',
-  MEETING: 'Rendez-vous',
-  VISIT: 'Visite',
-  FOLLOW_UP: 'Relance',
-  NOTE: 'Note',
-  MESSAGE: 'Message',
-  OTHER: 'Autre',
-};
 
 function formatRelativeDate(dateStr: string): string {
   try {
@@ -113,6 +74,7 @@ const PERSO_SUB_LABELS: Record<string, string> = {
   comptes: 'Comptes',
   transactions: 'Transactions',
   budgets: 'Budgets',
+  subscriptions: 'Abonnements',
   epargne: 'Épargne',
 };
 
@@ -141,47 +103,69 @@ export default function PivotTopbar({ space, pathname, businessId, businesses, o
 
   const handleComingSoon = () => toast.info('Bientôt disponible');
 
+  const mobileTitle = (() => {
+    if (proSubPage) return proSubPage.label;
+    if (persoSubPage) return persoSubPage.label;
+    if (focusSubPage) return focusSubPage.label;
+    if (inBusiness && currentBiz) return currentBiz.name;
+    if (space === 'perso') return 'Wallet';
+    if (space === 'focus') return 'Focus';
+    return 'Accueil';
+  })();
+
   return (
-    <header
-      className="grid items-center shrink-0"
-      style={{
-        gridTemplateColumns: '1fr auto 1fr',
-        background: 'var(--shell-topbar-bg)',
-        padding: '12px 24px',
-        minHeight: 56,
-        gap: 16,
-      }}
-    >
-      {/* Left: Breadcrumb */}
-      <div className="flex items-center min-w-0">
-        {inBusiness ? (
-          <ProBreadcrumb
-            businessName={currentBiz?.name}
-            businessId={businessId}
-            subPage={proSubPage}
-          />
-        ) : (
-          <SpaceBreadcrumb space={space} persoSubPage={persoSubPage} focusSubPage={focusSubPage} />
-        )}
+    <header className="shrink-0" style={{ background: 'var(--shell-topbar-bg)', minHeight: 56 }}>
+      {/* Desktop header */}
+      <div
+        className="hidden md:grid items-center"
+        style={{ gridTemplateColumns: '1fr auto 1fr', padding: '12px 24px', gap: 16, minHeight: 56 }}
+      >
+        {/* Left: Breadcrumb */}
+        <div className="flex items-center min-w-0">
+          {inBusiness ? (
+            <ProBreadcrumb
+              businessName={currentBiz?.name}
+              businessId={businessId}
+              subPage={proSubPage}
+            />
+          ) : (
+            <SpaceBreadcrumb space={space} persoSubPage={persoSubPage} focusSubPage={focusSubPage} />
+          )}
+        </div>
+
+        {/* Center: Search */}
+        <SearchBar businessId={businessId} onComingSoon={handleComingSoon} />
+
+        {/* Right: Actions */}
+        <div className="flex items-center gap-2 justify-end">
+          {inBusiness && businessId ? (
+            <NotificationsDropdown businessId={businessId} onToggleMessaging={onToggleMessaging} />
+          ) : (
+            <NavIconBtn onClick={handleComingSoon}><IconAlert size={20} color="var(--shell-topbar-text)" /></NavIconBtn>
+          )}
+          <NavIconBtn onClick={inBusiness ? onToggleMessaging : handleComingSoon}><IconMessage size={20} color="var(--shell-topbar-text)" /></NavIconBtn>
+          <Link href={inBusiness ? `/app/pro/${businessId}/settings` : '/app/account'}>
+            <NavIconBtn><IconSettings size={20} color="var(--shell-topbar-text)" /></NavIconBtn>
+          </Link>
+          {inBusiness && businesses.length > 0 && (
+            <BusinessSwitcher businesses={businesses} currentId={businessId} />
+          )}
+        </div>
       </div>
 
-      {/* Center: Search (always centered) */}
-      <SearchBar businessId={businessId} onComingSoon={handleComingSoon} />
-
-      {/* Right: Actions */}
-      <div className="flex items-center gap-2 justify-end">
-        {inBusiness && businessId ? (
-          <NotificationsDropdown businessId={businessId} onToggleMessaging={onToggleMessaging} />
-        ) : (
-          <NavIconBtn onClick={handleComingSoon}><IconAlert size={20} color="var(--shell-topbar-text)" /></NavIconBtn>
-        )}
-        <NavIconBtn onClick={inBusiness ? onToggleMessaging : handleComingSoon}><IconMessage size={20} color="var(--shell-topbar-text)" /></NavIconBtn>
-        <Link href={inBusiness ? `/app/pro/${businessId}/settings` : '/app/account'}>
-          <NavIconBtn><IconSettings size={20} color="var(--shell-topbar-text)" /></NavIconBtn>
-        </Link>
-        {inBusiness && businesses.length > 0 && (
-          <BusinessSwitcher businesses={businesses} currentId={businessId} />
-        )}
+      {/* Mobile header */}
+      <div className="flex md:hidden items-center justify-between px-4" style={{ height: 56 }}>
+        <span className="text-sm font-medium truncate" style={{ color: 'var(--shell-topbar-text)' }}>
+          {mobileTitle}
+        </span>
+        <div className="flex items-center gap-1">
+          {inBusiness && businessId ? (
+            <NotificationsDropdown businessId={businessId} onToggleMessaging={onToggleMessaging} />
+          ) : null}
+          <Link href={inBusiness ? `/app/pro/${businessId}/settings` : '/app/account'}>
+            <NavIconBtn><IconSettings size={20} color="var(--shell-topbar-text)" /></NavIconBtn>
+          </Link>
+        </div>
       </div>
     </header>
   );
@@ -831,7 +815,7 @@ function NavIconBtn({ children, onClick }: { children: ReactNode; onClick?: () =
       type="button"
       onClick={onClick}
       className="relative flex items-center justify-center rounded-full hover:opacity-80 transition-opacity"
-      style={{ width: 32, height: 32, background: 'var(--surface)' }}
+      style={{ width: 40, height: 40, background: 'var(--surface)' }}
     >
       {children}
     </button>

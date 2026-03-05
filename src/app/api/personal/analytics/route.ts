@@ -46,6 +46,7 @@ export const GET = withPersonalRoute(async (ctx) => {
     trendTransactions,
     budgets,
     yearExpensesByCategoryRows,
+    activeSubscriptions,
   ] = await Promise.all([
     prisma.personalAccount.findMany({
       where: { userId: ctx.userId },
@@ -107,6 +108,10 @@ export const GET = withPersonalRoute(async (ctx) => {
       },
       _sum: { amountCents: true },
     }),
+    prisma.personalSubscription.findMany({
+      where: { userId: ctx.userId, isActive: true },
+      select: { amountCents: true, frequency: true },
+    }),
   ]);
 
   const txSumMap = new Map(txSumsByAccount.map((row) => [row.accountId.toString(), row._sum.amountCents ?? 0n]));
@@ -118,6 +123,23 @@ export const GET = withPersonalRoute(async (ctx) => {
   const monthIncomeCents = absBigInt(monthIncomeAgg._sum.amountCents ?? 0n);
   const monthExpenseCents = absBigInt(monthExpenseAgg._sum.amountCents ?? 0n);
   const savingsRate = toPercent(monthIncomeCents - monthExpenseCents, monthIncomeCents);
+
+  function toMonthlyCents(amountCents: bigint, frequency: string): bigint {
+    switch (frequency) {
+      case 'WEEKLY':    return (amountCents * 52n) / 12n;
+      case 'QUARTERLY': return (amountCents * 4n) / 12n;
+      case 'YEARLY':    return amountCents / 12n;
+      default:          return amountCents;
+    }
+  }
+
+  const fixedChargesMonthlyCents = activeSubscriptions.reduce(
+    (acc, s) => acc + toMonthlyCents(s.amountCents, s.frequency),
+    0n
+  );
+  const variableChargesCents = monthExpenseCents > fixedChargesMonthlyCents
+    ? monthExpenseCents - fixedChargesMonthlyCents
+    : 0n;
 
   const monthCategoryIds = monthExpensesByCategoryRows
     .map((row) => row.categoryId)
@@ -222,6 +244,8 @@ export const GET = withPersonalRoute(async (ctx) => {
       monthIncomeCents,
       monthExpenseCents,
       savingsRate,
+      fixedChargesMonthlyCents,
+      variableChargesCents,
       expensesByCategory,
       balanceTrend,
       budgetVsActual,

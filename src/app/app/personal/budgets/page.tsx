@@ -57,15 +57,37 @@ export default function BudgetsPage() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
+  type Subscription = {
+    id: string;
+    amountCents: string;
+    frequency: string;
+    isActive: boolean;
+  };
+  const [fixedMonthlyCents, setFixedMonthlyCents] = useState(0n);
+
   const load = useCallback(async () => {
     setLoading(true);
-    const [bRes, cRes] = await Promise.all([
+    const [bRes, cRes, subRes] = await Promise.all([
       fetchJson<{ items: Budget[] }>('/api/personal/budgets'),
       fetchJson<{ items: Category[] }>('/api/personal/categories'),
+      fetchJson<{ items: Subscription[] }>('/api/personal/subscriptions'),
     ]);
     if (bRes.ok && bRes.data) setBudgets(bRes.data.items ?? []);
     else setError(bRes.error ?? 'Impossible de charger les budgets.');
     if (cRes.ok && cRes.data) setCategories(cRes.data.items ?? []);
+    if (subRes.ok && subRes.data) {
+      const active = (subRes.data.items ?? []).filter((s) => s.isActive);
+      const total = active.reduce((acc, s) => {
+        const a = BigInt(s.amountCents);
+        switch (s.frequency) {
+          case 'WEEKLY':    return acc + (a * 52n) / 12n;
+          case 'QUARTERLY': return acc + (a * 4n) / 12n;
+          case 'YEARLY':    return acc + a / 12n;
+          default:          return acc + a;
+        }
+      }, 0n);
+      setFixedMonthlyCents(total);
+    }
     setLoading(false);
   }, []);
 
@@ -158,7 +180,7 @@ export default function BudgetsPage() {
 
       {error ? <p className="text-sm text-[var(--danger)]">{error}</p> : null}
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard label="Total budgété" value={formatCentsToEuroDisplay(totalLimit.toString())} />
         <KpiCard
           label="Dépensé ce mois"
@@ -170,6 +192,7 @@ export default function BudgetsPage() {
           value={String(overBudget)}
           trend={overBudget > 0 ? 'down' : 'up'}
         />
+        <KpiCard label="Charges fixes / mois" value={formatCentsToEuroDisplay(fixedMonthlyCents.toString())} />
       </div>
 
       {loading ? (

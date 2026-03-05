@@ -264,7 +264,8 @@ export default function PersoTransactionsPage() {
 
   // ─── Effects ────────────────────────────────────────────────────────────────
 
-  useEffect(() => { fetchAccounts(); fetchCategories(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { fetchAccounts(); fetchCategories(); }, []);
 
   useEffect(() => {
     if (loadingAccounts) return;

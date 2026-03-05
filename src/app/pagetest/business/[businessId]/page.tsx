@@ -14,7 +14,6 @@ import {
   FigmaFooter,
   FIGMA,
   fmtKpi,
-  fmtDate,
 } from '../../figma-ui';
 
 /* ═══ Types ═══ */

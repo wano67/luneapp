@@ -11,7 +11,6 @@ import { Card } from '@/components/ui/card';
 import { PageContainer } from '@/components/layouts/PageContainer';
 import { fmtKpi } from '@/lib/format';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
-import { useActiveBusiness } from '@/app/app/pro/ActiveBusinessProvider';
 
 const TreasuryCashflowChart = dynamic(() => import('./charts/TreasuryCashflowChart'), { ssr: false });
 const TasksDonut = dynamic(() => import('./charts/TasksDonut'), { ssr: false });
@@ -73,6 +72,8 @@ type DashboardPayload = {
       projectId: string | null;
     }>;
   };
+  granularity?: 'daily' | 'weekly' | 'monthly';
+  timeSeries?: Array<{ label: string; incomeCents: string | number; expenseCents: string | number }>;
   monthlySeries?: Array<{ month: string; incomeCents: string | number; expenseCents: string | number }>;
 };
 
@@ -108,14 +109,14 @@ const PERIODS = [
 
 function PeriodPills({ value, onChange }: { value: number; onChange: (v: number) => void }) {
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-2 overflow-x-auto">
       {PERIODS.map((p) => (
         <button
           key={p.value}
           type="button"
           onClick={() => onChange(p.value)}
           className={cn(
-            'cursor-pointer rounded-xl px-3 py-1.5 text-sm font-medium transition',
+            'cursor-pointer shrink-0 rounded-xl px-3 py-1.5 text-sm font-medium transition',
             value === p.value
               ? 'bg-[var(--shell-accent-dark)] text-white'
               : 'bg-[var(--surface)] text-[var(--text-faint)]'
@@ -136,7 +137,6 @@ export default function ProDashboard({ businessId }: { businessId: string }) {
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const activeCtx = useActiveBusiness({ optional: true });
 
   useEffect(() => {
     let cancelled = false;
@@ -179,7 +179,8 @@ export default function ProDashboard({ businessId }: { businessId: string }) {
     });
   }, [tasks, periodDays]);
   const tasksByStatus = useMemo(() => countByStatus(filteredTasks), [filteredTasks]);
-  const monthlySeries = dashboard?.monthlySeries ?? [];
+  const granularity = dashboard?.granularity ?? 'monthly';
+  const timeSeries = dashboard?.timeSeries ?? dashboard?.monthlySeries ?? [];
   const avgProfitability = dashboard?.projectMetrics?.avgProfitabilityPercent ?? 0;
 
   return (
@@ -230,7 +231,8 @@ export default function ProDashboard({ businessId }: { businessId: string }) {
               </Button>
             </div>
             <TreasuryCashflowChart
-              series={monthlySeries}
+              series={timeSeries}
+              granularity={granularity}
               openingBalanceCents={dashboard?.treasury?.openingBalanceCents}
               variant="accent"
             />

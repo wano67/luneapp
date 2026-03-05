@@ -41,9 +41,8 @@ function isExactActive(pathname: string, href: string): boolean {
 
 /* ═══ Sidebar ═══ */
 
-export default function PivotSidebar({ space, pathname, businessId, businesses, userName, collapsed, onToggleCollapse }: Props) {
+export default function PivotSidebar({ space, pathname, businessId, businesses: _businesses, userName, collapsed, onToggleCollapse }: Props) {
   const inBusiness = space === 'pro' && !!businessId;
-  const bizBase = businessId ? `/app/pro/${businessId}` : '';
 
   const nameParts = userName.trim().split(/\s+/);
   const firstName = nameParts[0] || '';
@@ -106,6 +105,7 @@ export default function PivotSidebar({ space, pathname, businessId, businesses, 
             <Item icon={(c) => <IconPerso size={20} color={c} />} label="Comptes" href="/app/personal/comptes" active={pathname.startsWith('/app/personal/comptes')} collapsed={collapsed} />
             <Item icon={(c) => <IconPerso size={20} color={c} />} label="Transactions" href="/app/personal/transactions" active={pathname.startsWith('/app/personal/transactions')} collapsed={collapsed} />
             <Item icon={(c) => <IconPerso size={20} color={c} />} label="Budgets" href="/app/personal/budgets" active={pathname.startsWith('/app/personal/budgets')} collapsed={collapsed} />
+            <Item icon={(c) => <IconPerso size={20} color={c} />} label="Abonnements" href="/app/personal/subscriptions" active={pathname.startsWith('/app/personal/subscriptions')} collapsed={collapsed} />
             <Item icon={(c) => <IconPerso size={20} color={c} />} label="Épargne" href="/app/personal/epargne" active={pathname.startsWith('/app/personal/epargne')} collapsed={collapsed} />
           </Section>
         )}

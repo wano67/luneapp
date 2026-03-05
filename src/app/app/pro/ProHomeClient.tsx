@@ -472,7 +472,7 @@ export default function ProHomeClient() {
             />
           ) : (
             <div className="grid gap-4 grid-cols-1 md:grid-cols-2">
-              {filteredItems.map(({ business, role }, index) => {
+              {filteredItems.map(({ business, role: _role }, index) => {
                 const stats = businessStats[business.id] ?? {};
                 const members = typeof stats.members === 'number' ? stats.members : 0;
                 const clients = typeof stats.clients === 'number' ? stats.clients : 0;

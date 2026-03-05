@@ -1,12 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/server/db/client';
+import { ProjectStatus, TaskStatus } from '@/generated/prisma';
 import { notifyProjectOverdue, notifyTaskDueSoon } from '@/server/services/notifications';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
+  const cronSecret = process.env.CRON_SECRET;
+  if (!cronSecret) {
+    return NextResponse.json({ error: 'Server misconfigured' }, { status: 500 });
+  }
   const authHeader = req.headers.get('authorization');
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (authHeader !== `Bearer ${cronSecret}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -21,7 +26,7 @@ export async function GET(req: NextRequest) {
   const overdueProjects = await prisma.project.findMany({
     where: {
       endDate: { lt: now },
-      status: { notIn: ['COMPLETED', 'CANCELLED'] },
+      status: { notIn: [ProjectStatus.COMPLETED, ProjectStatus.CANCELLED] },
       NOT: {
         notifications: {
           some: {
@@ -43,7 +48,7 @@ export async function GET(req: NextRequest) {
   const dueSoonTasks = await prisma.task.findMany({
     where: {
       dueDate: { gte: now, lte: in24h },
-      status: { not: 'DONE' },
+      status: { not: TaskStatus.DONE },
       NOT: {
         notifications: {
           some: {

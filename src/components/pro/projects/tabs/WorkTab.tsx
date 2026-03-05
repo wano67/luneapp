@@ -18,7 +18,6 @@ import { TaskSidePanel } from '@/components/pro/projects/work/TaskSidePanel';
 import { RoadmapView } from '@/components/pro/projects/work/RoadmapView';
 import { GanttChart } from '@/components/pro/projects/work/GanttChart';
 import { useRowSelection } from '@/app/app/components/selection/useRowSelection';
-import { BulkActionBar } from '@/app/app/components/selection/BulkActionBar';
 import type { TaskItem, MemberItem, OrganizationUnitItem } from '@/components/pro/projects/hooks/useProjectDataLoaders';
 
 function formatEstimatedTime(minutes: number): string {

@@ -1,6 +1,6 @@
 'use client';
 
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 
 const COLORS_DEFAULT = ['var(--warning)', 'var(--accent)', 'var(--success)'];
 const COLORS_ACCENT = ['var(--accent-light)', 'var(--shell-accent-dark)', 'white'];

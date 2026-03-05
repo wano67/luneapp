@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/server/db/client';
-import { DiscountType, InvoiceStatus, RecurringUnit } from '@/generated/prisma';
+import { InvoiceStatus, RecurringUnit } from '@/generated/prisma';
 import { withBusinessRoute } from '@/server/http/routeHandler';
 import { jsonbCreated } from '@/server/http/json';
 import { badRequest, notFound } from '@/server/http/apiUtils';

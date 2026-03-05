@@ -21,6 +21,8 @@ type PersonalAnalyticsResponse = {
   monthIncomeCents: string;
   monthExpenseCents: string;
   savingsRate: number;
+  fixedChargesMonthlyCents: string;
+  variableChargesCents: string;
   expensesByCategory: Array<{
     category: string;
     totalCents: string;
@@ -127,6 +129,11 @@ export default function PerformancePersoPage() {
             <KpiCard label="Revenus du mois" value={formatCentsToEuroDisplay(data.monthIncomeCents)} trend="up" />
             <KpiCard label="Dépenses du mois" value={formatCentsToEuroDisplay(data.monthExpenseCents)} trend="down" />
             <KpiCard label="Taux d’épargne" value={`${data.savingsRate.toFixed(1)}%`} />
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <KpiCard label="Charges fixes / mois" value={formatCentsToEuroDisplay(data.fixedChargesMonthlyCents)} />
+            <KpiCard label="Charges variables / mois" value={formatCentsToEuroDisplay(data.variableChargesCents)} />
           </div>
 
           <div className="grid gap-4 xl:grid-cols-2">

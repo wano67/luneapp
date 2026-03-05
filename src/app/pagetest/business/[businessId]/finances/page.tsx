@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { fetchJson } from '@/lib/apiClient';
 import { formatCentsToEuroDisplay } from '@/lib/money';
-import { FigmaKpiCard, FigmaSectionTitle, FigmaListRow, FigmaStatusPill, FigmaEmpty, FigmaFooter, FIGMA, fmtKpi, fmtDate } from '../../../figma-ui';
+import { FigmaKpiCard, FigmaSectionTitle, FigmaListRow, FigmaEmpty, FigmaFooter, FIGMA, fmtKpi, fmtDate } from '../../../figma-ui';
 
 type Finance = {
   id: string;

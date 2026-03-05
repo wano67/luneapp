@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { fetchJson } from '@/lib/apiClient';
-import { FigmaKpiCard, FigmaSectionTitle, FigmaListRow, FigmaProgressBar, FigmaEmpty, FigmaFooter, FIGMA, fmtKpi } from '../../figma-ui';
+import { FigmaKpiCard, FigmaSectionTitle, FigmaProgressBar, FigmaEmpty, FigmaFooter, FIGMA, fmtKpi } from '../../figma-ui';
 
 type Budget = {
   id: string;

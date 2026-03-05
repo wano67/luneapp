@@ -10,6 +10,10 @@ const eslintConfig = defineConfig([
     files: ["src/**/*.{ts,tsx}"],
     rules: {
       "no-console": ["warn", { allow: ["warn", "error", "debug"] }],
+      "@typescript-eslint/no-unused-vars": [
+        "warn",
+        { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },
+      ],
     },
   },
   // Override default ignores of eslint-config-next.

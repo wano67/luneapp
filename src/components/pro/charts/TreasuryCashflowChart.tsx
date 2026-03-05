@@ -13,14 +13,16 @@ import {
   Legend,
 } from 'recharts';
 
-type MonthlyPoint = {
-  month: string;
+type SeriesPoint = {
+  label?: string;
+  month?: string;
   incomeCents: string | number;
   expenseCents: string | number;
 };
 
 export type TreasuryCashflowChartProps = {
-  series: MonthlyPoint[];
+  series: SeriesPoint[];
+  granularity?: 'daily' | 'weekly' | 'monthly';
   openingBalanceCents?: string | number;
   height?: string;
   variant?: 'default' | 'accent';
@@ -43,13 +45,29 @@ const MONTH_SHORT: Record<string, string> = {
   '09': 'Sep', '10': 'Oct', '11': 'Nov', '12': 'Déc',
 };
 
-function formatMonth(month: string): string {
-  const parts = month.split('-');
-  return MONTH_SHORT[parts[1]] ?? month;
+/** Format a label for the X axis based on granularity. */
+function formatLabel(raw: string, granularity: 'daily' | 'weekly' | 'monthly'): string {
+  if (granularity === 'daily') {
+    // "YYYY-MM-DD" → "DD/MM"
+    const parts = raw.split('-');
+    if (parts.length === 3) return `${parts[2]}/${parts[1]}`;
+    return raw;
+  }
+  if (granularity === 'weekly') {
+    // "W-YYYY-MM-DD" → "DD/MM"
+    const datePart = raw.replace(/^W-/, '');
+    const parts = datePart.split('-');
+    if (parts.length === 3) return `${parts[2]}/${parts[1]}`;
+    return raw;
+  }
+  // monthly: "YYYY-MM" → abbreviated month name
+  const parts = raw.split('-');
+  return MONTH_SHORT[parts[1]] ?? raw;
 }
 
 export default function TreasuryCashflowChart({
   series,
+  granularity = 'monthly',
   openingBalanceCents,
   height = 'h-56 sm:h-72',
   variant = 'default',
@@ -58,13 +76,14 @@ export default function TreasuryCashflowChart({
 
   const data = useMemo(() => {
     const opening = toEuro(openingBalanceCents ?? 0);
-    return (series ?? []).reduce<{ items: { month: string; income: number; expense: number; treasury: number }[]; running: number }>(
+    return (series ?? []).reduce<{ items: { label: string; income: number; expense: number; treasury: number }[]; running: number }>(
       (acc, m) => {
         const income = toEuro(m.incomeCents);
         const expense = toEuro(m.expenseCents);
         const running = acc.running + income - expense;
+        const rawLabel = m.label ?? m.month ?? '';
         acc.items.push({
-          month: formatMonth(m.month),
+          label: formatLabel(rawLabel, granularity),
           income,
           expense,
           treasury: Math.round(running * 100) / 100,
@@ -73,10 +92,13 @@ export default function TreasuryCashflowChart({
       },
       { items: [], running: opening }
     ).items;
-  }, [series, openingBalanceCents]);
+  }, [series, openingBalanceCents, granularity]);
 
   const tickFill = isAccent ? 'white' : 'var(--text-faint)';
   const gridStroke = isAccent ? 'rgba(255,255,255,0.4)' : 'var(--border)';
+
+  // Show fewer ticks for dense series (daily/weekly)
+  const tickInterval = data.length > 30 ? Math.ceil(data.length / 15) - 1 : 0;
 
   return (
     <div className={height}>
@@ -84,11 +106,12 @@ export default function TreasuryCashflowChart({
         <ComposedChart data={data} margin={{ left: 0, right: 8, top: 4, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
           <XAxis
-            dataKey="month"
+            dataKey="label"
             tickMargin={6}
             tick={{ fontSize: 11, fill: tickFill }}
             tickLine={false}
             axisLine={false}
+            interval={tickInterval}
           />
           <YAxis
             yAxisId="bars"
@@ -127,7 +150,7 @@ export default function TreasuryCashflowChart({
             name="Revenus"
             fill={isAccent ? 'rgba(255,255,255,0.55)' : 'var(--success)'}
             radius={[3, 3, 0, 0]}
-            barSize={14}
+            barSize={granularity === 'daily' ? 6 : granularity === 'weekly' ? 10 : 14}
           />
           <Bar
             yAxisId="bars"
@@ -135,7 +158,7 @@ export default function TreasuryCashflowChart({
             name="Depenses"
             fill={isAccent ? 'var(--shell-accent-dark)' : 'var(--danger)'}
             radius={[3, 3, 0, 0]}
-            barSize={14}
+            barSize={granularity === 'daily' ? 6 : granularity === 'weekly' ? 10 : 14}
           />
           <Line
             yAxisId="line"
@@ -144,7 +167,7 @@ export default function TreasuryCashflowChart({
             name="Tresorerie"
             stroke={isAccent ? 'white' : 'var(--shell-accent)'}
             strokeWidth={2.5}
-            dot={{ r: 3, fill: isAccent ? 'white' : 'var(--shell-accent)' }}
+            dot={granularity === 'daily' ? false : { r: 3, fill: isAccent ? 'white' : 'var(--shell-accent)' }}
             activeDot={{ r: 5 }}
           />
         </ComposedChart>
