@@ -114,7 +114,7 @@ export default function PivotTopbar({ space, pathname, businessId, businesses, o
   })();
 
   return (
-    <header className="shrink-0" style={{ background: 'var(--shell-topbar-bg)', minHeight: 56 }}>
+    <header className="shrink-0 sticky top-0 z-[55]" style={{ background: 'var(--shell-topbar-bg)', minHeight: 56 }}>
       {/* Desktop header */}
       <div
         className="hidden md:grid items-center"

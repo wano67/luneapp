@@ -6,27 +6,18 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Select } from '@/components/ui/select';
 import { PageContainer } from '@/components/layouts/PageContainer';
-import { PageHeader } from '@/components/layouts/PageHeader';
 import Modal from '@/components/ui/modal';
+import { fmtKpi } from '@/lib/format';
+import { BANK_MAP } from '@/config/banks';
 import dynamic from 'next/dynamic';
+import CreateAccountWizard, { type WizardResult } from './CreateAccountWizard';
+import BankGroup from './BankGroup';
+import { type AccountItem } from './AccountCard';
 
 const CsvImportModal = dynamic(() => import('@/components/CsvImportModal'), { ssr: false });
 import { useFileDropHandler } from '@/components/file-drop/FileDropProvider';
 import { emitWalletRefresh } from '@/lib/personalEvents';
-
-type AccountItem = {
-  id: string;
-  name: string;
-  type: 'CURRENT' | 'SAVINGS' | 'INVEST' | 'CASH';
-  currency: string;
-  institution: string | null;
-  iban: string | null;
-  initialCents: string;
-  balanceCents: string;
-  delta30Cents: string;
-};
 
 async function safeJson(res: Response): Promise<unknown> {
   try {
@@ -75,67 +66,57 @@ function eurosToCentsBigInt(input: string): bigint | null {
   }
 }
 
-type AccountFormErrors = {
+type EditFormErrors = {
   name?: string;
   initialEuros?: string;
-  institution?: string;
   iban?: string;
   form?: string;
 };
 
-function validateAccountForm(values: {
-  name: string;
-  initialEuros: string;
-  institution: string;
-  iban: string;
-}) {
-  const errors: AccountFormErrors = {};
+/* ═══ Category grouping ═══ */
 
-  const name = values.name.trim();
-  if (!name) {
-    errors.name = 'Nom requis.';
-  } else if (name.length < 2) {
-    errors.name = 'Minimum 2 caractères.';
-  }
+type CategoryKey = 'CHECKING' | 'SAVINGS' | 'INVESTMENT' | 'LOAN';
+const CATEGORY_ORDER: CategoryKey[] = ['CHECKING', 'SAVINGS', 'INVESTMENT', 'LOAN'];
+const CATEGORY_LABEL: Record<CategoryKey, string> = {
+  CHECKING: 'Espèces',
+  SAVINGS: 'Épargne',
+  INVESTMENT: 'Investissement',
+  LOAN: 'Prêts',
+};
+const CATEGORY_LABEL_SHORT: Record<CategoryKey, string> = {
+  CHECKING: 'Espèces',
+  SAVINGS: 'Épargne',
+  INVESTMENT: 'Invest',
+  LOAN: 'Prêts',
+};
+const CATEGORY_TYPES: Record<CategoryKey, AccountItem['type'][]> = {
+  CHECKING: ['CASH', 'CURRENT'],
+  SAVINGS: ['SAVINGS'],
+  INVESTMENT: ['INVEST'],
+  LOAN: ['LOAN'],
+};
 
-  const initialCents = eurosToCentsBigInt(values.initialEuros);
-  if (initialCents === null) {
-    errors.initialEuros = 'Montant invalide.';
-  } else if (initialCents < 0n) {
-    errors.initialEuros = 'Le solde initial doit être supérieur ou égal à 0.';
-  }
+const TYPE_DISPLAY: Record<AccountItem['type'], string> = {
+  CURRENT: 'Compte courant',
+  SAVINGS: 'Épargne',
+  INVEST: 'Investissement',
+  CASH: 'Espèces',
+  LOAN: 'Prêt',
+};
 
-  const institution = values.institution.trim();
-  if (institution && institution.length > 60) {
-    errors.institution = '60 caractères maximum.';
-  }
+const CATEGORY_TYPE_KEY: Record<CategoryKey, string> = {
+  CHECKING: 'courant',
+  SAVINGS: 'epargne',
+  INVESTMENT: 'investissement',
+  LOAN: 'prets',
+};
 
-  const ibanRaw = values.iban.trim();
-  const ibanCompact = ibanRaw.replace(/\s+/g, '');
-  const ibanUpper = ibanCompact.toUpperCase();
-  if (ibanCompact && (!ibanUpper.startsWith('FR') || ibanUpper.length < 15)) {
-    errors.iban = 'IBAN FR requis (au moins 15 caractères).';
-  }
-
-  return {
-    errors,
-    name,
-    institution: institution || null,
-    iban: ibanCompact ? ibanUpper : null,
-    initialCents,
-  };
-}
-
-function typeLabel(t: AccountItem['type']) {
-  if (t === 'CURRENT') return 'Courant';
-  if (t === 'SAVINGS') return 'Épargne';
-  if (t === 'INVEST') return 'Invest';
-  return 'Cash';
-}
-
-function isAccountType(v: string): v is AccountItem['type'] {
-  return v === 'CURRENT' || v === 'SAVINGS' || v === 'INVEST' || v === 'CASH';
-}
+const CATEGORY_ICON: Record<CategoryKey, string> = {
+  CHECKING: '💳',
+  SAVINGS: '🏦',
+  INVESTMENT: '📈',
+  LOAN: '🏠',
+};
 
 export default function ComptesPage() {
   const router = useRouter();
@@ -145,34 +126,28 @@ export default function ComptesPage() {
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<AccountItem[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [showHidden, setShowHidden] = useState(false);
 
-  // modal create
+  // create modal
   const [open, setOpen] = useState(false);
   const [openImport, setOpenImport] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
   const [lastImportedFileName, setLastImportedFileName] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [wizardError, setWizardError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [fieldErrors, setFieldErrors] = useState<AccountFormErrors>({});
-
-  const [name, setName] = useState('');
-  const [type, setType] = useState<AccountItem['type']>('CURRENT');
-  const [initialEuros, setInitialEuros] = useState('0');
-  const [institution, setInstitution] = useState('');
-  const [iban, setIban] = useState('');
 
   // edit modal
   const [editOpen, setEditOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState<AccountItem | null>(null);
   const [editLoading, setEditLoading] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
-  const [editErrors, setEditErrors] = useState<AccountFormErrors>({});
+  const [editErrors, setEditErrors] = useState<EditFormErrors>({});
   const [editName, setEditName] = useState('');
-  const [editType, setEditType] = useState<AccountItem['type']>('CURRENT');
   const [editInitialEuros, setEditInitialEuros] = useState('0.00');
-  const [editInstitution, setEditInstitution] = useState('');
   const [editIban, setEditIban] = useState('');
+  const [editRatePct, setEditRatePct] = useState('');
 
   async function load() {
     setLoading(true);
@@ -234,72 +209,172 @@ export default function ComptesPage() {
 
   useFileDropHandler(handleCsvFiles, { enabled: true });
 
+  /* ═══ Computed values ═══ */
+
+  // All items for KPIs (including hidden)
+  const nonLoanItems = useMemo(() => items.filter((a) => a.type !== 'LOAN'), [items]);
+  const loanItems = useMemo(() => items.filter((a) => a.type === 'LOAN'), [items]);
+
+  // Visible items for display (excluding hidden unless toggled)
+  const visibleItems = useMemo(
+    () => (showHidden ? items : items.filter((a) => !a.hidden)),
+    [items, showHidden]
+  );
+  const hasHiddenAccounts = useMemo(() => items.some((a) => a.hidden), [items]);
+
   const totalCents = useMemo(() => {
-    return items.reduce<bigint>((acc, a) => acc + BigInt(a.balanceCents || '0'), 0n);
+    return nonLoanItems.reduce<bigint>((acc, a) => acc + BigInt(a.balanceCents || '0'), 0n);
+  }, [nonLoanItems]);
+
+  const totalDelta30 = useMemo(() => {
+    return nonLoanItems.reduce<bigint>((acc, a) => acc + BigInt(a.delta30Cents || '0'), 0n);
+  }, [nonLoanItems]);
+
+  const loanEncoursCents = useMemo(() => {
+    return loanItems.reduce<bigint>((acc, a) => acc + BigInt(a.loanPrincipalCents || '0'), 0n);
+  }, [loanItems]);
+
+  const categoryCounts = useMemo(() => {
+    const counts: Record<CategoryKey, number> = { CHECKING: 0, SAVINGS: 0, INVESTMENT: 0, LOAN: 0 };
+    for (const a of items) {
+      for (const cat of CATEGORY_ORDER) {
+        if (CATEGORY_TYPES[cat].includes(a.type)) {
+          counts[cat]++;
+          break;
+        }
+      }
+    }
+    return counts;
   }, [items]);
 
-  async function onCreate(e: FormEvent) {
-    e.preventDefault();
-    setFieldErrors({});
-    setSuccessMessage(null);
+  const hasLoans = loanItems.length > 0;
+  const deltaPositive = totalDelta30 >= 0n;
 
-    const validated = validateAccountForm({ name, initialEuros, institution, iban });
-    if (Object.keys(validated.errors).length > 0) {
-      setFieldErrors(validated.errors);
-      return;
-    }
+  /* ═══ Bank grouping per category ═══ */
 
+  type BankGroupData = {
+    bankKey: string;
+    bankName: string;
+    bankWebsiteUrl: string | null;
+    accounts: AccountItem[];
+    totalCents: bigint;
+  };
+  type CategoryGroupData = {
+    category: CategoryKey;
+    bankGroups: BankGroupData[];
+    totalCents: bigint;
+  };
+
+  const categoryGroups = useMemo<CategoryGroupData[]>(() => {
+    return CATEGORY_ORDER
+      .map((cat) => {
+        const types = CATEGORY_TYPES[cat];
+        const catAccounts = visibleItems.filter((a) => types.includes(a.type));
+        if (!catAccounts.length) return null;
+
+        const bankMap = new Map<string, AccountItem[]>();
+        for (const a of catAccounts) {
+          let key: string;
+          if (a.bankCode && BANK_MAP.has(a.bankCode)) {
+            key = a.bankCode;
+          } else if (a.institution) {
+            key = `OTHER:${a.institution}`;
+          } else {
+            key = 'UNKNOWN';
+          }
+          const arr = bankMap.get(key);
+          if (arr) arr.push(a);
+          else bankMap.set(key, [a]);
+        }
+
+        const bankGroups: BankGroupData[] = [];
+        for (const [key, accounts] of bankMap) {
+          let bankName: string;
+          let bankWebsiteUrl: string | null = null;
+          if (key === 'UNKNOWN') {
+            bankName = 'Autre';
+          } else if (key.startsWith('OTHER:')) {
+            bankName = key.slice(6);
+          } else {
+            const bank = BANK_MAP.get(key)!;
+            bankName = bank.name;
+            bankWebsiteUrl = bank.websiteUrl;
+          }
+          const total = accounts.reduce(
+            (s, a) => s + BigInt(cat === 'LOAN' ? (a.loanPrincipalCents || '0') : (a.balanceCents || '0')),
+            0n
+          );
+          bankGroups.push({ bankKey: key, bankName, bankWebsiteUrl, accounts, totalCents: total });
+        }
+
+        bankGroups.sort((a, b) => {
+          const aOrder = a.bankKey === 'UNKNOWN' ? 2 : a.bankKey.startsWith('OTHER:') ? 1 : 0;
+          const bOrder = b.bankKey === 'UNKNOWN' ? 2 : b.bankKey.startsWith('OTHER:') ? 1 : 0;
+          if (aOrder !== bOrder) return aOrder - bOrder;
+          return a.bankName.localeCompare(b.bankName, 'fr');
+        });
+
+        const catTotal = catAccounts.reduce(
+          (s, a) => s + BigInt(cat === 'LOAN' ? (a.loanPrincipalCents || '0') : (a.balanceCents || '0')),
+          0n
+        );
+        return { category: cat, bankGroups, totalCents: catTotal };
+      })
+      .filter((g): g is CategoryGroupData => g !== null);
+  }, [visibleItems]);
+
+  /* ═══ Create handler (wizard) ═══ */
+
+  async function onWizardSubmit(data: WizardResult) {
+    setCreating(true);
+    setWizardError(null);
     try {
-      setCreating(true);
       const res = await fetch('/api/personal/accounts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({
-          name: validated.name,
-          type,
-          currency: 'EUR',
-          institution: validated.institution,
-          iban: validated.iban,
-          initialCents: validated.initialCents!.toString(),
+          name: data.name,
+          type: data.type,
+          currency: data.currency,
+          institution: data.institution,
+          iban: data.iban,
+          initialCents: data.initialCents,
+          bankCode: data.bankCode,
+          productCode: data.productCode,
+          interestRateBps: data.interestRateBps,
+          loanPrincipalCents: data.loanPrincipalCents,
+          loanDurationMonths: data.loanDurationMonths,
+          loanStartDate: data.loanStartDate,
         }),
       });
 
       const json = await safeJson(res);
       if (!res.ok) {
-        setFieldErrors((prev) => ({
-          ...prev,
-          form: getErrorFromJson(json) ?? 'Création impossible.',
-        }));
+        setWizardError(getErrorFromJson(json) ?? 'Création impossible.');
         return;
       }
 
       setOpen(false);
-      setName('');
-      setType('CURRENT');
-      setInitialEuros('0');
-      setInstitution('');
-      setIban('');
-      setFieldErrors({});
+      setWizardError(null);
       setSuccessMessage('Compte créé avec succès.');
-
       await load();
       emitWalletRefresh();
-    } catch (e) {
-      console.error(e);
-      setFieldErrors((prev) => ({ ...prev, form: 'Création impossible.' }));
+    } catch {
+      setWizardError('Création impossible.');
     } finally {
       setCreating(false);
     }
   }
 
+  /* ═══ Edit handlers ═══ */
+
   function openEditModal(account: AccountItem) {
     setEditingAccount(account);
     setEditName(account.name);
-    setEditType(account.type);
     setEditInitialEuros(centsToEUR(account.initialCents));
-    setEditInstitution(account.institution ?? '');
     setEditIban(account.iban ?? '');
+    setEditRatePct(account.interestRateBps ? (account.interestRateBps / 100).toFixed(2) : '');
     setEditErrors({});
     setSuccessMessage(null);
     setEditOpen(true);
@@ -311,16 +386,27 @@ export default function ComptesPage() {
     setEditErrors({});
     setSuccessMessage(null);
 
-    const validated = validateAccountForm({
-      name: editName,
-      initialEuros: editInitialEuros,
-      institution: editInstitution,
-      iban: editIban,
-    });
-    if (Object.keys(validated.errors).length > 0) {
-      setEditErrors(validated.errors);
+    const errors: EditFormErrors = {};
+    const name = editName.trim();
+    if (!name) errors.name = 'Nom requis.';
+    else if (name.length < 2) errors.name = 'Minimum 2 caractères.';
+
+    const initialCents = eurosToCentsBigInt(editInitialEuros);
+    if (initialCents === null) errors.initialEuros = 'Montant invalide.';
+    else if (initialCents < 0n) errors.initialEuros = 'Le solde initial doit être positif ou nul.';
+
+    const ibanRaw = editIban.trim().replace(/\s+/g, '');
+    const ibanUpper = ibanRaw.toUpperCase();
+    if (ibanRaw && (!ibanUpper.startsWith('FR') || ibanUpper.length < 15)) {
+      errors.iban = 'IBAN FR requis (au moins 15 caractères).';
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setEditErrors(errors);
       return;
     }
+
+    const rateBps = editRatePct ? Math.round(parseFloat(editRatePct) * 100) : null;
 
     try {
       setEditLoading(true);
@@ -329,11 +415,12 @@ export default function ComptesPage() {
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({
-          name: validated.name,
-          type: editType,
-          institution: validated.institution,
-          iban: validated.iban,
-          initialCents: validated.initialCents!.toString(),
+          name,
+          type: editingAccount.type,
+          institution: editingAccount.institution,
+          iban: ibanRaw ? ibanUpper : null,
+          initialCents: initialCents!.toString(),
+          interestRateBps: rateBps != null && Number.isFinite(rateBps) ? rateBps : null,
         }),
       });
 
@@ -345,10 +432,7 @@ export default function ComptesPage() {
 
       const json = await safeJson(res);
       if (!res.ok) {
-        setEditErrors((prev) => ({
-          ...prev,
-          form: getErrorFromJson(json) ?? 'Mise à jour impossible.',
-        }));
+        setEditErrors({ form: getErrorFromJson(json) ?? 'Mise à jour impossible.' });
         return;
       }
 
@@ -361,7 +445,39 @@ export default function ComptesPage() {
       emitWalletRefresh();
     } catch (e) {
       console.error(e);
-      setEditErrors((prev) => ({ ...prev, form: 'Mise à jour impossible.' }));
+      setEditErrors({ form: 'Mise à jour impossible.' });
+    } finally {
+      setEditLoading(false);
+    }
+  }
+
+  async function onToggleHidden() {
+    if (!editingAccount) return;
+    try {
+      setEditLoading(true);
+      const res = await fetch(`/api/personal/accounts/${encodeURIComponent(editingAccount.id)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          name: editingAccount.name,
+          type: editingAccount.type,
+          initialCents: editingAccount.initialCents,
+          hidden: !editingAccount.hidden,
+        }),
+      });
+      if (!res.ok) {
+        const json = await safeJson(res);
+        setEditErrors({ form: getErrorFromJson(json) ?? 'Erreur.' });
+        return;
+      }
+      setEditOpen(false);
+      setEditingAccount(null);
+      setSuccessMessage(editingAccount.hidden ? 'Compte affiché.' : 'Compte masqué.');
+      await load();
+      emitWalletRefresh();
+    } catch {
+      setEditErrors({ form: 'Erreur.' });
     } finally {
       setEditLoading(false);
     }
@@ -389,10 +505,7 @@ export default function ComptesPage() {
 
       const json = await safeJson(res);
       if (!res.ok) {
-        setEditErrors((prev) => ({
-          ...prev,
-          form: getErrorFromJson(json) ?? 'Suppression impossible.',
-        }));
+        setEditErrors({ form: getErrorFromJson(json) ?? 'Suppression impossible.' });
         return;
       }
 
@@ -405,7 +518,7 @@ export default function ComptesPage() {
       emitWalletRefresh();
     } catch (e) {
       console.error(e);
-      setEditErrors((prev) => ({ ...prev, form: 'Suppression impossible.' }));
+      setEditErrors({ form: 'Suppression impossible.' });
     } finally {
       setDeleteLoading(false);
     }
@@ -413,40 +526,36 @@ export default function ComptesPage() {
 
   return (
     <PageContainer className="space-y-6">
-      <PageHeader
-        title="Comptes"
-        subtitle={
-          <>
-            {"Gère tes comptes et soldes, point d'entrée unique avant les transactions."}
-            <span className="block text-sm text-[var(--text-faint)]">
-              {'Solde total (calculé) : '}{loading ? '—' : `${centsToEUR(totalCents.toString())} €`}
-            </span>
-          </>
-        }
-        actions={
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              onClick={() => {
-                setImportFile(null);
-                setImportError(null);
-                setOpenImport(true);
-              }}
-            >
-              Importer CSV
+      {/* ─── Header: Title + Actions ─── */}
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <h1 style={{ color: 'var(--text)', fontSize: 28, fontWeight: 700 }}>Mes Comptes</h1>
+        <div className="flex gap-2">
+          {hasHiddenAccounts ? (
+            <Button variant="outline" onClick={() => setShowHidden((v) => !v)}>
+              {showHidden ? 'Masquer les cachés' : 'Voir les cachés'}
             </Button>
-            <Button
-              onClick={() => {
-                setFieldErrors({});
-                setSuccessMessage(null);
-                setOpen(true);
-              }}
-            >
-              Créer un compte
-            </Button>
-          </div>
-        }
-      />
+          ) : null}
+          <Button
+            variant="outline"
+            onClick={() => {
+              setImportFile(null);
+              setImportError(null);
+              setOpenImport(true);
+            }}
+          >
+            Importer CSV
+          </Button>
+          <Button
+            onClick={() => {
+              setWizardError(null);
+              setSuccessMessage(null);
+              setOpen(true);
+            }}
+          >
+            Créer un compte
+          </Button>
+        </div>
+      </div>
 
       {error ? (
         <Card className="p-5">
@@ -455,186 +564,161 @@ export default function ComptesPage() {
         </Card>
       ) : null}
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {loading ? (
-          <Card className="p-5">
-            <p className="text-sm text-[var(--text-secondary)]">Chargement…</p>
+      {/* ─── KPI Cards (always computed on ALL items, including hidden) ─── */}
+      <div className={`grid grid-cols-1 gap-4 ${hasLoans ? 'md:grid-cols-2 lg:grid-cols-4' : 'md:grid-cols-3'}`}>
+        <Card className="p-4 flex flex-col gap-1">
+          <span className="text-sm font-medium text-[var(--text-faint)]">Patrimoine net</span>
+          {loading ? (
+            <div className="h-8 w-28 rounded-lg bg-[var(--surface-2)] animate-skeleton-pulse" />
+          ) : (
+            <span className="text-2xl font-extrabold" style={{ color: 'var(--shell-accent)' }}>
+              {fmtKpi(totalCents.toString())}
+            </span>
+          )}
+        </Card>
+        <Card className="p-4 flex flex-col gap-1">
+          <span className="text-sm font-medium text-[var(--text-faint)]">Variation 30 jours</span>
+          {loading ? (
+            <div className="h-8 w-28 rounded-lg bg-[var(--surface-2)] animate-skeleton-pulse" />
+          ) : (
+            <span
+              className="text-2xl font-extrabold"
+              style={{ color: deltaPositive ? 'var(--success)' : 'var(--danger)' }}
+            >
+              {deltaPositive ? '+' : ''}{fmtKpi(totalDelta30.toString())}
+            </span>
+          )}
+        </Card>
+        <Card className="p-4 flex flex-col gap-1">
+          <span className="text-sm font-medium text-[var(--text-faint)]">Comptes</span>
+          {loading ? (
+            <div className="h-8 w-28 rounded-lg bg-[var(--surface-2)] animate-skeleton-pulse" />
+          ) : (
+            <>
+              <span className="text-2xl font-extrabold" style={{ color: 'var(--text)' }}>
+                {items.length} {items.length > 1 ? 'comptes' : 'compte'}
+              </span>
+              <span className="text-xs text-[var(--text-faint)]">
+                {CATEGORY_ORDER
+                  .filter((c) => categoryCounts[c] > 0)
+                  .map((c) => `${categoryCounts[c]} ${CATEGORY_LABEL_SHORT[c]}`)
+                  .join(' · ')}
+              </span>
+            </>
+          )}
+        </Card>
+        {hasLoans ? (
+          <Card className="p-4 flex flex-col gap-1">
+            <span className="text-sm font-medium text-[var(--text-faint)]">Encours prêts</span>
+            {loading ? (
+              <div className="h-8 w-28 rounded-lg bg-[var(--surface-2)] animate-skeleton-pulse" />
+            ) : (
+              <>
+                <span className="text-2xl font-extrabold" style={{ color: 'var(--danger)' }}>
+                  {fmtKpi(loanEncoursCents.toString())}
+                </span>
+                <span className="text-xs text-[var(--text-faint)]">
+                  {loanItems.length} {loanItems.length > 1 ? 'prêts' : 'prêt'}
+                </span>
+              </>
+            )}
           </Card>
-        ) : items.length === 0 ? (
-          <Card className="p-5">
-            <p className="text-sm text-[var(--text-secondary)]">
-              Aucun compte. Crée ton premier compte bancaire.
-            </p>
-            <div className="mt-3">
+        ) : null}
+      </div>
+
+      {/* ─── Accounts grouped by category (visible items only) ─── */}
+      {loading ? (
+        <Card className="p-5">
+          <p className="text-sm text-[var(--text-secondary)]">Chargement…</p>
+        </Card>
+      ) : items.length === 0 ? (
+        <Card className="p-5">
+          <p className="text-sm text-[var(--text-secondary)]">
+            Aucun compte. Crée ton premier compte bancaire.
+          </p>
+          <div className="mt-3">
             <Button
               onClick={() => {
-                setFieldErrors({});
+                setWizardError(null);
                 setSuccessMessage(null);
                 setOpen(true);
               }}
             >
               Créer un compte
             </Button>
-            </div>
-          </Card>
-        ) : (
-          items.map((a) => {
-            const deltaBig = BigInt(a.delta30Cents || '0');
-            const deltaTxt = `${centsToEUR(deltaBig.toString())} €`;
-            return (
-              <Card
-                key={a.id}
-                role="button"
-                tabIndex={0}
-                onClick={(e) => {
-                  const target = e.target as HTMLElement | null;
-                  if (target?.closest('button,a,input,select,textarea')) return;
-                  router.push(`/app/personal/comptes/${a.id}`);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key !== 'Enter' && e.key !== ' ') return;
-                  const target = e.target as HTMLElement | null;
-                  if (target?.closest('button,a,input,select,textarea')) return;
-                  e.preventDefault();
-                  router.push(`/app/personal/comptes/${a.id}`);
-                }}
-                className="p-5 text-left hover:bg-[var(--surface-hover)]"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="truncate text-base font-semibold">{a.name}</p>
-                    <p className="mt-1 text-xs text-[var(--text-secondary)]">
-                      {typeLabel(a.type)} · {a.currency}
-                      {a.institution ? ` · ${a.institution}` : ''}
-                    </p>
-                  </div>
-
-                  <div className="flex flex-col items-end gap-2">
-                    <div className="text-right">
-                      <p className="text-base font-semibold">{centsToEUR(a.balanceCents)} €</p>
-                      <p
-                        className={[
-                          'mt-1 text-xs font-semibold',
-                          deltaBig >= 0n ? 'text-[var(--success)]' : 'text-[var(--danger)]',
-                        ].join(' ')}
-                      >
-                        {deltaBig >= 0n ? '+' : ''}
-                        {deltaTxt} · 30j
-                      </p>
-                    </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openEditModal(a);
-                      }}
-                    >
-                      Modifier
-                    </Button>
-                  </div>
+          </div>
+        </Card>
+      ) : (
+        <div className="flex flex-col gap-5">
+          {categoryGroups.map(({ category: cat, bankGroups, totalCents: groupTotal }) => (
+            <section
+              key={cat}
+              className="rounded-2xl bg-[var(--shell-accent)] p-5 overflow-hidden"
+            >
+              {/* Category header */}
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <span className="text-xl">{CATEGORY_ICON[cat]}</span>
+                  <span className="text-sm font-medium text-white/80">{CATEGORY_LABEL[cat]}</span>
                 </div>
+                <Link
+                  href={`/app/personal/comptes/type/${CATEGORY_TYPE_KEY[cat]}`}
+                  className="flex items-center gap-2 rounded-xl bg-white px-3 py-2 text-sm font-semibold text-[var(--text)] hover:opacity-90 transition-opacity"
+                  style={{ fontFamily: 'var(--font-barlow), sans-serif' }}
+                >
+                  Détails
+                  <span aria-hidden>→</span>
+                </Link>
+              </div>
 
-                <div className="mt-4 flex items-center justify-between text-xs text-[var(--text-secondary)]">
-                  <span>Ouvrir le détail →</span>
-                  <span className="underline underline-offset-4">
-                    <Link
-                      href="/app/personal/transactions"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      Transactions
-                    </Link>
-                  </span>
-                </div>
-              </Card>
-            );
-          })
-        )}
-      </div>
+              {/* Total */}
+              <p className="text-3xl font-extrabold text-white mb-5">
+                {fmtKpi(groupTotal.toString())}
+              </p>
 
+              {/* Bank groups inside */}
+              <div className="flex flex-col gap-4">
+                {bankGroups.map((bg) => (
+                  <div key={bg.bankKey} className="rounded-xl bg-white/10 p-4 backdrop-blur-sm">
+                    <BankGroup
+                      bankName={bg.bankName}
+                      bankWebsiteUrl={bg.bankWebsiteUrl}
+                      totalCents={bg.totalCents}
+                      accounts={bg.accounts}
+                      onEdit={openEditModal}
+                      onNavigate={(id) => router.push(`/app/personal/comptes/${id}`)}
+                    />
+                  </div>
+                ))}
+              </div>
+            </section>
+          ))}
+        </div>
+      )}
+
+      {/* ─── Create Modal (Wizard) ─── */}
       <Modal
         open={open}
         onCloseAction={() => {
           if (creating) return;
           setOpen(false);
-          setFieldErrors({});
+          setWizardError(null);
         }}
-        title="Créer un compte bancaire"
-        description="Ajoute un compte (courant, épargne, invest, cash). Le solde est calculé avec les transactions."
+        title="Créer un compte"
+        description="Choisis une catégorie pour commencer."
       >
-        <form onSubmit={onCreate} className="space-y-4">
-          {fieldErrors.form ? (
-            <div className="rounded-2xl border border-[var(--danger-border)] bg-[var(--danger-bg)] px-4 py-3 text-sm text-[var(--danger)]">
-              {fieldErrors.form}
-            </div>
-          ) : null}
-          <Input
-            label="Nom du compte *"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            error={fieldErrors.name}
-            placeholder="Ex: Courant Revolut"
-            data-autofocus="true"
-          />
-
-          <Select
-            label="Type"
-            value={type}
-            onChange={(e) => {
-              const v = e.target.value;
-              if (isAccountType(v)) setType(v);
-            }}
-            disabled={creating}
-          >
-            <option value="CURRENT">Courant</option>
-            <option value="SAVINGS">Épargne</option>
-            <option value="INVEST">Invest</option>
-            <option value="CASH">Cash</option>
-          </Select>
-
-          <Input
-            label="Solde initial (€)"
-            value={initialEuros}
-            onChange={(e) => setInitialEuros(e.target.value)}
-            placeholder="0.00"
-            error={fieldErrors.initialEuros}
-          />
-
-          <Input
-            label="Banque / institution"
-            value={institution}
-            onChange={(e) => setInstitution(e.target.value)}
-            placeholder="Ex: BNP, Revolut..."
-            error={fieldErrors.institution}
-          />
-
-          <Input
-            label="IBAN (optionnel)"
-            value={iban}
-            onChange={(e) => setIban(e.target.value)}
-            placeholder="FR76 ..."
-            error={fieldErrors.iban}
-          />
-
-          <div className="flex justify-end gap-2 pt-2">
-            <Button
-              variant="outline"
-              type="button"
-              onClick={() => {
-                setOpen(false);
-                setFieldErrors({});
-              }}
-              disabled={creating}
-            >
-              Annuler
-            </Button>
-            <Button type="submit" disabled={creating}>
-              {creating ? 'Création…' : 'Créer'}
-            </Button>
-          </div>
-        </form>
+        <CreateAccountWizard
+          onSubmit={onWizardSubmit}
+          onCancel={() => {
+            setOpen(false);
+            setWizardError(null);
+          }}
+          submitting={creating}
+          error={wizardError}
+        />
       </Modal>
 
+      {/* ─── Edit Modal ─── */}
       <Modal
         open={editOpen}
         onCloseAction={() => {
@@ -652,6 +736,7 @@ export default function ComptesPage() {
               {editErrors.form}
             </div>
           ) : null}
+
           <Input
             label="Nom du compte *"
             value={editName}
@@ -661,35 +746,40 @@ export default function ComptesPage() {
             data-autofocus="true"
           />
 
-          <Select
-            label="Type"
-            value={editType}
-            onChange={(e) => {
-              const v = e.target.value;
-              if (isAccountType(v)) setEditType(v);
-            }}
-            disabled={editLoading || deleteLoading}
-          >
-            <option value="CURRENT">Courant</option>
-            <option value="SAVINGS">Épargne</option>
-            <option value="INVEST">Invest</option>
-            <option value="CASH">Cash</option>
-          </Select>
+          {/* Type — read-only */}
+          <div className="flex w-full flex-col gap-1">
+            <span className="text-sm font-medium text-[var(--text-secondary)]">Type</span>
+            <div className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-sm text-[var(--text-faint)]">
+              {TYPE_DISPLAY[editingAccount?.type ?? 'CURRENT']}
+            </div>
+          </div>
+
+          {/* Institution — read-only */}
+          {editingAccount?.institution ? (
+            <div className="flex w-full flex-col gap-1">
+              <span className="text-sm font-medium text-[var(--text-secondary)]">Banque</span>
+              <div className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-sm text-[var(--text-faint)]">
+                {editingAccount.institution}
+              </div>
+            </div>
+          ) : null}
+
+          {/* Interest rate — editable for non-checking */}
+          {editingAccount && editingAccount.type !== 'CURRENT' && editingAccount.type !== 'CASH' ? (
+            <Input
+              label="Taux d'intérêt annuel (%)"
+              value={editRatePct}
+              onChange={(e) => setEditRatePct(e.target.value)}
+              placeholder="1.50"
+            />
+          ) : null}
 
           <Input
-            label="Solde initial (€)"
+            label={editingAccount?.type === 'LOAN' ? 'Capital restant dû (€)' : 'Solde initial (€)'}
             value={editInitialEuros}
             onChange={(e) => setEditInitialEuros(e.target.value)}
             placeholder="0.00"
             error={editErrors.initialEuros}
-          />
-
-          <Input
-            label="Banque / institution"
-            value={editInstitution}
-            onChange={(e) => setEditInstitution(e.target.value)}
-            placeholder="Ex: BNP, Revolut..."
-            error={editErrors.institution}
           />
 
           <Input
@@ -701,14 +791,24 @@ export default function ComptesPage() {
           />
 
           <div className="flex flex-wrap items-center justify-between gap-2 pt-2">
-            <Button
-              variant="danger"
-              type="button"
-              onClick={onDeleteAccount}
-              disabled={editLoading || deleteLoading}
-            >
-              {deleteLoading ? 'Suppression…' : 'Supprimer'}
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                variant="danger"
+                type="button"
+                onClick={onDeleteAccount}
+                disabled={editLoading || deleteLoading}
+              >
+                {deleteLoading ? 'Suppression…' : 'Supprimer'}
+              </Button>
+              <Button
+                variant="outline"
+                type="button"
+                onClick={onToggleHidden}
+                disabled={editLoading || deleteLoading}
+              >
+                {editingAccount?.hidden ? 'Afficher' : 'Masquer'}
+              </Button>
+            </div>
             <div className="flex gap-2">
               <Button
                 variant="outline"

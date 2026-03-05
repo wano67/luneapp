@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import dynamic from 'next/dynamic';
 import { usePathname, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -10,8 +11,14 @@ import { PageContainer } from '@/components/layouts/PageContainer';
 import { PageHeader } from '@/components/layouts/PageHeader';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import { absCents, formatCents, formatCentsToEuroInput, parseEuroToCents } from '@/lib/money';
+import { fmtKpi } from '@/lib/format';
 import { emitWalletRefresh } from '@/lib/personalEvents';
 import { TransactionFormModal } from './TransactionFormModal';
+
+const CategoryPieChart = dynamic(
+  () => import('@/components/ui/charts/CategoryPieChart').then((m) => ({ default: m.CategoryPieChart })),
+  { ssr: false }
+);
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -39,6 +46,15 @@ type TxUpsertPayload = {
   label: string;
   note: string | null;
   categoryId?: string | null;
+};
+
+type Analytics = {
+  totalIncomeCents: string;
+  totalExpenseCents: string;
+  txnCount: number;
+  topExpenseCategories: { name: string; totalCents: string; count: number }[];
+  topExpenses: { id: string; label: string; amountCents: string; date: string; currency: string; accountName: string }[];
+  perAccount: { accountId: string; accountName: string; count: number; totalCents: string }[];
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -100,6 +116,18 @@ function buildAmountCents(amountEuro: string, type: 'INCOME' | 'EXPENSE' | 'TRAN
   return amount.toString();
 }
 
+function periodLabel(from: string, to: string): string {
+  if (!from && !to) return 'Ce mois-ci';
+  if (from && to) return `${formatDateFR(from + 'T00:00:00')} — ${formatDateFR(to + 'T00:00:00')}`;
+  if (from) return `Depuis le ${formatDateFR(from + 'T00:00:00')}`;
+  return `Jusqu'au ${formatDateFR(to + 'T00:00:00')}`;
+}
+
+const CHART_COLORS = [
+  '#6366f1', '#ec4899', '#f59e0b', '#10b981', '#3b82f6',
+  '#8b5cf6', '#ef4444', '#14b8a6',
+];
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function PersoTransactionsPage() {
@@ -111,12 +139,14 @@ export default function PersoTransactionsPage() {
   const [categories, setCategories] = useState<CategoryItem[]>([]);
   const [items, setItems] = useState<TxItem[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [analytics, setAnalytics] = useState<Analytics | null>(null);
 
   // UI state
   const [loadingAccounts, setLoadingAccounts] = useState(true);
   const [loadingCategories, setLoadingCategories] = useState(true);
   const [loadingList, setLoadingList] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [loadingAnalytics, setLoadingAnalytics] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   // Filters
@@ -167,11 +197,6 @@ export default function PersoTransactionsPage() {
     router.push(`/login?from=${encodeURIComponent(pathname || '/app/personal/transactions')}`);
   }
 
-  const accountLabel = useMemo(() => {
-    if (!accountId) return 'Tous les comptes';
-    return accounts.find((a) => a.id === accountId)?.name ?? 'Compte';
-  }, [accountId, accounts]);
-
   const amountCentsRaw = useMemo(() => {
     const c = parseEuroToCents(fAmountEuro);
     return Number.isFinite(c) ? String(c) : null;
@@ -203,6 +228,16 @@ export default function PersoTransactionsPage() {
     () => eRequired.account && eRequired.type && eRequired.date && eRequired.amount && eRequired.label,
     [eRequired],
   );
+
+  // Pie chart data
+  const pieData = useMemo(() => {
+    if (!analytics?.topExpenseCategories.length) return [];
+    return analytics.topExpenseCategories.map((c, i) => ({
+      name: c.name,
+      value: Math.abs(Number(c.totalCents)) / 100,
+      color: CHART_COLORS[i % CHART_COLORS.length],
+    }));
+  }, [analytics]);
 
   // ─── Data loaders ───────────────────────────────────────────────────────────
 
@@ -262,6 +297,22 @@ export default function PersoTransactionsPage() {
     }
   }
 
+  async function fetchAnalytics() {
+    setLoadingAnalytics(true);
+    try {
+      const query = buildQuery({
+        from: from ? toISOFromDateOnly(from) : undefined,
+        to: to ? toISOFromDateOnly(to) : undefined,
+      });
+      const res = await fetchJson<Analytics>(`/api/personal/transactions/analytics${query}`);
+      if (res.ok && res.data) setAnalytics(res.data);
+    } catch {
+      // Analytics optional
+    } finally {
+      setLoadingAnalytics(false);
+    }
+  }
+
   // ─── Effects ────────────────────────────────────────────────────────────────
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -270,6 +321,7 @@ export default function PersoTransactionsPage() {
   useEffect(() => {
     if (loadingAccounts) return;
     fetchTransactions({ reset: true });
+    fetchAnalytics();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accountId, type, from, to, loadingAccounts]);
 
@@ -328,7 +380,7 @@ export default function PersoTransactionsPage() {
       });
       if (!res.ok) { if (res.status === 401) return handle401(); setCreateError(res.error ?? 'Création impossible.'); return; }
       setOpenAdd(false);
-      await fetchTransactions({ reset: true });
+      await Promise.all([fetchTransactions({ reset: true }), fetchAnalytics()]);
       emitWalletRefresh();
     } catch (e) {
       setCreateError(getErrorMessage(e));
@@ -369,7 +421,7 @@ export default function PersoTransactionsPage() {
       });
       if (!res.ok) { if (res.status === 401) return handle401(); setEditError(res.error ?? 'Modification impossible.'); return; }
       setOpenEdit(false); setEditing(null);
-      await fetchTransactions({ reset: true });
+      await Promise.all([fetchTransactions({ reset: true }), fetchAnalytics()]);
       emitWalletRefresh();
     } catch (e) {
       setEditError(getErrorMessage(e));
@@ -388,7 +440,7 @@ export default function PersoTransactionsPage() {
       });
       if (!res.ok) { if (res.status === 401) return handle401(); throw new Error(res.error ?? 'Suppression impossible'); }
       clearSelection();
-      await fetchTransactions({ reset: true });
+      await Promise.all([fetchTransactions({ reset: true }), fetchAnalytics()]);
       emitWalletRefresh();
     } catch (e) {
       setError(getErrorMessage(e));
@@ -399,12 +451,14 @@ export default function PersoTransactionsPage() {
 
   // ─── Render ─────────────────────────────────────────────────────────────────
 
+  const periodText = periodLabel(from, to);
+
   return (
     <PageContainer>
-      <div className="space-y-4">
+      <div className="space-y-5">
         <PageHeader
           title="Transactions"
-          subtitle="Point unique pour filtrer, ajouter et nettoyer tes mouvements."
+          subtitle="Analyse tes dépenses et revenus en un coup d'oeil."
           actions={
             <>
               <Button variant="outline" onClick={resetFilters} disabled={loadingAccounts || loadingList}>
@@ -474,8 +528,166 @@ export default function PersoTransactionsPage() {
           </div>
         </Card>
 
-        {/* Error */}
         {error ? <Card><div className="p-4 text-sm text-[var(--danger)]">{error}</div></Card> : null}
+
+        {/* ═══ Analytics Dashboard ═══ */}
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+
+          {/* KPIs Row */}
+          <section className="lg:col-span-3 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {/* Dépenses */}
+            <div className="rounded-2xl bg-[var(--danger)] p-5">
+              <p className="text-sm font-medium text-white/80">Dépenses</p>
+              {loadingAnalytics ? (
+                <div className="mt-2 h-8 w-28 rounded-lg bg-white/20 animate-skeleton-pulse" />
+              ) : (
+                <p className="mt-1 text-3xl font-extrabold text-white">
+                  {fmtKpi(analytics?.totalExpenseCents ?? '0')}
+                </p>
+              )}
+              <p className="mt-1 text-xs text-white/60">{periodText}</p>
+            </div>
+
+            {/* Revenus */}
+            <div className="rounded-2xl bg-[var(--success)] p-5">
+              <p className="text-sm font-medium text-white/80">Revenus</p>
+              {loadingAnalytics ? (
+                <div className="mt-2 h-8 w-28 rounded-lg bg-white/20 animate-skeleton-pulse" />
+              ) : (
+                <p className="mt-1 text-3xl font-extrabold text-white">
+                  {fmtKpi(analytics?.totalIncomeCents ?? '0')}
+                </p>
+              )}
+              <p className="mt-1 text-xs text-white/60">{periodText}</p>
+            </div>
+
+            {/* Solde net */}
+            <div className="rounded-2xl bg-[var(--shell-accent)] p-5">
+              <p className="text-sm font-medium text-white/80">Solde net</p>
+              {loadingAnalytics ? (
+                <div className="mt-2 h-8 w-28 rounded-lg bg-white/20 animate-skeleton-pulse" />
+              ) : (
+                <p className="mt-1 text-3xl font-extrabold text-white">
+                  {fmtKpi(
+                    String(
+                      BigInt(analytics?.totalIncomeCents ?? '0') +
+                      BigInt(analytics?.totalExpenseCents ?? '0')
+                    )
+                  )}
+                </p>
+              )}
+              <p className="mt-1 text-xs text-white/60">{periodText}</p>
+            </div>
+
+            {/* Nombre de transactions */}
+            <div className="rounded-2xl bg-[var(--shell-accent)] p-5">
+              <p className="text-sm font-medium text-white/80">Transactions</p>
+              {loadingAnalytics ? (
+                <div className="mt-2 h-8 w-28 rounded-lg bg-white/20 animate-skeleton-pulse" />
+              ) : (
+                <p className="mt-1 text-3xl font-extrabold text-white">
+                  {analytics?.txnCount ?? 0}
+                </p>
+              )}
+              <p className="mt-1 text-xs text-white/60">{periodText}</p>
+            </div>
+          </section>
+
+          {/* Allocation des dépenses (Pie Chart) */}
+          <section className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5">
+            <p className="text-sm font-semibold text-[var(--text)]">Allocation des dépenses</p>
+            <p className="mt-0.5 text-xs text-[var(--text-faint)]">Par catégorie — {periodText}</p>
+            {loadingAnalytics ? (
+              <div className="mt-4 flex items-center justify-center" style={{ height: 260 }}>
+                <div className="h-32 w-32 rounded-full bg-[var(--surface-2)] animate-skeleton-pulse" />
+              </div>
+            ) : pieData.length > 0 ? (
+              <div className="mt-3">
+                <CategoryPieChart data={pieData} height={260} />
+              </div>
+            ) : (
+              <div className="mt-4 flex items-center justify-center text-sm text-[var(--text-faint)]" style={{ height: 260 }}>
+                Aucune catégorie de dépense
+              </div>
+            )}
+          </section>
+
+          {/* Top dépenses */}
+          <section className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5">
+            <p className="text-sm font-semibold text-[var(--text)]">Plus grosses dépenses</p>
+            <p className="mt-0.5 text-xs text-[var(--text-faint)]">{periodText}</p>
+            {loadingAnalytics ? (
+              <div className="mt-4 space-y-3">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <div key={i} className="h-10 rounded-xl bg-[var(--surface-2)] animate-skeleton-pulse" />
+                ))}
+              </div>
+            ) : analytics?.topExpenses.length ? (
+              <div className="mt-4 space-y-2">
+                {analytics.topExpenses.map((t, i) => (
+                  <div key={t.id} className="flex items-center gap-3 rounded-xl bg-[var(--surface-2)]/50 px-3 py-2.5">
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--danger)]/10 text-xs font-bold text-[var(--danger)]">
+                      {i + 1}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium text-[var(--text)]">{t.label}</p>
+                      <p className="text-xs text-[var(--text-faint)]">{t.accountName} · {formatDateFR(t.date)}</p>
+                    </div>
+                    <span className="shrink-0 text-sm font-semibold text-[var(--danger)]">
+                      {formatCents(absCents(t.amountCents), t.currency)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="mt-4 flex items-center justify-center text-sm text-[var(--text-faint)]" style={{ height: 200 }}>
+                Aucune dépense
+              </div>
+            )}
+          </section>
+
+          {/* Transactions par compte */}
+          <section className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5">
+            <p className="text-sm font-semibold text-[var(--text)]">Par compte</p>
+            <p className="mt-0.5 text-xs text-[var(--text-faint)]">Nombre de transactions — {periodText}</p>
+            {loadingAnalytics ? (
+              <div className="mt-4 space-y-3">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="h-10 rounded-xl bg-[var(--surface-2)] animate-skeleton-pulse" />
+                ))}
+              </div>
+            ) : analytics?.perAccount.length ? (
+              <div className="mt-4 space-y-2">
+                {analytics.perAccount
+                  .sort((a, b) => b.count - a.count)
+                  .map((pa) => {
+                    const maxCount = Math.max(...analytics.perAccount.map((x) => x.count));
+                    const pct = maxCount > 0 ? (pa.count / maxCount) * 100 : 0;
+                    return (
+                      <div key={pa.accountId} className="space-y-1">
+                        <div className="flex items-center justify-between">
+                          <p className="truncate text-sm text-[var(--text)]">{pa.accountName}</p>
+                          <span className="shrink-0 text-xs font-medium text-[var(--text-faint)]">
+                            {pa.count} txn · {fmtKpi(pa.totalCents)}
+                          </span>
+                        </div>
+                        <div className="h-2 w-full overflow-hidden rounded-full bg-[var(--surface-2)]">
+                          <div
+                            className="h-full rounded-full bg-[var(--shell-accent)] transition-all"
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            ) : (
+              <div className="mt-4 flex items-center justify-center text-sm text-[var(--text-faint)]" style={{ height: 200 }}>
+                Aucune donnée
+              </div>
+            )}
+          </section>
+        </div>
 
         {/* Bulk selection */}
         {selectedCount > 0 ? (
@@ -493,20 +705,33 @@ export default function PersoTransactionsPage() {
           </div>
         ) : null}
 
-        {/* List */}
-        <Card>
-          <div className="border-b border-[var(--border)] p-4">
+        {/* ═══ Transaction List ═══ */}
+        <section className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] overflow-hidden">
+          <div className="border-b border-[var(--border)] px-5 py-4">
             <div className="flex items-center justify-between">
-              <p className="text-sm text-[var(--text-faint)]">{loadingList ? 'Chargement…' : `${items.length} transaction(s)`}</p>
-              <p className="text-xs text-[var(--text-muted)]">{accountLabel}</p>
+              <p className="text-sm font-semibold text-[var(--text)]">
+                {loadingList ? 'Chargement…' : `${items.length} transaction(s)`}
+              </p>
+              <p className="text-xs text-[var(--text-faint)]">{periodText}</p>
             </div>
           </div>
 
           {loadingList ? (
-            <div className="p-4 text-sm text-[var(--text-faint)]">Chargement des transactions…</div>
+            <div className="space-y-0 divide-y divide-[var(--border)]">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="flex items-center gap-4 px-5 py-4">
+                  <div className="h-5 w-5 rounded bg-[var(--surface-2)] animate-skeleton-pulse" />
+                  <div className="flex-1 space-y-2">
+                    <div className="h-4 w-40 rounded bg-[var(--surface-2)] animate-skeleton-pulse" />
+                    <div className="h-3 w-24 rounded bg-[var(--surface-2)] animate-skeleton-pulse" />
+                  </div>
+                  <div className="h-4 w-20 rounded bg-[var(--surface-2)] animate-skeleton-pulse" />
+                </div>
+              ))}
+            </div>
           ) : items.length === 0 ? (
             <div className="p-8">
-              <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6 text-center">
+              <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)]/30 p-6 text-center">
                 <p className="text-sm font-medium text-[var(--text)]">Aucune transaction</p>
                 <p className="mt-1 text-sm text-[var(--text-faint)]">
                   Ajoute ta première transaction pour commencer à suivre tes finances.
@@ -521,7 +746,7 @@ export default function PersoTransactionsPage() {
               {items.map((t) => {
                 const neg = isNegCents(t.amountCents);
                 return (
-                  <div key={t.id} className="group flex flex-col gap-2 p-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div key={t.id} className="group flex flex-col gap-2 px-5 py-3.5 sm:flex-row sm:items-center sm:justify-between hover:bg-[var(--surface-2)]/30 transition-colors">
                     <div className="flex items-start gap-3">
                       <input
                         type="checkbox" checked={selectedIds.has(t.id)} onChange={() => toggleSelected(t.id)}
@@ -538,12 +763,9 @@ export default function PersoTransactionsPage() {
                               {t.category.name}
                             </span>
                           ) : null}
-                          <span className="rounded-full border border-[var(--border)] px-2 py-0.5 text-[11px] text-[var(--text-faint)]">
-                            {t.type}
-                          </span>
                         </div>
                         <p className="text-xs text-[var(--text-muted)]">
-                          {formatDateFR(t.date)}{t.note ? ` • ${t.note}` : ''}
+                          {formatDateFR(t.date)}{t.note ? ` · ${t.note}` : ''}
                         </p>
                       </div>
                     </div>
@@ -552,8 +774,8 @@ export default function PersoTransactionsPage() {
                         {neg ? '-' : '+'}{formatCents(absCents(t.amountCents), t.currency)}
                       </p>
                       <div className="flex gap-2 transition sm:opacity-0 sm:group-hover:opacity-100">
-                        <Button variant="outline" onClick={() => openEditModal(t)} className="h-10 rounded-2xl px-4">Modifier</Button>
-                        <Button variant="outline" onClick={() => deleteMany([t.id])} className="h-10 rounded-2xl px-4">Supprimer</Button>
+                        <Button variant="outline" onClick={() => openEditModal(t)} className="h-9 rounded-xl px-3 text-xs">Modifier</Button>
+                        <Button variant="outline" onClick={() => deleteMany([t.id])} className="h-9 rounded-xl px-3 text-xs">Supprimer</Button>
                       </div>
                     </div>
                   </div>
@@ -562,7 +784,7 @@ export default function PersoTransactionsPage() {
             </div>
           )}
 
-          <div className="border-t border-[var(--border)] p-4">
+          <div className="border-t border-[var(--border)] px-5 py-4">
             <div className="flex items-center justify-between">
               <p className="text-xs text-[var(--text-muted)]">{nextCursor ? 'Plus de résultats disponibles' : 'Fin de liste'}</p>
               <Button
@@ -574,7 +796,7 @@ export default function PersoTransactionsPage() {
               </Button>
             </div>
           </div>
-        </Card>
+        </section>
 
         {/* Create modal */}
         <TransactionFormModal

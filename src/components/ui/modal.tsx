@@ -1,7 +1,13 @@
 'use client';
 
-import React, { useEffect, useId, useRef } from 'react';
+import React, { useEffect, useId, useRef, useSyncExternalStore } from 'react';
+import { createPortal } from 'react-dom';
 import { useBodyScrollLock } from '@/lib/scrollLock';
+
+const emptySubscribe = () => () => {};
+function useIsMounted() {
+  return useSyncExternalStore(emptySubscribe, () => true, () => false);
+}
 
 type ModalSize = 'md' | 'lg' | 'xl' | 'full';
 
@@ -44,6 +50,7 @@ export function Modal({ open, onCloseAction, title, description, size = 'md', ch
   const panelRef = useRef<HTMLDivElement | null>(null);
   const lastActiveRef = useRef<HTMLElement | null>(null);
   const closeRef = useRef<() => void>(() => {});
+  const mounted = useIsMounted();
 
   useEffect(() => {
     closeRef.current = onCloseAction;
@@ -129,7 +136,7 @@ export function Modal({ open, onCloseAction, title, description, size = 'md', ch
     };
   }, [open]);
 
-  if (!open) return null;
+  if (!open || !mounted) return null;
 
   const handleOverlayPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (e.target !== e.currentTarget) return;
@@ -173,28 +180,27 @@ export function Modal({ open, onCloseAction, title, description, size = 'md', ch
     }
   };
 
-  return (
+  return createPortal(
     <div
       ref={containerRef}
-      className="fixed inset-0 z-[70]"
+      className="fixed inset-0 z-[70] flex items-center justify-center"
       role="dialog"
       aria-modal="true"
       aria-labelledby={titleId}
       aria-describedby={descId}
       onKeyDownCapture={handleKeyDown}
+      onPointerDown={handleOverlayPointerDown}
     >
       {/* overlay */}
       <div
         role="presentation"
         aria-hidden="true"
-        className="absolute inset-0 bg-black/55 backdrop-blur-sm"
-        onPointerDown={handleOverlayPointerDown}
-        onClick={handleOverlayPointerDown}
+        className="absolute inset-0 bg-black/55 backdrop-blur-sm pointer-events-none"
       />
 
       {/* panel */}
       <div
-        className={`absolute left-1/2 top-1/2 w-[92vw] ${SIZE_CLASS[size]} -translate-x-1/2 -translate-y-1/2 px-2`}
+        className={`relative w-[92vw] ${SIZE_CLASS[size]} px-2`}
         style={{
           paddingTop: 'env(safe-area-inset-top, 0px)',
           paddingBottom: 'env(safe-area-inset-bottom, 0px)',
@@ -204,7 +210,7 @@ export function Modal({ open, onCloseAction, title, description, size = 'md', ch
           ref={panelRef}
           onPointerDown={(e) => e.stopPropagation()}
           tabIndex={-1}
-          className="flex max-h-[90vh] flex-col overflow-hidden rounded-3xl border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] shadow-2xl shadow-[var(--shadow-float)] backdrop-blur-md focus:outline-none"
+          className="flex max-h-[90vh] flex-col overflow-hidden rounded-3xl border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] focus:outline-none"
         >
           {/* Header */}
           <div className="relative shrink-0 border-b border-[var(--border)] px-6 py-5">
@@ -243,7 +249,8 @@ export function Modal({ open, onCloseAction, title, description, size = 'md', ch
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 

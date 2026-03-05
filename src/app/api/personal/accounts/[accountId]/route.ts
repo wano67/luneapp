@@ -29,6 +29,13 @@ export const GET = withPersonalRoute(async (ctx, req) => {
       institution: true,
       iban: true,
       initialCents: true,
+      bankCode: true,
+      productCode: true,
+      interestRateBps: true,
+      loanPrincipalCents: true,
+      loanDurationMonths: true,
+      loanStartDate: true,
+      hidden: true,
       createdAt: true,
       updatedAt: true,
     },
@@ -64,6 +71,13 @@ export const GET = withPersonalRoute(async (ctx, req) => {
         institution: account.institution,
         iban: account.iban,
         initialCents: account.initialCents,
+        bankCode: account.bankCode,
+        productCode: account.productCode,
+        interestRateBps: account.interestRateBps,
+        loanPrincipalCents: account.loanPrincipalCents,
+        loanDurationMonths: account.loanDurationMonths,
+        loanStartDate: account.loanStartDate,
+        hidden: account.hidden,
         balanceCents: balance,
         delta30Cents: delta30,
         createdAt: account.createdAt,
@@ -80,11 +94,14 @@ export const PATCH = withPersonalRoute(async (ctx, req) => {
   const body = await readJson(req);
   if (!isRecord(body)) return badRequest('Invalid JSON');
 
+  const VALID_TYPES = ['CURRENT', 'SAVINGS', 'INVEST', 'CASH', 'LOAN'] as const;
+  type ValidType = (typeof VALID_TYPES)[number];
+
   const name = typeof body.name === 'string' ? body.name.trim() : '';
-  const type =
-    body.type === 'CURRENT' || body.type === 'SAVINGS' || body.type === 'INVEST' || body.type === 'CASH'
-      ? body.type
-      : null;
+  const typeRaw = typeof body.type === 'string' ? body.type : '';
+  const type: ValidType | null = VALID_TYPES.includes(typeRaw as ValidType)
+    ? (typeRaw as ValidType)
+    : null;
   const institution =
     typeof body.institution === 'string'
       ? body.institution.trim() || null
@@ -93,6 +110,22 @@ export const PATCH = withPersonalRoute(async (ctx, req) => {
   const initialCentsRaw =
     typeof body.initialCents === 'number' || typeof body.initialCents === 'string'
       ? body.initialCents
+      : null;
+
+  // New fields
+  const bankCode = typeof body.bankCode === 'string' ? body.bankCode.trim() || null : null;
+  const productCode = typeof body.productCode === 'string' ? body.productCode.trim() || null : null;
+  const interestRateBps =
+    typeof body.interestRateBps === 'number' && Number.isFinite(body.interestRateBps)
+      ? Math.round(body.interestRateBps)
+      : null;
+  const loanDurationMonths =
+    typeof body.loanDurationMonths === 'number' && Number.isFinite(body.loanDurationMonths)
+      ? Math.round(body.loanDurationMonths)
+      : null;
+  const loanStartDate =
+    typeof body.loanStartDate === 'string' && body.loanStartDate
+      ? new Date(body.loanStartDate)
       : null;
 
   if (!name) return badRequest('name required');
@@ -113,6 +146,25 @@ export const PATCH = withPersonalRoute(async (ctx, req) => {
     return badRequest('initialCents invalid');
   }
 
+  let loanPrincipalCents: bigint | null = null;
+  if (body.loanPrincipalCents != null) {
+    try {
+      loanPrincipalCents = BigInt(
+        typeof body.loanPrincipalCents === 'number'
+          ? Math.trunc(body.loanPrincipalCents)
+          : String(body.loanPrincipalCents).trim()
+      );
+    } catch {
+      return badRequest('loanPrincipalCents invalid');
+    }
+  }
+
+  const hidden = typeof body.hidden === 'boolean' ? body.hidden : undefined;
+
+  if (loanStartDate && isNaN(loanStartDate.getTime())) {
+    return badRequest('Invalid loanStartDate');
+  }
+
   const account = await prisma.personalAccount.findFirst({
     where: { id: accountId, userId: ctx.userId },
     select: { id: true },
@@ -122,7 +174,20 @@ export const PATCH = withPersonalRoute(async (ctx, req) => {
 
   const updated = await prisma.personalAccount.update({
     where: { id: accountId },
-    data: { name, type, institution, iban, initialCents },
+    data: {
+      name,
+      type,
+      institution,
+      iban,
+      initialCents,
+      bankCode,
+      productCode,
+      interestRateBps,
+      loanPrincipalCents,
+      loanDurationMonths,
+      loanStartDate,
+      ...(hidden !== undefined ? { hidden } : {}),
+    },
   });
 
   return jsonb({ account: { id: updated.id, name: updated.name } }, ctx.requestId);

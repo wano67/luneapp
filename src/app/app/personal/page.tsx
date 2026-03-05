@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { ChevronRight, TrendingUp, TrendingDown } from 'lucide-react';
+import { ChevronRight, ChartNoAxesColumnIncreasing, ChartNoAxesColumnDecreasing, Landmark, ArrowRight } from 'lucide-react';
 import { fetchJson } from '@/lib/apiClient';
 import { onWalletRefresh } from '@/lib/personalEvents';
 import { fmtKpi } from '@/lib/format';
@@ -57,13 +57,15 @@ type Budget = {
 
 const PERIODS = [
   { label: '30 jours', days: 30 },
-  { label: '60 jours', days: 60 },
   { label: '90 jours', days: 90 },
-  { label: '6 mois', days: 180 },
-  { label: '12 mois', days: 365 },
+  { label: '1 an', days: 365 },
 ] as const;
 
 /* ═══ Helpers ═══ */
+
+/** Liquidity order: most accessible → least accessible */
+const ACCOUNT_TYPE_ORDER: Record<string, number> = { CASH: 0, CURRENT: 1, SAVINGS: 2, INVEST: 3 };
+const ACCOUNT_TYPE_LABEL: Record<string, string> = { CASH: 'Espèces', CURRENT: 'Courant', SAVINGS: 'Épargne', INVEST: 'Investissement' };
 
 function absBigInt(v: bigint) {
   return v < 0n ? -v : v;
@@ -118,39 +120,46 @@ export default function WalletHomePage() {
 
   const kpi = useMemo(() => {
     if (!data?.kpis) return null;
-    const net = BigInt(data.kpis.monthNetCents ?? '0');
+    const totalBalance = BigInt(data.kpis.totalBalanceCents ?? '0');
+    const periodNet = BigInt(data.kpis.monthNetCents ?? '0');
+    const prevTotalBalance = totalBalance - periodNet;
+
     const income = absBigInt(BigInt(data.kpis.monthIncomeCents ?? '0'));
     const expense = absBigInt(BigInt(data.kpis.monthExpenseCents ?? '0'));
     const capacity = BigInt(data.kpis.savingsCapacityCents ?? '0');
     const prevIncome = absBigInt(BigInt(data.kpis.prevIncomeCents ?? '0'));
     const prevExpense = absBigInt(BigInt(data.kpis.prevExpenseCents ?? '0'));
-    const prevNet = prevIncome - prevExpense;
-    const currentNet = income - expense;
 
     function pctChange(cur: bigint, prev: bigint): number | null {
       if (prev === 0n) return null;
-      return Number(((cur - prev) * 100n) / prev);
+      const raw = Number(((cur - prev) * 100n) / absBigInt(prev));
+      return Math.max(-999, Math.min(999, raw));
     }
     const sign = (v: bigint) => (v > 0n ? '+' : '');
+    const fmtDelta = (diff: bigint) => sign(diff) + fmtKpi(diff.toString());
 
-    const treasuryPctVal = pctChange(currentNet, prevNet);
+    // Trésorerie: current total balance vs balance at start of period
+    const treasuryPctVal = pctChange(totalBalance, prevTotalBalance);
+    // Charges: period expenses vs previous period expenses
     const expensePctVal = pctChange(expense, prevExpense);
+    // Revenus: period income vs previous period income
     const incomePctVal = pctChange(income, prevIncome);
 
     return {
-      total: fmtKpi(data.kpis.totalBalanceCents),
+      total: fmtKpi(totalBalance.toString()),
       income: fmtKpi(income.toString()),
       expense: fmtKpi(expense.toString()),
       fixedCharges: fmtKpi(data.kpis.fixedChargesMonthlyCents),
       savingsCapacity: fmtKpi(data.kpis.savingsCapacityCents),
       savingsCapacityPositive: capacity >= 0n,
       treasuryPct: treasuryPctVal,
-      treasuryDelta: sign(net) + fmtKpi(net.toString()),
-      treasuryPositive: treasuryPctVal != null ? treasuryPctVal >= 0 : net >= 0n,
+      treasuryDelta: fmtDelta(periodNet),
+      treasuryPositive: treasuryPctVal != null ? treasuryPctVal >= 0 : periodNet >= 0n,
       expensePct: expensePctVal,
-      expenseDelta: sign(expense - prevExpense) + fmtKpi((expense - prevExpense).toString()),
+      expenseDelta: fmtDelta(expense - prevExpense),
       chargesPositive: expensePctVal != null ? expensePctVal <= 0 : true,
       incomePct: incomePctVal,
+      incomeDelta: fmtDelta(income - prevIncome),
       revenusPositive: incomePctVal != null ? incomePctVal >= 0 : true,
     };
   }, [data]);
@@ -166,11 +175,13 @@ export default function WalletHomePage() {
   /* ═══ Render ═══ */
 
   return (
-    <PageContainer className="gap-5">
+    <PageContainer className="gap-3 md:gap-4 md:h-full md:overflow-hidden">
       {error ? <Alert variant="danger" title={error} /> : null}
 
-      {/* ─── Period filters ─── */}
-      <div className="flex items-center justify-end gap-2 flex-wrap">
+      {/* ─── Title + Period filters ─── */}
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <h1 style={{ color: 'var(--text)', fontSize: 28, fontWeight: 700 }}>Mon Wallet</h1>
+        <div className="flex items-center gap-2 flex-wrap">
         {PERIODS.map((p) => (
           <button
             key={p.days}
@@ -186,6 +197,7 @@ export default function WalletHomePage() {
             {p.label}
           </button>
         ))}
+        </div>
       </div>
 
       {/* ─── Hero KPI cards ─── */}
@@ -213,6 +225,7 @@ export default function WalletHomePage() {
         <HeroCard
           label="Revenus"
           value={kpi?.income ?? '—'}
+          delta={kpi?.incomeDelta}
           pctChange={kpi?.incomePct}
           positive={kpi?.revenusPositive}
           href="/app/personal/transactions"
@@ -221,12 +234,38 @@ export default function WalletHomePage() {
         />
       </div>
 
+      {/* ─── Empty state CTA ─── */}
+      {!loading && data && !data.accounts?.length && !data.latestTransactions?.length && !budgets.length && (
+        <Link
+          href="/app/personal/comptes"
+          className="flex flex-col items-center gap-4 rounded-2xl p-8 text-center transition-opacity hover:opacity-90 animate-fade-in-up"
+          style={{ background: 'var(--shell-accent)', animationDelay: '120ms', animationFillMode: 'backwards' }}
+        >
+          <div
+            className="flex items-center justify-center rounded-full"
+            style={{ width: 64, height: 64, background: 'var(--shell-accent-dark)' }}
+          >
+            <Landmark size={32} style={{ color: 'white' }} />
+          </div>
+          <div className="flex flex-col gap-1">
+            <span className="text-white text-lg font-bold">Commencez par ajouter un compte</span>
+            <span className="text-white/70 text-sm">
+              Ajoutez votre premier compte bancaire pour suivre vos finances, transactions et budgets.
+            </span>
+          </div>
+          <div className="flex items-center gap-2 rounded-xl bg-white px-4 py-2.5">
+            <span className="text-sm font-semibold" style={{ color: 'var(--shell-accent)' }}>Créer un compte</span>
+            <ArrowRight size={16} style={{ color: 'var(--shell-accent)' }} />
+          </div>
+        </Link>
+      )}
+
       {/* ─── Bottom 2-col: Accounts + Budgets ─── */}
-      <div className="flex flex-col lg:flex-row gap-4 min-w-0 w-full">
+      <div className="flex flex-col lg:flex-row gap-4 min-w-0 w-full md:flex-1 md:min-h-0">
 
         {/* ── Left: Comptes + Transactions ── */}
         <div
-          className="flex-1 min-w-0 rounded-xl py-3 flex flex-col gap-6 animate-fade-in-up overflow-hidden"
+          className="flex-1 min-w-0 rounded-xl py-3 flex flex-col gap-6 animate-fade-in-up overflow-hidden md:overflow-y-auto"
           style={{ background: 'var(--shell-accent)', animationDelay: '120ms', animationFillMode: 'backwards' }}
         >
           {/* Accounts header */}
@@ -246,14 +285,19 @@ export default function WalletHomePage() {
             </div>
           ) : data?.accounts?.length ? (
             <div className="flex gap-3 overflow-x-auto px-3 pb-1 scrollbar-none">
-              {data.accounts.map((a) => (
+              {[...data.accounts]
+                .sort((a, b) => (ACCOUNT_TYPE_ORDER[a.type] ?? 9) - (ACCOUNT_TYPE_ORDER[b.type] ?? 9))
+                .map((a) => (
                 <Link
                   key={a.id}
                   href={`/app/personal/comptes/${a.id}`}
                   className="shrink-0 w-[160px] h-[100px] rounded-lg p-3 flex flex-col justify-between transition-opacity hover:opacity-80"
                   style={{ background: 'var(--shell-accent-dark)' }}
                 >
-                  <span className="text-white/70 text-xs truncate">{a.name}</span>
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="text-white/70 text-xs truncate">{a.name}</span>
+                    <span className="text-white/40 text-[10px] shrink-0">{ACCOUNT_TYPE_LABEL[a.type] ?? a.type}</span>
+                  </div>
                   <span className="text-white text-lg font-bold">{fmtKpi(a.balanceCents)}</span>
                 </Link>
               ))}
@@ -274,7 +318,7 @@ export default function WalletHomePage() {
           {/* Transaction list */}
           {!loading && data?.latestTransactions?.length ? (
             <div className="flex flex-col px-3">
-              {data.latestTransactions.slice(0, 8).map((t) => {
+              {data.latestTransactions.slice(0, 5).map((t) => {
                 const amt = BigInt(t.amountCents);
                 const isPositive = amt >= 0n;
                 return (
@@ -303,7 +347,7 @@ export default function WalletHomePage() {
 
         {/* ── Right: Budgets + Épargne ── */}
         <div
-          className="w-full lg:w-[381px] shrink-0 rounded-xl p-3 flex flex-col gap-5 animate-fade-in-up"
+          className="w-full lg:w-[381px] shrink-0 rounded-xl p-3 flex flex-col gap-5 animate-fade-in-up md:overflow-y-auto"
           style={{ background: 'var(--shell-accent)', animationDelay: '160ms', animationFillMode: 'backwards' }}
         >
           {/* Header */}
@@ -314,8 +358,8 @@ export default function WalletHomePage() {
 
           {/* Donut */}
           {budgetSummary ? (
-            <div className="flex flex-col items-center gap-5 py-4">
-              <div className="relative w-[200px] h-[200px]">
+            <div className="flex flex-col items-center gap-4 py-3">
+              <div className="relative w-[160px] h-[160px] md:w-[140px] md:h-[140px]">
                 <div
                   className="w-full h-full rounded-full"
                   style={{
@@ -329,7 +373,7 @@ export default function WalletHomePage() {
                   className="absolute inset-[22%] rounded-full flex flex-col items-center justify-center"
                   style={{ background: 'var(--shell-accent)' }}
                 >
-                  <span className="text-white text-[38px] font-extrabold leading-none">{budgetSummary.pct}%</span>
+                  <span className="text-white text-[28px] md:text-[24px] font-extrabold leading-none">{budgetSummary.pct}%</span>
                   <span className="text-white/70 text-xs mt-1">Dépensé</span>
                 </div>
               </div>
@@ -429,7 +473,7 @@ function HeroCard({
       href={href}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      className="flex flex-col min-h-[200px] justify-between rounded-xl bg-[var(--surface)] outline outline-[0.5px] outline-[var(--border)] p-3 animate-fade-in-up transition-shadow hover:shadow-md"
+      className="flex flex-col min-h-[180px] md:min-h-0 justify-between rounded-xl bg-[var(--surface)] outline outline-[0.5px] outline-[var(--border)] p-3 animate-fade-in-up transition-shadow hover:shadow-md"
       style={{
         animationDelay: delay ? `${delay}ms` : undefined,
         animationFillMode: delay ? 'backwards' : undefined,
@@ -446,9 +490,9 @@ function HeroCard({
               {pctChange > 0 ? '+' : ''}{pctChange}%
             </span>
             {pctChange >= 0 ? (
-              <TrendingUp size={14} style={{ color: badgeColor }} />
+              <ChartNoAxesColumnIncreasing size={14} style={{ color: badgeColor }} />
             ) : (
-              <TrendingDown size={14} style={{ color: badgeColor }} />
+              <ChartNoAxesColumnDecreasing size={14} style={{ color: badgeColor }} />
             )}
           </div>
         ) : null}
@@ -461,7 +505,7 @@ function HeroCard({
           {loading ? (
             <div className="h-10 w-32 rounded-lg bg-[var(--surface-2)] animate-skeleton-pulse" />
           ) : (
-            <span className="text-[40px] font-extrabold leading-[40px] text-[var(--shell-accent)]">
+            <span className="text-[32px] md:text-[28px] font-extrabold leading-tight text-[var(--shell-accent)]">
               {value}
             </span>
           )}

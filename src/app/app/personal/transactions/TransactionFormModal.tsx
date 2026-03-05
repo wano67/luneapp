@@ -78,6 +78,12 @@ const TYPE_LABELS: Record<TxType, string> = {
   TRANSFER: 'Virement',
 };
 
+const TYPE_ACTIVE_CLASS: Record<TxType, string> = {
+  EXPENSE: 'bg-[var(--danger)] text-white border-[var(--danger)]',
+  INCOME: 'bg-[var(--success)] text-white border-[var(--success)]',
+  TRANSFER: 'bg-[var(--shell-accent)] text-white border-[var(--shell-accent)]',
+};
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function TransactionFormModal({
@@ -168,9 +174,9 @@ export function TransactionFormModal({
                   type="button"
                   onClick={() => onTypeChange(t)}
                   className={[
-                    'h-12 rounded-2xl border px-3 text-sm font-medium',
+                    'h-12 rounded-2xl border px-3 text-sm font-semibold transition-colors',
                     active
-                      ? 'border-[var(--border)] bg-[var(--surface)] text-[var(--text)]'
+                      ? TYPE_ACTIVE_CLASS[t]
                       : 'border-[var(--border)] bg-transparent text-[var(--text-faint)] hover:bg-[var(--surface)]/60',
                     attemptedSubmit && !required.type
                       ? 'ring-2 ring-[var(--danger-border)] border-[var(--danger-border)]'

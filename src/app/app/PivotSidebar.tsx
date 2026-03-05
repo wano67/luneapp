@@ -62,12 +62,14 @@ export default function PivotSidebar({ space, pathname, businessId, businesses: 
       <div className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-6">
         {/* Logo + toggle */}
         {collapsed ? (
-          <button type="button" onClick={onToggleCollapse} className="self-center hover:opacity-80 transition-opacity">
+          <Link href="/app" className="self-center hover:opacity-80 transition-opacity">
             <PivotLogo size={40} color="var(--shell-sidebar-text)" />
-          </button>
+          </Link>
         ) : (
           <div className="flex items-start justify-between">
-            <PivotLogo size={49} color="var(--shell-sidebar-text)" />
+            <Link href="/app" className="hover:opacity-80 transition-opacity">
+              <PivotLogo size={49} color="var(--shell-sidebar-text)" />
+            </Link>
             <button type="button" className="hover:opacity-80 transition-opacity" onClick={onToggleCollapse}>
               <IconToggleSidebar size={24} color="var(--shell-sidebar-text)" />
             </button>

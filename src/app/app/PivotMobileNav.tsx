@@ -3,7 +3,7 @@
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 import Link from 'next/link';
-import { Menu, X, Plus, Home, Wallet2, Banknote, BarChart3, FileText, PiggyBank, Target, CreditCard } from 'lucide-react';
+import { Menu, X, Plus, Home, Wallet2, Banknote, BarChart3, FileText, PiggyBank, Target, CreditCard, Landmark } from 'lucide-react';
 import { useBodyScrollLock } from '@/lib/scrollLock';
 import {
   IconPerso,
@@ -31,7 +31,8 @@ type Props = {
 
 export default function PivotMobileNav({ space, pathname, businessId, businesses: _businesses, userName }: Props) {
   const [drawerOpen, setDrawerOpen] = useState(false);
-  useBodyScrollLock(drawerOpen);
+  const [actionMenuOpen, setActionMenuOpen] = useState(false);
+  useBodyScrollLock(drawerOpen || actionMenuOpen);
 
   const effectiveSpace = pathname.startsWith('/app/performance/perso') ? 'perso' : space;
   const inBusiness = effectiveSpace === 'pro' && !!businessId;
@@ -49,7 +50,7 @@ export default function PivotMobileNav({ space, pathname, businessId, businesses
             <>
               <BottomTab href="/app/personal" icon={<Wallet2 size={20} />} label="Accueil" active={pathname === '/app/personal'} />
               <BottomTab href="/app/personal/comptes" icon={<Banknote size={20} />} label="Comptes" active={pathname.startsWith('/app/personal/comptes')} />
-              <CenterAction href="/app/personal/transactions?add=true" />
+              <CenterActionButton onClick={() => setActionMenuOpen(true)} />
               <BottomTab href="/app/performance/perso" icon={<BarChart3 size={20} />} label="Stats" active={pathname.startsWith('/app/performance/perso')} />
               <MenuButton onClick={() => setDrawerOpen(true)} />
             </>
@@ -73,6 +74,42 @@ export default function PivotMobileNav({ space, pathname, businessId, businesses
         </div>
       </nav>
 
+      {/* Quick action sheet — perso */}
+      {actionMenuOpen && (
+        <>
+          <div className="md:hidden fixed inset-0 z-[60] bg-black/40" onClick={() => setActionMenuOpen(false)} />
+          <div
+            className="md:hidden fixed bottom-20 left-4 right-4 z-[61] rounded-2xl p-2 flex flex-col gap-1 animate-fade-in-up"
+            style={{ background: 'var(--surface)', border: '1px solid var(--border)', boxShadow: '0 -4px 24px rgba(0,0,0,0.12)' }}
+          >
+            <ActionMenuItem
+              icon={<Landmark size={20} style={{ color: 'var(--shell-accent)' }} />}
+              label="Ajouter un compte"
+              href="/app/personal/comptes"
+              onClick={() => setActionMenuOpen(false)}
+            />
+            <ActionMenuItem
+              icon={<FileText size={20} style={{ color: 'var(--shell-accent)' }} />}
+              label="Ajouter une transaction"
+              href="/app/personal/transactions?add=true"
+              onClick={() => setActionMenuOpen(false)}
+            />
+            <ActionMenuItem
+              icon={<CreditCard size={20} style={{ color: 'var(--shell-accent)' }} />}
+              label="Ajouter un abonnement"
+              href="/app/personal/subscriptions"
+              onClick={() => setActionMenuOpen(false)}
+            />
+            <ActionMenuItem
+              icon={<Target size={20} style={{ color: 'var(--shell-accent)' }} />}
+              label="Objectif d'épargne"
+              href="/app/personal/epargne"
+              onClick={() => setActionMenuOpen(false)}
+            />
+          </div>
+        </>
+      )}
+
       {/* Mobile drawer */}
       {drawerOpen && (
         <>
@@ -83,7 +120,9 @@ export default function PivotMobileNav({ space, pathname, businessId, businesses
           >
             {/* Header */}
             <div className="flex items-center justify-between mb-6">
-              <PivotLogo size={40} color="var(--shell-sidebar-text)" />
+              <Link href="/app" onClick={closeDrawer} className="hover:opacity-80 transition-opacity">
+                <PivotLogo size={40} color="var(--shell-sidebar-text)" />
+              </Link>
               <button type="button" onClick={closeDrawer} className="hover:opacity-80">
                 <X size={24} style={{ color: 'var(--shell-sidebar-text)' }} />
               </button>
@@ -165,7 +204,7 @@ function BottomTab({ href, icon, label, active }: { href: string; icon: ReactNod
   );
 }
 
-/* ═══ Center Action ═══ */
+/* ═══ Center Action (link) ═══ */
 
 function CenterAction({ href }: { href: string }) {
   return (
@@ -180,6 +219,41 @@ function CenterAction({ href }: { href: string }) {
       }}
     >
       <Plus size={24} style={{ color: 'white' }} />
+    </Link>
+  );
+}
+
+/* ═══ Center Action (button — opens menu) ═══ */
+
+function CenterActionButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex items-center justify-center rounded-full shadow-lg active:scale-95 transition-transform"
+      style={{
+        width: 48,
+        height: 48,
+        background: 'var(--shell-accent)',
+        marginTop: -12,
+      }}
+    >
+      <Plus size={24} style={{ color: 'white' }} />
+    </button>
+  );
+}
+
+/* ═══ Action Menu Item ═══ */
+
+function ActionMenuItem({ icon, label, href, onClick }: { icon: ReactNode; label: string; href: string; onClick: () => void }) {
+  return (
+    <Link
+      href={href}
+      onClick={onClick}
+      className="flex items-center gap-3 rounded-xl px-4 py-3 transition-colors hover:bg-[var(--surface-2)]"
+    >
+      <span className="shrink-0">{icon}</span>
+      <span className="text-sm font-medium" style={{ color: 'var(--text)' }}>{label}</span>
     </Link>
   );
 }

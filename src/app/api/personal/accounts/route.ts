@@ -21,6 +21,13 @@ export const GET = withPersonalRoute(async (ctx) => {
       institution: true,
       iban: true,
       initialCents: true,
+      bankCode: true,
+      productCode: true,
+      interestRateBps: true,
+      loanPrincipalCents: true,
+      loanDurationMonths: true,
+      loanStartDate: true,
+      hidden: true,
       createdAt: true,
       updatedAt: true,
     },
@@ -72,6 +79,13 @@ export const GET = withPersonalRoute(async (ctx) => {
           institution: a.institution,
           iban: a.iban,
           initialCents: a.initialCents,
+          bankCode: a.bankCode,
+          productCode: a.productCode,
+          interestRateBps: a.interestRateBps,
+          loanPrincipalCents: a.loanPrincipalCents,
+          loanDurationMonths: a.loanDurationMonths,
+          loanStartDate: a.loanStartDate,
+          hidden: a.hidden,
           balanceCents,
           delta30Cents,
           createdAt: a.createdAt,
@@ -94,11 +108,14 @@ export const POST = withPersonalRoute(async (ctx, req) => {
   const body = await readJson(req);
   if (!isRecord(body)) return badRequest('Invalid JSON');
 
+  const VALID_TYPES = ['CURRENT', 'SAVINGS', 'INVEST', 'CASH', 'LOAN'] as const;
+  type ValidType = (typeof VALID_TYPES)[number];
+
   const name = typeof body.name === 'string' ? body.name.trim() : '';
-  const type =
-    body.type === 'CURRENT' || body.type === 'SAVINGS' || body.type === 'INVEST' || body.type === 'CASH'
-      ? body.type
-      : 'CURRENT';
+  const typeRaw = typeof body.type === 'string' ? body.type : '';
+  const type: ValidType = VALID_TYPES.includes(typeRaw as ValidType)
+    ? (typeRaw as ValidType)
+    : 'CURRENT';
   const currencyRaw = typeof body.currency === 'string' ? body.currency.trim() : '';
   const currency = (currencyRaw || 'EUR').toUpperCase();
   const institution =
@@ -111,17 +128,52 @@ export const POST = withPersonalRoute(async (ctx, req) => {
       ? body.initialCents
       : '0';
 
+  // New fields
+  const bankCode = typeof body.bankCode === 'string' ? body.bankCode.trim() || null : null;
+  const productCode = typeof body.productCode === 'string' ? body.productCode.trim() || null : null;
+  const interestRateBps =
+    typeof body.interestRateBps === 'number' && Number.isFinite(body.interestRateBps)
+      ? Math.round(body.interestRateBps)
+      : null;
+
+  // Loan fields
+  const loanPrincipalCentsRaw =
+    typeof body.loanPrincipalCents === 'number' || typeof body.loanPrincipalCents === 'string'
+      ? body.loanPrincipalCents
+      : null;
+  const loanDurationMonths =
+    typeof body.loanDurationMonths === 'number' && Number.isFinite(body.loanDurationMonths)
+      ? Math.round(body.loanDurationMonths)
+      : null;
+  const loanStartDate =
+    typeof body.loanStartDate === 'string' && body.loanStartDate
+      ? new Date(body.loanStartDate)
+      : null;
+
   if (!name) return badRequest('name required');
   if (name.length > 120) return badRequest('name too long');
   if (currency.length > 8) return badRequest('currency too long');
   if (institution && institution.length > 120) return badRequest('institution too long');
   if (iban && iban.length > 34) return badRequest('iban too long');
+  if (bankCode && bankCode.length > 40) return badRequest('bankCode too long');
+  if (productCode && productCode.length > 40) return badRequest('productCode too long');
 
   const initialParsed = parseCentsInput(initialCentsRaw);
   if (initialParsed == null || !Number.isFinite(initialParsed)) {
     return badRequest('Invalid initialCents');
   }
   const initialCents = BigInt(initialParsed);
+
+  let loanPrincipalCents: bigint | null = null;
+  if (loanPrincipalCentsRaw != null) {
+    const parsed = parseCentsInput(loanPrincipalCentsRaw);
+    if (parsed == null || !Number.isFinite(parsed)) return badRequest('Invalid loanPrincipalCents');
+    loanPrincipalCents = BigInt(parsed);
+  }
+
+  if (loanStartDate && isNaN(loanStartDate.getTime())) {
+    return badRequest('Invalid loanStartDate');
+  }
 
   const created = await prisma.personalAccount.create({
     data: {
@@ -132,6 +184,12 @@ export const POST = withPersonalRoute(async (ctx, req) => {
       institution,
       iban,
       initialCents,
+      bankCode,
+      productCode,
+      interestRateBps,
+      loanPrincipalCents,
+      loanDurationMonths,
+      loanStartDate,
     },
   });
 

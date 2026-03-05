@@ -1557,6 +1557,7 @@ enum PersonalAccountType {
   SAVINGS
   INVEST
   CASH
+  LOAN
 }
 
 enum PersonalTransactionType {
@@ -1576,6 +1577,19 @@ model PersonalAccount {
   institution  String?
   iban         String?
   initialCents BigInt              @default(0)
+
+  // Référentiel banque & produit
+  bankCode    String?
+  productCode String?
+
+  // Taux d'intérêt annuel en points de base (150 = 1.50%)
+  interestRateBps Int?
+
+  // Prêt uniquement
+  loanPrincipalCents BigInt?
+  loanDurationMonths Int?
+  loanStartDate      DateTime?
+  hidden             Boolean   @default(false)
 
   transactions PersonalTransaction[]
 
