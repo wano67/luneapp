@@ -1,62 +1,33 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert } from '@/components/ui/alert';
 import { PivotLogo, PivotWordmark } from '@/components/pivot-icons';
-import { Mail, CheckCircle, RefreshCw } from 'lucide-react';
+import { Mail, CheckCircle } from 'lucide-react';
 
 export default function VerifyEmailPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const token = searchParams?.get('token') ?? null;
+  const verified = searchParams?.get('verified') === 'true';
+  const errorParam = searchParams?.get('error');
 
-  const [status, setStatus] = useState<'pending' | 'verifying' | 'success' | 'error'>(
-    token ? 'verifying' : 'pending'
-  );
-  const [error, setError] = useState<string | null>(null);
   const [resending, setResending] = useState(false);
   const [resent, setResent] = useState(false);
+  const [error, setError] = useState<string | null>(
+    errorParam === 'expired'
+      ? 'Ce lien a expiré. Demandez un nouvel email de vérification.'
+      : errorParam === 'invalid'
+        ? 'Lien invalide.'
+        : null
+  );
 
-  const verifyToken = useCallback(async (t: string) => {
-    setStatus('verifying');
-    setError(null);
-
-    try {
-      const res = await fetch('/api/auth/verify-email', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ token: t }),
-      });
-
-      const data = await res.json().catch(() => ({}));
-
-      if (res.ok && (data as Record<string, unknown>).verified) {
-        setStatus('success');
-        setTimeout(() => router.push('/app'), 2000);
-      } else {
-        setStatus('error');
-        setError(
-          typeof (data as Record<string, unknown>).error === 'string'
-            ? (data as { error: string }).error
-            : 'Lien invalide ou expiré.'
-        );
-      }
-    } catch {
-      setStatus('error');
-      setError('Une erreur est survenue.');
-    }
-  }, [router]);
-
-  useEffect(() => {
-    if (token && status === 'verifying') {
-      verifyToken(token);
-    }
-  }, [token, status, verifyToken]);
+  if (verified) {
+    setTimeout(() => router.push('/app'), 2000);
+  }
 
   async function handleResend() {
     setResending(true);
@@ -97,21 +68,7 @@ export default function VerifyEmailPage() {
         </div>
 
         <Card className="space-y-6 border-[var(--border)] bg-[var(--surface)] p-8 text-center">
-          {status === 'verifying' && (
-            <>
-              <div className="flex justify-center">
-                <RefreshCw size={48} className="animate-spin" style={{ color: 'var(--accent-strong)' }} />
-              </div>
-              <h1 className="text-xl font-semibold" style={{ color: 'var(--text)' }}>
-                Vérification en cours...
-              </h1>
-              <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
-                Merci de patienter quelques instants.
-              </p>
-            </>
-          )}
-
-          {status === 'success' && (
+          {verified ? (
             <>
               <div className="flex justify-center">
                 <CheckCircle size={48} style={{ color: 'var(--success)' }} />
@@ -123,31 +80,20 @@ export default function VerifyEmailPage() {
                 Votre adresse email a été confirmée. Redirection en cours...
               </p>
             </>
-          )}
-
-          {status === 'pending' && (
+          ) : (
             <>
               <div className="flex justify-center">
-                <Mail size={48} style={{ color: 'var(--accent-strong)' }} />
+                <Mail size={48} style={{ color: errorParam ? 'var(--danger)' : 'var(--accent-strong)' }} />
               </div>
               <h1 className="text-xl font-semibold" style={{ color: 'var(--text)' }}>
-                Vérifiez votre email
+                {errorParam ? 'Lien invalide' : 'Vérifiez votre email'}
               </h1>
-              <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
-                Un email de vérification a été envoyé à votre adresse.
-                Cliquez sur le lien dans l&apos;email pour activer votre compte.
-              </p>
-            </>
-          )}
-
-          {status === 'error' && (
-            <>
-              <div className="flex justify-center">
-                <Mail size={48} style={{ color: 'var(--danger)' }} />
-              </div>
-              <h1 className="text-xl font-semibold" style={{ color: 'var(--text)' }}>
-                Lien invalide
-              </h1>
+              {!errorParam && (
+                <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+                  Un email de vérification a été envoyé à votre adresse.
+                  Cliquez sur le lien dans l&apos;email pour activer votre compte.
+                </p>
+              )}
             </>
           )}
 
@@ -161,7 +107,7 @@ export default function VerifyEmailPage() {
             />
           )}
 
-          {(status === 'pending' || status === 'error') && (
+          {!verified && (
             <div className="space-y-3">
               <Button
                 onClick={handleResend}

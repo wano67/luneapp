@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
   });
 
   const baseUrl = buildBaseUrl(request);
-  const verificationLink = `${baseUrl}/verify-email?token=${encodeURIComponent(rawVerificationToken)}`;
+  const verificationLink = `${baseUrl}/api/auth/verify-email?token=${encodeURIComponent(rawVerificationToken)}`;
 
   sendVerificationEmail({
     to: user.email,
