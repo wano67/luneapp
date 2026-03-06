@@ -76,7 +76,7 @@ export default function RegisterPage() {
       }
 
       await savePreferences({ language, theme });
-      router.push('/app');
+      router.push('/verify-email');
     } catch (err) {
       console.error(err);
       setError('Une erreur est survenue, merci de réessayer.');

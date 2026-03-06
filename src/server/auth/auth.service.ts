@@ -19,7 +19,7 @@ type LoginInput = {
   password: string;
 };
 
-export type PublicUser = Omit<User, 'passwordHash' | 'id'> & { id: string };
+export type PublicUser = Omit<User, 'passwordHash' | 'id' | 'emailVerificationToken' | 'emailVerificationExpiry'> & { id: string };
 
 async function hashPassword(password: string) {
   return bcrypt.hash(password, 10);
@@ -69,6 +69,7 @@ export async function createSessionToken(user: User) {
     email: user.email,
     role: user.role,
     isActive: user.isActive,
+    emailVerified: user.emailVerified,
   });
 }
 
@@ -79,6 +80,7 @@ export function toPublicUser(user: User): PublicUser {
     name: user.name,
     role: user.role,
     isActive: user.isActive,
+    emailVerified: user.emailVerified,
     language: user.language,
     theme: user.theme,
     defaultCurrency: user.defaultCurrency,

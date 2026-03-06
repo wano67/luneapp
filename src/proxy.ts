@@ -38,6 +38,14 @@ export async function proxy(request: NextRequest) {
       return unauthorizedResponse(request);
     }
 
+    // Block unverified users from /app (redirect to /verify-email)
+    if (
+      payload.emailVerified === false &&
+      request.nextUrl.pathname.startsWith('/app')
+    ) {
+      return NextResponse.redirect(new URL('/verify-email', request.url));
+    }
+
     return NextResponse.next();
   } catch (error) {
     console.error('Auth proxy error', error);

@@ -136,6 +136,9 @@ model User {
   name         String?
   role         UserRole @default(USER)
   isActive     Boolean  @default(true)
+  emailVerified           Boolean   @default(false)
+  emailVerificationToken  String?
+  emailVerificationExpiry DateTime?
   language     String   @default("fr")
   theme        String   @default("system")
 

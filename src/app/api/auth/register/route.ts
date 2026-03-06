@@ -14,6 +14,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { badRequest, getRequestId, withRequestId } from '@/server/http/apiUtils';
 import { authenticateUser } from '@/server/auth/auth.service';
 import { isValidEmail, normalizeEmail } from '@/lib/validation/email';
+import { prisma } from '@/server/db/client';
+import crypto from 'crypto';
+import { buildBaseUrl } from '@/server/http/baseUrl';
+import { sendVerificationEmail } from '@/server/services/email';
 
 const MIN_PASSWORD_LENGTH = 8;
 const MAX_PASSWORD_LENGTH = 128;
@@ -65,7 +69,31 @@ export async function POST(request: NextRequest) {
 
   try {
     const user = await registerUser({ email, password, name });
-    const token = await createSessionToken(user);
+
+    // Generate email verification token
+    const rawVerificationToken = crypto.randomBytes(32).toString('base64url');
+    const verificationHash = crypto.createHash('sha256').update(rawVerificationToken).digest('base64url');
+    const verificationExpiry = new Date();
+    verificationExpiry.setHours(verificationExpiry.getHours() + 24);
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        emailVerificationToken: verificationHash,
+        emailVerificationExpiry: verificationExpiry,
+      },
+    });
+
+    const baseUrl = buildBaseUrl(request);
+    const verificationLink = `${baseUrl}/verify-email?token=${encodeURIComponent(rawVerificationToken)}`;
+
+    sendVerificationEmail({
+      to: email,
+      name: user.name ?? null,
+      verificationLink,
+    }).catch(() => {});
+
+    const sessionToken = await createSessionToken(user);
     const response = NextResponse.json(
       { user: toPublicUser(user) },
       { status: 201 }
@@ -73,7 +101,7 @@ export async function POST(request: NextRequest) {
 
     response.cookies.set({
       name: AUTH_COOKIE_NAME,
-      value: token,
+      value: sessionToken,
       ...authCookieOptions,
     });
 

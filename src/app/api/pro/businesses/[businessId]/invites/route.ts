@@ -4,44 +4,13 @@ import { BusinessRole, BusinessInviteStatus } from '@/generated/prisma';
 import { withBusinessRoute } from '@/server/http/routeHandler';
 import { jsonb, jsonbCreated } from '@/server/http/json';
 import { badRequest, notFound, readJson, serverError } from '@/server/http/apiUtils';
-import { getAllowedOrigins } from '@/server/security/csrf';
+import { buildBaseUrl } from '@/server/http/baseUrl';
 import crypto from 'crypto';
 import { isValidEmail } from '@/lib/validation/email';
 import { sendInviteEmail } from '@/server/services/email';
 
 function hashToken(raw: string) {
   return crypto.createHash('sha256').update(raw).digest('base64url');
-}
-
-function buildBaseUrl(request: NextRequest) {
-  const envBase = process.env.BASE_URL?.trim();
-  if (envBase) {
-    try {
-      return new URL(envBase).origin;
-    } catch {
-      // ignore and fallback
-    }
-  }
-  const forwardedProto = request.headers.get('x-forwarded-proto')?.split(',')[0]?.trim();
-  const forwardedHost =
-    request.headers.get('x-forwarded-host')?.split(',')[0]?.trim() || request.headers.get('host');
-  if (forwardedHost) {
-    const proto = forwardedProto || 'https';
-    try {
-      return new URL(`${proto}://${forwardedHost}`).origin;
-    } catch {
-      // fall through
-    }
-  }
-
-  const allowed = getAllowedOrigins();
-  if (allowed.length > 0) return allowed[0];
-
-  try {
-    return new URL(request.url).origin;
-  } catch {
-    return 'http://localhost:3000';
-  }
 }
 
 // GET /api/pro/businesses/{businessId}/invites

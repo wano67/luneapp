@@ -19,6 +19,7 @@ export type AuthTokenPayload = JWTPayload & {
   email: string;
   role: string;
   isActive?: boolean;
+  emailVerified?: boolean;
 };
 
 function getAuthSecret(): Uint8Array {
@@ -36,12 +37,13 @@ export async function signAuthToken(params: {
   email: string;
   role: string;
   isActive: boolean;
+  emailVerified: boolean;
   expiresIn?: string;
 }) {
-  const { userId, email, role, isActive, expiresIn = DEFAULT_EXPIRATION } =
+  const { userId, email, role, isActive, emailVerified, expiresIn = DEFAULT_EXPIRATION } =
     params;
 
-  return new SignJWT({ email, role, isActive })
+  return new SignJWT({ email, role, isActive, emailVerified })
     .setProtectedHeader({ alg: 'HS256' })
     .setSubject(userId.toString())
     .setIssuedAt()

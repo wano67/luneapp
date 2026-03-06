@@ -74,3 +74,49 @@ export async function sendInviteEmail(params: InviteEmailParams): Promise<void> 
     console.error('[email] Failed to send invite email:', error);
   }
 }
+
+type VerificationEmailParams = {
+  to: string;
+  name: string | null;
+  verificationLink: string;
+};
+
+export async function sendVerificationEmail(params: VerificationEmailParams): Promise<void> {
+  const resend = getResend();
+  if (!resend) return;
+
+  const { to, name, verificationLink } = params;
+  const fromAddress = process.env.RESEND_FROM_EMAIL?.trim() || 'Lune <noreply@lune.app>';
+  const greeting = name ? `Bonjour ${name},` : 'Bonjour,';
+
+  const html = `<!DOCTYPE html>
+<html lang="fr">
+<head><meta charset="utf-8" /></head>
+<body style="margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f5f5f5;">
+  <div style="max-width:560px;margin:40px auto;background:#fff;border-radius:12px;padding:40px;border:1px solid #e5e5e5;">
+    <h1 style="font-size:20px;color:#111;margin:0 0 8px;">Confirmez votre adresse email</h1>
+    <p style="color:#555;font-size:14px;line-height:1.6;margin:0 0 24px;">
+      ${greeting} merci de vous &ecirc;tre inscrit sur Lune. Cliquez sur le bouton ci-dessous pour v&eacute;rifier votre adresse email.
+    </p>
+    <a href="${verificationLink}"
+       style="display:inline-block;padding:12px 28px;background:#111;color:#fff;text-decoration:none;border-radius:8px;font-size:14px;font-weight:600;">
+      V&eacute;rifier mon email
+    </a>
+    <p style="color:#888;font-size:12px;margin:24px 0 0;">
+      Ce lien expire dans 24 heures. Si vous n&apos;avez pas cr&eacute;&eacute; de compte, ignorez cet email.
+    </p>
+  </div>
+</body>
+</html>`;
+
+  try {
+    await resend.emails.send({
+      from: fromAddress,
+      to,
+      subject: 'Confirmez votre adresse email \u2014 Lune',
+      html,
+    });
+  } catch (error) {
+    console.error('[email] Failed to send verification email:', error);
+  }
+}
