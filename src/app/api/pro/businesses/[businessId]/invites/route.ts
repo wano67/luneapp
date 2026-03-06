@@ -7,6 +7,7 @@ import { badRequest, notFound, readJson, serverError } from '@/server/http/apiUt
 import { getAllowedOrigins } from '@/server/security/csrf';
 import crypto from 'crypto';
 import { isValidEmail } from '@/lib/validation/email';
+import { sendInviteEmail } from '@/server/services/email';
 
 function hashToken(raw: string) {
   return crypto.createHash('sha256').update(raw).digest('base64url');
@@ -189,9 +190,21 @@ export const POST = withBusinessRoute(
       return serverError();
     }
 
-    // TODO: envoyer un email avec le lien d'invitation
+    const inviteLink = `${baseUrl}/app/invites/accept?token=${encodeURIComponent(rawToken)}`;
 
-    const inviteLink = `${baseUrl}/app/invites/accept?token=${encodeURIComponent(tokenHash)}`;
+    const inviter = await prisma.user.findUnique({
+      where: { id: ctx.userId },
+      select: { name: true },
+    });
+
+    sendInviteEmail({
+      to: email,
+      businessName: business.name,
+      inviterName: inviter?.name ?? null,
+      role,
+      inviteLink,
+      expiresAt,
+    }).catch(() => {});
 
     return jsonbCreated(
       {

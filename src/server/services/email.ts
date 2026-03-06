@@ -1,0 +1,76 @@
+import { Resend } from 'resend';
+
+let resendClient: Resend | null = null;
+
+function getResend(): Resend | null {
+  if (resendClient) return resendClient;
+  const apiKey = process.env.RESEND_API_KEY?.trim();
+  if (!apiKey) {
+    console.error('[email] RESEND_API_KEY is not set — emails will not be sent.');
+    return null;
+  }
+  resendClient = new Resend(apiKey);
+  return resendClient;
+}
+
+const ROLE_LABELS: Record<string, string> = {
+  ADMIN: 'Administrateur',
+  MEMBER: 'Membre',
+  VIEWER: 'Lecteur',
+};
+
+type InviteEmailParams = {
+  to: string;
+  businessName: string;
+  inviterName: string | null;
+  role: string;
+  inviteLink: string;
+  expiresAt: Date;
+};
+
+export async function sendInviteEmail(params: InviteEmailParams): Promise<void> {
+  const resend = getResend();
+  if (!resend) return;
+
+  const { to, businessName, inviterName, role, inviteLink, expiresAt } = params;
+  const roleLabel = ROLE_LABELS[role] ?? role;
+  const expiryFormatted = new Intl.DateTimeFormat('fr-FR', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  }).format(expiresAt);
+
+  const fromAddress = process.env.RESEND_FROM_EMAIL?.trim() || 'Lune <noreply@lune.app>';
+  const inviterDisplay = inviterName || 'Un administrateur';
+
+  const html = `<!DOCTYPE html>
+<html lang="fr">
+<head><meta charset="utf-8" /></head>
+<body style="margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f5f5f5;">
+  <div style="max-width:560px;margin:40px auto;background:#fff;border-radius:12px;padding:40px;border:1px solid #e5e5e5;">
+    <h1 style="font-size:20px;color:#111;margin:0 0 8px;">Invitation à rejoindre ${businessName}</h1>
+    <p style="color:#555;font-size:14px;line-height:1.6;margin:0 0 24px;">
+      ${inviterDisplay} vous invite à rejoindre <strong>${businessName}</strong> en tant que <strong>${roleLabel}</strong>.
+    </p>
+    <a href="${inviteLink}"
+       style="display:inline-block;padding:12px 28px;background:#111;color:#fff;text-decoration:none;border-radius:8px;font-size:14px;font-weight:600;">
+      Accepter l&apos;invitation
+    </a>
+    <p style="color:#888;font-size:12px;margin:24px 0 0;">
+      Ce lien expire le ${expiryFormatted}. Si vous n&apos;avez pas demandé cette invitation, ignorez cet email.
+    </p>
+  </div>
+</body>
+</html>`;
+
+  try {
+    await resend.emails.send({
+      from: fromAddress,
+      to,
+      subject: `Invitation à rejoindre ${businessName} sur Lune`,
+      html,
+    });
+  } catch (error) {
+    console.error('[email] Failed to send invite email:', error);
+  }
+}
