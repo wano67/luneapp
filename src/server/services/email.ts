@@ -26,13 +26,14 @@ type InviteEmailParams = {
   role: string;
   inviteLink: string;
   expiresAt: Date;
+  userExists?: boolean;
 };
 
 export async function sendInviteEmail(params: InviteEmailParams): Promise<void> {
   const resend = getResend();
   if (!resend) return;
 
-  const { to, businessName, inviterName, role, inviteLink, expiresAt } = params;
+  const { to, businessName, inviterName, role, inviteLink, expiresAt, userExists } = params;
   const roleLabel = ROLE_LABELS[role] ?? role;
   const expiryFormatted = new Intl.DateTimeFormat('fr-FR', {
     day: 'numeric',
@@ -43,21 +44,29 @@ export async function sendInviteEmail(params: InviteEmailParams): Promise<void> 
   const fromAddress = process.env.RESEND_FROM_EMAIL?.trim() || 'Lune <noreply@lune.app>';
   const inviterDisplay = inviterName || 'Un administrateur';
 
+  const buttonLabel = userExists === false ? 'Cr&eacute;er mon compte' : 'Accepter l&apos;invitation';
+  const instruction = userExists === false
+    ? 'Cr&eacute;ez votre compte pour rejoindre l&apos;&eacute;quipe.'
+    : 'Connectez-vous pour accepter l&apos;invitation.';
+
   const html = `<!DOCTYPE html>
 <html lang="fr">
 <head><meta charset="utf-8" /></head>
 <body style="margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f5f5f5;">
   <div style="max-width:560px;margin:40px auto;background:#fff;border-radius:12px;padding:40px;border:1px solid #e5e5e5;">
-    <h1 style="font-size:20px;color:#111;margin:0 0 8px;">Invitation à rejoindre ${businessName}</h1>
+    <h1 style="font-size:20px;color:#111;margin:0 0 8px;">Invitation &agrave; rejoindre ${businessName}</h1>
+    <p style="color:#555;font-size:14px;line-height:1.6;margin:0 0 8px;">
+      ${inviterDisplay} vous invite &agrave; rejoindre <strong>${businessName}</strong> en tant que <strong>${roleLabel}</strong>.
+    </p>
     <p style="color:#555;font-size:14px;line-height:1.6;margin:0 0 24px;">
-      ${inviterDisplay} vous invite à rejoindre <strong>${businessName}</strong> en tant que <strong>${roleLabel}</strong>.
+      ${instruction}
     </p>
     <a href="${inviteLink}"
        style="display:inline-block;padding:12px 28px;background:#111;color:#fff;text-decoration:none;border-radius:8px;font-size:14px;font-weight:600;">
-      Accepter l&apos;invitation
+      ${buttonLabel}
     </a>
     <p style="color:#888;font-size:12px;margin:24px 0 0;">
-      Ce lien expire le ${expiryFormatted}. Si vous n&apos;avez pas demandé cette invitation, ignorez cet email.
+      Ce lien expire le ${expiryFormatted}. Si vous n&apos;avez pas demand&eacute; cette invitation, ignorez cet email.
     </p>
   </div>
 </body>

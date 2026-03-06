@@ -42,6 +42,7 @@ export type InviteItem = {
   expiresAt: string | null;
   inviteLink?: string;
   tokenPreview?: string;
+  userExists?: boolean;
 };
 
 export type InvitesResponse = { items: InviteItem[] };

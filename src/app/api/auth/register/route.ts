@@ -49,6 +49,7 @@ export async function POST(request: NextRequest) {
   const email = normalizeEmail(body.email);
   const password = body.password.trim();
   const name = typeof body.name === 'string' ? body.name : undefined;
+  const inviteToken = typeof body.inviteToken === 'string' ? body.inviteToken.trim() : null;
 
   if (!isValidEmail(email)) {
     const res = withRequestId(badRequest('Email invalide.'), requestId);
@@ -81,6 +82,7 @@ export async function POST(request: NextRequest) {
       data: {
         emailVerificationToken: verificationHash,
         emailVerificationExpiry: verificationExpiry,
+        ...(inviteToken ? { pendingInviteToken: crypto.createHash('sha256').update(inviteToken).digest('base64url') } : {}),
       },
     });
 

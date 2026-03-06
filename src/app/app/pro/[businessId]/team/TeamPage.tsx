@@ -1,7 +1,7 @@
 'use client';
 
 import { type FormEvent, useMemo, useState } from 'react';
-import { Search, Users, Plus, Pencil, Trash2 } from 'lucide-react';
+import { Search, Users, Plus, Pencil, Trash2, ChevronDown, ChevronRight } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -72,6 +72,9 @@ export default function TeamPage({ businessId }: Props) {
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState<BusinessRole | 'ALL'>('ALL');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL');
+
+  // Invitations: archive toggle
+  const [showArchived, setShowArchived] = useState(false);
 
   // Unit modal state
   const [unitModalOpen, setUnitModalOpen] = useState(false);
@@ -325,87 +328,135 @@ export default function TeamPage({ businessId }: Props) {
             ) : null}
           </div>
 
-          {/* Pending invitations list */}
-          <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5 space-y-3">
-            <div>
-              <p className="text-sm font-semibold text-[var(--text)]">Invitations en attente</p>
-              <p className="mt-0.5 text-xs text-[var(--text-secondary)]">
-                Révoque une invitation pour la rendre invalide immédiatement.
-              </p>
-            </div>
-
-            {teamData.loading ? (
-              <p className="text-sm text-[var(--text-secondary)]">Chargement des invitations…</p>
-            ) : teamData.invites.length === 0 ? (
-              <p className="text-sm text-[var(--text-secondary)]">Aucune invitation active.</p>
-            ) : (
-              <div className="space-y-2">
-                {teamData.invites.map((inv) => (
-                  <div
-                    key={inv.id}
-                    className="flex flex-col gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface)]/70 p-3 md:flex-row md:items-center md:justify-between"
-                  >
-                    <div className="space-y-1">
-                      <p className="text-sm font-semibold text-[var(--text)]">{inv.email}</p>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Badge variant="neutral">{ROLE_LABELS[inv.role]}</Badge>
-                        <Badge
-                          variant={
-                            inv.status === 'PENDING' ? 'neutral'
-                              : inv.status === 'ACCEPTED' ? 'success'
-                                : 'warning'
-                          }
-                        >
-                          {inv.status === 'PENDING' ? 'En attente'
-                            : inv.status === 'ACCEPTED' ? 'Acceptée'
-                              : inv.status === 'EXPIRED' ? 'Expirée'
-                                : 'Révoquée'}
-                        </Badge>
-                        <span className="text-[10px] text-[var(--text-secondary)]">
-                          Envoyée le {formatDate(inv.createdAt)}
-                        </span>
-                        {inv.expiresAt && inv.status === 'PENDING' ? (
-                          <InviteExpiry expiresAt={inv.expiresAt} />
-                        ) : null}
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      {inv.inviteLink ? (
-                        <>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            disabled={inv.status !== 'PENDING'}
-                            onClick={() => void invites.copyInviteLink(inv.inviteLink!)}
-                          >
-                            Copier le lien
-                          </Button>
-                          <a
-                            className="text-xs text-[var(--accent-strong)] underline"
-                            href={inv.inviteLink}
-                            target="_blank"
-                            rel="noreferrer"
-                          >
-                            Ouvrir
-                          </a>
-                        </>
-                      ) : null}
-                      {inv.status === 'PENDING' && canInvite ? (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={invites.inviteLoading}
-                          onClick={() => void invites.onRevokeInvite(inv.id)}
-                        >
-                          Révoquer
-                        </Button>
-                      ) : null}
-                    </div>
+          {/* Active invitations list (PENDING + ACCEPTED) */}
+          {(() => {
+            const activeInvites = teamData.invites.filter(i => i.status === 'PENDING' || i.status === 'ACCEPTED');
+            const archivedInvites = teamData.invites.filter(i => i.status === 'REVOKED' || i.status === 'EXPIRED');
+            return (
+              <>
+                <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5 space-y-3">
+                  <div>
+                    <p className="text-sm font-semibold text-[var(--text)]">Invitations actives</p>
+                    <p className="mt-0.5 text-xs text-[var(--text-secondary)]">
+                      Révoque une invitation pour la rendre invalide immédiatement.
+                    </p>
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
+
+                  {teamData.loading ? (
+                    <p className="text-sm text-[var(--text-secondary)]">Chargement des invitations…</p>
+                  ) : activeInvites.length === 0 ? (
+                    <p className="text-sm text-[var(--text-secondary)]">Aucune invitation active.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {activeInvites.map((inv) => (
+                        <div
+                          key={inv.id}
+                          className="flex flex-col gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface)]/70 p-3 md:flex-row md:items-center md:justify-between"
+                        >
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2">
+                              <p className="text-sm font-semibold text-[var(--text)]">{inv.email}</p>
+                              {inv.userExists === true && (
+                                <span className="rounded-full bg-[var(--surface-2)] px-2 py-0.5 text-[10px] text-[var(--text-secondary)]">Compte existant</span>
+                              )}
+                              {inv.userExists === false && (
+                                <span className="rounded-full bg-[var(--surface-2)] px-2 py-0.5 text-[10px] text-[var(--text-secondary)]">Nouveau</span>
+                              )}
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Badge variant="neutral">{ROLE_LABELS[inv.role]}</Badge>
+                              <Badge variant={inv.status === 'ACCEPTED' ? 'success' : 'neutral'}>
+                                {inv.status === 'ACCEPTED' ? 'Acceptée' : 'En attente'}
+                              </Badge>
+                              <span className="text-[10px] text-[var(--text-secondary)]">
+                                Envoyée le {formatDate(inv.createdAt)}
+                              </span>
+                              {inv.expiresAt && inv.status === 'PENDING' ? (
+                                <InviteExpiry expiresAt={inv.expiresAt} />
+                              ) : null}
+                            </div>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            {inv.inviteLink && inv.status === 'PENDING' ? (
+                              <>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => void invites.copyInviteLink(inv.inviteLink!)}
+                                >
+                                  Copier le lien
+                                </Button>
+                                <a
+                                  className="text-xs text-[var(--accent-strong)] underline"
+                                  href={inv.inviteLink}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                >
+                                  Ouvrir
+                                </a>
+                              </>
+                            ) : null}
+                            {inv.status === 'PENDING' && canInvite ? (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={invites.inviteLoading}
+                                onClick={() => void invites.onRevokeInvite(inv.id)}
+                              >
+                                Révoquer
+                              </Button>
+                            ) : null}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Archived invitations (REVOKED + EXPIRED) — collapsible */}
+                {archivedInvites.length > 0 && (
+                  <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5 space-y-3">
+                    <button
+                      type="button"
+                      className="flex w-full items-center gap-2 text-left"
+                      onClick={() => setShowArchived((v) => !v)}
+                    >
+                      {showArchived
+                        ? <ChevronDown size={14} className="text-[var(--text-secondary)]" />
+                        : <ChevronRight size={14} className="text-[var(--text-secondary)]" />}
+                      <p className="text-sm font-semibold text-[var(--text-secondary)]">
+                        Invitations archivées ({archivedInvites.length})
+                      </p>
+                    </button>
+
+                    {showArchived && (
+                      <div className="space-y-2">
+                        {archivedInvites.map((inv) => (
+                          <div
+                            key={inv.id}
+                            className="flex flex-col gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface)]/70 p-3 opacity-60 md:flex-row md:items-center md:justify-between"
+                          >
+                            <div className="space-y-1">
+                              <p className="text-sm font-semibold text-[var(--text)]">{inv.email}</p>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <Badge variant="neutral">{ROLE_LABELS[inv.role]}</Badge>
+                                <Badge variant="warning">
+                                  {inv.status === 'EXPIRED' ? 'Expirée' : 'Révoquée'}
+                                </Badge>
+                                <span className="text-[10px] text-[var(--text-secondary)]">
+                                  Envoyée le {formatDate(inv.createdAt)}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </>
+            );
+          })()}
         </>
       )}
 

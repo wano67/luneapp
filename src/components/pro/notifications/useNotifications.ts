@@ -6,6 +6,7 @@ export type NotificationItem = {
   type: string;
   title: string;
   body: string | null;
+  businessId: string | null;
   taskId: string | null;
   projectId: string | null;
   isRead: boolean;
@@ -18,17 +19,25 @@ type NotificationsResponse = {
   unreadCount: number;
 };
 
-export function useNotifications(businessId: string | undefined) {
+/**
+ * Hook for notifications.
+ * - With businessId → business-scoped endpoints
+ * - Without businessId → personal aggregate endpoints (cross-business)
+ */
+export function useNotifications(businessId?: string) {
   const [items, setItems] = useState<NotificationItem[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  const base = businessId
+    ? `/api/pro/businesses/${businessId}/notifications`
+    : '/api/personal/notifications';
+
   const loadNotifications = useCallback(async () => {
-    if (!businessId) return;
     setLoading(true);
     try {
-      const res = await fetchJson<NotificationsResponse>(`/api/pro/businesses/${businessId}/notifications?limit=30`);
+      const res = await fetchJson<NotificationsResponse>(`${base}?limit=30`);
       if (res.ok && res.data) {
         setItems(res.data.items);
         setUnreadCount(res.data.unreadCount);
@@ -36,24 +45,22 @@ export function useNotifications(businessId: string | undefined) {
     } finally {
       setLoading(false);
     }
-  }, [businessId]);
+  }, [base]);
 
   const pollUnreadCount = useCallback(async () => {
-    if (!businessId) return;
     try {
-      const res = await fetchJson<NotificationsResponse>(`/api/pro/businesses/${businessId}/notifications?limit=0`);
+      const res = await fetchJson<NotificationsResponse>(`${base}?limit=0`);
       if (res.ok && res.data) {
         setUnreadCount(res.data.unreadCount);
       }
     } catch {
       // silent
     }
-  }, [businessId]);
+  }, [base]);
 
   const markRead = useCallback(async (notificationId: string) => {
-    if (!businessId) return;
     try {
-      await fetchJson(`/api/pro/businesses/${businessId}/notifications/${notificationId}`, {
+      await fetchJson(`${base}/${notificationId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ isRead: true }),
@@ -63,30 +70,26 @@ export function useNotifications(businessId: string | undefined) {
     } catch {
       // silent
     }
-  }, [businessId]);
+  }, [base]);
 
   const markAllRead = useCallback(async () => {
-    if (!businessId) return;
     try {
-      await fetchJson(`/api/pro/businesses/${businessId}/notifications/read-all`, {
-        method: 'POST',
-      });
+      await fetchJson(`${base}/read-all`, { method: 'POST' });
       setItems((prev) => prev.map((n) => ({ ...n, isRead: true })));
       setUnreadCount(0);
     } catch {
       // silent
     }
-  }, [businessId]);
+  }, [base]);
 
   // Poll every 60s for unread count
   useEffect(() => {
-    if (!businessId) return;
     void pollUnreadCount();
     intervalRef.current = setInterval(() => void pollUnreadCount(), 60_000);
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [businessId, pollUnreadCount]);
+  }, [pollUnreadCount]);
 
   return { items, unreadCount, loading, loadNotifications, markRead, markAllRead };
 }

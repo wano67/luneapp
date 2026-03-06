@@ -3,7 +3,8 @@
 import type { ReactNode } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { ChevronRight } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { ChevronRight, UserPlus } from 'lucide-react';
 import { fetchJson } from '@/lib/apiClient';
 import { IconPerso, IconEntreprise } from '@/components/pivot-icons';
 import { fmtKpi } from '@/lib/format';
@@ -34,7 +35,22 @@ type BusinessResponse = {
 };
 type BusinessItem = { id: string; name: string };
 
+type PendingInvite = {
+  id: string;
+  businessName: string;
+  businessId: string;
+  role: string;
+  token: string;
+};
+
+const INVITE_ROLE_LABELS: Record<string, string> = {
+  ADMIN: 'Administrateur',
+  MEMBER: 'Membre',
+  VIEWER: 'Lecteur',
+};
+
 export default function AppHomePage() {
+  const router = useRouter();
   const [userName, setUserName] = useState<string | null>(null);
   const [summary, setSummary] = useState<{
     totalBalanceCents: string;
@@ -44,15 +60,18 @@ export default function AppHomePage() {
     transactions: SummaryResponse['latestTransactions'];
   } | null>(null);
   const [businesses, setBusinesses] = useState<BusinessItem[]>([]);
+  const [pendingInvites, setPendingInvites] = useState<PendingInvite[]>([]);
+  const [acceptingId, setAcceptingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const ctrl = new AbortController();
     (async () => {
-      const [meRes, sumRes, bizRes] = await Promise.all([
+      const [meRes, sumRes, bizRes, invRes] = await Promise.all([
         fetchJson<{ user?: { name?: string } }>('/api/auth/me', {}, ctrl.signal),
         fetchJson<SummaryResponse>('/api/personal/summary', {}, ctrl.signal),
         fetchJson<BusinessResponse>('/api/pro/businesses', {}, ctrl.signal),
+        fetchJson<{ items?: PendingInvite[] }>('/api/personal/pending-invites', {}, ctrl.signal),
       ]);
       if (ctrl.signal.aborted) return;
 
@@ -88,6 +107,10 @@ export default function AppHomePage() {
         );
       }
 
+      if (invRes.ok && invRes.data?.items) {
+        setPendingInvites(invRes.data.items);
+      }
+
       setLoading(false);
     })();
     return () => ctrl.abort();
@@ -105,12 +128,62 @@ export default function AppHomePage() {
     return businesses[0];
   }, [businesses]);
 
+  async function acceptInvite(token: string, inviteId: string) {
+    setAcceptingId(inviteId);
+    try {
+      const res = await fetchJson<{ business?: { id: string | bigint } }>(
+        '/api/pro/businesses/invites/accept',
+        { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token }) },
+      );
+      if (res.ok && res.data?.business?.id) {
+        router.push(`/app/pro/${res.data.business.id}`);
+      } else {
+        setPendingInvites((prev) => prev.filter((i) => i.id !== inviteId));
+      }
+    } catch {
+      setPendingInvites((prev) => prev.filter((i) => i.id !== inviteId));
+    } finally {
+      setAcceptingId(null);
+    }
+  }
+
   const greeting = loading ? 'Chargement…' : userName ? `Bonjour ${userName}` : 'Bonjour';
   const netCents = summary ? BigInt(summary.monthNetCents) : 0n;
 
   return (
     <PageContainer className="gap-7">
       <PageHeader title={greeting} />
+
+      {/* Pending invites banner */}
+      {pendingInvites.length > 0 && (
+        <div className="space-y-2">
+          {pendingInvites.map((inv) => (
+            <div
+              key={inv.id}
+              className="flex items-center justify-between gap-4 rounded-xl border border-[var(--accent-strong)]/30 bg-[var(--accent-strong)]/5 p-4"
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <UserPlus size={18} className="shrink-0" style={{ color: 'var(--accent-strong)' }} />
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-[var(--text)] truncate">
+                    Invitation à rejoindre {inv.businessName}
+                  </p>
+                  <p className="text-xs text-[var(--text-secondary)]">
+                    Rôle : {INVITE_ROLE_LABELS[inv.role] ?? inv.role}
+                  </p>
+                </div>
+              </div>
+              <Button
+                size="sm"
+                onClick={() => void acceptInvite(inv.token, inv.id)}
+                disabled={acceptingId === inv.id}
+              >
+                {acceptingId === inv.id ? 'Acceptation…' : 'Accepter'}
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* KPIs */}
       <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">

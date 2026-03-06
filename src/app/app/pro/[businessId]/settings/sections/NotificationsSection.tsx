@@ -11,6 +11,7 @@ const NOTIFICATION_TYPES: { key: string; label: string; description: string }[] 
   { key: 'TASK_BLOCKED', label: 'Tâche bloquée', description: 'Quand une tâche est marquée bloquée.' },
   { key: 'MESSAGE_RECEIVED', label: 'Nouveau message', description: 'Quand un message est reçu dans une conversation.' },
   { key: 'PROJECT_OVERDUE', label: 'Projet en retard', description: 'Quand un projet dépasse sa date de fin.' },
+  { key: 'BUSINESS_INVITE', label: 'Invitation business', description: 'Quand vous êtes invité à rejoindre un business.' },
 ];
 
 type PrefsMap = Record<string, boolean>;

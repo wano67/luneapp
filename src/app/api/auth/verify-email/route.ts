@@ -51,13 +51,50 @@ export async function GET(request: NextRequest) {
       emailVerified: true,
       emailVerificationToken: null,
       emailVerificationExpiry: null,
+      pendingInviteToken: null,
     },
   });
+
+  // Auto-accept pending business invite if present
+  let acceptedBusinessId: bigint | null = null;
+
+  if (user.pendingInviteToken) {
+    const invite = await prisma.businessInvite.findFirst({
+      where: { token: user.pendingInviteToken, status: 'PENDING' },
+      include: { business: { select: { id: true } } },
+    });
+
+    if (
+      invite &&
+      invite.email.toLowerCase() === user.email.toLowerCase() &&
+      (!invite.expiresAt || invite.expiresAt > new Date())
+    ) {
+      const alreadyMember = await prisma.businessMembership.findUnique({
+        where: { businessId_userId: { businessId: invite.businessId, userId: user.id } },
+      });
+      if (!alreadyMember) {
+        await prisma.$transaction(async (tx) => {
+          await tx.businessMembership.create({
+            data: { businessId: invite.businessId, userId: user.id, role: invite.role },
+          });
+          await tx.businessInvite.update({
+            where: { id: invite.id },
+            data: { status: 'ACCEPTED' },
+          });
+        });
+        acceptedBusinessId = invite.businessId;
+      }
+    }
+  }
 
   const updatedUser = { ...user, emailVerified: true };
   const sessionToken = await createSessionToken(updatedUser);
 
-  const response = NextResponse.redirect(new URL('/verify-email?verified=true', request.url));
+  const redirectTarget = acceptedBusinessId
+    ? `/app/pro/${acceptedBusinessId}`
+    : '/verify-email?verified=true';
+
+  const response = NextResponse.redirect(new URL(redirectTarget, request.url));
   response.cookies.set({
     name: AUTH_COOKIE_NAME,
     value: sessionToken,
@@ -112,14 +149,47 @@ export async function POST(request: NextRequest) {
       emailVerified: true,
       emailVerificationToken: null,
       emailVerificationExpiry: null,
+      pendingInviteToken: null,
     },
   });
+
+  // Auto-accept pending business invite if present
+  let acceptedBusinessId: string | null = null;
+
+  if (user.pendingInviteToken) {
+    const invite = await prisma.businessInvite.findFirst({
+      where: { token: user.pendingInviteToken, status: 'PENDING' },
+      include: { business: { select: { id: true } } },
+    });
+
+    if (
+      invite &&
+      invite.email.toLowerCase() === user.email.toLowerCase() &&
+      (!invite.expiresAt || invite.expiresAt > new Date())
+    ) {
+      const alreadyMember = await prisma.businessMembership.findUnique({
+        where: { businessId_userId: { businessId: invite.businessId, userId: user.id } },
+      });
+      if (!alreadyMember) {
+        await prisma.$transaction(async (tx) => {
+          await tx.businessMembership.create({
+            data: { businessId: invite.businessId, userId: user.id, role: invite.role },
+          });
+          await tx.businessInvite.update({
+            where: { id: invite.id },
+            data: { status: 'ACCEPTED' },
+          });
+        });
+        acceptedBusinessId = invite.businessId.toString();
+      }
+    }
+  }
 
   const updatedUser = { ...user, emailVerified: true };
   const sessionToken = await createSessionToken(updatedUser);
 
   const response = NextResponse.json(
-    { user: toPublicUser(updatedUser), verified: true },
+    { user: toPublicUser(updatedUser), verified: true, acceptedBusinessId },
     { status: 200 }
   );
 

@@ -8,6 +8,7 @@ import { buildBaseUrl } from '@/server/http/baseUrl';
 import crypto from 'crypto';
 import { isValidEmail } from '@/lib/validation/email';
 import { sendInviteEmail } from '@/server/services/email';
+import { notify } from '@/server/services/notifications';
 
 function hashToken(raw: string) {
   return crypto.createHash('sha256').update(raw).digest('base64url');
@@ -24,6 +25,14 @@ export const GET = withBusinessRoute(
       where: { businessId: ctx.businessId },
       orderBy: { createdAt: 'desc' },
     });
+
+    // Batch lookup: which invited emails already have an account
+    const inviteEmails = [...new Set(invites.map((i) => i.email.toLowerCase()))];
+    const existingUsers = await prisma.user.findMany({
+      where: { email: { in: inviteEmails } },
+      select: { email: true },
+    });
+    const existingEmailSet = new Set(existingUsers.map((u) => u.email.toLowerCase()));
 
     const baseUrl = buildBaseUrl(req);
     const now = Date.now();
@@ -50,6 +59,7 @@ export const GET = withBusinessRoute(
         status,
         createdAt: inv.createdAt,
         expiresAt: inv.expiresAt,
+        userExists: existingEmailSet.has(inv.email.toLowerCase()),
         ...(inviteLink ? { inviteLink, tokenPreview: inv.token.slice(-6) } : {}),
       };
     });
@@ -159,7 +169,10 @@ export const POST = withBusinessRoute(
       return serverError();
     }
 
-    const inviteLink = `${baseUrl}/app/invites/accept?token=${encodeURIComponent(rawToken)}`;
+    const userExists = !!existingUser;
+    const inviteLink = userExists
+      ? `${baseUrl}/app/invites/accept?token=${encodeURIComponent(rawToken)}`
+      : `${baseUrl}/register?invite=${encodeURIComponent(rawToken)}&email=${encodeURIComponent(email)}`;
 
     const inviter = await prisma.user.findUnique({
       where: { id: ctx.userId },
@@ -173,7 +186,23 @@ export const POST = withBusinessRoute(
       role,
       inviteLink,
       expiresAt,
+      userExists,
     }).catch(() => {});
+
+    // Create in-app notification for existing users (respects preferences)
+    if (existingUser) {
+      const ROLE_LABELS: Record<string, string> = { ADMIN: 'Administrateur', MEMBER: 'Membre', VIEWER: 'Lecteur' };
+      void notify(
+        [existingUser.id],
+        ctx.userId,
+        {
+          businessId: ctx.businessId,
+          type: 'BUSINESS_INVITE',
+          title: `Invitation à rejoindre ${business.name}`,
+          body: `En tant que ${ROLE_LABELS[role] ?? role}`,
+        },
+      );
+    }
 
     return jsonbCreated(
       {
@@ -181,6 +210,7 @@ export const POST = withBusinessRoute(
           ...invite,
           inviteLink,
           tokenPreview: rawToken.slice(-6),
+          userExists,
         },
       },
       ctx.requestId

@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server';
 import { getAllowedOrigins } from '@/server/security/csrf';
 
 export function buildBaseUrl(request: NextRequest) {
-  const envBase = process.env.BASE_URL?.trim();
+  const envBase = (process.env.BASE_URL || process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL)?.trim();
   if (envBase) {
     try {
       return new URL(envBase).origin;

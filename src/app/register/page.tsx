@@ -3,7 +3,7 @@
 
 import { useState, FormEvent, type ChangeEvent } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -16,7 +16,12 @@ type Prefs = { language: 'fr' | 'en'; theme: 'light' | 'dark' | 'system' };
 
 export default function RegisterPage() {
   const router = useRouter();
-  const [email, setEmail] = useState('');
+  const searchParams = useSearchParams();
+  const inviteToken = searchParams?.get('invite') || '';
+  const prefilledEmail = searchParams?.get('email') || '';
+  const emailLocked = !!inviteToken && !!prefilledEmail;
+
+  const [email, setEmail] = useState(prefilledEmail);
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [password, setPassword] = useState('');
@@ -59,6 +64,7 @@ export default function RegisterPage() {
           email,
           password,
           name: `${firstName} ${lastName}`.trim() || undefined,
+          ...(inviteToken ? { inviteToken } : {}),
         }),
       });
 
@@ -147,6 +153,14 @@ export default function RegisterPage() {
             </p>
           </div>
 
+          {inviteToken ? (
+            <Alert
+              variant="info"
+              title="Invitation"
+              description="Vous avez été invité à rejoindre un business. Créez votre compte pour accepter l'invitation."
+            />
+          ) : null}
+
           {error ? (
             <Alert
               variant="danger"
@@ -199,6 +213,8 @@ export default function RegisterPage() {
                   value={email}
                   onChange={(event: ChangeEvent<HTMLInputElement>) => setEmail(event.target.value)}
                   required
+                  readOnly={emailLocked}
+                  className={emailLocked ? 'opacity-60' : ''}
                 />
                 <div className="grid gap-3 md:grid-cols-2">
                   <Input

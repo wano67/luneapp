@@ -139,6 +139,7 @@ model User {
   emailVerified           Boolean   @default(false)
   emailVerificationToken  String?
   emailVerificationExpiry DateTime?
+  pendingInviteToken      String?
   language     String   @default("fr")
   theme        String   @default("system")
 
@@ -1744,6 +1745,7 @@ enum NotificationType {
   TASK_BLOCKED
   MESSAGE_RECEIVED
   PROJECT_OVERDUE
+  BUSINESS_INVITE
 }
 
 model Notification {

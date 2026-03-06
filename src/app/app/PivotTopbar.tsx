@@ -3,7 +3,7 @@
 import type { ReactNode } from 'react';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
-import { ChevronDown, Search, CheckSquare, Calendar, MessageSquare, AlertTriangle, X, Loader2 } from 'lucide-react';
+import { ChevronDown, Search, CheckSquare, Calendar, MessageSquare, AlertTriangle, UserPlus, X, Loader2 } from 'lucide-react';
 import {
   IconAlert,
   IconMessage,
@@ -138,11 +138,7 @@ export default function PivotTopbar({ space, pathname, businessId, businesses, o
 
         {/* Right: Actions */}
         <div className="flex items-center gap-2 justify-end">
-          {inBusiness && businessId ? (
-            <NotificationsDropdown businessId={businessId} onToggleMessaging={onToggleMessaging} />
-          ) : (
-            <NavIconBtn onClick={handleComingSoon}><IconAlert size={20} color="var(--shell-topbar-text)" /></NavIconBtn>
-          )}
+          <NotificationsDropdown onToggleMessaging={onToggleMessaging} />
           <NavIconBtn onClick={inBusiness ? onToggleMessaging : handleComingSoon}><IconMessage size={20} color="var(--shell-topbar-text)" /></NavIconBtn>
           <Link href={inBusiness ? `/app/pro/${businessId}/settings` : '/app/account'}>
             <NavIconBtn><IconSettings size={20} color="var(--shell-topbar-text)" /></NavIconBtn>
@@ -159,9 +155,7 @@ export default function PivotTopbar({ space, pathname, businessId, businesses, o
           {mobileTitle}
         </span>
         <div className="flex items-center gap-1">
-          {inBusiness && businessId ? (
-            <NotificationsDropdown businessId={businessId} onToggleMessaging={onToggleMessaging} />
-          ) : null}
+          <NotificationsDropdown onToggleMessaging={onToggleMessaging} />
           <Link href={inBusiness ? `/app/pro/${businessId}/settings` : '/app/account'}>
             <NavIconBtn><IconSettings size={20} color="var(--shell-topbar-text)" /></NavIconBtn>
           </Link>
@@ -274,18 +268,31 @@ function Separator() {
 
 /* ═══ Notifications Dropdown ═══ */
 
-function NotificationsDropdown({ businessId, onToggleMessaging }: { businessId: string; onToggleMessaging?: () => void }) {
+type NotifItem = {
+  id: string;
+  type: string;
+  title: string;
+  body: string | null;
+  businessId: string | null;
+  taskId: string | null;
+  projectId: string | null;
+  conversationId: string | null;
+  isRead: boolean;
+  createdAt: string;
+};
+
+function NotificationsDropdown({ onToggleMessaging }: { onToggleMessaging?: () => void }) {
   const [open, setOpen] = useState(false);
-  const [items, setItems] = useState<Array<{ id: string; type: string; title: string; body: string | null; taskId: string | null; projectId: string | null; conversationId: string | null; isRead: boolean; createdAt: string }>>([]);
+  const [items, setItems] = useState<NotifItem[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
 
-  // Poll unread count every 60s
+  // Poll unread count every 60s (cross-business)
   useEffect(() => {
     async function poll() {
       try {
         const res = await fetchJson<{ items: unknown[]; unreadCount: number }>(
-          `/api/pro/businesses/${businessId}/notifications?limit=0`
+          '/api/personal/notifications?limit=0'
         );
         if (res.ok && res.data) setUnreadCount(res.data.unreadCount);
       } catch { /* silent */ }
@@ -293,7 +300,7 @@ function NotificationsDropdown({ businessId, onToggleMessaging }: { businessId: 
     void poll();
     const interval = setInterval(() => void poll(), 60_000);
     return () => clearInterval(interval);
-  }, [businessId]);
+  }, []);
 
   // Load full list when opened
   useEffect(() => {
@@ -302,8 +309,8 @@ function NotificationsDropdown({ businessId, onToggleMessaging }: { businessId: 
     async function load() {
       setLoading(true);
       try {
-        const res = await fetchJson<{ items: typeof items; unreadCount: number }>(
-          `/api/pro/businesses/${businessId}/notifications?limit=30`, {}, controller.signal
+        const res = await fetchJson<{ items: NotifItem[]; unreadCount: number }>(
+          '/api/personal/notifications?limit=30', {}, controller.signal
         );
         if (controller.signal.aborted) return;
         if (res.ok && res.data) {
@@ -318,19 +325,19 @@ function NotificationsDropdown({ businessId, onToggleMessaging }: { businessId: 
     }
     void load();
     return () => controller.abort();
-  }, [open, businessId]);
+  }, [open]);
 
   const markAllRead = useCallback(async () => {
     try {
-      await fetchJson(`/api/pro/businesses/${businessId}/notifications/read-all`, { method: 'POST' });
+      await fetchJson('/api/personal/notifications/read-all', { method: 'POST' });
       setItems((prev) => prev.map((n) => ({ ...n, isRead: true })));
       setUnreadCount(0);
     } catch { /* silent */ }
-  }, [businessId]);
+  }, []);
 
   const markRead = useCallback(async (notifId: string) => {
     try {
-      await fetchJson(`/api/pro/businesses/${businessId}/notifications/${notifId}`, {
+      await fetchJson(`/api/personal/notifications/${notifId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ isRead: true }),
@@ -338,15 +345,16 @@ function NotificationsDropdown({ businessId, onToggleMessaging }: { businessId: 
       setItems((prev) => prev.map((n) => n.id === notifId ? { ...n, isRead: true } : n));
       setUnreadCount((c) => Math.max(0, c - 1));
     } catch { /* silent */ }
-  }, [businessId]);
+  }, []);
 
-  const NOTIF_ICONS: Record<string, 'task' | 'interaction' | 'message' | 'project'> = {
+  const NOTIF_ICONS: Record<string, 'task' | 'interaction' | 'message' | 'project' | 'invite'> = {
     TASK_ASSIGNED: 'task',
     TASK_STATUS_CHANGED: 'task',
     TASK_DUE_SOON: 'task',
     TASK_BLOCKED: 'interaction',
     MESSAGE_RECEIVED: 'message',
     PROJECT_OVERDUE: 'project',
+    BUSINESS_INVITE: 'invite',
   };
 
   return (
@@ -410,11 +418,13 @@ function NotificationsDropdown({ businessId, onToggleMessaging }: { businessId: 
               ) : (
                 items.map((notif) => {
                   const iconType = NOTIF_ICONS[notif.type] ?? 'task';
-                  const href = notif.projectId
-                    ? `/app/pro/${businessId}/projects/${notif.projectId}`
-                    : notif.taskId
-                      ? `/app/pro/${businessId}/tasks`
-                      : null;
+                  const href = notif.type === 'BUSINESS_INVITE'
+                    ? '/app'
+                    : notif.projectId && notif.businessId
+                      ? `/app/pro/${notif.businessId}/projects/${notif.projectId}`
+                      : notif.taskId && notif.businessId
+                        ? `/app/pro/${notif.businessId}/tasks`
+                        : null;
 
                   const inner = (
                     <div className="flex items-start gap-3">
@@ -431,7 +441,7 @@ function NotificationsDropdown({ businessId, onToggleMessaging }: { businessId: 
                           width: 28,
                           height: 28,
                           background:
-                            iconType === 'task' || iconType === 'message'
+                            iconType === 'task' || iconType === 'message' || iconType === 'invite'
                               ? 'var(--shell-accent)'
                               : 'var(--danger-bg)',
                         }}
@@ -440,6 +450,8 @@ function NotificationsDropdown({ businessId, onToggleMessaging }: { businessId: 
                           <CheckSquare size={14} style={{ color: 'white' }} />
                         ) : iconType === 'message' ? (
                           <MessageSquare size={14} style={{ color: 'white' }} />
+                        ) : iconType === 'invite' ? (
+                          <UserPlus size={14} style={{ color: 'white' }} />
                         ) : iconType === 'project' ? (
                           <AlertTriangle size={14} style={{ color: 'var(--danger)' }} />
                         ) : (

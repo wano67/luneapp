@@ -19,7 +19,7 @@ type LoginInput = {
   password: string;
 };
 
-export type PublicUser = Omit<User, 'passwordHash' | 'id' | 'emailVerificationToken' | 'emailVerificationExpiry'> & { id: string };
+export type PublicUser = Omit<User, 'passwordHash' | 'id' | 'emailVerificationToken' | 'emailVerificationExpiry' | 'pendingInviteToken'> & { id: string };
 
 async function hashPassword(password: string) {
   return bcrypt.hash(password, 10);
