@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import Select from '@/components/ui/select';
 import { UI } from '@/components/pro/projects/workspace-ui';
+import { TASK_STATUS_OPTIONS } from '@/lib/taskStatusUi';
 import { formatCurrencyEUR } from '@/lib/formatCurrency';
 import { sanitizeEuroInput } from '@/lib/money';
 import type { ServiceItem, TaskItem, MemberItem } from '@/components/pro/projects/hooks/useProjectDataLoaders';
@@ -315,9 +316,9 @@ export function BillingServiceCard({
                           onChange={(e) => void onUpdateTask(task.id, { status: e.target.value })}
                           disabled={!isAdmin || isTaskSaving}
                         >
-                          <option value="TODO">À faire</option>
-                          <option value="IN_PROGRESS">En cours</option>
-                          <option value="DONE">Terminée</option>
+                          {TASK_STATUS_OPTIONS.map((o) => (
+                            <option key={o.value} value={o.value}>{o.label}</option>
+                          ))}
                         </Select>
                         <Select
                           value={task.assigneeUserId ?? ''}

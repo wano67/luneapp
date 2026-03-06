@@ -18,8 +18,7 @@ import { useActiveBusiness } from '../../ActiveBusinessProvider';
 import { ReferencePicker } from '../references/ReferencePicker';
 import { useRowSelection } from '../../../components/selection/useRowSelection';
 import { BulkActionBar } from '../../../components/selection/BulkActionBar';
-
-type TaskStatus = 'TODO' | 'IN_PROGRESS' | 'DONE';
+import { TASK_STATUS_OPTIONS } from '@/lib/taskStatusUi';
 
 type Task = {
   id: string;
@@ -33,7 +32,7 @@ type Task = {
   categoryReferenceName: string | null;
   tagReferences: { id: string; name: string }[];
   title: string;
-  status: TaskStatus;
+  status: string;
   dueDate: string | null;
   createdAt: string;
   updatedAt: string;
@@ -41,12 +40,6 @@ type Task = {
 
 type TaskListResponse = { items: Task[] };
 type TaskDetailResponse = { item: Task };
-
-const STATUS_OPTIONS: { value: TaskStatus; label: string }[] = [
-  { value: 'TODO', label: 'À faire' },
-  { value: 'IN_PROGRESS', label: 'En cours' },
-  { value: 'DONE', label: 'Terminé' },
-];
 
 function formatDate(value: string | null) {
   if (!value) return '—';
@@ -68,7 +61,7 @@ export default function TasksPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [statusFilter, setStatusFilter] = useState<TaskStatus | 'ALL'>('ALL');
+  const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [referenceError, setReferenceError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -78,7 +71,7 @@ export default function TasksPage() {
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState({
     title: '',
-    status: 'TODO' as TaskStatus,
+    status: 'TODO',
     projectId: '',
     assigneeUserId: '',
     dueDate: '',
@@ -365,11 +358,11 @@ function openEdit(task: Task) {
           <span className="text-sm font-semibold text-[var(--text-primary)]">Tâches</span>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {[{ value: 'ALL' as const, label: 'Tous' }, ...STATUS_OPTIONS].map((opt) => (
+          {[{ value: 'ALL' as const, label: 'Tous' }, ...TASK_STATUS_OPTIONS].map((opt) => (
             <button
               key={opt.value}
               type="button"
-              onClick={() => setStatusFilter(opt.value as TaskStatus | 'ALL')}
+              onClick={() => setStatusFilter(opt.value)}
               className="rounded-full px-3 py-1.5 text-xs font-semibold transition"
               style={{
                 background: statusFilter === opt.value ? 'var(--shell-accent-dark)' : 'var(--surface)',
@@ -482,7 +475,7 @@ function openEdit(task: Task) {
                                 : 'bg-[var(--warning-bg)] text-[var(--warning)]'
                           }
                         >
-                          {STATUS_OPTIONS.find((s) => s.value === task.status)?.label ?? task.status}
+                          {TASK_STATUS_OPTIONS.find((s) => s.value === task.status)?.label ?? task.status}
                         </Badge>
                       </TableCell>
                       <TableCell>
@@ -546,9 +539,9 @@ function openEdit(task: Task) {
           <Select
             label="Statut"
             value={form.status}
-            onChange={(e) => handleChange('status', e.target.value as TaskStatus)}
+            onChange={(e) => handleChange('status', e.target.value)}
           >
-            {STATUS_OPTIONS.map((opt) => (
+            {TASK_STATUS_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>
                 {opt.label}
               </option>

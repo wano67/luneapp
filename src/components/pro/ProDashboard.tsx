@@ -10,11 +10,10 @@ import { Card } from '@/components/ui/card';
 import { PageContainer } from '@/components/layouts/PageContainer';
 import { fmtKpi } from '@/lib/format';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
+import { TASK_STATUS_LABELS } from '@/lib/taskStatusUi';
 
 const TreasuryCashflowChart = dynamic(() => import('./charts/TreasuryCashflowChart'), { ssr: false });
 const TasksDonut = dynamic(() => import('./charts/TasksDonut'), { ssr: false });
-
-type TaskStatus = 'TODO' | 'IN_PROGRESS' | 'DONE';
 
 type DashboardPayload = {
   kpis?: {
@@ -51,7 +50,7 @@ type DashboardPayload = {
   latestTasks?: Array<{
     id: string;
     title: string;
-    status: TaskStatus;
+    status: string;
     dueDate: string | null;
     projectId: string | null;
     projectName: string | null;
@@ -60,7 +59,7 @@ type DashboardPayload = {
     tasks?: Array<{
       id: string;
       title: string;
-      status: TaskStatus;
+      status: string;
       dueDate: string | null;
       projectId: string | null;
       projectName: string | null;
@@ -81,7 +80,7 @@ type DashboardPayload = {
 type TaskItem = {
   id: string;
   title: string;
-  status: TaskStatus;
+  status: string;
   dueDate: string | null;
   createdAt?: string | null;
   projectId?: string | null;
@@ -89,7 +88,7 @@ type TaskItem = {
 };
 
 function countByStatus(tasks: TaskItem[]) {
-  const counts: Record<TaskStatus, number> = { TODO: 0, IN_PROGRESS: 0, DONE: 0 };
+  const counts: Record<string, number> = { TODO: 0, IN_PROGRESS: 0, DONE: 0 };
   for (const t of tasks) {
     const status = t.status ?? 'TODO';
     counts[status] = (counts[status] ?? 0) + 1;
@@ -256,9 +255,9 @@ export default function ProDashboard({ businessId }: { businessId: string }) {
             </div>
             <TasksDonut
               data={[
-                { name: 'A faire', value: tasksByStatus.TODO },
-                { name: 'En cours', value: tasksByStatus.IN_PROGRESS },
-                { name: 'Terminees', value: tasksByStatus.DONE },
+                { name: TASK_STATUS_LABELS.TODO, value: tasksByStatus.TODO },
+                { name: TASK_STATUS_LABELS.IN_PROGRESS, value: tasksByStatus.IN_PROGRESS },
+                { name: TASK_STATUS_LABELS.DONE, value: tasksByStatus.DONE },
               ]}
               variant="accent"
             />

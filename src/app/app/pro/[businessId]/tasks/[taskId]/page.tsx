@@ -13,8 +13,7 @@ import { ReferencePicker } from '../../references/ReferencePicker';
 import { useActiveBusiness } from '../../../ActiveBusinessProvider';
 import { PageContainer } from '@/components/layouts/PageContainer';
 import { PageHeader } from '@/components/layouts/PageHeader';
-
-type TaskStatus = 'TODO' | 'IN_PROGRESS' | 'DONE';
+import { formatTaskStatus } from '@/lib/taskStatusUi';
 
 type Task = {
   id: string;
@@ -29,7 +28,7 @@ type Task = {
   categoryReferenceName: string | null;
   tagReferences: { id: string; name: string }[];
   title: string;
-  status: TaskStatus;
+  status: string;
   dueDate: string | null;
   createdAt: string;
   updatedAt: string;
@@ -50,12 +49,6 @@ type ChecklistItem = {
 
 type TaskDetailResponse = { item: Task; subtasks?: Task[] };
 type ChecklistResponse = { items: ChecklistItem[] };
-
-const STATUS_LABELS: Record<TaskStatus, string> = {
-  TODO: 'À faire',
-  IN_PROGRESS: 'En cours',
-  DONE: 'Terminé',
-};
 
 function formatDate(value: string | null) {
   if (!value) return '—';
@@ -373,7 +366,7 @@ export default function TaskDetailPage() {
         context={
           <div className="flex flex-wrap gap-2">
             <Badge variant="neutral">
-              {STATUS_LABELS[task.status] ?? task.status}
+              {formatTaskStatus(task.status)}
             </Badge>
             {task.categoryReferenceName ? (
               <Badge variant="neutral" className="bg-indigo-50 text-indigo-700">
@@ -399,7 +392,7 @@ export default function TaskDetailPage() {
           <Card className="border-dashed border-[var(--border)] bg-transparent p-3">
             <p className="text-xs text-[var(--text-secondary)]">Statut</p>
             <p className="text-sm text-[var(--text-primary)]">
-              {STATUS_LABELS[task.status] ?? task.status}
+              {formatTaskStatus(task.status)}
             </p>
           </Card>
           <Card className="border-dashed border-[var(--border)] bg-transparent p-3">
@@ -449,7 +442,7 @@ export default function TaskDetailPage() {
                     </p>
                   </div>
                   <div className="flex items-center gap-2 text-[11px] text-[var(--text-secondary)]">
-                    <Badge variant="neutral">{STATUS_LABELS[subtask.status] ?? subtask.status}</Badge>
+                    <Badge variant="neutral">{formatTaskStatus(subtask.status)}</Badge>
                     <span>{formatDate(subtask.dueDate)}</span>
                   </div>
                 </Link>

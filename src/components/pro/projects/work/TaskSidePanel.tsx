@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import Select from '@/components/ui/select';
 import { cn } from '@/lib/cn';
 import { InitialsAvatar, getStatusBadgeClasses, formatTaskStatus } from '@/components/pro/projects/workspace-ui';
+import { TASK_STATUS_OPTIONS } from '@/lib/taskStatusUi';
 import type { TaskItem, MemberItem, OrganizationUnitItem } from '@/components/pro/projects/hooks/useProjectDataLoaders';
 
 const PHASE_OPTIONS = [
@@ -19,12 +20,6 @@ const PHASE_OPTIONS = [
   { value: 'SEO', label: 'SEO' },
   { value: 'LAUNCH', label: 'Lancement' },
   { value: 'FOLLOW_UP', label: 'Suivi' },
-];
-
-const STATUS_OPTIONS = [
-  { value: 'TODO', label: 'À faire' },
-  { value: 'IN_PROGRESS', label: 'En cours' },
-  { value: 'DONE', label: 'Terminée' },
 ];
 
 type ServiceOption = { id: string; name: string };
@@ -179,7 +174,7 @@ export function TaskSidePanel({
               onChange={(e) => patchField('status', e.target.value)}
               disabled={!canEdit}
             >
-              {STATUS_OPTIONS.map((o) => (
+              {TASK_STATUS_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>{o.label}</option>
               ))}
             </Select>

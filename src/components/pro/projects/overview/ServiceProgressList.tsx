@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { GuidedCtaCard } from '@/components/pro/shared/GuidedCtaCard';
+import { formatTaskStatus } from '@/lib/taskStatusUi';
 
 export type ServiceItem = {
   id: string;
@@ -28,14 +29,6 @@ function ProgressBar({ value }: { value: number }) {
       <div className="h-1.5 rounded-full bg-[var(--accent)] transition-all" style={{ width: `${pct}%` }} />
     </div>
   );
-}
-
-function formatTaskStatus(status: string) {
-  if (!status) return '—';
-  if (status === 'DONE') return 'Terminée';
-  if (status === 'IN_PROGRESS') return 'En cours';
-  if (status === 'TODO') return 'À faire';
-  return status;
 }
 
 function formatDate(value: string | null) {

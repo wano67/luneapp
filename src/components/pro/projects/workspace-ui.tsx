@@ -27,25 +27,7 @@ export function formatDate(value: string | null) {
   }
 }
 
-export function formatTaskStatus(status: string) {
-  if (status === 'DONE') return 'Terminée';
-  if (status === 'IN_PROGRESS') return 'En cours';
-  if (status === 'TODO') return 'À faire';
-  return status || '\u2014';
-}
-
-export const STATUS_BADGE_STYLES: Record<string, string> = {
-  DONE: 'border-[var(--success-border)] bg-[var(--success-bg)] text-[var(--success)]',
-  IN_PROGRESS: 'border-[var(--warning-border)] bg-[var(--warning-bg)] text-[var(--warning)]',
-  TODO: 'border-[var(--border)] bg-[var(--surface-2)] text-[var(--text)]',
-};
-
-export function getStatusBadgeClasses(status: string) {
-  return (
-    STATUS_BADGE_STYLES[status] ??
-    'border-[var(--border)]/60 bg-[var(--surface-2)] text-[var(--text-secondary)]'
-  );
-}
+export { formatTaskStatus, TASK_STATUS_CLASSES as STATUS_BADGE_STYLES, getTaskStatusBadgeClasses as getStatusBadgeClasses } from '@/lib/taskStatusUi';
 
 export function getInitials(name?: string | null, email?: string | null) {
   const base = name?.trim() || email?.split('@')[0]?.trim() || '';

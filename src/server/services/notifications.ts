@@ -1,5 +1,6 @@
 import { prisma } from '@/server/db/client';
 import type { NotificationType } from '@/generated/prisma';
+import { formatTaskStatus } from '@/lib/taskStatusUi';
 
 type NotifyParams = {
   businessId: bigint;
@@ -132,16 +133,10 @@ export async function notifyTaskStatusChanged(
     for (const m of members) userIds.add(m.userId);
   }
 
-  const statusLabels: Record<string, string> = {
-    TODO: 'À faire',
-    IN_PROGRESS: 'En cours',
-    DONE: 'Terminée',
-  };
-
   await notify(Array.from(userIds), actorUserId, {
     businessId,
     type: 'TASK_STATUS_CHANGED',
-    title: `${taskTitle} → ${statusLabels[newStatus] ?? newStatus}`,
+    title: `${taskTitle} → ${formatTaskStatus(newStatus)}`,
     taskId,
     projectId,
   });

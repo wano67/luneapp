@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { X, Send, CheckSquare, Square } from 'lucide-react';
 import type { TaskItem } from '@/components/pro/projects/hooks/useProjectDataLoaders';
+import { formatTaskStatus } from '@/lib/taskStatusUi';
 
 type TaskSubmitPickerProps = {
   open: boolean;
@@ -93,7 +94,7 @@ export function TaskSubmitPicker({ open, tasks, onClose, onSubmit }: TaskSubmitP
                         ? 'bg-[var(--warning-bg)] text-[var(--warning)] border border-[var(--warning-border)]'
                         : 'bg-[var(--surface-2)] text-[var(--text-muted)] border border-[var(--border)]'
                     }`}>
-                      {task.status === 'IN_PROGRESS' ? 'En cours' : 'À faire'}
+                      {formatTaskStatus(task.status)}
                     </span>
                   </button>
                 );

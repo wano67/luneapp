@@ -4,6 +4,7 @@ import { ChevronDown, ChevronUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/cn';
+import { formatTaskStatus, getTaskStatusBadgeClasses } from '@/lib/taskStatusUi';
 
 export type ServiceRow = {
   id: string;
@@ -39,22 +40,6 @@ function formatDate(value: string | null) {
   }
 }
 
-function formatStatus(status: string) {
-  if (status === 'DONE') return 'Terminée';
-  if (status === 'IN_PROGRESS') return 'En cours';
-  if (status === 'TODO') return 'À faire';
-  return status || '—';
-}
-
-const STATUS_BADGE_STYLES: Record<string, string> = {
-  DONE: 'border-[var(--success-border)] bg-[var(--success-bg)] text-[var(--success)]',
-  IN_PROGRESS: 'border-[var(--warning-border)] bg-[var(--warning-bg)] text-[var(--warning)]',
-  TODO: 'border-[var(--border)] bg-[var(--surface-2)] text-[var(--text)]',
-};
-
-function getStatusBadgeClasses(status: string) {
-  return STATUS_BADGE_STYLES[status] ?? 'border-[var(--border)]/60 bg-[var(--surface-2)] text-[var(--text-secondary)]';
-}
 
 export function ServiceProgressRow({
   service,
@@ -127,10 +112,10 @@ export function ServiceProgressRow({
                   <span
                     className={cn(
                       'inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide',
-                      getStatusBadgeClasses(task.status)
+                      getTaskStatusBadgeClasses(task.status)
                     )}
                   >
-                    {formatStatus(task.status)}
+                    {formatTaskStatus(task.status)}
                   </span>
                   <span>{formatDate(task.dueDate)}</span>
                 </div>
