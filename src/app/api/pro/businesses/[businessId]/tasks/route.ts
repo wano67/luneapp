@@ -192,6 +192,8 @@ export const POST = withBusinessRoute<{ businessId: string }>(
       if (!membershipAssignee) {
         return badRequest('assigneeUserId doit être membre du business.');
       }
+    } else if ((body as { assignToSelf?: boolean }).assignToSelf) {
+      assigneeUserId = ctx.userId;
     }
 
     let dueDate: Date | undefined;
@@ -297,8 +299,7 @@ export const POST = withBusinessRoute<{ businessId: string }>(
       return badRequest(validated.error);
     }
 
-    // Auto startDate when created as IN_PROGRESS
-    const effectiveStartDate = startDate ?? (status === TaskStatus.IN_PROGRESS ? new Date() : undefined);
+    const effectiveStartDate = startDate;
 
     const task = await prisma.task.create({
       data: {

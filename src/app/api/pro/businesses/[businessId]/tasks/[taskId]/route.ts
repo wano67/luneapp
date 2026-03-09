@@ -414,10 +414,6 @@ export const PATCH = withBusinessRoute<{ businessId: string; taskId: string }>(
       } else if (existing.status === TaskStatus.DONE) {
         data.completedAt = null;
       }
-      // Auto-set startDate when moving to IN_PROGRESS
-      if (newStatus === TaskStatus.IN_PROGRESS && existing.status === TaskStatus.TODO && !existing.startDate && !('startDate' in data)) {
-        data.startDate = new Date();
-      }
       if (newStatus !== existing.status) {
         data.statusUpdatedAt = new Date();
         data.statusUpdatedByUserId = userId;

@@ -59,7 +59,7 @@ export function ServiceProgressRow({
   const progress =
     total > 0
       ? Math.round(
-          tasks.reduce((sum, t) => sum + (t.status === 'DONE' ? 100 : t.status === 'IN_PROGRESS' ? t.progress ?? 0 : 0), 0) /
+          tasks.reduce((sum, t) => sum + (t.status === 'DONE' ? 100 : 0), 0) /
             total
         )
       : 0;

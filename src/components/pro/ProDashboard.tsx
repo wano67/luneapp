@@ -88,9 +88,9 @@ type TaskItem = {
 };
 
 function countByStatus(tasks: TaskItem[]) {
-  const counts: Record<string, number> = { TODO: 0, IN_PROGRESS: 0, DONE: 0 };
+  const counts: Record<string, number> = { TODO: 0, DONE: 0 };
   for (const t of tasks) {
-    const status = t.status ?? 'TODO';
+    const status = t.status === 'DONE' ? 'DONE' : 'TODO';
     counts[status] = (counts[status] ?? 0) + 1;
   }
   return counts;
@@ -256,7 +256,6 @@ export default function ProDashboard({ businessId }: { businessId: string }) {
             <TasksDonut
               data={[
                 { name: TASK_STATUS_LABELS.TODO, value: tasksByStatus.TODO },
-                { name: TASK_STATUS_LABELS.IN_PROGRESS, value: tasksByStatus.IN_PROGRESS },
                 { name: TASK_STATUS_LABELS.DONE, value: tasksByStatus.DONE },
               ]}
               variant="accent"

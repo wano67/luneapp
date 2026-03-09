@@ -59,8 +59,8 @@ type WorkView = 'list' | 'roadmap' | 'gantt';
 export type WorkTabProps = {
   tasksByAssignee: TaskGroup[];
   subtasksByParentId: Record<string, WorkTabTask[]>;
-  statusFilter: 'TODO' | 'IN_PROGRESS' | 'DONE' | 'all';
-  onStatusFilterChange: (value: 'TODO' | 'IN_PROGRESS' | 'DONE' | 'all') => void;
+  statusFilter: 'TODO' | 'DONE' | 'all';
+  onStatusFilterChange: (value: 'TODO' | 'DONE' | 'all') => void;
   taskGroupExpanded: Record<string, boolean>;
   onTaskGroupToggle: (key: string, expanded: boolean) => void;
   taskRowExpanded: Record<string, boolean>;
@@ -195,7 +195,6 @@ export function WorkTab({
             items={[
               { key: 'all', label: 'Toutes' },
               { key: 'TODO', label: 'À faire' },
-              { key: 'IN_PROGRESS', label: 'En cours' },
               { key: 'DONE', label: 'Terminées' },
             ]}
             value={statusFilter}
@@ -418,7 +417,7 @@ function ListView({
       {tasksByAssignee.map((group) => {
         const total = group.tasks.length;
         const done = group.tasks.filter((t) => t.status === 'DONE').length;
-        const inProgress = group.tasks.filter((t) => t.status === 'IN_PROGRESS').length;
+        const blocked = group.tasks.filter((t) => t.isBlocked).length;
         const remaining = total - done;
         const expanded = taskGroupExpanded[group.key] ?? false;
         const previewTasks = expanded ? group.tasks : group.tasks.slice(0, 5);
@@ -445,7 +444,7 @@ function ListView({
                 <div>
                   <p className="text-sm font-semibold text-[var(--text-primary)]">{group.label}</p>
                   <p className="text-xs text-[var(--text-secondary)]">
-                    {done}/{total} terminées · {inProgress} en cours · {remaining} restantes
+                    {done}/{total} terminées{blocked > 0 ? ` · ${blocked} bloquée${blocked > 1 ? 's' : ''}` : ''} · {remaining} restante{remaining > 1 ? 's' : ''}
                   </p>
                 </div>
               </div>

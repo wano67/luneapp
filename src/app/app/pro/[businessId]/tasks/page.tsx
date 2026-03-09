@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useCallback, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { ClipboardList, ChevronRight, Plus, Check, ChevronDown, ChevronUp } from 'lucide-react';
+import { ListChecks, ChevronRight, Plus, Check, ChevronDown, ChevronUp } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -36,13 +36,13 @@ type MyTask = {
 };
 
 type ActiveProject = { id: string; name: string; taskCount: number; overdueCount: number };
-type Summary = { overdue: number; today: number; thisWeek: number; inProgress: number; blocked: number; total: number };
+type Summary = { overdue: number; today: number; thisWeek: number; blocked: number; total: number };
 type MyTasksData = { items: MyTask[]; summary: Summary; activeProjects: ActiveProject[] };
 type Member = { userId: string; name: string | null; email: string; role: string };
 type ProjectOption = { id: string; name: string };
 
 // ─── Helpers ────────────────────────────────────────────────────────
-const EMPTY_SUMMARY: Summary = { overdue: 0, today: 0, thisWeek: 0, inProgress: 0, blocked: 0, total: 0 };
+const EMPTY_SUMMARY: Summary = { overdue: 0, today: 0, thisWeek: 0, blocked: 0, total: 0 };
 
 type GroupedTasks = { overdue: MyTask[]; today: MyTask[]; thisWeek: MyTask[]; later: MyTask[]; noDate: MyTask[]; done: MyTask[] };
 
@@ -109,7 +109,6 @@ function TaskRow({
 }) {
   const hasChecklist = typeof task.checklistCount === 'number' && task.checklistCount > 0;
   const isDone = task.status === 'DONE';
-  const isInProgress = task.status === 'IN_PROGRESS';
 
   return (
     <div className={`flex items-center gap-3 px-4 py-3 transition-colors ${isDone ? 'opacity-60' : 'hover:bg-[var(--surface-hover)]'}`}>
@@ -121,17 +120,13 @@ function TaskRow({
         className="shrink-0 flex items-center justify-center rounded-full border-2 transition-all"
         style={{
           width: 22, height: 22,
-          borderColor: isDone ? 'var(--success)' : isInProgress ? 'var(--warning)' : 'var(--border)',
-          background: isDone ? 'var(--success)' : isInProgress ? 'var(--warning-bg)' : 'transparent',
+          borderColor: isDone ? 'var(--success)' : 'var(--border)',
+          background: isDone ? 'var(--success)' : 'transparent',
           opacity: updating ? 0.5 : 1,
         }}
         title={isDone ? 'Remettre à faire' : 'Valider'}
       >
-        {isDone ? (
-          <Check size={13} color="white" strokeWidth={3} />
-        ) : isInProgress ? (
-          <div className="h-2.5 w-2.5 rounded-full" style={{ background: 'var(--warning)' }} />
-        ) : null}
+        {isDone ? <Check size={13} color="white" strokeWidth={3} /> : null}
       </button>
 
       {/* Task info */}
@@ -271,7 +266,6 @@ export default function MyTasksPage() {
   const [createDueDate, setCreateDueDate] = useState('');
   const [createProjectId, setCreateProjectId] = useState('');
   const [createAssigneeId, setCreateAssigneeId] = useState('');
-  const [createStatus, setCreateStatus] = useState('TODO');
   const [creating, setCreating] = useState(false);
 
   // Dropdown data for modal
@@ -344,7 +338,7 @@ export default function MyTasksPage() {
     const title = createTitle.trim();
     if (!title || title.length > 200) return;
     setCreating(true);
-    const payload: Record<string, unknown> = { title, status: createStatus };
+    const payload: Record<string, unknown> = { title, status: 'TODO', assignToSelf: true };
     if (createDueDate) payload.dueDate = new Date(createDueDate).toISOString();
     if (createProjectId) payload.projectId = createProjectId;
     if (createAssigneeId && isAdmin) payload.assigneeUserId = createAssigneeId;
@@ -360,17 +354,15 @@ export default function MyTasksPage() {
       setCreateDueDate('');
       setCreateProjectId('');
       setCreateAssigneeId('');
-      setCreateStatus('TODO');
       await loadMyTasks();
     }
-  }, [businessId, createTitle, createDueDate, createProjectId, createAssigneeId, createStatus, isAdmin, loadMyTasks]);
+  }, [businessId, createTitle, createDueDate, createProjectId, createAssigneeId, isAdmin, loadMyTasks]);
 
   const openCreateModal = useCallback(() => {
     setCreateTitle('');
     setCreateDueDate('');
     setCreateProjectId('');
     setCreateAssigneeId('');
-    setCreateStatus('TODO');
     setCreateOpen(true);
   }, []);
 
@@ -411,7 +403,7 @@ export default function MyTasksPage() {
             />
             <KpiCard label="Aujourd'hui" value={summary.today} delay={50} size="compact" />
             <KpiCard label="Cette semaine" value={summary.thisWeek} delay={100} size="compact" />
-            <KpiCard label="En cours" value={summary.inProgress} delay={150} size="compact" />
+            <KpiCard label="Bloquées" value={summary.blocked} delay={150} size="compact" />
           </>
         )}
       </div>
@@ -419,7 +411,7 @@ export default function MyTasksPage() {
       {/* Empty state */}
       {hasNoTasks ? (
         <div className="flex flex-col items-center justify-center py-20 text-center">
-          <ClipboardList size={48} style={{ color: 'var(--text-faint)' }} />
+          <ListChecks size={48} style={{ color: 'var(--text-faint)' }} />
           <p className="mt-4 text-lg font-semibold" style={{ color: 'var(--text)' }}>
             Aucune tâche assignée
           </p>
@@ -519,27 +511,16 @@ export default function MyTasksPage() {
             placeholder="Ex : Finaliser la maquette…"
           />
 
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Select
-              label="Projet"
-              value={createProjectId}
-              onChange={(e) => setCreateProjectId(e.target.value)}
-            >
-              <option value="">Aucun projet</option>
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-            </Select>
-
-            <Select
-              label="Statut"
-              value={createStatus}
-              onChange={(e) => setCreateStatus(e.target.value)}
-            >
-              <option value="TODO">À faire</option>
-              <option value="IN_PROGRESS">En cours</option>
-            </Select>
-          </div>
+          <Select
+            label="Projet"
+            value={createProjectId}
+            onChange={(e) => setCreateProjectId(e.target.value)}
+          >
+            <option value="">Aucun projet</option>
+            {projects.map((p) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </Select>
 
           <Input
             label="Échéance"

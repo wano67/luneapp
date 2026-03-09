@@ -2,14 +2,14 @@ import type { LucideIcon } from 'lucide-react';
 import {
   LayoutDashboard,
   Briefcase,
-  ClipboardList,
+  ListChecks,
   CalendarDays,
   Users,
-  Folder,
+  LayoutGrid,
   Boxes,
   Banknote,
-  Settings2,
-  Contact2,
+  Settings,
+  BookUser,
 } from 'lucide-react';
 
 export type ProNavItemConfig = {
@@ -35,8 +35,8 @@ function startsWithRegex(path: string) {
 
 export const proNavSections: ProNavSectionConfig[] = [
   {
-    id: 'pilotage',
-    title: 'Pilotage',
+    id: 'main',
+    title: 'Navigation',
     items: [
       {
         id: 'dashboard',
@@ -47,12 +47,6 @@ export const proNavSections: ProNavSectionConfig[] = [
           new RegExp(`^/app/pro/${biz}/?$`),
         ],
       },
-    ],
-  },
-  {
-    id: 'operations',
-    title: 'Opérations',
-    items: [
       {
         id: 'projects',
         label: 'Projets',
@@ -63,7 +57,7 @@ export const proNavSections: ProNavSectionConfig[] = [
       {
         id: 'tasks',
         label: 'Mes Tâches',
-        icon: ClipboardList,
+        icon: ListChecks,
         href: (biz) => `/app/pro/${biz}/tasks`,
         activePatterns: (biz) => [startsWithRegex(`/app/pro/${biz}/tasks`)],
       },
@@ -75,22 +69,9 @@ export const proNavSections: ProNavSectionConfig[] = [
         activePatterns: (biz) => [startsWithRegex(`/app/pro/${biz}/calendar`)],
       },
       {
-        id: 'team',
-        label: 'Équipe',
-        icon: Users,
-        href: (biz) => `/app/pro/${biz}/team`,
-        activePatterns: (biz) => [startsWithRegex(`/app/pro/${biz}/team`)],
-      },
-    ],
-  },
-  {
-    id: 'crm',
-    title: 'CRM',
-    items: [
-      {
         id: 'crm',
         label: 'CRM',
-        icon: Contact2,
+        icon: BookUser,
         href: (biz) => `/app/pro/${biz}/agenda`,
         activePatterns: (biz) => [
           startsWithRegex(`/app/pro/${biz}/agenda`),
@@ -98,32 +79,6 @@ export const proNavSections: ProNavSectionConfig[] = [
           startsWithRegex(`/app/pro/${biz}/prospects`),
         ],
       },
-    ],
-  },
-  {
-    id: 'catalog',
-    title: 'Catalogue & Stock',
-    items: [
-      {
-        id: 'catalog',
-        label: 'Catalogue services',
-        icon: Folder,
-        href: (biz) => `/app/pro/${biz}/services`,
-        activePatterns: (biz) => [startsWithRegex(`/app/pro/${biz}/services`)],
-      },
-      {
-        id: 'stock',
-        label: 'Stock',
-        icon: Boxes,
-        href: (biz) => `/app/pro/${biz}/stock`,
-        activePatterns: (biz) => [startsWithRegex(`/app/pro/${biz}/stock`)],
-      },
-    ],
-  },
-  {
-    id: 'finances',
-    title: 'Finances',
-    items: [
       {
         id: 'finances',
         label: 'Finances',
@@ -137,6 +92,33 @@ export const proNavSections: ProNavSectionConfig[] = [
     ],
   },
   {
+    id: 'gestion',
+    title: 'Gestion',
+    items: [
+      {
+        id: 'catalog',
+        label: 'Catalogue services',
+        icon: LayoutGrid,
+        href: (biz) => `/app/pro/${biz}/services`,
+        activePatterns: (biz) => [startsWithRegex(`/app/pro/${biz}/services`)],
+      },
+      {
+        id: 'stock',
+        label: 'Stock',
+        icon: Boxes,
+        href: (biz) => `/app/pro/${biz}/stock`,
+        activePatterns: (biz) => [startsWithRegex(`/app/pro/${biz}/stock`)],
+      },
+      {
+        id: 'team',
+        label: 'Équipe',
+        icon: Users,
+        href: (biz) => `/app/pro/${biz}/team`,
+        activePatterns: (biz) => [startsWithRegex(`/app/pro/${biz}/team`)],
+      },
+    ],
+  },
+  {
     id: 'admin',
     title: 'Paramètres',
     secondary: true,
@@ -144,7 +126,7 @@ export const proNavSections: ProNavSectionConfig[] = [
       {
         id: 'settings',
         label: 'Paramètres',
-        icon: Settings2,
+        icon: Settings,
         href: (biz) => `/app/pro/${biz}/settings`,
         activePatterns: (biz) => [
           startsWithRegex(`/app/pro/${biz}/settings`),

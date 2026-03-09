@@ -135,7 +135,7 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
 
   const [activeTab, setActiveTab] = useState<'overview' | 'work' | 'team' | 'billing' | 'charges' | 'files'>('overview');
   const [pendingTaskId, setPendingTaskId] = useState<string | null>(null);
-  const [statusFilter, setStatusFilter] = useState<'TODO' | 'IN_PROGRESS' | 'DONE' | 'all'>('all');
+  const [statusFilter, setStatusFilter] = useState<'TODO' | 'DONE' | 'all'>('all');
   const [showAllServicesOverview, setShowAllServicesOverview] = useState(false);
   const [showAllActionsOverview, setShowAllActionsOverview] = useState(false);
   const [showAllActivity, setShowAllActivity] = useState(false);
@@ -476,7 +476,7 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
     if (project?.tasksSummary) return project.tasksSummary.progressPct ?? 0;
     if (!tasks.length) return 0;
     const total = tasks.length;
-    const sum = tasks.reduce((acc, t) => acc + (t.status === 'DONE' ? 100 : t.status === 'IN_PROGRESS' ? t.progress ?? 0 : 0), 0);
+    const sum = tasks.reduce((acc, t) => acc + (t.status === 'DONE' ? 100 : 0), 0);
     return Math.round(sum / total);
   }, [project?.tasksSummary, tasks]);
 

@@ -19,7 +19,7 @@ type GanttChartProps = {
 
 const STATUS_COLORS: Record<string, string> = {
   TODO: 'var(--text-secondary)',
-  IN_PROGRESS: 'var(--chart-in-progress)',
+  IN_PROGRESS: 'var(--text-secondary)',
   DONE: 'var(--chart-done)',
 };
 

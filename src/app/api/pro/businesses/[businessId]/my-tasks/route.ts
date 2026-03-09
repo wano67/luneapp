@@ -53,14 +53,15 @@ export const GET = withBusinessRoute(
     let overdue = 0;
     let today = 0;
     let thisWeek = 0;
-    let inProgress = 0;
     let blocked = 0;
 
     const projectMap = new Map<string, { id: string; name: string; taskCount: number; overdueCount: number }>();
 
     for (const task of tasks) {
+      // Skip DONE tasks for summary & project counts — only count active work
+      if (task.status === TaskStatus.DONE) continue;
+
       if (task.isBlocked) blocked++;
-      if (task.status === TaskStatus.IN_PROGRESS) inProgress++;
 
       if (task.dueDate) {
         const dk = dayKey(task.dueDate);
@@ -86,7 +87,8 @@ export const GET = withBusinessRoute(
       }
     }
 
-    const summary = { overdue, today, thisWeek, inProgress, blocked, total: tasks.length };
+    const doneCount = tasks.filter((t) => t.status === TaskStatus.DONE).length;
+    const summary = { overdue, today, thisWeek, blocked, total: tasks.length - doneCount };
     const activeProjects = [...projectMap.values()].sort((a, b) => b.taskCount - a.taskCount);
 
     return jsonb({ items: tasks.map(serializeTask), summary, activeProjects }, requestId);
