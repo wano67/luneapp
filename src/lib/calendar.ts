@@ -2,7 +2,7 @@ import { dayKey, addDays, addMonths } from './date';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-export type CalendarEventType = 'task' | 'interaction' | 'subscription' | 'finance' | 'savings';
+export type CalendarEventType = 'task' | 'interaction' | 'subscription' | 'finance' | 'savings' | 'event';
 
 export type CalendarEvent = {
   id: string;
@@ -18,6 +18,7 @@ export const EVENT_COLORS: Record<CalendarEventType, { bg: string; text: string 
   subscription: { bg: 'var(--danger-bg)',  text: 'var(--danger)' },
   finance:      { bg: 'var(--success-bg)', text: 'var(--success)' },
   savings:      { bg: 'var(--accent)',     text: 'white' },
+  event:        { bg: 'var(--shell-accent)', text: 'white' },
 };
 
 export const EVENT_TYPE_LABELS: Record<CalendarEventType, string> = {
@@ -26,6 +27,7 @@ export const EVENT_TYPE_LABELS: Record<CalendarEventType, string> = {
   subscription: 'Abonnement',
   finance: 'Revenu',
   savings: 'Épargne',
+  event: 'Événements',
 };
 
 // ─── Grid builder ────────────────────────────────────────────────────────────

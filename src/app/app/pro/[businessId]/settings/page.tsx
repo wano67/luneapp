@@ -16,6 +16,7 @@ import { PermissionsSection } from './sections/PermissionsSection';
 import { ComptabiliteSection } from './sections/ComptabiliteSection';
 import { IntegrationsSection } from './sections/IntegrationsSection';
 import { NotificationsSection } from './sections/NotificationsSection';
+import { CalendarSyncSection } from './sections/CalendarSyncSection';
 
 const SECTIONS = [
   { id: 'identite', label: 'Identité' },
@@ -27,6 +28,7 @@ const SECTIONS = [
   { id: 'permissions', label: 'Permissions' },
   { id: 'comptabilite', label: 'Comptabilité' },
   { id: 'integrations', label: 'Intégrations' },
+  { id: 'calendrier', label: 'Calendrier' },
   { id: 'notifications', label: 'Notifications' },
   { id: 'equipe', label: 'Équipe' },
 ] as const;
@@ -69,6 +71,7 @@ export default function BusinessSettingsPage() {
         <section id="permissions"><PermissionsSection businessId={businessId} /></section>
         <section id="comptabilite"><ComptabiliteSection businessId={businessId} /></section>
         <section id="integrations"><IntegrationsSection businessId={businessId} /></section>
+        <section id="calendrier"><CalendarSyncSection businessId={businessId} /></section>
         <section id="notifications"><NotificationsSection businessId={businessId} /></section>
 
         <section id="equipe">

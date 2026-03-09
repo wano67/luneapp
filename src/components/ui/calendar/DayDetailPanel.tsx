@@ -1,6 +1,6 @@
 'use client';
 
-import { X } from 'lucide-react';
+import { X, Plus } from 'lucide-react';
 import { EVENT_COLORS, EVENT_TYPE_LABELS, type CalendarEvent } from '@/lib/calendar';
 import { formatCents } from '@/lib/money';
 
@@ -10,9 +10,10 @@ type DayDetailPanelProps = {
   open: boolean;
   onClose: () => void;
   businessId?: string;
+  onCreateEvent?: () => void;
 };
 
-export function DayDetailPanel({ date, events, open, onClose, businessId }: DayDetailPanelProps) {
+export function DayDetailPanel({ date, events, open, onClose, businessId, onCreateEvent }: DayDetailPanelProps) {
   if (!open) return null;
 
   const formatted = (() => {
@@ -57,14 +58,26 @@ export function DayDetailPanel({ date, events, open, onClose, businessId }: DayD
               {events.length} événement{events.length !== 1 ? 's' : ''}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex items-center justify-center rounded-lg hover:opacity-70 transition-opacity"
-            style={{ width: 28, height: 28, background: 'var(--surface-2)' }}
-          >
-            <X size={14} style={{ color: 'var(--text-faint)' }} />
-          </button>
+          <div className="flex items-center gap-1.5">
+            {onCreateEvent ? (
+              <button
+                type="button"
+                onClick={onCreateEvent}
+                className="flex items-center justify-center rounded-lg hover:opacity-70 transition-opacity"
+                style={{ width: 28, height: 28, background: 'var(--shell-accent)' }}
+              >
+                <Plus size={14} style={{ color: 'white' }} />
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex items-center justify-center rounded-lg hover:opacity-70 transition-opacity"
+              style={{ width: 28, height: 28, background: 'var(--surface-2)' }}
+            >
+              <X size={14} style={{ color: 'var(--text-faint)' }} />
+            </button>
+          </div>
         </div>
 
         {/* Content */}
@@ -133,6 +146,15 @@ function EventCard({ event, businessId }: { event: CalendarEvent; businessId?: s
           ) : null}
           {meta.category && !meta.categoryName ? (
             <span className="text-xs" style={{ color: 'var(--text-faint)' }}>{String(meta.category)}</span>
+          ) : null}
+          {meta.kindLabel ? (
+            <span className="text-xs font-medium" style={{ color: colors.text }}>{String(meta.kindLabel)}</span>
+          ) : null}
+          {meta.location ? (
+            <span className="text-xs" style={{ color: 'var(--text-faint)' }}>{String(meta.location)}</span>
+          ) : null}
+          {meta.startTime ? (
+            <span className="text-xs" style={{ color: 'var(--text-faint)' }}>{String(meta.startTime)}{meta.endTime ? ` – ${String(meta.endTime)}` : ''}</span>
           ) : null}
           {meta.amountCents ? (
             <span className="text-xs font-medium" style={{ color: colors.text }}>

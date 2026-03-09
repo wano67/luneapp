@@ -183,6 +183,10 @@ model User {
   conversationsCreated Conversation[] @relation("ConversationCreatedBy")
   conversationMembers  ConversationMember[]
   messagesSent         Message[] @relation("MessageSender")
+  calendarEvents       CalendarEvent[]
+  calendarTokens       CalendarToken[]
+  personalCalendarEvents PersonalCalendarEvent[]
+  personalCalendarTokens PersonalCalendarToken[]
 }
 
 /**
@@ -241,6 +245,8 @@ model Business {
   conversations Conversation[]
   notifications Notification[]
   notificationPreferences NotificationPreference[]
+  calendarEvents CalendarEvent[]
+  calendarTokens CalendarToken[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -429,6 +435,11 @@ enum InteractionType {
   MESSAGE
 }
 
+enum CalendarEventKind {
+  APPOINTMENT
+  REMINDER
+}
+
 enum BusinessReferenceType {
   CATEGORY
   TAG
@@ -481,6 +492,7 @@ model Client {
   payments  Payment[]
   documents BusinessDocument[]
   subscriptions Subscription[]
+  calendarEvents CalendarEvent[] @relation("CalendarEventClient")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -527,6 +539,7 @@ model Project {
   documents     BusinessDocument[]
   conversations Conversation[]
   notifications Notification[]
+  calendarEvents CalendarEvent[] @relation("CalendarEventProject")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1789,4 +1802,80 @@ model NotificationPreference {
 
   @@unique([userId, businessId, type])
   @@index([userId, businessId])
+}
+
+model CalendarEvent {
+  id          BigInt            @id @default(autoincrement())
+  businessId  BigInt
+  userId      BigInt
+  kind        CalendarEventKind
+  title       String
+  description String?
+  startAt     DateTime
+  endAt       DateTime?
+  allDay      Boolean           @default(false)
+  location    String?
+  clientId    BigInt?
+  projectId   BigInt?
+  icalUid     String?           @unique
+  remindAt    DateTime?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  client   Client?  @relation("CalendarEventClient", fields: [clientId], references: [id], onDelete: SetNull)
+  project  Project? @relation("CalendarEventProject", fields: [projectId], references: [id], onDelete: SetNull)
+
+  @@index([businessId, startAt])
+  @@index([userId, startAt])
+}
+
+model CalendarToken {
+  id         BigInt    @id @default(autoincrement())
+  userId     BigInt
+  businessId BigInt
+  token      String    @unique @default(uuid())
+  name       String    @default("Calendrier")
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, businessId])
+  @@index([token])
+}
+
+model PersonalCalendarEvent {
+  id          BigInt            @id @default(autoincrement())
+  userId      BigInt
+  kind        CalendarEventKind
+  title       String
+  description String?
+  startAt     DateTime
+  endAt       DateTime?
+  allDay      Boolean           @default(false)
+  location    String?
+  icalUid     String?           @unique
+  remindAt    DateTime?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, startAt])
+}
+
+model PersonalCalendarToken {
+  id        BigInt    @id @default(autoincrement())
+  userId    BigInt    @unique
+  token     String    @unique @default(uuid())
+  name      String    @default("Calendrier personnel")
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([token])
 }

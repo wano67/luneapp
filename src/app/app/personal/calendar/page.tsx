@@ -1,16 +1,24 @@
 'use client';
 
 import { useEffect, useState, useCallback, useMemo } from 'react';
+import { Plus, CalendarPlus, Bell, RefreshCw } from 'lucide-react';
 import { PageContainer } from '@/components/layouts/PageContainer';
 import { PageHeader } from '@/components/layouts/PageHeader';
 import { CalendarGrid } from '@/components/ui/calendar/CalendarGrid';
 import { DayDetailPanel } from '@/components/ui/calendar/DayDetailPanel';
+import { CalendarSyncPanel } from '@/components/ui/calendar/CalendarSyncPanel';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Modal } from '@/components/ui/modal';
 import { fetchJson } from '@/lib/apiClient';
 import { dayKey, startOfMonth, addMonths, addDays } from '@/lib/date';
 import { EVENT_TYPE_LABELS, type CalendarEvent, type CalendarEventType } from '@/lib/calendar';
 
+type CreateKind = 'APPOINTMENT' | 'REMINDER' | null;
+
 const FILTER_OPTIONS: { value: CalendarEventType | 'all'; label: string }[] = [
   { value: 'all', label: 'Tous' },
+  { value: 'event', label: EVENT_TYPE_LABELS.event },
   { value: 'subscription', label: EVENT_TYPE_LABELS.subscription },
   { value: 'finance', label: EVENT_TYPE_LABELS.finance },
   { value: 'savings', label: EVENT_TYPE_LABELS.savings },
@@ -21,6 +29,19 @@ export default function PersonalCalendarPage() {
   const [loading, setLoading] = useState(true);
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [filterType, setFilterType] = useState<CalendarEventType | 'all'>('all');
+  const [currentMonth, setCurrentMonth] = useState(new Date());
+
+  // Create modal
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createKind, setCreateKind] = useState<CreateKind>(null);
+  const [createTitle, setCreateTitle] = useState('');
+  const [createDate, setCreateDate] = useState('');
+  const [createTimeStart, setCreateTimeStart] = useState('');
+  const [createTimeEnd, setCreateTimeEnd] = useState('');
+  const [createLocation, setCreateLocation] = useState('');
+  const [createDescription, setCreateDescription] = useState('');
+  const [creating, setCreating] = useState(false);
+  const [syncOpen, setSyncOpen] = useState(false);
 
   const loadEvents = useCallback(async (month: Date, signal?: AbortSignal) => {
     setLoading(true);
@@ -43,8 +64,10 @@ export default function PersonalCalendarPage() {
   }, [loadEvents]);
 
   const handleMonthChange = useCallback((year: number, month: number) => {
+    const m = new Date(year, month, 1);
+    setCurrentMonth(m);
     const controller = new AbortController();
-    void loadEvents(new Date(year, month, 1), controller.signal);
+    void loadEvents(m, controller.signal);
   }, [loadEvents]);
 
   const filteredEvents = useMemo(() => {
@@ -57,8 +80,49 @@ export default function PersonalCalendarPage() {
     [selectedDay, filteredEvents],
   );
 
+  // Create modal logic
+  const openCreate = useCallback((prefillDate?: string) => {
+    setCreateKind(null);
+    setCreateTitle('');
+    setCreateDate(prefillDate ?? '');
+    setCreateTimeStart('');
+    setCreateTimeEnd('');
+    setCreateLocation('');
+    setCreateDescription('');
+    setCreateOpen(true);
+  }, []);
+
+  const handleCreate = useCallback(async () => {
+    const title = createTitle.trim();
+    if (!title || !createDate) return;
+    setCreating(true);
+
+    const startAt = new Date(createDate + (createTimeStart ? `T${createTimeStart}` : 'T00:00:00')).toISOString();
+    const payload: Record<string, unknown> = {
+      kind: createKind,
+      title,
+      startAt,
+      allDay: !createTimeStart,
+    };
+    if (createTimeEnd) {
+      payload.endAt = new Date(createDate + `T${createTimeEnd}`).toISOString();
+    }
+    if (createLocation) payload.location = createLocation;
+    if (createDescription) payload.description = createDescription;
+
+    await fetchJson('/api/personal/calendar/events', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    setCreating(false);
+    setCreateOpen(false);
+    await loadEvents(currentMonth);
+  }, [createKind, createTitle, createDate, createTimeStart, createTimeEnd, createLocation, createDescription, currentMonth, loadEvents]);
+
   const filters = (
-    <div className="flex items-center gap-1.5">
+    <div className="flex items-center gap-1.5 flex-wrap">
       {FILTER_OPTIONS.map((opt) => (
         <button
           key={opt.value}
@@ -80,7 +144,19 @@ export default function PersonalCalendarPage() {
     <PageContainer className="gap-5">
       <PageHeader
         title="Calendrier"
-        subtitle="Abonnements, revenus et objectifs d'épargne"
+        subtitle="Abonnements, revenus, objectifs et rendez-vous"
+        actions={
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => setSyncOpen(true)}>
+              <RefreshCw size={14} className="mr-1" />
+              Sync
+            </Button>
+            <Button onClick={() => openCreate(selectedDay ?? undefined)}>
+              <Plus size={16} className="mr-1" />
+              Ajouter
+            </Button>
+          </div>
+        }
       />
       <div className="flex gap-5">
         <div className="flex-1 min-w-0">
@@ -98,9 +174,118 @@ export default function PersonalCalendarPage() {
             events={selectedEvents}
             open
             onClose={() => setSelectedDay(null)}
+            onCreateEvent={() => openCreate(selectedDay)}
           />
         )}
       </div>
+
+      {/* Create modal */}
+      <Modal
+        open={createOpen}
+        onCloseAction={() => { if (!creating) setCreateOpen(false); }}
+        title={createKind ? (createKind === 'APPOINTMENT' ? 'Nouveau rendez-vous' : 'Nouveau rappel') : 'Ajouter au calendrier'}
+        description={createKind ? undefined : 'Choisissez le type d\u2019événement à créer.'}
+      >
+        {!createKind ? (
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              type="button"
+              onClick={() => setCreateKind('APPOINTMENT')}
+              className="flex flex-col items-center gap-2 rounded-xl border border-[var(--border)] p-4 hover:border-[var(--shell-accent)] hover:bg-[var(--surface-hover)] transition-colors"
+            >
+              <CalendarPlus size={24} style={{ color: 'var(--shell-accent)' }} />
+              <span className="text-sm font-medium" style={{ color: 'var(--text)' }}>RDV</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setCreateKind('REMINDER')}
+              className="flex flex-col items-center gap-2 rounded-xl border border-[var(--border)] p-4 hover:border-[var(--shell-accent)] hover:bg-[var(--surface-hover)] transition-colors"
+            >
+              <Bell size={24} style={{ color: 'var(--shell-accent)' }} />
+              <span className="text-sm font-medium" style={{ color: 'var(--text)' }}>Rappel</span>
+            </button>
+          </div>
+        ) : (
+          <form onSubmit={(e) => { e.preventDefault(); void handleCreate(); }} className="space-y-3">
+            <Input
+              label="Titre"
+              value={createTitle}
+              onChange={(e) => setCreateTitle(e.target.value)}
+              maxLength={200}
+              autoFocus
+              placeholder={createKind === 'APPOINTMENT' ? 'Ex : RDV médecin…' : 'Ex : Rappeler banque…'}
+            />
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Input
+                label="Date"
+                type="date"
+                value={createDate}
+                onChange={(e) => setCreateDate(e.target.value)}
+              />
+              <Input
+                label="Heure début"
+                type="time"
+                value={createTimeStart}
+                onChange={(e) => setCreateTimeStart(e.target.value)}
+              />
+            </div>
+
+            {createKind === 'APPOINTMENT' ? (
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Input
+                  label="Heure fin"
+                  type="time"
+                  value={createTimeEnd}
+                  onChange={(e) => setCreateTimeEnd(e.target.value)}
+                />
+                <Input
+                  label="Lieu"
+                  value={createLocation}
+                  onChange={(e) => setCreateLocation(e.target.value)}
+                  placeholder="Adresse ou lien visio"
+                />
+              </div>
+            ) : null}
+
+            <Input
+              label="Description"
+              value={createDescription}
+              onChange={(e) => setCreateDescription(e.target.value)}
+              placeholder="Notes supplémentaires…"
+            />
+
+            <div className="flex items-center justify-between pt-1">
+              <button
+                type="button"
+                onClick={() => setCreateKind(null)}
+                className="text-xs font-medium hover:underline"
+                style={{ color: 'var(--text-secondary)' }}
+              >
+                ← Changer le type
+              </button>
+              <div className="flex gap-2">
+                <Button variant="outline" type="button" onClick={() => setCreateOpen(false)} disabled={creating}>
+                  Annuler
+                </Button>
+                <Button type="submit" disabled={creating || !createTitle.trim() || !createDate}>
+                  {creating ? 'Création…' : 'Créer'}
+                </Button>
+              </div>
+            </div>
+          </form>
+        )}
+      </Modal>
+
+      {/* Sync modal */}
+      <Modal
+        open={syncOpen}
+        onCloseAction={() => setSyncOpen(false)}
+        title="Synchronisation calendrier"
+        description="Synchronisez vos événements avec votre app calendrier."
+      >
+        <CalendarSyncPanel apiBase="/api/personal/calendar/sync" />
+      </Modal>
     </PageContainer>
   );
 }
