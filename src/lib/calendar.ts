@@ -1,4 +1,4 @@
-import { dayKey, addDays, addMonths } from './date';
+import { addDays, addMonths } from './date';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 

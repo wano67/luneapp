@@ -167,6 +167,7 @@ export function ReceiptScanModal({ open, onClose, businessId, onExtracted }: Pro
             )}
 
             {preview ? (
+              /* eslint-disable-next-line @next/next/no-img-element -- base64 data URL preview */
               <img
                 src={preview}
                 alt="Aperçu"
@@ -198,6 +199,7 @@ export function ReceiptScanModal({ open, onClose, businessId, onExtracted }: Pro
             </div>
 
             {preview ? (
+              /* eslint-disable-next-line @next/next/no-img-element -- base64 data URL preview */
               <img
                 src={preview}
                 alt="Aperçu"

@@ -1,4 +1,3 @@
-import { NextRequest } from 'next/server';
 import { prisma } from '@/server/db/client';
 import { BusinessRole, BusinessInviteStatus } from '@/generated/prisma';
 import { withBusinessRoute } from '@/server/http/routeHandler';

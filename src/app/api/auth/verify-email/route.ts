@@ -14,7 +14,7 @@ import crypto from 'crypto';
 
 // GET /api/auth/verify-email?token=xxx — user clicks the email link
 export async function GET(request: NextRequest) {
-  const requestId = getRequestId(request);
+  const _requestId = getRequestId(request);
   const limited = rateLimit(request, {
     key: makeIpKey(request, 'auth:verify-email'),
     limit: 10,
