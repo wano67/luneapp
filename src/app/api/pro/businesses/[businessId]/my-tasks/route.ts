@@ -2,29 +2,39 @@ import { prisma } from '@/server/db/client';
 import { TaskStatus } from '@/generated/prisma';
 import { withBusinessRoute } from '@/server/http/routeHandler';
 import { jsonb } from '@/server/http/json';
+import { forbidden } from '@/server/http/apiUtils';
 import { ensureDelegate } from '@/server/http/delegates';
 import { serializeTask } from '@/server/http/serializeTask';
+import { parseId } from '@/server/http/parsers';
 import { dayKey, startOfWeek, addDays } from '@/lib/date';
 
-// GET /api/pro/businesses/{businessId}/my-tasks?includeDone=true
+// GET /api/pro/businesses/{businessId}/my-tasks?includeDone=true&userId=xxx
 export const GET = withBusinessRoute(
   { minRole: 'VIEWER' },
   async (ctx, req) => {
-    const { requestId, businessId, userId } = ctx;
+    const { requestId, businessId, userId: callerId, membership } = ctx;
 
     const delegateError = ensureDelegate('task');
     if (delegateError) return delegateError;
 
     const { searchParams } = new URL(req.url);
     const includeDone = searchParams.get('includeDone') === 'true';
+    const userIdParam = searchParams.get('userId');
+
+    let targetUserId = callerId;
+    if (userIdParam) {
+      const role = membership.role;
+      if (role !== 'OWNER' && role !== 'ADMIN') return forbidden();
+      targetUserId = parseId(userIdParam);
+    }
 
     const tasks = await prisma.task.findMany({
       where: {
         businessId,
         ...(!includeDone ? { status: { not: TaskStatus.DONE } } : {}),
         OR: [
-          { assigneeUserId: userId },
-          { assignees: { some: { userId } } },
+          { assigneeUserId: targetUserId },
+          { assignees: { some: { userId: targetUserId } } },
         ],
       },
       orderBy: [{ dueDate: 'asc' }, { createdAt: 'desc' }],

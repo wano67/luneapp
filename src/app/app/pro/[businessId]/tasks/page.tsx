@@ -386,8 +386,11 @@ export default function MyTasksPage() {
     if (!businessId) return;
     const controller = new AbortController();
     setLoading(true);
+    const tasksUrl = selectedMemberId
+      ? `/api/pro/businesses/${businessId}/my-tasks?includeDone=true&userId=${selectedMemberId}`
+      : `/api/pro/businesses/${businessId}/my-tasks?includeDone=true`;
     fetchJson<MyTasksData>(
-      `/api/pro/businesses/${businessId}/my-tasks?includeDone=true`,
+      tasksUrl,
       {},
       controller.signal,
     ).then(res => {
@@ -396,7 +399,7 @@ export default function MyTasksPage() {
       setLoading(false);
     });
     return () => controller.abort();
-  }, [businessId, fetchVersion]);
+  }, [businessId, selectedMemberId, fetchVersion]);
 
   // Load weekly stats
   useEffect(() => {
@@ -463,6 +466,22 @@ export default function MyTasksPage() {
     setCreateOpen(true);
   }, []);
 
+  // Current user's ID (from the initial weekly-stats call without userId param)
+  const [myUserId, setMyUserId] = useState('');
+
+  // Capture own userId on first weekly-stats load (no member selected)
+  useEffect(() => {
+    if (!selectedMemberId && weeklyStats?.userId) {
+      setMyUserId(weeklyStats.userId);
+    }
+  }, [selectedMemberId, weeklyStats]);
+
+  // Filter self out of the member dropdown
+  const otherMembers = useMemo(
+    () => (myUserId ? members.filter((m) => m.userId !== myUserId) : members),
+    [members, myUserId],
+  );
+
   const hasNoTasks = !loading && (data?.items.length ?? 0) === 0;
 
   return (
@@ -473,14 +492,14 @@ export default function MyTasksPage() {
       subtitle="Organisez et dirigez votre journée"
       actions={
         <div className="flex items-center gap-2">
-          {isAdmin && members.length > 0 ? (
+          {isAdmin && otherMembers.length > 0 ? (
             <Select
               className="w-44"
               value={selectedMemberId}
               onChange={(e) => setSelectedMemberId(e.target.value)}
             >
               <option value="">Moi-même</option>
-              {members.map((m) => (
+              {otherMembers.map((m) => (
                 <option key={m.userId} value={m.userId}>
                   {m.name ?? m.email}
                 </option>
