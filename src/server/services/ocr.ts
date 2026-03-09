@@ -172,7 +172,7 @@ export async function extractFromDocument(
       confidence: parsed.confidence != null ? Math.min(100, Math.max(0, Number(parsed.confidence))) : 0,
     };
   } catch {
-    console.error('[ocr] Failed to parse AI response:', text);
+    console.error('[ocr] Failed to parse AI response (invalid JSON)');
     return null;
   }
 }
@@ -287,7 +287,7 @@ export async function categorizeBatch(
       };
     });
   } catch {
-    console.error('[categorize] Failed to parse AI response:', text);
+    console.error('[categorize] Failed to parse AI response (invalid JSON)');
     return null;
   }
 }

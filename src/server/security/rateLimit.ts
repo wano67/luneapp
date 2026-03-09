@@ -15,6 +15,22 @@ type RateLimitOptions = {
 
 const buckets = new Map<string, Bucket>();
 
+// Periodic cleanup: evict buckets older than 2× their window (at most every 60s)
+const CLEANUP_INTERVAL = 60_000;
+const BUCKET_MAX_AGE = 30 * 60_000; // 30 min default max age
+let lastCleanup = Date.now();
+
+function cleanupStale() {
+  const now = Date.now();
+  if (now - lastCleanup < CLEANUP_INTERVAL) return;
+  lastCleanup = now;
+  for (const [key, bucket] of buckets) {
+    if (now - bucket.updatedAt > BUCKET_MAX_AGE) {
+      buckets.delete(key);
+    }
+  }
+}
+
 function getIp(req: NextRequest): string {
   const xff = req.headers.get('x-forwarded-for');
   if (xff) return xff.split(',')[0]?.trim() || 'unknown';
@@ -41,6 +57,8 @@ function errorResponse(limit: number, windowMs: number, retryAfterSeconds: numbe
 }
 
 export function rateLimit(req: NextRequest, opts: RateLimitOptions): NextResponse | null {
+  cleanupStale();
+
   const requestId = getRequestId(req);
   const now = Date.now();
   const baseKey = `${opts.key}`;

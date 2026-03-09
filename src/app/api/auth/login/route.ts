@@ -96,8 +96,7 @@ export async function POST(request: NextRequest) {
       return withRequestId(res, requestId);
     }
 
-    const message = error instanceof Error ? error.message : 'unknown error';
-    console.error('Login error', message);
+    console.error('[auth] Login error');
 
     const res = NextResponse.json({ error: 'Impossible de se connecter pour le moment.' }, { status: 500 });
     res.headers.set('Cache-Control', 'no-store');

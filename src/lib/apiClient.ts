@@ -42,7 +42,7 @@ export async function fetchJson<T>(
   try {
     const res = await fetch(url, {
       ...init,
-      credentials: init.credentials ?? 'include',
+      credentials: init.credentials ?? 'same-origin',
       signal: signal ?? init.signal,
     });
 

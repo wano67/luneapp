@@ -23,7 +23,7 @@ export const POST = withPersonalRoute(
     const tokenHash = hashToken(token);
 
     const invite = await prisma.businessInvite.findFirst({
-      where: { OR: [{ token }, { token: tokenHash }] },
+      where: { token: tokenHash },
       include: { business: true },
     });
 

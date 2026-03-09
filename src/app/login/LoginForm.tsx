@@ -29,8 +29,14 @@ function sanitizeRedirectPath(value?: string) {
   if (typeof value !== 'string') return '/app';
   const v = value.trim();
   if (!v) return '/app';
+  // Must start with single / and not be a protocol-relative URL
   if (!v.startsWith('/')) return '/app';
   if (v.startsWith('//')) return '/app';
+  if (/^\/\\/.test(v)) return '/app';
+  // Block embedded protocol schemes (e.g. /javascript:, /data:)
+  if (/[a-z][a-z0-9+.-]*:/i.test(v)) return '/app';
+  // Must stay within /app paths
+  if (!v.startsWith('/app')) return '/app';
   return v;
 }
 

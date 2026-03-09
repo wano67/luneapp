@@ -80,7 +80,7 @@ export async function sendInviteEmail(params: InviteEmailParams): Promise<void> 
       html,
     });
   } catch (error) {
-    console.error('[email] Failed to send invite email:', error);
+    console.error('[email] Failed to send invite email:', error instanceof Error ? error.message : 'unknown');
   }
 }
 
@@ -126,6 +126,6 @@ export async function sendVerificationEmail(params: VerificationEmailParams): Pr
       html,
     });
   } catch (error) {
-    console.error('[email] Failed to send verification email:', error);
+    console.error('[email] Failed to send verification email:', error instanceof Error ? error.message : 'unknown');
   }
 }
