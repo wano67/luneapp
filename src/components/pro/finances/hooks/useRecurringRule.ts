@@ -26,6 +26,10 @@ type Finance = {
   recurringRuleId: string | null;
   isRuleOverride: boolean;
   lockedFromRule: boolean;
+  accountCode: string | null;
+  vatRate: number | null;
+  vatCents: string | null;
+  pieceRef: string | null;
   date: string;
   note: string | null;
   createdAt: string;
@@ -70,7 +74,7 @@ export function useRecurringRule({ businessId, loadFinances }: UseRecurringRuleO
     method: 'WIRE' as PaymentMethod,
     startDate: '',
     endDate: '',
-    dayOfMonth: '',
+    frequency: 'MONTHLY' as 'MONTHLY' | 'YEARLY',
     isActive: true,
   });
   const [recurringApplyFuture, setRecurringApplyFuture] = useState(true);
@@ -92,7 +96,7 @@ export function useRecurringRule({ businessId, loadFinances }: UseRecurringRuleO
       method: 'WIRE' as PaymentMethod,
       startDate: new Date().toISOString().slice(0, 10),
       endDate: '',
-      dayOfMonth: '1',
+      frequency: 'MONTHLY' as 'MONTHLY' | 'YEARLY',
       isActive: true,
     });
     setRecurringModalOpen(true);
@@ -107,13 +111,6 @@ export function useRecurringRule({ businessId, loadFinances }: UseRecurringRuleO
         setRecurringRuleError('Montant invalide.');
         return;
       }
-      const dayOfMonth = recurringRuleForm.dayOfMonth
-        ? Math.min(31, Math.max(1, Number.parseInt(recurringRuleForm.dayOfMonth, 10)))
-        : 1;
-      if (!Number.isFinite(dayOfMonth) || dayOfMonth <= 0) {
-        setRecurringRuleError('Jour de facturation invalide.');
-        return;
-      }
       if (!recurringRuleForm.category.trim()) {
         setRecurringRuleError('Catégorie requise.');
         return;
@@ -122,6 +119,8 @@ export function useRecurringRule({ businessId, loadFinances }: UseRecurringRuleO
         setRecurringRuleError('Date de début requise.');
         return;
       }
+      // Derive dayOfMonth from startDate
+      const dayOfMonth = new Date(recurringRuleForm.startDate).getDate();
       const res = await fetchJson<{ item: RecurringRule }>(`/api/pro/businesses/${businessId}/finances/recurring`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -134,7 +133,7 @@ export function useRecurringRule({ businessId, loadFinances }: UseRecurringRuleO
           startDate: recurringRuleForm.startDate,
           endDate: recurringRuleForm.endDate || null,
           dayOfMonth,
-          frequency: 'MONTHLY',
+          frequency: recurringRuleForm.frequency,
         }),
       });
       if (!res.ok || !res.data) {
@@ -173,7 +172,7 @@ export function useRecurringRule({ businessId, loadFinances }: UseRecurringRuleO
         method: res.data.item.method ?? 'WIRE',
         startDate: res.data.item.startDate.slice(0, 10),
         endDate: res.data.item.endDate ? res.data.item.endDate.slice(0, 10) : '',
-        dayOfMonth: String(res.data.item.dayOfMonth ?? ''),
+        frequency: (res.data.item.frequency ?? 'MONTHLY') as 'MONTHLY' | 'YEARLY',
         isActive: res.data.item.isActive,
       });
     } catch (err) {
@@ -217,13 +216,10 @@ export function useRecurringRule({ businessId, loadFinances }: UseRecurringRuleO
         setRecurringRuleError('Montant invalide.');
         return;
       }
-      const dayOfMonth = recurringRuleForm.dayOfMonth
-        ? Math.min(31, Math.max(1, Number.parseInt(recurringRuleForm.dayOfMonth, 10)))
+      // Derive dayOfMonth from startDate
+      const dayOfMonth = recurringRuleForm.startDate
+        ? new Date(recurringRuleForm.startDate).getDate()
         : recurringRule.dayOfMonth;
-      if (!Number.isFinite(dayOfMonth) || dayOfMonth <= 0) {
-        setRecurringRuleError('Jour de facturation invalide.');
-        return;
-      }
       const res = await fetchJson<{ item: RecurringRule }>(
         `/api/pro/businesses/${businessId}/finances/recurring/${recurringRule.id}`,
         {
@@ -237,6 +233,7 @@ export function useRecurringRule({ businessId, loadFinances }: UseRecurringRuleO
             startDate: recurringRuleForm.startDate,
             endDate: recurringRuleForm.endDate || null,
             dayOfMonth,
+            frequency: recurringRuleForm.frequency,
             isActive: recurringRuleForm.isActive,
             applyToFuture: recurringApplyFuture,
             recalculateFuture: recurringRecalculate,

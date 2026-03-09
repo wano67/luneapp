@@ -8,6 +8,9 @@ import { ensureDelegate } from '@/server/http/delegates';
 import { parseCentsInput, parseEuroToCents } from '@/lib/money';
 import { addMonths, enumerateMonthlyDates } from '@/server/finances/recurring';
 import { parseIdOpt, parseDateOpt } from '@/server/http/parsers';
+import { computeVat } from '@/config/pcg';
+import { upsertLedgerForFinance } from '@/server/services/financeToLedger';
+import { categorizeEntry } from '@/server/services/ocr';
 
 function isValidType(value: unknown): value is FinanceType {
   return value === 'INCOME' || value === 'EXPENSE';
@@ -25,6 +28,51 @@ function parseAmountCentsDirect(raw: unknown): bigint | null {
   const parsed = parseCentsInput(raw);
   if (parsed == null) return null;
   return BigInt(parsed);
+}
+
+/** Background auto-categorization — non-blocking, best-effort. */
+async function autoCategorizeFinance(
+  financeId: bigint,
+  businessId: bigint,
+  category: string,
+  vendor: string | null,
+  type: 'INCOME' | 'EXPENSE',
+  amountCents: bigint,
+) {
+  try {
+    const result = await categorizeEntry(category, vendor, type);
+    if (!result || result.confidence < 40) return;
+
+    const vatRate = 2000;
+    const vat = computeVat(amountCents, vatRate);
+
+    await prisma.$transaction(async (tx) => {
+      await tx.finance.update({
+        where: { id: financeId },
+        data: {
+          accountCode: result.accountCode,
+          category: result.label,
+          vatRate,
+          vatCents: vat.tvaCents,
+        },
+      });
+      await upsertLedgerForFinance(tx, {
+        id: financeId,
+        businessId,
+        type,
+        amountCents,
+        accountCode: result.accountCode,
+        vatRate,
+        vatCents: vat.tvaCents,
+        pieceRef: null,
+        category: result.label,
+        vendor,
+        date: new Date(),
+      });
+    });
+  } catch (err) {
+    console.error('[auto-categorize] Failed for finance', financeId.toString(), err);
+  }
 }
 
 async function ensureRecurringFinanceHorizon(params: {
@@ -350,6 +398,26 @@ export const POST = withBusinessRoute(
       ? (body as { recurringRetroactive?: unknown }).recurringRetroactive !== false
       : false;
 
+  // accountCode (optional PCG code)
+  const accountCodeRaw = (body as { accountCode?: unknown }).accountCode;
+  const accountCode = typeof accountCodeRaw === 'string' && accountCodeRaw.trim() ? accountCodeRaw.trim() : null;
+
+  // vatRate (optional, in bps: 2000 = 20%)
+  const vatRateRaw = (body as { vatRate?: unknown }).vatRate;
+  const vatRate =
+    typeof vatRateRaw === 'number' && Number.isFinite(vatRateRaw) && vatRateRaw >= 0
+      ? Math.trunc(vatRateRaw)
+      : typeof vatRateRaw === 'string' && /^\d+$/.test(vatRateRaw)
+        ? Math.trunc(Number(vatRateRaw))
+        : null;
+
+  // Compute vatCents from amountCents (TTC) and vatRate
+  const vatCents = vatRate != null && vatRate > 0 ? computeVat(amountCents, vatRate).tvaCents : null;
+
+  // pieceRef (optional)
+  const pieceRefRaw = (body as { pieceRef?: unknown }).pieceRef;
+  const pieceRef = typeof pieceRefRaw === 'string' && pieceRefRaw.trim() ? pieceRefRaw.trim() : null;
+
   const metadata = sanitizeMetadata((body as { metadata?: unknown }).metadata);
   const noteToStore = metadata ? JSON.stringify(metadata) : note;
 
@@ -416,6 +484,10 @@ export const POST = withBusinessRoute(
       type: typeRaw,
       amountCents,
       category,
+      accountCode,
+      vatRate,
+      vatCents,
+      pieceRef,
       vendor,
       method,
       isRecurring,
@@ -483,6 +555,28 @@ export const POST = withBusinessRoute(
     if (entries.length) {
       await prisma.finance.createMany({ data: entries, skipDuplicates: true });
     }
+  }
+
+  // Auto-generate ledger entry if PCG account code is set
+  if (accountCode) {
+    await prisma.$transaction(async (tx) => {
+      await upsertLedgerForFinance(tx, {
+        id: finance.id,
+        businessId: businessIdBigInt,
+        type: typeRaw as 'INCOME' | 'EXPENSE',
+        amountCents: finance.amountCents,
+        accountCode,
+        vatRate,
+        vatCents,
+        pieceRef,
+        category,
+        vendor,
+        date: finance.date,
+      });
+    });
+  } else {
+    // Auto-categorize in background if no accountCode was provided
+    void autoCategorizeFinance(finance.id, businessIdBigInt, category, vendor, typeRaw as 'INCOME' | 'EXPENSE', amountCents);
   }
 
   return jsonb({ item: enrichFinance(finance) }, requestId, { status: 201 });

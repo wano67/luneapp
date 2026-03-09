@@ -139,7 +139,7 @@ export function FixedChargesPanel({ businessId }: { businessId: string }) {
                   {rule.category}
                 </p>
                 <p className="text-xs text-[var(--text-secondary)]">
-                  {rule.vendor ?? '—'} · Jour {rule.dayOfMonth} · {rule.frequency === 'MONTHLY' ? 'Mensuel' : 'Annuel'}
+                  {rule.vendor ?? '—'} · Depuis le {new Date(rule.startDate).toLocaleDateString('fr-FR')} · {rule.frequency === 'MONTHLY' ? 'Mensuel' : 'Annuel'}
                 </p>
               </div>
               <div className="flex items-center gap-2">

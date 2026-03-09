@@ -3,7 +3,6 @@
 import { useMemo } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { ProPageShell } from '@/components/pro/ProPageShell';
-import { Card } from '@/components/ui/card';
 import { FinanceEntriesPanel } from '@/components/pro/finances/FinanceEntriesPanel';
 import { PaymentsPanel } from '@/components/pro/finances/PaymentsPanel';
 import { TreasuryPanel } from '@/components/pro/finances/TreasuryPanel';
@@ -11,10 +10,13 @@ import { VatPanel } from '@/components/pro/finances/VatPanel';
 import { ForecastingPanel } from '@/components/pro/finances/ForecastingPanel';
 import { LedgerPanel } from '@/components/pro/finances/LedgerPanel';
 import { FixedChargesPanel } from '@/components/pro/finances/FixedChargesPanel';
+import { DashboardPanel } from '@/components/pro/finances/DashboardPanel';
+import { ReportsPanel } from '@/components/pro/finances/ReportsPanel';
 
 type Props = { businessId: string };
 
 const TABS = [
+  { key: 'overview', label: 'Vue d\'ensemble' },
   { key: 'entries', label: 'Écritures' },
   { key: 'payments', label: 'Paiements' },
   { key: 'charges', label: 'Charges fixes' },
@@ -45,6 +47,8 @@ export default function AccountingPage({ businessId }: Props) {
 
   const content = useMemo(() => {
     switch (currentTab) {
+      case 'overview':
+        return <DashboardPanel businessId={businessId} />;
       case 'entries':
         return <FinanceEntriesPanel businessId={businessId} />;
       case 'payments':
@@ -60,13 +64,9 @@ export default function AccountingPage({ businessId }: Props) {
       case 'ledger':
         return <LedgerPanel businessId={businessId} />;
       case 'reports':
-        return (
-          <Card className="p-4 text-sm text-[var(--text-secondary)]">
-            Rapports comptables à venir. Configurez vos écritures pour préparer les exports.
-          </Card>
-        );
+        return <ReportsPanel businessId={businessId} />;
       default:
-        return <FinanceEntriesPanel businessId={businessId} />;
+        return <DashboardPanel businessId={businessId} />;
     }
   }, [businessId, currentTab]);
 
@@ -75,7 +75,7 @@ export default function AccountingPage({ businessId }: Props) {
       backHref={`/app/pro/${businessId}`}
       backLabel="Dashboard"
       title="Comptabilité"
-      subtitle="Écritures, paiements, TVA et prévisions."
+      subtitle="Situation financière, écritures, TVA et rapports comptables."
       tabs={TABS}
       activeTab={currentTab}
       onTabChange={handleTabChange}

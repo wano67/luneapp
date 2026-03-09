@@ -21,6 +21,10 @@ export type Finance = {
   recurringRuleId: string | null;
   isRuleOverride: boolean;
   lockedFromRule: boolean;
+  accountCode: string | null;
+  vatRate: number | null;
+  vatCents: string | null;
+  pieceRef: string | null;
   date: string;
   note: string | null;
   createdAt: string;

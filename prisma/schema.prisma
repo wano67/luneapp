@@ -67,6 +67,7 @@ enum LedgerSourceType {
   INVENTORY_MOVEMENT
   INVOICE_STOCK_CONSUMPTION
   INVOICE_CASH_SALE
+  FINANCE_ENTRY
 }
 
 enum InventoryMovementSource {
@@ -211,6 +212,8 @@ model Business {
   bankName String?
   accountHolder String?
   billingLegalText String?
+  legalForm        String?    // SAS, SASU, SARL, EURL, EI, MICRO, SA, SCI, OTHER
+  taxRegime        String?    // IS, IR
 
   ownerId BigInt
   owner   User   @relation("BusinessOwner", fields: [ownerId], references: [id])
@@ -669,6 +672,10 @@ model Finance {
   lockedFromRule Boolean @default(false)
   date       DateTime
   note       String?
+  accountCode String?
+  vatRate     Int?
+  vatCents    BigInt?
+  pieceRef    String?
   deletedAt  DateTime?
 
   business Business @relation(fields: [businessId], references: [id])
@@ -1218,6 +1225,11 @@ model LedgerEntry {
   sourceType     LedgerSourceType
   sourceId       BigInt?
   createdByUserId BigInt?
+  journalCode    String?
+  entryNumber    Int?
+  pieceRef       String?
+  pieceDate      DateTime?
+  validDate      DateTime?
   lines          LedgerLine[]
 
   business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
@@ -1309,6 +1321,7 @@ enum RecurringUnit {
 enum NumberSequenceKind {
   QUOTE
   INVOICE
+  LEDGER
 }
 
 model NumberSequence {

@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import type { ChangeEvent, FormEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -6,6 +7,8 @@ import { Modal } from '@/components/ui/modal';
 import type { Finance } from '@/components/pro/finances/finance-types';
 import { TYPE_OPTIONS, METHOD_OPTIONS, RECURRING_OPTIONS } from '@/components/pro/finances/finance-types';
 import type { FinanceFormState } from '@/components/pro/finances/hooks/useFinanceForm';
+import { groupedCategories, VAT_RATES, computeVat } from '@/config/pcg';
+import { parseEuroToCents } from '@/lib/money';
 
 type Props = {
   open: boolean;
@@ -40,15 +43,49 @@ export function FinanceFormModal({
   tagOptions,
   recurringPreview,
 }: Props) {
+  const pcgGroups = useMemo(
+    () => groupedCategories(form.type === 'INCOME' ? 'INCOME' : 'EXPENSE'),
+    [form.type]
+  );
+
+  const vatBreakdown = useMemo(() => {
+    const cents = parseEuroToCents(form.amount);
+    if (!Number.isFinite(cents) || cents <= 0) return null;
+    const rate = Number.parseInt(form.vatRate, 10) || 0;
+    const result = computeVat(BigInt(cents), rate);
+    return {
+      ht: Number(result.htCents) / 100,
+      tva: Number(result.tvaCents) / 100,
+      ttc: Number(result.ttcCents) / 100,
+    };
+  }, [form.amount, form.vatRate]);
+
+  function handlePcgChange(e: ChangeEvent<HTMLSelectElement>) {
+    const code = e.target.value;
+    if (code === '__custom__') {
+      setForm((prev) => ({ ...prev, accountCode: '', category: '' }));
+      return;
+    }
+    // Find the label from the grouped categories
+    for (const cats of pcgGroups.values()) {
+      const match = cats.find((c) => c.code === code);
+      if (match) {
+        setForm((prev) => ({ ...prev, accountCode: code, category: match.label }));
+        return;
+      }
+    }
+  }
+
   return (
     <Modal
       open={open}
       onCloseAction={onClose}
-      title={editing ? 'Modifier écriture' : 'Nouvelle charge'}
-      description="Montant, libellé et date sont requis."
+      title={editing ? 'Modifier l\'écriture' : 'Nouvelle écriture'}
+      description="Sélectionnez une catégorie comptable, un montant et une date."
     >
       <form className="space-y-3" onSubmit={onSubmit}>
         <div className="grid gap-2 md:grid-cols-2">
+          {/* Type */}
           <label className="text-sm text-[var(--text-primary)]">
             <span className="text-xs text-[var(--text-secondary)]">Type</span>
             <Select name="type" value={form.type} onChange={onFieldChange}>
@@ -59,8 +96,39 @@ export function FinanceFormModal({
               ))}
             </Select>
           </label>
+
+          {/* PCG Category picker */}
           <label className="text-sm text-[var(--text-primary)]">
-            <span className="text-xs text-[var(--text-secondary)]">Montant (€)</span>
+            <span className="text-xs text-[var(--text-secondary)]">Catégorie comptable</span>
+            <Select value={form.accountCode || '__custom__'} onChange={handlePcgChange}>
+              <option value="__custom__">Autre (saisie libre)</option>
+              {Array.from(pcgGroups.entries()).map(([group, cats]) => (
+                <optgroup key={group} label={group}>
+                  {cats.map((cat) => (
+                    <option key={cat.code} value={cat.code}>
+                      {cat.code} — {cat.label}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </Select>
+          </label>
+
+          {/* Free-text category (visible when "Autre" or to override label) */}
+          <label className="text-sm text-[var(--text-primary)]">
+            <span className="text-xs text-[var(--text-secondary)]">Libellé</span>
+            <Input
+              name="category"
+              value={form.category}
+              onChange={onFieldChange}
+              placeholder={form.accountCode ? 'Auto-rempli' : 'Ex: Loyer, Assurance…'}
+              required={!form.accountCode}
+            />
+          </label>
+
+          {/* Amount */}
+          <label className="text-sm text-[var(--text-primary)]">
+            <span className="text-xs text-[var(--text-secondary)]">Montant TTC (€)</span>
             <Input
               name="amount"
               type="text"
@@ -70,19 +138,39 @@ export function FinanceFormModal({
               required
             />
           </label>
+
+          {/* VAT rate */}
           <label className="text-sm text-[var(--text-primary)]">
-            <span className="text-xs text-[var(--text-secondary)]">Libellé</span>
-            <Input name="category" value={form.category} onChange={onFieldChange} required />
+            <span className="text-xs text-[var(--text-secondary)]">Taux de TVA</span>
+            <Select
+              value={form.vatRate}
+              onChange={(e) => setForm((prev) => ({ ...prev, vatRate: e.target.value }))}
+            >
+              {VAT_RATES.map((rate) => (
+                <option key={rate.value} value={rate.value}>
+                  {rate.label}
+                </option>
+              ))}
+            </Select>
           </label>
+
+          {/* Date */}
           <label className="text-sm text-[var(--text-primary)]">
             <span className="text-xs text-[var(--text-secondary)]">Date</span>
             <Input name="date" type="date" value={form.date} onChange={onFieldChange} required />
           </label>
-          <label className="text-sm text-[var(--text-primary)]">
-            <span className="text-xs text-[var(--text-secondary)]">Projet (optionnel)</span>
-            <Input name="projectId" value={form.projectId} onChange={onFieldChange} />
-          </label>
         </div>
+
+        {/* VAT breakdown */}
+        {vatBreakdown && vatBreakdown.tva > 0 ? (
+          <div className="flex items-center gap-3 rounded-xl bg-[var(--surface-2)] px-3 py-2 text-xs text-[var(--text-secondary)]">
+            <span>HT : {vatBreakdown.ht.toFixed(2)} €</span>
+            <span>·</span>
+            <span>TVA : {vatBreakdown.tva.toFixed(2)} €</span>
+            <span>·</span>
+            <span className="font-medium text-[var(--text-primary)]">TTC : {vatBreakdown.ttc.toFixed(2)} €</span>
+          </div>
+        ) : null}
 
         <details className="rounded-2xl border border-[var(--border)]/60 bg-[var(--surface)]/40 px-3 py-2">
           <summary className="cursor-pointer text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)]">
@@ -102,6 +190,19 @@ export function FinanceFormModal({
                   </option>
                 ))}
               </Select>
+            </label>
+            <label className="text-sm text-[var(--text-primary)]">
+              <span className="text-xs text-[var(--text-secondary)]">Réf. pièce justificative</span>
+              <Input
+                name="pieceRef"
+                value={form.pieceRef}
+                onChange={onFieldChange}
+                placeholder="N° facture, reçu…"
+              />
+            </label>
+            <label className="text-sm text-[var(--text-primary)]">
+              <span className="text-xs text-[var(--text-secondary)]">Projet (optionnel)</span>
+              <Input name="projectId" value={form.projectId} onChange={onFieldChange} />
             </label>
             <label className="flex items-center gap-2 text-sm text-[var(--text-primary)]">
               <input
@@ -139,18 +240,6 @@ export function FinanceFormModal({
                     type="number"
                     min={1}
                     max={36}
-                  />
-                </label>
-                <label className="text-sm text-[var(--text-primary)]">
-                  <span className="text-xs text-[var(--text-secondary)]">Jour de facturation</span>
-                  <Input
-                    name="recurringDayOfMonth"
-                    value={form.recurringDayOfMonth}
-                    onChange={onFieldChange}
-                    type="number"
-                    min={1}
-                    max={31}
-                    placeholder="Auto"
                   />
                 </label>
                 <label className="text-sm text-[var(--text-primary)]">

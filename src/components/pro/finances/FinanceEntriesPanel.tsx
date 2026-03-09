@@ -11,13 +11,14 @@ import { Modal } from '@/components/ui/modal';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import { formatCurrency } from '@/app/app/pro/pro-data';
 import { useActiveBusiness } from '@/app/app/pro/ActiveBusinessProvider';
-import { Plus } from 'lucide-react';
+import { Plus, ScanLine, Sparkles } from 'lucide-react';
 import { useRowSelection } from '@/app/app/components/selection/useRowSelection';
 import { BulkActionBar } from '@/app/app/components/selection/BulkActionBar';
 import { useRecurringRule } from '@/components/pro/finances/hooks/useRecurringRule';
 import { useFinanceForm } from '@/components/pro/finances/hooks/useFinanceForm';
 import { FinanceFormModal } from '@/components/pro/finances/modals/FinanceFormModal';
 import { RecurringRuleModal } from '@/components/pro/finances/modals/RecurringRuleModal';
+import { ReceiptScanModal } from '@/components/pro/finances/modals/ReceiptScanModal';
 import type { Finance, FinanceType } from '@/components/pro/finances/finance-types';
 import { TYPE_OPTIONS, METHOD_OPTIONS, formatFinanceDate } from '@/components/pro/finances/finance-types';
 
@@ -81,7 +82,8 @@ export function FinanceEntriesPanel({ businessId }: Props) {
   const [bulkLoading, setBulkLoading] = useState(false);
   const { selectedArray, selectedCount, toggle, toggleAll, clear, isSelected } = useRowSelection();
 
-
+  const [scanModalOpen, setScanModalOpen] = useState(false);
+  const [categorizing, setCategorizing] = useState(false);
 
   const controllerRef = useRef<AbortController | null>(null);
 
@@ -242,9 +244,51 @@ export function FinanceEntriesPanel({ businessId }: Props) {
     }
   }
 
+  async function handleAutoCategorize() {
+    if (!isAdmin) { setInfo(readOnlyMessage); return; }
+    setCategorizing(true);
+    setInfo(null);
+    const ids = selectedCount > 0
+      ? selectedArray.filter(id => {
+          const f = items.find(i => i.id === id);
+          return f && !f.accountCode;
+        })
+      : [];
+    const payload = ids.length > 0 ? { ids } : { all: true };
+    const res = await fetchJson<{ updated: number }>(
+      `/api/pro/businesses/${businessId}/finances/categorize`,
+      { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }
+    );
+    setCategorizing(false);
+    if (!res.ok || !res.data) {
+      setError(res.error ?? 'Erreur de classification.');
+      return;
+    }
+    setInfo(`${res.data.updated} écriture(s) classée(s) automatiquement.`);
+    clear();
+    await loadFinances();
+  }
+
+  const uncategorizedCount = items.filter(i => !i.accountCode).length;
+
   return (
     <div className="space-y-4">
-      <div className="flex justify-end">
+      <div className="flex justify-end gap-2">
+        {uncategorizedCount > 0 ? (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={handleAutoCategorize}
+            disabled={categorizing}
+            className="gap-2"
+          >
+            <Sparkles size={14} />
+            {categorizing ? 'Classification…' : `Classer (${uncategorizedCount})`}
+          </Button>
+        ) : null}
+        <Button size="sm" variant="outline" onClick={() => setScanModalOpen(true)} className="gap-2">
+          <ScanLine size={14} /> Scanner
+        </Button>
         <Button size="sm" onClick={openCreate} className="gap-2">
           <Plus size={14} /> Ajouter une charge
         </Button>
@@ -502,6 +546,32 @@ export function FinanceEntriesPanel({ businessId }: Props) {
           </div>
         </div>
       </Modal>
+
+      <ReceiptScanModal
+        open={scanModalOpen}
+        onClose={() => setScanModalOpen(false)}
+        businessId={businessId}
+        onExtracted={(data) => {
+          // Map OCR percentages to bps for vatRate
+          const vatBps = data.vatRate != null
+            ? { 20: '2000', 10: '1000', 5.5: '550', 2.1: '210', 0: '0' }[data.vatRate] ?? '2000'
+            : '2000';
+          setForm((prev) => ({
+            ...prev,
+            type: data.type,
+            amount: data.amountTtc != null ? data.amountTtc.toFixed(2) : prev.amount,
+            category: data.category ?? prev.category,
+            accountCode: data.accountCode ?? prev.accountCode,
+            vatRate: vatBps,
+            pieceRef: data.pieceRef ?? prev.pieceRef,
+            date: data.date ?? prev.date,
+            vendor: data.vendor ?? prev.vendor,
+            note: data.note ?? prev.note,
+          }));
+          setModalOpen(true);
+          setInfo('Données extraites du justificatif. Vérifiez et validez.');
+        }}
+      />
 
       <RecurringRuleModal
         open={recurringModalOpen}

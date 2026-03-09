@@ -1,6 +1,7 @@
 import { useState, useMemo, type ChangeEvent, type FormEvent } from 'react';
 import { fetchJson } from '@/lib/apiClient';
 import { formatCentsToEuroInput, parseEuroToCents, sanitizeEuroInput } from '@/lib/money';
+import { findCategoryByCode } from '@/config/pcg';
 
 type FinanceType = 'INCOME' | 'EXPENSE';
 type PaymentMethod = 'WIRE' | 'CARD' | 'CHECK' | 'CASH' | 'OTHER';
@@ -25,6 +26,10 @@ type Finance = {
   recurringRuleId: string | null;
   isRuleOverride: boolean;
   lockedFromRule: boolean;
+  accountCode: string | null;
+  vatRate: number | null;
+  vatCents: string | null;
+  pieceRef: string | null;
   date: string;
   note: string | null;
   createdAt: string;
@@ -37,6 +42,9 @@ export type FinanceFormState = {
   type: FinanceType;
   amount: string;
   category: string;
+  accountCode: string;
+  vatRate: string;
+  pieceRef: string;
   date: string;
   projectId: string;
   note: string;
@@ -55,7 +63,10 @@ export type FinanceFormState = {
 const EMPTY_FORM: FinanceFormState = {
   type: 'EXPENSE',
   amount: '',
-  category: 'Autre',
+  category: '',
+  accountCode: '',
+  vatRate: '2000',
+  pieceRef: '',
   date: '',
   projectId: '',
   note: '',
@@ -118,6 +129,9 @@ export function useFinanceForm(params: UseFinanceFormParams) {
       type: item.type,
       amount: formatCentsToEuroInput(item.amountCents),
       category: item.category,
+      accountCode: item.accountCode ?? '',
+      vatRate: item.vatRate != null ? String(item.vatRate) : '2000',
+      pieceRef: item.pieceRef ?? '',
       date: item.date.slice(0, 10),
       projectId: item.projectId ?? '',
       note: item.note ?? '',
@@ -163,10 +177,21 @@ export function useFinanceForm(params: UseFinanceFormParams) {
       setCreating(false);
       return;
     }
+    // Auto-fill category from PCG if accountCode is selected but category is empty
+    const category = form.category || (form.accountCode ? (findCategoryByCode(form.accountCode)?.label ?? '') : '');
+    if (!category) {
+      setActionError('Catégorie requise.');
+      setCreating(false);
+      return;
+    }
+
     const payload: Record<string, unknown> = {
       type: form.type,
       amountCents,
-      category: form.category,
+      category,
+      accountCode: form.accountCode || null,
+      vatRate: form.vatRate ? Number.parseInt(form.vatRate, 10) : null,
+      pieceRef: form.pieceRef || null,
       date: form.date,
       projectId: form.projectId || null,
       note: form.note || null,

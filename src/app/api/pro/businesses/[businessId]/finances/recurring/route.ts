@@ -91,17 +91,14 @@ export const POST = withBusinessRoute<{ businessId: string }>(
     // endDate (optional)
     const endDate = parseDateOpt(b.endDate) ?? null;
 
-    // dayOfMonth (required)
+    // dayOfMonth (optional — derived from startDate if not provided)
     const dayRaw = b.dayOfMonth;
     const dayOfMonth =
       typeof dayRaw === 'number' && Number.isFinite(dayRaw)
         ? Math.min(31, Math.max(1, Math.trunc(dayRaw)))
         : typeof dayRaw === 'string' && /^\d+$/.test(dayRaw)
           ? Math.min(31, Math.max(1, Math.trunc(Number(dayRaw))))
-          : null;
-    if (!dayOfMonth) {
-      return withIdNoStore(badRequest('dayOfMonth requis (1-31).'), requestId);
-    }
+          : startDate.getDate();
 
     // frequency (optional, default MONTHLY)
     let frequency: RecurringUnit = RecurringUnit.MONTHLY;

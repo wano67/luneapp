@@ -88,8 +88,9 @@ export async function upsertLedgerForMovement(
       sourceType: LedgerSourceType.INVENTORY_MOVEMENT,
       sourceId: params.movement.id,
       createdByUserId: params.createdByUserId ?? null,
+      journalCode: 'AC',
     },
-    update: { date: params.movement.date, memo: `Achat stock ${params.product.sku}` },
+    update: { date: params.movement.date, memo: `Achat stock ${params.product.sku}`, journalCode: 'AC' },
   });
 
   const lines = [
@@ -161,6 +162,7 @@ export async function createLedgerForInvoiceConsumption(
       sourceType: LedgerSourceType.INVOICE_STOCK_CONSUMPTION,
       sourceId: params.invoiceId,
       createdByUserId: params.createdByUserId ?? null,
+      journalCode: 'AC',
     },
   });
 
@@ -214,8 +216,11 @@ export async function upsertCashSaleLedgerForInvoicePaid(
       sourceType: LedgerSourceType.INVOICE_CASH_SALE,
       sourceId: params.invoice.id,
       createdByUserId: params.createdByUserId ?? null,
+      journalCode: 'VT',
+      pieceRef: params.invoice.number ?? null,
+      pieceDate: date,
     },
-    update: { date, memo },
+    update: { date, memo, journalCode: 'VT', pieceRef: params.invoice.number ?? null, pieceDate: date },
   });
 
   const lines = [

@@ -7,6 +7,8 @@ import { badRequest, notFound, withIdNoStore } from '@/server/http/apiUtils';
 import { ensureDelegate } from '@/server/http/delegates';
 import { parseCentsInput, parseEuroToCents } from '@/lib/money';
 import { parseIdOpt, parseDateOpt } from '@/server/http/parsers';
+import { computeVat } from '@/config/pcg';
+import { upsertLedgerForFinance, deleteLedgerForFinance } from '@/server/services/financeToLedger';
 
 function isValidType(value: unknown): value is FinanceType {
   return value === 'INCOME' || value === 'EXPENSE';
@@ -236,6 +238,40 @@ export const PATCH = withBusinessRoute<{ businessId: string; financeId: string }
       }
     }
 
+    if ('accountCode' in body) {
+      const raw = (body as { accountCode?: unknown }).accountCode;
+      data.accountCode = typeof raw === 'string' && raw.trim() ? raw.trim() : null;
+    }
+
+    if ('vatRate' in body) {
+      const raw = (body as { vatRate?: unknown }).vatRate;
+      if (raw === null || raw === undefined || raw === '') {
+        data.vatRate = null;
+        data.vatCents = null;
+      } else {
+        const rate = typeof raw === 'number' ? Math.trunc(raw) : typeof raw === 'string' && /^\d+$/.test(raw) ? Math.trunc(Number(raw)) : null;
+        data.vatRate = rate;
+        // Recompute vatCents if we have both vatRate and amountCents
+        const amtCents = (data.amountCents as bigint | undefined) ?? existing.amountCents;
+        if (rate != null && rate > 0) {
+          data.vatCents = computeVat(amtCents, rate).tvaCents;
+        } else {
+          data.vatCents = null;
+        }
+      }
+    } else if ('amountCents' in data) {
+      // Amount changed but vatRate wasn't sent — recompute with existing rate
+      const rate = existing.vatRate;
+      if (rate != null && rate > 0) {
+        data.vatCents = computeVat(data.amountCents as bigint, rate).tvaCents;
+      }
+    }
+
+    if ('pieceRef' in body) {
+      const raw = (body as { pieceRef?: unknown }).pieceRef;
+      data.pieceRef = typeof raw === 'string' && raw.trim() ? raw.trim() : null;
+    }
+
     const metadata = sanitizeMetadata((body as { metadata?: unknown }).metadata);
     if (metadata) {
       data.note = JSON.stringify(metadata);
@@ -343,6 +379,31 @@ export const PATCH = withBusinessRoute<{ businessId: string; financeId: string }
       },
     });
 
+    // Update ledger entry if accountCode is present
+    const finalAccountCode = (data.accountCode as string | undefined) ?? updated.accountCode;
+    if (finalAccountCode) {
+      await prisma.$transaction(async (tx) => {
+        await upsertLedgerForFinance(tx, {
+          id: updated.id,
+          businessId: businessIdBigInt,
+          type: updated.type as 'INCOME' | 'EXPENSE',
+          amountCents: updated.amountCents,
+          accountCode: finalAccountCode,
+          vatRate: updated.vatRate,
+          vatCents: updated.vatCents,
+          pieceRef: updated.pieceRef,
+          category: updated.category,
+          vendor: updated.vendor,
+          date: updated.date,
+        });
+      });
+    } else {
+      // No accountCode → remove any existing ledger entry
+      await prisma.$transaction(async (tx) => {
+        await deleteLedgerForFinance(tx, updated.id);
+      });
+    }
+
     return jsonb({ item: enrichFinance(updated) }, requestId);
   }
 );
@@ -369,9 +430,12 @@ export const DELETE = withBusinessRoute<{ businessId: string; financeId: string 
     });
     if (!finance) return withIdNoStore(notFound('Opération introuvable.'), requestId);
     if (!finance.deletedAt) {
-      await prisma.finance.update({
-        where: { id: financeIdBigInt },
-        data: { deletedAt: new Date() },
+      await prisma.$transaction(async (tx) => {
+        await tx.finance.update({
+          where: { id: financeIdBigInt },
+          data: { deletedAt: new Date() },
+        });
+        await deleteLedgerForFinance(tx, financeIdBigInt);
       });
     }
 

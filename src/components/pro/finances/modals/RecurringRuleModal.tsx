@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
@@ -15,7 +15,7 @@ type RecurringRuleFormState = {
   method: PaymentMethod;
   startDate: string;
   endDate: string;
-  dayOfMonth: string;
+  frequency: 'MONTHLY' | 'YEARLY';
   isActive: boolean;
 };
 
@@ -62,6 +62,18 @@ export function RecurringRuleModal({
 }: Props) {
   const isCreateMode = !rule;
   const [confirmDelete, setConfirmDelete] = useState(false);
+
+  const billingHint = useMemo(() => {
+    if (!form.startDate) return null;
+    const d = new Date(form.startDate);
+    if (Number.isNaN(d.getTime())) return null;
+    const day = d.getDate();
+    if (form.frequency === 'YEARLY') {
+      const monthName = d.toLocaleDateString('fr-FR', { month: 'long' });
+      return `Facturation le ${day} ${monthName} de chaque année`;
+    }
+    return `Facturation le ${day} de chaque mois`;
+  }, [form.startDate, form.frequency]);
 
   function handleClose() {
     setConfirmDelete(false);
@@ -144,15 +156,14 @@ export function RecurringRuleModal({
                 />
               </label>
               <label className="space-y-1">
-                <span className="text-xs font-medium text-[var(--text-secondary)]">Jour de facturation</span>
-                <Input
-                  type="number"
-                  min={1}
-                  max={31}
-                  value={form.dayOfMonth}
-                  onChange={(e) => setForm((prev) => ({ ...prev, dayOfMonth: e.target.value }))}
-                  placeholder="1"
-                />
+                <span className="text-xs font-medium text-[var(--text-secondary)]">Fréquence</span>
+                <Select
+                  value={form.frequency}
+                  onChange={(e) => setForm((prev) => ({ ...prev, frequency: e.target.value as 'MONTHLY' | 'YEARLY' }))}
+                >
+                  <option value="MONTHLY">Mensuel</option>
+                  <option value="YEARLY">Annuel</option>
+                </Select>
               </label>
               <label className="flex items-center gap-2 self-end rounded-xl border border-[var(--border)]/60 bg-[var(--surface-2)] px-3 py-2.5">
                 <input
@@ -164,6 +175,12 @@ export function RecurringRuleModal({
                 <span className="text-sm text-[var(--text-primary)]">Règle active</span>
               </label>
             </div>
+
+            {billingHint ? (
+              <p className="text-xs text-[var(--text-secondary)] -mt-2">
+                {billingHint}
+              </p>
+            ) : null}
 
             {/* Edit-mode options */}
             {!isCreateMode ? (
