@@ -22,12 +22,12 @@ export const EVENT_COLORS: Record<CalendarEventType, { bg: string; text: string 
 };
 
 export const EVENT_TYPE_LABELS: Record<CalendarEventType, string> = {
-  task: 'Tâche',
-  interaction: 'Interaction',
-  subscription: 'Abonnement',
-  finance: 'Revenu',
+  task: 'Tâches',
+  interaction: 'Interactions',
+  subscription: 'Abonnements',
+  finance: 'Finances',
   savings: 'Épargne',
-  event: 'Événements',
+  event: 'RDV / Rappels',
 };
 
 // ─── Grid builder ────────────────────────────────────────────────────────────

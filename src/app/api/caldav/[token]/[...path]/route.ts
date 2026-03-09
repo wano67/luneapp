@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/server/db/client';
 import icalGenerator from 'ical-generator';
-import * as nodeIcal from 'node-ical';
 import { CalendarEventKind } from '@/generated/prisma';
 
 type TokenInfo = {
@@ -195,26 +194,29 @@ async function handleGet(info: TokenInfo, path: string): Promise<NextResponse> {
 // ──────────────────────────────────────────────────────────────────────────────
 
 async function handlePut(info: TokenInfo, path: string, icsData: string): Promise<NextResponse> {
-  // Parse VEVENT
-  const parsed = nodeIcal.sync.parseICS(icsData);
-  const vevents = Object.values(parsed).filter(
-    (c): c is nodeIcal.VEvent => c != null && c.type === 'VEVENT',
-  );
-  if (vevents.length === 0) return new NextResponse('No VEVENT found.', { status: 400 });
+  // Simple ICS parser — extract VEVENT properties
+  const veventMatch = icsData.match(/BEGIN:VEVENT[\s\S]*?END:VEVENT/);
+  if (!veventMatch) return new NextResponse('No VEVENT found.', { status: 400 });
 
-  const vevent = vevents[0];
-  const uid = vevent.uid ?? path.replace(/\.ics$/, '');
-  const rawSummary = vevent.summary;
-  const title = typeof rawSummary === 'string' ? rawSummary : typeof rawSummary === 'object' && rawSummary && 'val' in rawSummary ? String(rawSummary.val) : 'Sans titre';
-  const rawDesc = vevent.description;
-  const description: string | null = typeof rawDesc === 'string' ? rawDesc : typeof rawDesc === 'object' && rawDesc && 'val' in rawDesc ? String(rawDesc.val) : null;
-  const rawLoc = vevent.location;
-  const location: string | null = typeof rawLoc === 'string' ? rawLoc : typeof rawLoc === 'object' && rawLoc && 'val' in rawLoc ? String(rawLoc.val) : null;
-  const start = vevent.start ? new Date(vevent.start as unknown as string) : new Date();
-  const end = vevent.end ? new Date(vevent.end as unknown as string) : null;
+  const vevent = veventMatch[0];
+  const prop = (name: string): string | null => {
+    const re = new RegExp(`^${name}[;:](.*)$`, 'm');
+    const m = vevent.match(re);
+    return m ? m[1].trim() : null;
+  };
 
-  // Check if start has time component or is all-day
-  const allDay = vevent.datetype === 'date';
+  const uid = prop('UID') ?? path.replace(/\.ics$/, '');
+  const title = prop('SUMMARY') ?? 'Sans titre';
+  const description = prop('DESCRIPTION') ?? null;
+  const location = prop('LOCATION') ?? null;
+
+  const dtstart = prop('DTSTART');
+  const dtend = prop('DTEND');
+  const start = dtstart ? parseIcsDate(dtstart) : new Date();
+  const end = dtend ? parseIcsDate(dtend) : null;
+
+  // All-day events use DATE format (8 digits), timed events use DATETIME (15+ chars)
+  const allDay = dtstart ? !dtstart.includes('T') && /^\d{8}$/.test(dtstart.replace(/^VALUE=DATE:/, '')) : false;
 
   if (info.scope === 'pro' && info.businessId) {
     // Check if existing event with this icalUid
@@ -381,4 +383,21 @@ function singleEventToIcs(ev: EventDto): string {
 
 function escapeXml(str: string): string {
   return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+/** Parse iCal date string: 20260315 (DATE) or 20260315T140000Z (DATETIME) */
+function parseIcsDate(raw: string): Date {
+  // Strip VALUE=DATE: or VALUE=DATE-TIME: prefixes
+  const clean = raw.replace(/^VALUE=DATE(-TIME)?:/, '').replace(/^TZID=[^:]+:/, '');
+  if (/^\d{8}$/.test(clean)) {
+    // DATE format: YYYYMMDD
+    return new Date(`${clean.slice(0, 4)}-${clean.slice(4, 6)}-${clean.slice(6, 8)}T00:00:00`);
+  }
+  if (/^\d{8}T\d{6}Z?$/.test(clean)) {
+    // DATETIME format: YYYYMMDDTHHMMSS(Z)
+    const d = `${clean.slice(0, 4)}-${clean.slice(4, 6)}-${clean.slice(6, 8)}T${clean.slice(9, 11)}:${clean.slice(11, 13)}:${clean.slice(13, 15)}`;
+    return clean.endsWith('Z') ? new Date(d + 'Z') : new Date(d);
+  }
+  // Fallback: try native parsing
+  return new Date(clean);
 }
