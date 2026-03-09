@@ -3,7 +3,10 @@ type PrismaClientKnownRequestError = Prisma.PrismaClientKnownRequestError;
 import {
   AUTH_COOKIE_NAME,
   authCookieOptions,
+  REFRESH_COOKIE_NAME,
+  refreshCookieOptions,
   createSessionToken,
+  createRefreshToken,
   registerUser,
   toPublicUser,
 } from '@/server/auth/auth.service';
@@ -98,7 +101,10 @@ export async function POST(request: NextRequest) {
       verificationLink,
     }).catch(() => {});
 
-    const sessionToken = await createSessionToken(user);
+    const [sessionToken, refreshRaw] = await Promise.all([
+      createSessionToken(user),
+      createRefreshToken(user.id),
+    ]);
     const response = NextResponse.json(
       { user: toPublicUser(user) },
       { status: 201 }
@@ -108,6 +114,11 @@ export async function POST(request: NextRequest) {
       name: AUTH_COOKIE_NAME,
       value: sessionToken,
       ...authCookieOptions,
+    });
+    response.cookies.set({
+      name: REFRESH_COOKIE_NAME,
+      value: refreshRaw,
+      ...refreshCookieOptions,
     });
 
     response.headers.set('Cache-Control', 'no-store');

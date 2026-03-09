@@ -47,6 +47,7 @@ export function FinanceEntriesPanel({ businessId }: Props) {
   const [tagFilter, setTagFilter] = useState('');
   const [categoryOptions, setCategoryOptions] = useState<Array<{ id: string; name: string }>>([]);
   const [tagOptions, setTagOptions] = useState<Array<{ id: string; name: string }>>([]);
+  const [projectOptions, setProjectOptions] = useState<Array<{ id: string; name: string }>>([]);
   const [referenceError, setReferenceError] = useState<string | null>(null);
   const [referenceRequestId, setReferenceRequestId] = useState<string | null>(null);
 
@@ -169,12 +170,15 @@ export function FinanceEntriesPanel({ businessId }: Props) {
   async function loadReferences() {
     setReferenceError(null);
     setReferenceRequestId(null);
-    const [categories, tags] = await Promise.all([
+    const [categories, tags, projects] = await Promise.all([
       fetchJson<{ items: Array<{ id: string; name: string }> }>(
         `/api/pro/businesses/${businessId}/references?type=FINANCE_CATEGORY&limit=30`
       ),
       fetchJson<{ items: Array<{ id: string; name: string }> }>(
         `/api/pro/businesses/${businessId}/references?type=FINANCE_TAG&limit=30`
+      ),
+      fetchJson<{ items: Array<{ id: string; name: string }> }>(
+        `/api/pro/businesses/${businessId}/projects?scope=ACTIVE`
       ),
     ]);
     setReferenceRequestId(categories.requestId ?? tags.requestId ?? null);
@@ -185,6 +189,7 @@ export function FinanceEntriesPanel({ businessId }: Props) {
     }
     setCategoryOptions(categories.data.items ?? []);
     setTagOptions(tags.data.items ?? []);
+    setProjectOptions(projects.data?.items ?? []);
   }
 
   useEffect(() => {
@@ -522,6 +527,7 @@ export function FinanceEntriesPanel({ businessId }: Props) {
         readOnlyMessage={readOnlyMessage}
         categoryOptions={categoryOptions}
         tagOptions={tagOptions}
+        projectOptions={projectOptions}
         recurringPreview={recurringPreview}
       />
 

@@ -4,7 +4,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { MoreVertical, ChevronRight } from 'lucide-react';
+import { MoreVertical, ChevronRight, Plus } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -47,17 +47,15 @@ type BusinessesResponse = {
   }[];
 };
 
-type ProjectsResponse = {
-  items?: Array<{ id: string; status: string; archivedAt?: string | null }>;
-  counts?: { active: number; planned: number; inactive: number; archived: number; total: number };
+type DashboardResponse = {
+  kpis?: { openTasksCount?: number; projectsActiveCount?: number };
+  treasury?: { balanceCents?: string | number };
 };
 
-type MembersResponse = {
-  items?: Array<{ userId: string }>;
-};
-
-type ClientsResponse = {
-  items?: Array<{ id: string }>;
+type BusinessKpis = {
+  openTasksCount?: number;
+  balanceCents?: string;
+  projectsActiveCount?: number;
 };
 
 type BusinessInviteAcceptResponse = {
@@ -106,9 +104,8 @@ export default function ProHomeClient() {
   const [joining, setJoining] = useState(false);
   const [joinError, setJoinError] = useState<string | null>(null);
   const [joinSuccess, setJoinSuccess] = useState<string | null>(null);
-  const [businessStats, setBusinessStats] = useState<
-    Record<string, { projectsTotal?: number; projectsInProgress?: number; members?: number; clients?: number }>
-  >({});
+  const [redirecting, setRedirecting] = useState(false);
+  const [businessKpis, setBusinessKpis] = useState<Record<string, BusinessKpis>>({});
 
   /* ---------- DATA ---------- */
   const items = useMemo(() => businesses?.items ?? [], [businesses]);
@@ -142,6 +139,20 @@ export default function ProHomeClient() {
       return;
     }
   }, [searchParamsKey, router]);
+
+  /* ===================== AUTO-REDIRECT ===================== */
+  useEffect(() => {
+    const params = new URLSearchParams(searchParamsKey);
+    if (params.get('create') === '1' || params.get('join') === '1') return;
+    try {
+      const stored = localStorage.getItem('activeProBusinessId');
+      if (stored) {
+        setRedirecting(true);
+        router.replace(`/app/pro/${stored}`);
+      }
+    } catch { /* ignore */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   /* ===================== LOAD ===================== */
 
@@ -194,72 +205,37 @@ export default function ProHomeClient() {
   useEffect(() => {
     if (!businesses?.items?.length) return;
     const controller = new AbortController();
-    const targets = businesses.items.filter((item) => !businessStats[item.business.id]);
+    const targets = businesses.items.filter((item) => !businessKpis[item.business.id]);
     if (!targets.length) return undefined;
 
-    async function loadStats() {
+    async function loadKpis() {
       await Promise.all(
         targets.map(async (item) => {
           const businessId = item.business.id;
-          const next: {
-            projectsTotal?: number;
-            projectsInProgress?: number;
-            members?: number;
-            clients?: number;
-          } = {};
           try {
-            const res = await fetchJson<ProjectsResponse>(
-              `/api/pro/businesses/${businessId}/projects?scope=ALL`,
+            const res = await fetchJson<DashboardResponse>(
+              `/api/pro/businesses/${businessId}/dashboard?days=30`,
               {},
               controller.signal
             );
             if (res.ok && res.data) {
-              if (res.data.counts) {
-                next.projectsTotal = res.data.counts.total;
-                next.projectsInProgress = res.data.counts.active;
-              } else if (res.data.items) {
-                next.projectsTotal = res.data.items.length;
-                next.projectsInProgress = res.data.items.filter((p) => p.status === 'ACTIVE' && !p.archivedAt).length;
-              }
+              setBusinessKpis((prev) => ({
+                ...prev,
+                [businessId]: {
+                  openTasksCount: res.data?.kpis?.openTasksCount ?? 0,
+                  projectsActiveCount: res.data?.kpis?.projectsActiveCount ?? 0,
+                  balanceCents: String(res.data?.treasury?.balanceCents ?? '0'),
+                },
+              }));
             }
-          } catch {
-            // ignore
-          }
-
-          try {
-            const res = await fetchJson<MembersResponse>(
-              `/api/pro/businesses/${businessId}/members`,
-              {},
-              controller.signal
-            );
-            if (res.ok && res.data?.items) {
-              next.members = res.data.items.length;
-            }
-          } catch {
-            // ignore
-          }
-
-          try {
-            const res = await fetchJson<ClientsResponse>(
-              `/api/pro/businesses/${businessId}/clients`,
-              {},
-              controller.signal
-            );
-            if (res.ok && res.data?.items) {
-              next.clients = res.data.items.length;
-            }
-          } catch {
-            // ignore
-          }
-
-          setBusinessStats((prev) => ({ ...prev, [businessId]: { ...prev[businessId], ...next } }));
+          } catch { /* ignore */ }
         })
       );
     }
 
-    void loadStats();
+    void loadKpis();
     return () => controller.abort();
-  }, [businessStats, businesses]);
+  }, [businessKpis, businesses]);
 
   async function refreshBusinesses(signal?: AbortSignal) {
     try {
@@ -406,20 +382,30 @@ export default function ProHomeClient() {
 
   const kpis = useMemo(() => {
     const businessCount = overview?.totals?.businessesCount ?? items.length;
-    const projectsFromStats = Object.values(businessStats).reduce(
-      (acc, curr) => acc + (typeof curr.projectsInProgress === 'number' ? curr.projectsInProgress : 0),
+    const projectsFromKpis = Object.values(businessKpis).reduce(
+      (acc, curr) => acc + (typeof curr.projectsActiveCount === 'number' ? curr.projectsActiveCount : 0),
       0
     );
     const projectsFallback = overview?.totals?.projectsActiveCount ?? 0;
-    const projectsActive = projectsFromStats || projectsFallback;
+    const projectsActive = projectsFromKpis || projectsFallback;
 
     const totalNet = overview?.totals?.totalNetCents ?? '0';
     const solde = totalNet ? formatCurrency(totalNet) : '0 \u20AC';
 
     return { businessCount, projectsActive, solde };
-  }, [overview, businessStats, items.length]);
+  }, [overview, businessKpis, items.length]);
 
   /* ===================== UI ===================== */
+
+  if (redirecting) {
+    return (
+      <PageContainer className="gap-5">
+        <Card className="p-5">
+          <p className="text-sm text-[var(--text-secondary)]">Chargement{'\u2026'}</p>
+        </Card>
+      </PageContainer>
+    );
+  }
 
   return (
     <PageContainer className="gap-5">
@@ -472,10 +458,8 @@ export default function ProHomeClient() {
             />
           ) : (
             <div className="grid gap-4 grid-cols-1 md:grid-cols-2">
-              {filteredItems.map(({ business, role: _role }, index) => {
-                const stats = businessStats[business.id] ?? {};
-                const members = typeof stats.members === 'number' ? stats.members : 0;
-                const clients = typeof stats.clients === 'number' ? stats.clients : 0;
+              {filteredItems.map(({ business }, index) => {
+                const kpiData = businessKpis[business.id] ?? {};
 
                 return (
                   <div
@@ -497,20 +481,26 @@ export default function ProHomeClient() {
                       <BusinessCardMenu businessId={business.id} />
                     </div>
 
-                    {/* Stats + Ouvrir */}
+                    {/* KPIs + Ouvrir */}
                     <div className="flex flex-col gap-3">
                       <div className="flex flex-col gap-1">
                         <div className="flex items-center justify-between">
-                          <span className="text-sm font-medium text-white">CA</span>
-                          <span className="text-xs font-extrabold text-white">{"\u2014"}</span>
+                          <span className="text-sm font-medium text-white">Tâches</span>
+                          <span className="text-xs font-extrabold text-white">
+                            {typeof kpiData.openTasksCount === 'number' ? kpiData.openTasksCount : '\u2014'}
+                          </span>
                         </div>
                         <div className="flex items-center justify-between">
-                          <span className="text-sm font-medium text-white">Membres</span>
-                          <span className="text-xs font-extrabold text-white">{members}</span>
+                          <span className="text-sm font-medium text-white">Trésorerie</span>
+                          <span className="text-xs font-extrabold text-white">
+                            {kpiData.balanceCents ? formatCurrency(kpiData.balanceCents) : '\u2014'}
+                          </span>
                         </div>
                         <div className="flex items-center justify-between">
-                          <span className="text-sm font-medium text-white">Clients</span>
-                          <span className="text-xs font-extrabold text-white">{clients}</span>
+                          <span className="text-sm font-medium text-white">Projets actifs</span>
+                          <span className="text-xs font-extrabold text-white">
+                            {typeof kpiData.projectsActiveCount === 'number' ? kpiData.projectsActiveCount : '\u2014'}
+                          </span>
                         </div>
                       </div>
                       <Button
@@ -530,6 +520,26 @@ export default function ProHomeClient() {
                   </div>
                 );
               })}
+
+              {/* "+" card: create or join */}
+              <div
+                className="flex flex-col items-center justify-center gap-4 rounded-xl border-2 border-dashed border-[var(--border)] p-3 animate-fade-in-up transition hover:-translate-y-1 hover:shadow-lg"
+                style={{
+                  height: 200,
+                  animationDelay: `${150 + filteredItems.length * 80}ms`,
+                  animationFillMode: 'backwards',
+                }}
+              >
+                <Plus size={32} className="text-[var(--text-secondary)]" />
+                <div className="flex gap-2">
+                  <Button size="sm" onClick={() => setCreateOpen(true)}>
+                    Créer
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => setJoinOpen(true)}>
+                    Rejoindre
+                  </Button>
+                </div>
+              </div>
             </div>
           )}
         </>

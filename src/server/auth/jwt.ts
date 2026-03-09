@@ -1,18 +1,29 @@
 import { SignJWT, jwtVerify, type JWTPayload } from 'jose';
 
 export const AUTH_COOKIE_NAME = 'auth_token';
+export const REFRESH_COOKIE_NAME = 'refresh_token';
 
 const JWT_ISSUER = 'luneapp';
 const JWT_AUDIENCE = 'luneapp';
-const DEFAULT_EXPIRATION = '1d';
+const DEFAULT_EXPIRATION = '15m';
 
 export const authCookieOptions = {
   httpOnly: true,
   secure: process.env.NODE_ENV === 'production',
   sameSite: 'lax' as const,
   path: '/',
-  maxAge: 60 * 60 * 24, // 1 day
+  maxAge: 15 * 60, // 15 minutes
 };
+
+export const refreshCookieOptions = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === 'production',
+  sameSite: 'lax' as const,
+  path: '/api/auth/refresh',
+  maxAge: 7 * 24 * 60 * 60, // 7 days
+};
+
+export const REFRESH_TOKEN_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000;
 
 export type AuthTokenPayload = JWTPayload & {
   sub: string;

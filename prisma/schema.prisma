@@ -141,6 +141,8 @@ model User {
   emailVerificationToken  String?
   emailVerificationExpiry DateTime?
   pendingInviteToken      String?
+  passwordResetToken      String?
+  passwordResetExpiry     DateTime?
   language     String   @default("fr")
   theme        String   @default("system")
 
@@ -188,6 +190,22 @@ model User {
   calendarTokens       CalendarToken[]
   personalCalendarEvents PersonalCalendarEvent[]
   personalCalendarTokens PersonalCalendarToken[]
+  refreshTokens          RefreshToken[]
+}
+
+/**
+ * Refresh tokens pour les sessions longues
+ */
+model RefreshToken {
+  id        BigInt   @id @default(autoincrement())
+  tokenHash String   @unique
+  userId    BigInt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
 }
 
 /**

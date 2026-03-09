@@ -36,9 +36,9 @@ export function SearchSelect({ label, placeholder, items, value, onChange, error
   }, [items, query]);
 
   useEffect(() => {
+    if (!open) return;
     function handleClick(e: MouseEvent) {
-      if (!containerRef.current) return;
-      if (!containerRef.current.contains(e.target as Node)) setOpen(false);
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) setOpen(false);
     }
     function handleKey(e: KeyboardEvent) {
       if (e.key === 'Escape') setOpen(false);
@@ -49,7 +49,7 @@ export function SearchSelect({ label, placeholder, items, value, onChange, error
       document.removeEventListener('mousedown', handleClick);
       document.removeEventListener('keydown', handleKey as unknown as EventListener);
     };
-  }, []);
+  }, [open]);
 
   const selectItem = (code: string) => {
     onChange(code);
@@ -79,65 +79,82 @@ export function SearchSelect({ label, placeholder, items, value, onChange, error
 
   return (
     <div className="space-y-1" ref={containerRef}>
-      <label className="block text-sm font-medium text-[var(--text-primary)]">{label}</label>
-      <button
-        type="button"
-        className={cn(
-          'flex w-full items-center justify-between rounded-lg border bg-[var(--surface)] px-3 py-2 text-left text-sm text-[var(--text-primary)] transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]',
-          error ? 'border-[var(--danger-border)]' : 'border-[var(--border)]',
-          disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'
-        )}
-        onClick={() => !disabled && setOpen((v) => !v)}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-      >
-        <span className="truncate">{selected ? selected.label : placeholder ?? 'Sélectionner'}</span>
-        <span className="text-[var(--text-secondary)]">▾</span>
-      </button>
+      <label className="block text-sm font-medium text-[var(--text-secondary)]">{label}</label>
+      <div className="relative">
+        <button
+          type="button"
+          className={cn(
+            'flex w-full items-center justify-between rounded-xl border bg-[var(--surface)] px-4 py-3 text-left text-base text-[var(--text-primary)] transition-colors',
+            'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]',
+            error
+              ? 'border-[var(--danger)] focus-visible:outline-[var(--danger)]'
+              : 'border-[var(--border)] hover:border-[var(--border-strong)]',
+            disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'
+          )}
+          onClick={() => !disabled && setOpen((v) => !v)}
+          disabled={disabled}
+          aria-haspopup="listbox"
+          aria-expanded={open}
+        >
+          <span className="truncate">{selected ? selected.label : placeholder ?? 'Sélectionner'}</span>
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            className="shrink-0 text-[var(--text-secondary)]"
+          >
+            <path d="M6 9l6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
+
+        {open ? (
+          <div className="absolute left-0 right-0 top-full z-50 mt-1 rounded-xl border border-[var(--border)] bg-[var(--surface)] shadow-lg">
+            <div className="border-b border-[var(--border)] px-3 py-2">
+              <input
+                autoFocus
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={onKeyDown}
+                onBlur={handleBlur}
+                placeholder={placeholder ?? 'Rechercher…'}
+                className="w-full rounded-lg bg-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none"
+              />
+            </div>
+            <ul
+              ref={listRef}
+              className="max-h-56 overflow-y-auto p-1 text-sm text-[var(--text-primary)]"
+              role="listbox"
+            >
+              {filtered.length === 0 ? (
+                <li className="px-3 py-2 text-[var(--text-secondary)]">Aucun résultat</li>
+              ) : (
+                filtered.map((it) => (
+                  <li key={it.code}>
+                    <button
+                      type="button"
+                      className={cn(
+                        'flex w-full items-center justify-between rounded-lg px-3 py-2 text-left transition',
+                        'hover:bg-[var(--surface-hover)] focus:bg-[var(--surface-hover)] focus:outline-none',
+                        it.code === value ? 'bg-[var(--surface-hover)] font-semibold' : ''
+                      )}
+                      onClick={() => selectItem(it.code)}
+                    >
+                      <span>{it.label}</span>
+                      {it.meta ? <span className="text-[var(--text-secondary)]">{it.meta}</span> : null}
+                    </button>
+                  </li>
+                ))
+              )}
+            </ul>
+          </div>
+        ) : null}
+      </div>
       {helper ? <p className="text-xs text-[var(--text-secondary)]">{helper}</p> : null}
       {error ? <p className="text-xs text-[var(--danger)]">{error}</p> : null}
-
-      {open ? (
-        <div className="mt-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] shadow-lg">
-          <div className="border-b border-[var(--border)] px-2 py-1.5">
-            <input
-              autoFocus
-              type="text"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={onKeyDown}
-              onBlur={handleBlur}
-              placeholder={placeholder ?? 'Rechercher…'}
-              className="w-full rounded-md bg-[var(--surface-2)] px-2 py-1 text-sm text-[var(--text-primary)] outline-none"
-            />
-          </div>
-          <ul
-            ref={listRef}
-            className="max-h-56 overflow-y-auto p-1 text-sm text-[var(--text-primary)]"
-            role="listbox"
-          >
-            {filtered.length === 0 ? (
-              <li className="px-2 py-2 text-[var(--text-secondary)]">Aucun résultat</li>
-            ) : (
-              filtered.map((it) => (
-                <li key={it.code}>
-                  <button
-                    type="button"
-                    className={cn(
-                      'flex w-full items-center justify-between rounded-md px-2 py-2 text-left hover:bg-[var(--surface-hover)] focus:bg-[var(--surface-hover)] focus:outline-none',
-                      it.code === value ? 'bg-[var(--surface-hover)] font-semibold' : ''
-                    )}
-                    onClick={() => selectItem(it.code)}
-                  >
-                    <span>{it.label}</span>
-                    {it.meta ? <span className="text-[var(--text-secondary)]">{it.meta}</span> : null}
-                  </button>
-                </li>
-              ))
-            )}
-          </ul>
-        </div>
-      ) : null}
     </div>
   );
 }

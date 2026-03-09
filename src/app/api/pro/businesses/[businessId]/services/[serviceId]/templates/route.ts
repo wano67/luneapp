@@ -18,6 +18,7 @@ type TemplateInput = {
   phase: TaskPhase | null;
   defaultAssigneeRole: string | null;
   defaultDueOffsetDays: number | null;
+  estimatedMinutes: number | null;
 };
 
 function validateTemplateBody(body: unknown): TemplateInput | { error: string } {
@@ -52,11 +53,26 @@ function validateTemplateBody(body: unknown): TemplateInput | { error: string } 
     }
   }
 
+  let estimatedMinutes: number | null = null;
+  if (body.estimatedMinutes !== undefined) {
+    if (body.estimatedMinutes === null) {
+      estimatedMinutes = null;
+    } else if (typeof body.estimatedMinutes === 'number' && Number.isFinite(body.estimatedMinutes)) {
+      estimatedMinutes = Math.trunc(body.estimatedMinutes);
+      if (estimatedMinutes < 0 || estimatedMinutes > 99999) {
+        return { error: 'Durée estimée invalide (0-99999 min).' };
+      }
+    } else {
+      return { error: 'Durée estimée invalide.' };
+    }
+  }
+
   return {
     title,
     phase,
     defaultAssigneeRole,
     defaultDueOffsetDays,
+    estimatedMinutes,
   };
 }
 
@@ -124,6 +140,7 @@ export const POST = withBusinessRoute<{ businessId: string; serviceId: string }>
         title: parsed.title,
         defaultAssigneeRole: parsed.defaultAssigneeRole ?? undefined,
         defaultDueOffsetDays: parsed.defaultDueOffsetDays ?? undefined,
+        estimatedMinutes: parsed.estimatedMinutes ?? undefined,
       },
     });
 

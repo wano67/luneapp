@@ -1,8 +1,11 @@
 import {
   AUTH_COOKIE_NAME,
   authCookieOptions,
+  REFRESH_COOKIE_NAME,
+  refreshCookieOptions,
   authenticateUser,
   createSessionToken,
+  createRefreshToken,
   toPublicUser,
 } from '@/server/auth/auth.service';
 import { rateLimit, makeIpKey } from '@/server/security/rateLimit';
@@ -70,13 +73,21 @@ export async function POST(request: NextRequest) {
       return withRequestId(res, requestId);
     }
 
-    const token = await createSessionToken(user);
+    const [token, refreshRaw] = await Promise.all([
+      createSessionToken(user),
+      createRefreshToken(user.id),
+    ]);
     const response = NextResponse.json({ user: toPublicUser(user) });
 
     response.cookies.set({
       name: AUTH_COOKIE_NAME,
       value: token,
       ...authCookieOptions,
+    });
+    response.cookies.set({
+      name: REFRESH_COOKIE_NAME,
+      value: refreshRaw,
+      ...refreshCookieOptions,
     });
 
     response.headers.set('Cache-Control', 'no-store');

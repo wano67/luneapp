@@ -3,6 +3,7 @@ import type { ChangeEvent, FormEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
+import { SearchSelect } from '@/components/ui/search-select';
 import { Modal } from '@/components/ui/modal';
 import type { Finance } from '@/components/pro/finances/finance-types';
 import { TYPE_OPTIONS, METHOD_OPTIONS, RECURRING_OPTIONS } from '@/components/pro/finances/finance-types';
@@ -24,6 +25,7 @@ type Props = {
   readOnlyMessage: string;
   categoryOptions: Array<{ id: string; name: string }>;
   tagOptions: Array<{ id: string; name: string }>;
+  projectOptions: Array<{ id: string; name: string }>;
   recurringPreview: { pastCount: number; futureCount: number } | null;
 };
 
@@ -41,11 +43,22 @@ export function FinanceFormModal({
   readOnlyMessage,
   categoryOptions,
   tagOptions,
+  projectOptions,
   recurringPreview,
 }: Props) {
   const pcgGroups = useMemo(
     () => groupedCategories(form.type === 'INCOME' ? 'INCOME' : 'EXPENSE'),
     [form.type]
+  );
+
+  const projectItems = useMemo(
+    () => [{ code: '', label: 'Aucun projet' }, ...projectOptions.map((p) => ({ code: p.id, label: p.name }))],
+    [projectOptions]
+  );
+
+  const categoryRefItems = useMemo(
+    () => [{ code: '', label: 'Aucune' }, ...categoryOptions.map((c) => ({ code: c.id, label: c.name }))],
+    [categoryOptions]
   );
 
   const vatBreakdown = useMemo(() => {
@@ -200,10 +213,12 @@ export function FinanceFormModal({
                 placeholder="N° facture, reçu…"
               />
             </label>
-            <label className="text-sm text-[var(--text-primary)]">
-              <span className="text-xs text-[var(--text-secondary)]">Projet (optionnel)</span>
-              <Input name="projectId" value={form.projectId} onChange={onFieldChange} />
-            </label>
+            <SearchSelect
+              label="Projet (optionnel)"
+              items={projectItems}
+              value={form.projectId}
+              onChange={(code) => setForm((prev) => ({ ...prev, projectId: code }))}
+            />
             <label className="flex items-center gap-2 text-sm text-[var(--text-primary)]">
               <input
                 type="checkbox"
@@ -272,20 +287,14 @@ export function FinanceFormModal({
               <span className="text-xs text-[var(--text-secondary)]">Note</span>
               <Input name="note" value={form.note} onChange={onFieldChange} />
             </label>
-            <label className="text-sm text-[var(--text-primary)] md:col-span-2">
-              <span className="text-xs text-[var(--text-secondary)]">Catégorie de référence</span>
-              <Select
+            <div className="md:col-span-2">
+              <SearchSelect
+                label="Catégorie de référence"
+                items={categoryRefItems}
                 value={form.categoryReferenceId}
-                onChange={(e) => setForm((prev) => ({ ...prev, categoryReferenceId: e.target.value }))}
-              >
-                <option value="">Aucune</option>
-                {categoryOptions.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </Select>
-            </label>
+                onChange={(code) => setForm((prev) => ({ ...prev, categoryReferenceId: code }))}
+              />
+            </div>
             <label className="text-sm text-[var(--text-primary)] md:col-span-2">
               <span className="text-xs text-[var(--text-secondary)]">Tags</span>
               <Select

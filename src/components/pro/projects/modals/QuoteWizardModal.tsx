@@ -1,12 +1,13 @@
 "use client";
 
+import { useMemo } from 'react';
 import { cn } from '@/lib/cn';
 import { formatCurrencyEUR } from '@/lib/formatCurrency';
 import { parseEuroToCents, sanitizeEuroInput } from '@/lib/money';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import Select from '@/components/ui/select';
+import { SearchSelect } from '@/components/ui/search-select';
 import { Modal, ModalFooterSticky } from '@/components/ui/modal';
 
 // ─── Local types (subset of ProjectWorkspace types used by this modal) ─────────
@@ -22,7 +23,7 @@ export type WizardLine = {
   description: string;
   quantity: number;
   unitPrice: string;
-  priceLocked: boolean;
+  catalogPriceCents: number | null;
 };
 
 export type CatalogService = {
@@ -41,6 +42,7 @@ export type ServiceTemplate = {
   phase: string | null;
   defaultAssigneeRole: string | null;
   defaultDueOffsetDays: number | null;
+  estimatedMinutes: number | null;
 };
 
 export type WizardMember = {
@@ -152,6 +154,11 @@ export function QuoteWizardModal({
   onOpenDepositInvoice,
 }: QuoteWizardModalProps) {
   const totalCents = computeTotal(lines);
+
+  const memberItems = useMemo(
+    () => [{ code: '', label: 'Non assigné' }, ...members.map((m) => ({ code: m.userId, label: m.email }))],
+    [members]
+  );
 
   return (
     <Modal
@@ -307,8 +314,7 @@ export function QuoteWizardModal({
                 <div className="space-y-3">
                   {lines.map((line) => {
                     const errors = lineValidation.find((entry) => entry.id === line.id)?.errors ?? [];
-                    const priceInput = line.unitPrice;
-                    const lockedCents = line.unitPrice.trim() ? parseEuroInputCents(line.unitPrice) : null;
+                    const lineCents = line.unitPrice.trim() ? parseEuroInputCents(line.unitPrice) : null;
                     return (
                       <div
                         key={line.id}
@@ -353,29 +359,34 @@ export function QuoteWizardModal({
                               })
                             }
                           />
-                          {line.priceLocked ? (
-                            <div className="rounded-2xl border border-[var(--border)]/60 bg-[var(--surface)] px-3 py-2">
-                              <p className="text-[11px] uppercase tracking-[0.12em] text-[var(--text-secondary)]">
-                                Prix catalogue
-                              </p>
-                              <p className="text-sm font-semibold text-[var(--text-primary)]">
-                                {lockedCents != null
-                                  ? formatCurrencyEUR(lockedCents, { minimumFractionDigits: 0 })
-                                  : '—'}
-                              </p>
-                            </div>
-                          ) : (
+                          <div>
                             <Input
                               label="Prix unit. (€)"
                               type="text"
                               inputMode="decimal"
-                              value={priceInput}
+                              value={line.unitPrice}
                               onChange={(e) =>
                                 onUpdateLine(line.id, { unitPrice: sanitizeEuroInput(e.target.value) })
                               }
                             />
-                          )}
+                            {line.catalogPriceCents != null ? (
+                              <p className="mt-1 text-[10px] text-[var(--text-faint)]">
+                                Catalogue : {formatCurrencyEUR(line.catalogPriceCents, { minimumFractionDigits: 0 })}
+                              </p>
+                            ) : null}
+                          </div>
                         </div>
+
+                        {/* Line total: qty × price = total */}
+                        {lineCents != null && line.quantity > 0 ? (
+                          <p className="mt-2 text-xs text-[var(--text-secondary)] text-right">
+                            {line.quantity} × {formatCurrencyEUR(lineCents, { minimumFractionDigits: 0 })}
+                            {' = '}
+                            <span className="font-semibold text-[var(--text-primary)]">
+                              {formatCurrencyEUR(lineCents * line.quantity, { minimumFractionDigits: 0 })}
+                            </span>
+                          </p>
+                        ) : null}
 
                         {/* Row 3: description (compact) */}
                         <textarea
@@ -416,19 +427,13 @@ export function QuoteWizardModal({
               {generateTasks ? (
                 <div className="space-y-3">
                   <div className="grid gap-3 sm:grid-cols-2">
-                    <Select
+                    <SearchSelect
                       label="Assigner à"
+                      items={memberItems}
                       value={assigneeId}
-                      onChange={(e) => onAssigneeIdChange(e.target.value)}
+                      onChange={onAssigneeIdChange}
                       disabled={!isAdmin}
-                    >
-                      <option value="">Non assigné</option>
-                      {members.map((m) => (
-                        <option key={m.userId} value={m.userId}>
-                          {m.email}
-                        </option>
-                      ))}
-                    </Select>
+                    />
                     <Input
                       label="Échéance dans (jours)"
                       type="number"
@@ -439,6 +444,46 @@ export function QuoteWizardModal({
                       disabled={!isAdmin}
                     />
                   </div>
+
+                  {/* Workload summary */}
+                  {(() => {
+                    const roleMap = new Map<string, number>();
+                    let totalMin = 0;
+                    for (const line of lines) {
+                      if (!line.serviceId) continue;
+                      const tpls = serviceTemplates[line.serviceId] ?? [];
+                      for (const tpl of tpls) {
+                        const mins = tpl.estimatedMinutes ?? 0;
+                        if (mins <= 0) continue;
+                        totalMin += mins;
+                        const role = tpl.defaultAssigneeRole || 'Non assigné';
+                        roleMap.set(role, (roleMap.get(role) ?? 0) + mins);
+                      }
+                    }
+                    if (totalMin <= 0) return null;
+                    const fmt = (min: number) => {
+                      const h = Math.floor(min / 60);
+                      const m = min % 60;
+                      return `${h > 0 ? `${h}h` : ''}${m > 0 ? `${m}min` : ''}`;
+                    };
+                    return (
+                      <div className="rounded-xl border border-[var(--border)]/60 bg-[var(--surface-2)]/60 p-3">
+                        <p className="text-xs font-semibold text-[var(--text-primary)] mb-2">Charge de travail estimée</p>
+                        <div className="space-y-1">
+                          {[...roleMap.entries()].map(([role, mins]) => (
+                            <div key={role} className="flex items-center justify-between text-[11px]">
+                              <span className="text-[var(--text-secondary)]">{role}</span>
+                              <span className="font-medium text-[var(--text-primary)]">{fmt(mins)}</span>
+                            </div>
+                          ))}
+                          <div className="flex items-center justify-between text-[11px] border-t border-[var(--border)]/40 pt-1 mt-1">
+                            <span className="font-semibold text-[var(--text-primary)]">Total</span>
+                            <span className="font-semibold text-[var(--text-primary)]">{fmt(totalMin)}</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                   <div className="space-y-2">
                     <p className="text-xs font-semibold text-[var(--text-primary)]">Aperçu des tâches</p>
@@ -464,11 +509,29 @@ export function QuoteWizardModal({
                               ) : loading ? (
                                 <p className="text-[11px] text-[var(--text-secondary)]">Chargement des templates…</p>
                               ) : templates.length ? (
-                                <ul className="mt-1 space-y-1 text-[11px] text-[var(--text-secondary)]">
-                                  {templates.map((tpl) => (
-                                    <li key={tpl.id}>• {tpl.title}</li>
-                                  ))}
-                                </ul>
+                                <>
+                                  <ul className="mt-1 space-y-1 text-[11px] text-[var(--text-secondary)]">
+                                    {templates.map((tpl) => (
+                                      <li key={tpl.id}>
+                                        • {tpl.title}
+                                        {tpl.estimatedMinutes ? (
+                                          <span className="ml-1 text-[var(--text-faint)]">({tpl.estimatedMinutes} min)</span>
+                                        ) : null}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                  {(() => {
+                                    const total = templates.reduce((s, t) => s + (t.estimatedMinutes ?? 0), 0);
+                                    if (total <= 0) return null;
+                                    const h = Math.floor(total / 60);
+                                    const m = total % 60;
+                                    return (
+                                      <p className="mt-1 text-[11px] font-semibold text-[var(--text-secondary)]">
+                                        Durée estimée : {h > 0 ? `${h}h` : ''}{m > 0 ? `${m}min` : ''}
+                                      </p>
+                                    );
+                                  })()}
+                                </>
                               ) : (
                                 <p className="text-[11px] text-[var(--text-secondary)]">Aucun template disponible.</p>
                               )}

@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import Select from '@/components/ui/select';
+import { SearchSelect } from '@/components/ui/search-select';
 import { cn } from '@/lib/cn';
 import { InitialsAvatar, getStatusBadgeClasses, formatTaskStatus } from '@/components/pro/projects/workspace-ui';
 import { TASK_STATUS_OPTIONS } from '@/lib/taskStatusUi';
@@ -117,9 +118,17 @@ export function TaskSidePanel({
     [task, isAdmin, onUpdate]
   );
 
-  if (!open || !task) return null;
+  const assigneeIds = useMemo(
+    () => new Set(task?.assignees?.map((a) => a.userId) ?? []),
+    [task?.assignees]
+  );
 
-  const assigneeIds = new Set(task.assignees?.map((a) => a.userId) ?? []);
+  const availableMemberItems = useMemo(
+    () => members.filter((m) => !assigneeIds.has(m.userId)).map((m) => ({ code: m.userId, label: m.name ?? m.email })),
+    [members, assigneeIds]
+  );
+
+  if (!open || !task) return null;
 
   const panel = (
     <>
@@ -224,21 +233,13 @@ export function TaskSidePanel({
             )}
             {/* Add assignee dropdown */}
             {isAdmin ? (
-              <select
-                className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-1.5 text-xs text-[var(--text-primary)] outline-none"
+              <SearchSelect
+                label="Ajouter un membre"
+                placeholder="Rechercher…"
+                items={availableMemberItems}
                 value=""
-                onChange={(e) => {
-                  if (e.target.value) handleAssigneeToggle(e.target.value);
-                  e.target.value = '';
-                }}
-              >
-                <option value="">+ Ajouter un membre…</option>
-                {members
-                  .filter((m) => !assigneeIds.has(m.userId))
-                  .map((m) => (
-                    <option key={m.userId} value={m.userId}>{m.name ?? m.email}</option>
-                  ))}
-              </select>
+                onChange={(code) => { if (code) handleAssigneeToggle(code); }}
+              />
             ) : null}
           </div>
 

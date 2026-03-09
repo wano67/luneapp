@@ -19,6 +19,7 @@ type Template = {
   phase: string | null;
   defaultAssigneeRole: string | null;
   defaultDueOffsetDays: number | null;
+  estimatedMinutes: number | null;
 };
 
 type ServiceDetail = {
@@ -53,6 +54,7 @@ type TemplateForm = {
   phase: string;
   defaultAssigneeRole: string;
   defaultDueOffsetDays: string;
+  estimatedMinutes: string;
 };
 
 const TABS = [
@@ -100,6 +102,7 @@ export function ServiceDetailPage({ businessId, serviceId }: { businessId: strin
     phase: '',
     defaultAssigneeRole: '',
     defaultDueOffsetDays: '',
+    estimatedMinutes: '',
   });
 
   const loadService = useCallback(async () => {
@@ -189,7 +192,7 @@ export function ServiceDetailPage({ businessId, serviceId }: { businessId: strin
 
   const openTemplateCreate = () => {
     setFormError(null);
-    setTemplateForm({ id: null, title: '', phase: '', defaultAssigneeRole: '', defaultDueOffsetDays: '' });
+    setTemplateForm({ id: null, title: '', phase: '', defaultAssigneeRole: '', defaultDueOffsetDays: '', estimatedMinutes: '' });
     setTemplateOpen(true);
   };
 
@@ -201,6 +204,7 @@ export function ServiceDetailPage({ businessId, serviceId }: { businessId: strin
       phase: tpl.phase ?? '',
       defaultAssigneeRole: tpl.defaultAssigneeRole ?? '',
       defaultDueOffsetDays: tpl.defaultDueOffsetDays != null ? String(tpl.defaultDueOffsetDays) : '',
+      estimatedMinutes: tpl.estimatedMinutes != null ? String(tpl.estimatedMinutes) : '',
     });
     setTemplateOpen(true);
   };
@@ -218,6 +222,9 @@ export function ServiceDetailPage({ businessId, serviceId }: { businessId: strin
       defaultAssigneeRole: templateForm.defaultAssigneeRole.trim() || null,
       defaultDueOffsetDays: templateForm.defaultDueOffsetDays
         ? Number(templateForm.defaultDueOffsetDays)
+        : null,
+      estimatedMinutes: templateForm.estimatedMinutes
+        ? Number(templateForm.estimatedMinutes)
         : null,
     };
     const isEdit = !!templateForm.id;
@@ -254,8 +261,8 @@ export function ServiceDetailPage({ businessId, serviceId }: { businessId: strin
     ? formatCurrencyEUR(Number(service.defaultPriceCents), { minimumFractionDigits: 0 })
     : '—';
   const billing = service?.billingType === 'RECURRING' ? 'Abonnement mensuel' : 'Ponctuel';
-  const totalDuration = templates.reduce(
-    (acc, tpl) => acc + (tpl.defaultDueOffsetDays != null ? Math.max(0, tpl.defaultDueOffsetDays) : 0),
+  const totalEstimatedMinutes = templates.reduce(
+    (acc, tpl) => acc + (tpl.estimatedMinutes != null ? Math.max(0, tpl.estimatedMinutes) : 0),
     0
   );
   const needsCompletion = !service?.description || templates.length === 0;
@@ -282,7 +289,9 @@ export function ServiceDetailPage({ businessId, serviceId }: { businessId: strin
           <p className="text-sm text-[var(--text-secondary)]">Jour: {service.recurrenceDayOfMonth}</p>
         ) : null}
         <p className="text-sm text-[var(--text-secondary)]">
-          Durée totale estimée: {totalDuration ? `${totalDuration} j` : '—'}
+          Durée totale estimée: {totalEstimatedMinutes > 0
+            ? `${Math.floor(totalEstimatedMinutes / 60)}h${totalEstimatedMinutes % 60 > 0 ? ` ${totalEstimatedMinutes % 60}min` : ''}`
+            : '—'}
         </p>
       </Card>
     </div>
@@ -307,7 +316,7 @@ export function ServiceDetailPage({ businessId, serviceId }: { businessId: strin
               <div className="min-w-0">
                 <p className="text-[var(--text-primary)]">{tpl.title}</p>
                 <p className="text-xs text-[var(--text-secondary)]">
-                  Phase: {tpl.phase || '—'} · Durée/échéance: {tpl.defaultDueOffsetDays != null ? `J+${tpl.defaultDueOffsetDays}` : '—'} · Assignation:{' '}
+                  Phase: {tpl.phase || '—'} · Échéance: {tpl.defaultDueOffsetDays != null ? `J+${tpl.defaultDueOffsetDays}` : '—'} · Durée: {tpl.estimatedMinutes != null ? `${tpl.estimatedMinutes} min` : '—'} · Assignation:{' '}
                   {tpl.defaultAssigneeRole || '—'}
                 </p>
               </div>
@@ -448,6 +457,13 @@ export function ServiceDetailPage({ businessId, serviceId }: { businessId: strin
             type="number"
             value={templateForm.defaultDueOffsetDays}
             onChange={(e) => setTemplateForm((p) => ({ ...p, defaultDueOffsetDays: e.target.value }))}
+          />
+          <Input
+            label="Durée estimée (minutes)"
+            type="number"
+            min={0}
+            value={templateForm.estimatedMinutes}
+            onChange={(e) => setTemplateForm((p) => ({ ...p, estimatedMinutes: e.target.value }))}
           />
           {formError ? <p className="text-sm text-[var(--danger)]">{formError}</p> : null}
           <div className="flex justify-end gap-2">

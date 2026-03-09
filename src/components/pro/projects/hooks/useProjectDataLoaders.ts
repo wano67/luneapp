@@ -79,6 +79,7 @@ export type ServiceTemplate = {
   phase: string | null;
   defaultAssigneeRole: string | null;
   defaultDueOffsetDays: number | null;
+  estimatedMinutes: number | null;
 };
 
 export type TaskAssigneeItem = {

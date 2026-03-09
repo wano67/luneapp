@@ -3,6 +3,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
+import { SearchSelect } from '@/components/ui/search-select';
 import { Badge } from '@/components/ui/badge';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import { useActiveBusiness } from '@/app/app/pro/ActiveBusinessProvider';
@@ -127,6 +128,11 @@ export function ClientInfoTab({ businessId, clientId, client, onUpdated }: Props
     void loadReferences();
     return () => controller.abort();
   }, [businessId]);
+
+  const categoryRefItems = useMemo(
+    () => [{ code: '', label: 'Aucune' }, ...categoryOptions.map((c) => ({ code: c.id, label: c.name }))],
+    [categoryOptions]
+  );
 
   const hasChanges = useMemo(() => {
     const currentTags = [...form.tagReferenceIds].sort().join('|');
@@ -503,19 +509,13 @@ export function ClientInfoTab({ businessId, clientId, client, onUpdated }: Props
           <p className="text-xs uppercase tracking-wide text-[var(--text-secondary)]">Catégories & tags</p>
           {editing ? (
             <div className="grid gap-3 md:grid-cols-2">
-              <Select
+              <SearchSelect
                 label="Catégorie"
+                items={categoryRefItems}
                 value={form.categoryReferenceId}
-                onChange={(e) => setForm((p) => ({ ...p, categoryReferenceId: e.target.value }))}
+                onChange={(code) => setForm((p) => ({ ...p, categoryReferenceId: code }))}
                 disabled={!isAdmin}
-              >
-                <option value="">Aucune</option>
-                {categoryOptions.map((opt) => (
-                  <option key={opt.id} value={opt.id}>
-                    {opt.name}
-                  </option>
-                ))}
-              </Select>
+              />
               <label className="text-sm text-[var(--text-primary)]">
                 <span className="text-xs text-[var(--text-secondary)]">Tags</span>
                 <Select

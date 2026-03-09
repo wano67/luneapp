@@ -177,12 +177,19 @@ export default function LoginForm({ redirectPath = '/app' }: LoginFormProps) {
                 {submitting ? 'Connexion...' : 'Se connecter'}
               </Button>
 
-              <p className="text-center text-xs text-[var(--text-secondary)]">
-                Pas de compte ?{' '}
-                <Link href="/register" className="text-[var(--accent-strong)] hover:underline">
-                  Créer un compte
-                </Link>
-              </p>
+              <div className="space-y-1 text-center text-xs text-[var(--text-secondary)]">
+                <p>
+                  <Link href="/forgot-password" className="text-[var(--accent-strong)] hover:underline">
+                    Mot de passe oublié ?
+                  </Link>
+                </p>
+                <p>
+                  Pas de compte ?{' '}
+                  <Link href="/register" className="text-[var(--accent-strong)] hover:underline">
+                    Créer un compte
+                  </Link>
+                </p>
+              </div>
             </form>
           </Card>
         </div>

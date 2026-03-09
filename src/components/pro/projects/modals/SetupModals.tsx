@@ -1,10 +1,12 @@
 "use client";
 
+import { useMemo } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import Select from '@/components/ui/select';
+import { SearchSelect } from '@/components/ui/search-select';
 import { Modal } from '@/components/ui/modal';
 import { InitialsAvatar } from '@/components/pro/projects/workspace-ui';
 import { GuidedCtaCard } from '@/components/pro/shared/GuidedCtaCard';
@@ -282,6 +284,11 @@ export function SetupModals({
   onCloseAccessModal,
   onCloseUnitsModal,
 }: SetupModalsProps) {
+  const memberItems = useMemo(
+    () => [{ code: '', label: 'Non assigné' }, ...members.map((m) => ({ code: m.userId, label: m.name ?? m.email }))],
+    [members]
+  );
+
   return (
     <>
       {/* ── Client ─────────────────────────────────────────────────────────── */}
@@ -536,19 +543,13 @@ export function SetupModals({
             {generateTasksOnAdd ? (
               <div className="mt-3 space-y-3">
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <Select
+                  <SearchSelect
                     label="Assigner à"
+                    items={memberItems}
                     value={taskAssigneeId}
-                    onChange={(e) => setTaskAssigneeId(e.target.value)}
+                    onChange={setTaskAssigneeId}
                     disabled={!isAdmin}
-                  >
-                    <option value="">Non assigné</option>
-                    {members.map((m) => (
-                      <option key={m.userId} value={m.userId}>
-                        {m.email}
-                      </option>
-                    ))}
-                  </Select>
+                  />
                   <Input
                     label="Décalage échéance (jours)"
                     type="number"
@@ -648,19 +649,12 @@ export function SetupModals({
                 >
                   <p className="text-sm font-semibold text-[var(--text-primary)]">{task.title}</p>
                   <div className="mt-2 flex gap-2">
-                    <Select
+                    <SearchSelect
+                      label="Assigné"
+                      items={memberItems}
                       value={taskAssignments[task.id] ?? ''}
-                      onChange={(e) =>
-                        setTaskAssignments((prev) => ({ ...prev, [task.id]: e.target.value }))
-                      }
-                    >
-                      <option value="">Non assigné</option>
-                      {members.map((m) => (
-                        <option key={m.userId} value={m.userId}>
-                          {m.email}
-                        </option>
-                      ))}
-                    </Select>
+                      onChange={(v) => setTaskAssignments((prev) => ({ ...prev, [task.id]: v }))}
+                    />
                     <Input
                       type="date"
                       value={task.dueDate ?? ''}

@@ -18,6 +18,7 @@ type TemplateUpdate = {
   phase?: TaskPhase | null;
   defaultAssigneeRole?: string | null;
   defaultDueOffsetDays?: number | null;
+  estimatedMinutes?: number | null;
 };
 
 function validateUpdate(body: unknown): TemplateUpdate | { error: string } {
@@ -55,11 +56,24 @@ function validateUpdate(body: unknown): TemplateUpdate | { error: string } {
     }
   }
 
+  if ('estimatedMinutes' in body) {
+    if (body.estimatedMinutes === null) {
+      updates.estimatedMinutes = null;
+    } else if (typeof body.estimatedMinutes === 'number' && Number.isFinite(body.estimatedMinutes)) {
+      const value = Math.trunc(body.estimatedMinutes);
+      if (value < 0 || value > 99999) return { error: 'Durée estimée invalide (0-99999 min).' };
+      updates.estimatedMinutes = value;
+    } else {
+      return { error: 'Durée estimée invalide.' };
+    }
+  }
+
   if (
     !('title' in updates) &&
     !('phase' in updates) &&
     !('defaultAssigneeRole' in updates) &&
-    !('defaultDueOffsetDays' in updates)
+    !('defaultDueOffsetDays' in updates) &&
+    !('estimatedMinutes' in updates)
   ) {
     return { error: 'Aucune mise à jour fournie.' };
   }
@@ -122,6 +136,9 @@ export const PATCH = withBusinessRoute<{ businessId: string; serviceId: string; 
           : {}),
         ...('defaultDueOffsetDays' in updates
           ? { defaultDueOffsetDays: updates.defaultDueOffsetDays ?? null }
+          : {}),
+        ...('estimatedMinutes' in updates
+          ? { estimatedMinutes: updates.estimatedMinutes ?? null }
           : {}),
       },
     });

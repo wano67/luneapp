@@ -15,7 +15,7 @@ export type WizardLine = {
   description: string;
   quantity: number;
   unitPrice: string;
-  priceLocked: boolean;
+  catalogPriceCents: number | null;
 };
 
 export type CatalogService = {
@@ -34,6 +34,7 @@ export type ServiceTemplate = {
   phase: string | null;
   defaultAssigneeRole: string | null;
   defaultDueOffsetDays: number | null;
+  estimatedMinutes: number | null;
 };
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
@@ -172,6 +173,7 @@ export function useQuoteWizard({
         }
         const defaultCents = service.defaultPriceCents ?? service.tjmCents;
         const unitPrice = defaultCents != null ? formatCentsToEuroInput(defaultCents) : '';
+        const catalogPriceCents = defaultCents != null ? Number(defaultCents) : null;
         return [
           ...prev,
           {
@@ -183,7 +185,7 @@ export function useQuoteWizard({
             description: '',
             quantity: 1,
             unitPrice,
-            priceLocked: defaultCents != null,
+            catalogPriceCents,
           },
         ];
       });
@@ -204,7 +206,7 @@ export function useQuoteWizard({
         description: '',
         quantity: 1,
         unitPrice: '',
-        priceLocked: false,
+        catalogPriceCents: null,
       },
     ]);
   }, []);
@@ -272,7 +274,7 @@ export function useQuoteWizard({
           titleOverride: line.title.trim() || undefined,
           description: line.description.trim() || undefined,
         };
-        if (unitPriceCents != null && (!line.priceLocked || line.source === 'custom')) {
+        if (unitPriceCents != null) {
           payload.priceCents = Math.max(0, Math.trunc(unitPriceCents));
         }
         if (createTasks) {
