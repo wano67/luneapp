@@ -56,25 +56,24 @@ export function VatPanel({ businessId }: { businessId: string }) {
     return { from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10) };
   }, [year, month, quarter, mode]);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    const period = computePeriod();
-    const res = await fetchJson<TvaData>(
-      `/api/pro/businesses/${businessId}/accounting/tva?from=${period.from}&to=${period.to}`
-    );
-    setLoading(false);
-    if (!res.ok || !res.data) {
-      setError(res.error ?? 'Impossible de charger la TVA.');
-      setData(null);
-      return;
-    }
-    setData(res.data);
-  }, [businessId, computePeriod]);
-
   useEffect(() => {
-    void load();
-  }, [load]);
+    let cancelled = false;
+    const period = computePeriod();
+    fetchJson<TvaData>(
+      `/api/pro/businesses/${businessId}/accounting/tva?from=${period.from}&to=${period.to}`
+    ).then(res => {
+      if (cancelled) return;
+      setLoading(false);
+      if (res.ok && res.data) {
+        setData(res.data);
+        setError(null);
+      } else {
+        setError(res.error ?? 'Impossible de charger la TVA.');
+        setData(null);
+      }
+    });
+    return () => { cancelled = true; };
+  }, [businessId, computePeriod]);
 
   const tvaAPayer = data ? Number(data.tvaAPayerCents) : 0;
   const creditTva = data ? Number(data.creditTvaCents) : 0;

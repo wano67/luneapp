@@ -54,26 +54,24 @@ export default function ProCalendarPage() {
   const [projects, setProjects] = useState<ProjectOption[]>([]);
   const [clients, setClients] = useState<ClientOption[]>([]);
 
-  const loadEvents = useCallback(async (month: Date, signal?: AbortSignal) => {
-    if (!businessId) return;
-    setLoading(true);
-    const from = addDays(startOfMonth(month), -7);
-    const to = addDays(startOfMonth(addMonths(month, 1)), 7);
-    const res = await fetchJson<{ items: CalendarEvent[] }>(
-      `/api/pro/businesses/${businessId}/calendar/events?from=${dayKey(from)}&to=${dayKey(to)}`,
-      {},
-      signal,
-    );
-    if (signal?.aborted) return;
-    if (res.ok && res.data) setEvents(res.data.items);
-    setLoading(false);
-  }, [businessId]);
+  const [fetchVersion, setFetchVersion] = useState(0);
 
   useEffect(() => {
+    if (!businessId) return;
     const controller = new AbortController();
-    void loadEvents(new Date(), controller.signal);
+    const from = addDays(startOfMonth(currentMonth), -7);
+    const to = addDays(startOfMonth(addMonths(currentMonth, 1)), 7);
+    fetchJson<{ items: CalendarEvent[] }>(
+      `/api/pro/businesses/${businessId}/calendar/events?from=${dayKey(from)}&to=${dayKey(to)}`,
+      {},
+      controller.signal,
+    ).then(res => {
+      if (controller.signal.aborted) return;
+      if (res.ok && res.data) setEvents(res.data.items);
+      setLoading(false);
+    });
     return () => controller.abort();
-  }, [loadEvents]);
+  }, [businessId, currentMonth, fetchVersion]);
 
   // Load projects + clients for modal
   useEffect(() => {
@@ -93,11 +91,8 @@ export default function ProCalendarPage() {
   }, [businessId]);
 
   const handleMonthChange = useCallback((year: number, month: number) => {
-    const m = new Date(year, month, 1);
-    setCurrentMonth(m);
-    const controller = new AbortController();
-    void loadEvents(m, controller.signal);
-  }, [loadEvents]);
+    setCurrentMonth(new Date(year, month, 1));
+  }, []);
 
   const filteredEvents = useMemo(() => {
     if (filterType === 'all') return events;
@@ -166,8 +161,8 @@ export default function ProCalendarPage() {
 
     setCreating(false);
     setCreateOpen(false);
-    await loadEvents(currentMonth);
-  }, [businessId, createKind, createTitle, createDate, createTimeStart, createTimeEnd, createLocation, createDescription, createProjectId, createClientId, currentMonth, loadEvents]);
+    setFetchVersion(v => v + 1);
+  }, [businessId, createKind, createTitle, createDate, createTimeStart, createTimeEnd, createLocation, createDescription, createProjectId, createClientId]);
 
   const filters = (
     <div className="flex items-center gap-1.5 flex-wrap">

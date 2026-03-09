@@ -78,34 +78,34 @@ export function ReportsPanel({ businessId }: { businessId: string }) {
 
   // ── Balance ──
   const [balance, setBalance] = useState<BalanceData | null>(null);
-  const [balanceLoading, setBalanceLoading] = useState(false);
-
-  const loadBalance = useCallback(async () => {
-    setBalanceLoading(true);
-    const res = await fetchJson<BalanceData>(
-      `/api/pro/businesses/${businessId}/accounting/balance?from=${from}&to=${to}`
-    );
-    setBalanceLoading(false);
-    if (res.ok && res.data) setBalance(res.data);
-  }, [businessId, from, to]);
+  const [balanceLoading, setBalanceLoading] = useState(true);
 
   // ── Grand Livre ──
   const [grandLivre, setGrandLivre] = useState<GrandLivreData | null>(null);
-  const [grandLivreLoading, setGrandLivreLoading] = useState(false);
-
-  const loadGrandLivre = useCallback(async () => {
-    setGrandLivreLoading(true);
-    const res = await fetchJson<GrandLivreData>(
-      `/api/pro/businesses/${businessId}/accounting/grand-livre?from=${from}&to=${to}`
-    );
-    setGrandLivreLoading(false);
-    if (res.ok && res.data) setGrandLivre(res.data);
-  }, [businessId, from, to]);
+  const [grandLivreLoading, setGrandLivreLoading] = useState(true);
 
   useEffect(() => {
-    if (activeReport === 'balance') void loadBalance();
-    else if (activeReport === 'grand-livre') void loadGrandLivre();
-  }, [activeReport, loadBalance, loadGrandLivre]);
+    if (activeReport === 'fec') return;
+    let cancelled = false;
+    if (activeReport === 'balance') {
+      fetchJson<BalanceData>(
+        `/api/pro/businesses/${businessId}/accounting/balance?from=${from}&to=${to}`
+      ).then(res => {
+        if (cancelled) return;
+        setBalanceLoading(false);
+        if (res.ok && res.data) setBalance(res.data);
+      });
+    } else if (activeReport === 'grand-livre') {
+      fetchJson<GrandLivreData>(
+        `/api/pro/businesses/${businessId}/accounting/grand-livre?from=${from}&to=${to}`
+      ).then(res => {
+        if (cancelled) return;
+        setGrandLivreLoading(false);
+        if (res.ok && res.data) setGrandLivre(res.data);
+      });
+    }
+    return () => { cancelled = true; };
+  }, [activeReport, businessId, from, to]);
 
   return (
     <div className="space-y-4">

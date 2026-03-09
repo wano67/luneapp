@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { Select } from '@/components/ui/select';
 import { fetchJson } from '@/lib/apiClient';
@@ -37,24 +37,23 @@ export function DashboardPanel({ businessId }: { businessId: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    const res = await fetchJson<DashboardData>(
-      `/api/pro/businesses/${businessId}/accounting/dashboard?year=${year}`
-    );
-    setLoading(false);
-    if (!res.ok || !res.data) {
-      setError(res.error ?? 'Impossible de charger le dashboard.');
-      setData(null);
-      return;
-    }
-    setData(res.data);
-  }, [businessId, year]);
-
   useEffect(() => {
-    void load();
-  }, [load]);
+    let cancelled = false;
+    fetchJson<DashboardData>(
+      `/api/pro/businesses/${businessId}/accounting/dashboard?year=${year}`
+    ).then(res => {
+      if (cancelled) return;
+      setLoading(false);
+      if (res.ok && res.data) {
+        setData(res.data);
+        setError(null);
+      } else {
+        setError(res.error ?? 'Impossible de charger le dashboard.');
+        setData(null);
+      }
+    });
+    return () => { cancelled = true; };
+  }, [businessId, year]);
 
   const resultatNum = data ? Number(data.resultatCents) : 0;
   const tvaNette = data ? Number(data.tvaNetteCents) : 0;

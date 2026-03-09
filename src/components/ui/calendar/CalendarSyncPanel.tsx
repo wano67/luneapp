@@ -16,14 +16,12 @@ export function CalendarSyncPanel({ apiBase }: Props) {
   const [copied, setCopied] = useState<string | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    const res = await fetchJson<{ token: string | null }>(apiBase);
-    if (res.ok && res.data) setToken(res.data.token);
-    setLoading(false);
+  useEffect(() => {
+    fetchJson<{ token: string | null }>(apiBase).then(res => {
+      if (res.ok && res.data) setToken(res.data.token);
+      setLoading(false);
+    });
   }, [apiBase]);
-
-  useEffect(() => { void load(); }, [load]);
 
   const generate = useCallback(async () => {
     setGenerating(true);

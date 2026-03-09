@@ -43,32 +43,27 @@ export default function PersonalCalendarPage() {
   const [creating, setCreating] = useState(false);
   const [syncOpen, setSyncOpen] = useState(false);
 
-  const loadEvents = useCallback(async (month: Date, signal?: AbortSignal) => {
-    setLoading(true);
-    const from = addDays(startOfMonth(month), -7);
-    const to = addDays(startOfMonth(addMonths(month, 1)), 7);
-    const res = await fetchJson<{ items: CalendarEvent[] }>(
-      `/api/personal/calendar/events?from=${dayKey(from)}&to=${dayKey(to)}`,
-      {},
-      signal,
-    );
-    if (signal?.aborted) return;
-    if (res.ok && res.data) setEvents(res.data.items);
-    setLoading(false);
-  }, []);
+  const [fetchVersion, setFetchVersion] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
-    void loadEvents(new Date(), controller.signal);
+    const from = addDays(startOfMonth(currentMonth), -7);
+    const to = addDays(startOfMonth(addMonths(currentMonth, 1)), 7);
+    fetchJson<{ items: CalendarEvent[] }>(
+      `/api/personal/calendar/events?from=${dayKey(from)}&to=${dayKey(to)}`,
+      {},
+      controller.signal,
+    ).then(res => {
+      if (controller.signal.aborted) return;
+      if (res.ok && res.data) setEvents(res.data.items);
+      setLoading(false);
+    });
     return () => controller.abort();
-  }, [loadEvents]);
+  }, [currentMonth, fetchVersion]);
 
   const handleMonthChange = useCallback((year: number, month: number) => {
-    const m = new Date(year, month, 1);
-    setCurrentMonth(m);
-    const controller = new AbortController();
-    void loadEvents(m, controller.signal);
-  }, [loadEvents]);
+    setCurrentMonth(new Date(year, month, 1));
+  }, []);
 
   const filteredEvents = useMemo(() => {
     if (filterType === 'all') return events;
@@ -118,8 +113,8 @@ export default function PersonalCalendarPage() {
 
     setCreating(false);
     setCreateOpen(false);
-    await loadEvents(currentMonth);
-  }, [createKind, createTitle, createDate, createTimeStart, createTimeEnd, createLocation, createDescription, currentMonth, loadEvents]);
+    setFetchVersion(v => v + 1);
+  }, [createKind, createTitle, createDate, createTimeStart, createTimeEnd, createLocation, createDescription]);
 
   const filters = (
     <div className="flex items-center gap-1.5 flex-wrap">
