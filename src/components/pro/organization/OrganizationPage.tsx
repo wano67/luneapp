@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from 'react';
+import { useMemo, useEffect } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { ProPageShell } from '@/components/pro/ProPageShell';
 import { Card } from '@/components/ui/card';
@@ -31,26 +31,27 @@ export default function OrganizationPage({ businessId }: Props) {
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
   };
 
+  useEffect(() => {
+    if (currentTab === 'calendar') {
+      router.replace(`/app/pro/${businessId}/calendar`);
+    }
+  }, [currentTab, businessId, router]);
+
   const content = useMemo(() => {
     switch (currentTab) {
       case 'team':
         return (
-          <PlaceholderCard title="Organisation de l’équipe" description="Ajoutez des membres et répartissez les responsabilités du projet." />
+          <PlaceholderCard title="Organisation de l'équipe" description="Ajoutez des membres et répartissez les responsabilités du projet." />
         );
       case 'tasks':
         return (
           <PlaceholderCard
             title="Tâches par équipe"
-            description="Suivez les tâches clés par squad et préparez vos workflows d’assignation."
+            description="Suivez les tâches clés par squad et préparez vos workflows d'assignation."
           />
         );
       case 'calendar':
-        return (
-          <PlaceholderCard
-            title="Calendrier partagé"
-            description="Synchronisez les événements d’équipe et les jalons projet depuis vos outils existants."
-          />
-        );
+        return null;
       default:
         return null;
     }

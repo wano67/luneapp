@@ -1,623 +1,470 @@
-// src/app/app/pro/[businessId]/tasks/page.tsx
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
+import { useEffect, useMemo, useCallback, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { ClipboardList } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
+import { ClipboardList, ChevronRight, Plus } from 'lucide-react';
+import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Table, TableBody, TableCell, TableEmpty, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
-import { Select } from '@/components/ui/select';
 import { Modal } from '@/components/ui/modal';
 import { KpiCard } from '@/components/ui/kpi-card';
+import { Skeleton, SkeletonKpiCard } from '@/components/ui/skeleton';
 import { ProPageShell } from '@/components/pro/ProPageShell';
-import { fetchJson, getErrorMessage } from '@/lib/apiClient';
+import { fetchJson } from '@/lib/apiClient';
 import { useActiveBusiness } from '../../ActiveBusinessProvider';
-import { ReferencePicker } from '../references/ReferencePicker';
-import { useRowSelection } from '../../../components/selection/useRowSelection';
-import { BulkActionBar } from '../../../components/selection/BulkActionBar';
-import { TASK_STATUS_OPTIONS } from '@/lib/taskStatusUi';
+import { fmtDate } from '@/lib/format';
+import { dayKey, startOfWeek, addDays } from '@/lib/date';
 
-type Task = {
+// ─── Types ──────────────────────────────────────────────────────────
+type MyTask = {
   id: string;
-  businessId: string;
-  projectId: string | null;
-  projectName: string | null;
-  assigneeUserId: string | null;
-  assigneeEmail: string | null;
-  assigneeName: string | null;
-  categoryReferenceId: string | null;
-  categoryReferenceName: string | null;
-  tagReferences: { id: string; name: string }[];
   title: string;
   status: string;
   dueDate: string | null;
-  createdAt: string;
-  updatedAt: string;
+  projectId: string | null;
+  projectName: string | null;
+  progress: number;
+  isBlocked: boolean;
+  checklistCount?: number;
+  checklistDoneCount?: number;
+  estimatedMinutes: number | null;
 };
 
-type TaskListResponse = { items: Task[] };
-type TaskDetailResponse = { item: Task };
+type ActiveProject = {
+  id: string;
+  name: string;
+  taskCount: number;
+  overdueCount: number;
+};
 
-function formatDate(value: string | null) {
-  if (!value) return '—';
-  try {
-    return new Intl.DateTimeFormat('fr-FR').format(new Date(value));
-  } catch {
-    return value;
+type Summary = {
+  overdue: number;
+  today: number;
+  thisWeek: number;
+  inProgress: number;
+  blocked: number;
+  total: number;
+};
+
+type MyTasksData = {
+  items: MyTask[];
+  summary: Summary;
+  activeProjects: ActiveProject[];
+};
+
+// ─── Helpers ────────────────────────────────────────────────────────
+const EMPTY_SUMMARY: Summary = { overdue: 0, today: 0, thisWeek: 0, inProgress: 0, blocked: 0, total: 0 };
+
+type GroupedTasks = {
+  overdue: MyTask[];
+  today: MyTask[];
+  thisWeek: MyTask[];
+  later: MyTask[];
+  noDate: MyTask[];
+};
+
+function groupByUrgency(items: MyTask[]): GroupedTasks {
+  const now = new Date();
+  const todayStr = dayKey(now);
+  const monday = startOfWeek(now);
+  const sundayStr = dayKey(addDays(monday, 6));
+
+  const groups: GroupedTasks = { overdue: [], today: [], thisWeek: [], later: [], noDate: [] };
+  for (const t of items) {
+    if (!t.dueDate) { groups.noDate.push(t); continue; }
+    const dk = t.dueDate.slice(0, 10);
+    if (dk < todayStr) groups.overdue.push(t);
+    else if (dk === todayStr) groups.today.push(t);
+    else if (dk <= sundayStr) groups.thisWeek.push(t);
+    else groups.later.push(t);
   }
+  return groups;
 }
 
-export default function TasksPage() {
-  const params = useParams();
-  const businessId = (params?.businessId ?? '') as string;
+const NEXT_STATUS: Record<string, string> = { TODO: 'IN_PROGRESS', IN_PROGRESS: 'DONE' };
+
+// ─── Inline components ─────────────────────────────────────────────
+function UrgencySection({
+  title, color, tasks, businessId, onStatusToggle, updatingIds,
+}: {
+  title: string;
+  color: string;
+  tasks: MyTask[];
+  businessId: string;
+  onStatusToggle: (taskId: string, currentStatus: string) => void;
+  updatingIds: Record<string, boolean>;
+}) {
+  if (tasks.length === 0) return null;
+  return (
+    <Card className="overflow-hidden">
+      <div className="flex items-center gap-2.5 px-4 py-3" style={{ borderBottom: '1px solid var(--border)' }}>
+        <div className="h-2 w-2 rounded-full shrink-0" style={{ background: color }} />
+        <span className="text-sm font-semibold" style={{ color: 'var(--text)' }}>{title}</span>
+        <span className="text-xs font-medium" style={{ color: 'var(--text-faint)' }}>{tasks.length}</span>
+      </div>
+      <div className="divide-y divide-[var(--border)]">
+        {tasks.map((task) => (
+          <TaskRow
+            key={task.id}
+            task={task}
+            businessId={businessId}
+            onStatusToggle={onStatusToggle}
+            updating={!!updatingIds[task.id]}
+          />
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+function TaskRow({
+  task, businessId, onStatusToggle, updating,
+}: {
+  task: MyTask;
+  businessId: string;
+  onStatusToggle: (taskId: string, currentStatus: string) => void;
+  updating: boolean;
+}) {
+  const hasChecklist = typeof task.checklistCount === 'number' && task.checklistCount > 0;
+  const isInProgress = task.status === 'IN_PROGRESS';
+
+  return (
+    <div className="flex items-center gap-3 px-4 py-3 hover:bg-[var(--surface-hover)] transition-colors">
+      {/* Status toggle */}
+      <button
+        type="button"
+        disabled={updating || task.status === 'DONE'}
+        onClick={() => onStatusToggle(task.id, task.status)}
+        className="shrink-0 flex items-center justify-center rounded-full border-2 transition-all"
+        style={{
+          width: 22, height: 22,
+          borderColor: isInProgress ? 'var(--warning)' : 'var(--border)',
+          background: isInProgress ? 'var(--warning-bg)' : 'transparent',
+          opacity: updating ? 0.5 : 1,
+        }}
+        title={task.status === 'TODO' ? 'Passer en cours' : 'Terminer'}
+      >
+        {isInProgress ? (
+          <div className="h-2.5 w-2.5 rounded-full" style={{ background: 'var(--warning)' }} />
+        ) : null}
+      </button>
+
+      {/* Task info */}
+      <div className="flex-1 min-w-0">
+        <Link
+          href={`/app/pro/${businessId}/tasks/${task.id}`}
+          className="text-sm font-medium hover:underline truncate block"
+          style={{ color: 'var(--text)' }}
+        >
+          {task.title}
+        </Link>
+        <div className="flex items-center gap-2 mt-0.5">
+          {task.projectName && task.projectId ? (
+            <Link
+              href={`/app/pro/${businessId}/projects/${task.projectId}`}
+              className="text-xs hover:underline truncate"
+              style={{ color: 'var(--shell-accent)' }}
+            >
+              {task.projectName}
+            </Link>
+          ) : null}
+          {task.isBlocked ? (
+            <span
+              className="text-[10px] font-semibold px-1.5 py-0.5 rounded"
+              style={{ background: 'var(--danger-bg)', color: 'var(--danger)' }}
+            >
+              Bloqué
+            </span>
+          ) : null}
+        </div>
+      </div>
+
+      {/* Right side */}
+      <div className="flex items-center gap-3 shrink-0">
+        {hasChecklist ? (
+          <span className="text-xs" style={{ color: 'var(--text-faint)' }}>
+            {task.checklistDoneCount}/{task.checklistCount}
+          </span>
+        ) : null}
+        {task.progress > 0 && task.progress < 100 ? (
+          <div className="w-12 h-1.5 rounded-full" style={{ background: 'var(--surface-2)' }}>
+            <div
+              className="h-full rounded-full"
+              style={{ width: `${task.progress}%`, background: 'var(--shell-accent)' }}
+            />
+          </div>
+        ) : null}
+        {task.dueDate ? (
+          <span className="text-xs whitespace-nowrap" style={{ color: 'var(--text-faint)' }}>
+            {fmtDate(task.dueDate)}
+          </span>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function ActiveProjectCard({
+  project, businessId,
+}: {
+  project: ActiveProject;
+  businessId: string;
+}) {
+  return (
+    <Link href={`/app/pro/${businessId}/projects/${project.id}`}>
+      <Card className="p-3 hover:border-[var(--border-strong)] transition-colors cursor-pointer">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-sm font-semibold truncate" style={{ color: 'var(--text)' }}>
+            {project.name}
+          </span>
+          <ChevronRight size={14} className="shrink-0" style={{ color: 'var(--text-faint)' }} />
+        </div>
+        <div className="flex items-center gap-3 mt-2">
+          <span className="text-xs" style={{ color: 'var(--text-faint)' }}>
+            {project.taskCount} tâche{project.taskCount > 1 ? 's' : ''}
+          </span>
+          {project.overdueCount > 0 ? (
+            <span className="text-xs font-semibold" style={{ color: 'var(--danger)' }}>
+              {project.overdueCount} en retard
+            </span>
+          ) : null}
+        </div>
+      </Card>
+    </Link>
+  );
+}
+
+// ─── Main page ──────────────────────────────────────────────────────
+export default function MyTasksPage() {
+  const params = useParams<{ businessId: string }>();
+  const businessId = params?.businessId ?? '';
   const activeCtx = useActiveBusiness({ optional: true });
   const actorRole = activeCtx?.activeBusiness?.role ?? null;
-  const isAdmin = actorRole === 'OWNER' || actorRole === 'ADMIN';
-  const readOnlyMessage = 'Action réservée aux admins/owners.';
+  const canCreate = actorRole === 'OWNER' || actorRole === 'ADMIN' || actorRole === 'MEMBER';
 
-  const [tasks, setTasks] = useState<Task[]>([]);
+  const [data, setData] = useState<MyTasksData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [statusFilter, setStatusFilter] = useState<string>('ALL');
-  const [referenceError, setReferenceError] = useState<string | null>(null);
-  const [info, setInfo] = useState<string | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
+  const [updatingIds, setUpdatingIds] = useState<Record<string, boolean>>({});
 
-  const [modalOpen, setModalOpen] = useState(false);
-  const [editing, setEditing] = useState<Task | null>(null);
+  // Create modal
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createTitle, setCreateTitle] = useState('');
+  const [createDueDate, setCreateDueDate] = useState('');
   const [creating, setCreating] = useState(false);
-  const [form, setForm] = useState({
-    title: '',
-    status: 'TODO',
-    projectId: '',
-    assigneeUserId: '',
-    dueDate: '',
-    categoryReferenceId: '',
-    tagReferenceIds: [] as string[],
-  });
 
-  const [deleteModal, setDeleteModal] = useState<Task | null>(null);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
-  const fetchController = useRef<AbortController | null>(null);
-  const [readOnlyInfo, setReadOnlyInfo] = useState<string | null>(null);
-  const [bulkError, setBulkError] = useState<string | null>(null);
-  const [bulkLoading, setBulkLoading] = useState(false);
-  const { selectedArray, selectedCount, toggle, toggleAll, clear, isSelected } = useRowSelection();
-
-  const filteredTasks = useMemo(() => {
-    return statusFilter === 'ALL' ? tasks : tasks.filter((t) => t.status === statusFilter);
-  }, [statusFilter, tasks]);
-
-  const todoCount = useMemo(() => tasks.filter((t) => t.status === 'TODO').length, [tasks]);
-  const inProgressCount = useMemo(() => tasks.filter((t) => t.status === 'IN_PROGRESS').length, [tasks]);
-
-  function openCreate() {
-    setEditing(null);
-    setForm({
-    title: '',
-    status: 'TODO',
-    projectId: '',
-    assigneeUserId: '',
-    dueDate: '',
-    categoryReferenceId: '',
-    tagReferenceIds: [],
-  });
-  setModalOpen(true);
-}
-
-function openEdit(task: Task) {
-  setEditing(task);
-  setForm({
-    title: task.title,
-    status: task.status,
-    projectId: task.projectId ?? '',
-    assigneeUserId: task.assigneeUserId ?? '',
-    dueDate: task.dueDate ? task.dueDate.slice(0, 10) : '',
-    categoryReferenceId: task.categoryReferenceId ?? '',
-    tagReferenceIds: task.tagReferences?.map((t) => t.id) ?? [],
-  });
-  setModalOpen(true);
-}
-
-  async function loadTasks(signal?: AbortSignal) {
-    const controller = signal ? null : new AbortController();
-    const effectiveSignal = signal ?? controller?.signal;
-    if (controller) {
-      fetchController.current?.abort();
-      fetchController.current = controller;
-    }
-
-    try {
-      setLoading(true);
-      setError(null);
-      const query = new URLSearchParams();
-      if (statusFilter !== 'ALL') query.set('status', statusFilter);
-      const res = await fetchJson<TaskListResponse>(
-        `/api/pro/businesses/${businessId}/tasks${query.toString() ? `?${query.toString()}` : ''}`,
-        {},
-        effectiveSignal
-      );
-  
-
-      if (effectiveSignal?.aborted) return;
-      if (res.status === 401) {
-        const from = window.location.pathname + window.location.search;
-        window.location.href = `/login?from=${encodeURIComponent(from)}`;
-        return;
-      }
-      if (!res.ok || !res.data) {
-        setError(
-          res.requestId
-            ? `${res.error ?? 'Erreur de chargement.'} (Ref: ${res.requestId})`
-            : res.error ?? 'Erreur de chargement.'
-        );
-        setTasks([]);
-        return;
-      }
-      const normalized = res.data.items.map((item) => ({
-        ...item,
-        categoryReferenceId: item.categoryReferenceId ?? null,
-        categoryReferenceName: item.categoryReferenceName ?? null,
-        tagReferences: item.tagReferences ?? [],
-      }));
-      setTasks(normalized);
-    } catch (err) {
-      if (effectiveSignal?.aborted) return;
-      setError(getErrorMessage(err));
-    } finally {
-      if (!effectiveSignal?.aborted) setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    void loadTasks();
-    return () => fetchController.current?.abort();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [businessId, statusFilter]);
+  const loadMyTasks = useCallback(async (signal?: AbortSignal) => {
+    if (!businessId) return;
+    setLoading(true);
+    const res = await fetchJson<MyTasksData>(
+      `/api/pro/businesses/${businessId}/my-tasks`,
+      {},
+      signal,
+    );
+    if (signal?.aborted) return;
+    if (res.ok && res.data) setData(res.data);
+    setLoading(false);
+  }, [businessId]);
 
   useEffect(() => {
     const controller = new AbortController();
-    async function loadRefs() {
-      setReferenceError(null);
-      const [catRes, tagRes] = await Promise.all([
-        fetchJson<{ items: Array<{ id: string; name: string }> }>(
-          `/api/pro/businesses/${businessId}/references?type=CATEGORY`,
-          {},
-          controller.signal
-        ),
-        fetchJson<{ items: Array<{ id: string; name: string }> }>(
-          `/api/pro/businesses/${businessId}/references?type=TAG`,
-          {},
-          controller.signal
-        ),
-      ]);
-      if (controller.signal.aborted) return;
-      if (!catRes.ok || !catRes.data || !tagRes.ok || !tagRes.data) {
-        const msg = catRes.error || tagRes.error || 'Impossible de charger les références.';
-        setReferenceError(
-          catRes.requestId || tagRes.requestId ? `${msg} (Ref: ${catRes.requestId || tagRes.requestId})` : msg
-        );
-      }
-    }
-    void loadRefs();
+    void loadMyTasks(controller.signal);
     return () => controller.abort();
-  }, [businessId]);
+  }, [loadMyTasks]);
 
-  function handleChange<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
-    setForm((prev) => ({ ...prev, [key]: value }));
-  }
+  const summary = data?.summary ?? EMPTY_SUMMARY;
+  const groups = useMemo(() => groupByUrgency(data?.items ?? []), [data]);
 
-  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    if (!isAdmin) {
-      setActionError(readOnlyMessage);
-      setReadOnlyInfo(readOnlyMessage);
-      return;
+  const handleStatusToggle = useCallback(async (taskId: string, currentStatus: string) => {
+    const nextStatus = NEXT_STATUS[currentStatus];
+    if (!nextStatus) return;
+    setUpdatingIds((prev) => ({ ...prev, [taskId]: true }));
+    try {
+      const res = await fetchJson(`/api/pro/businesses/${businessId}/tasks/${taskId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: nextStatus }),
+      });
+      if (res.ok) await loadMyTasks();
+    } finally {
+      setUpdatingIds((prev) => ({ ...prev, [taskId]: false }));
     }
-    setActionError(null);
-    setInfo(null);
+  }, [businessId, loadMyTasks]);
+
+  const handleCreate = useCallback(async () => {
+    const title = createTitle.trim();
+    if (!title || title.length > 200) return;
     setCreating(true);
-
-    const payload = {
-      title: form.title.trim(),
-      status: form.status,
-      projectId: form.projectId.trim() || undefined,
-      assigneeUserId: form.assigneeUserId.trim() || undefined,
-      dueDate: form.dueDate ? new Date(form.dueDate).toISOString() : undefined,
-      categoryReferenceId: form.categoryReferenceId || null,
-      tagReferenceIds: form.tagReferenceIds,
-    };
-
-    const endpoint = editing
-      ? `/api/pro/businesses/${businessId}/tasks/${editing.id}`
-      : `/api/pro/businesses/${businessId}/tasks`;
-    const method = editing ? 'PATCH' : 'POST';
-
-    const res = await fetchJson<TaskDetailResponse>(endpoint, {
-      method,
+    const payload: Record<string, unknown> = { title, status: 'TODO' };
+    if (createDueDate) payload.dueDate = new Date(createDueDate).toISOString();
+    const res = await fetchJson(`/api/pro/businesses/${businessId}/tasks`, {
+      method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
-
-
-
-    if (res.status === 401) {
-      const from = window.location.pathname + window.location.search;
-      window.location.href = `/login?from=${encodeURIComponent(from)}`;
-      return;
-    }
-
-    if (!res.ok || !res.data) {
-      setActionError(
-        res.requestId ? `${res.error ?? 'Action impossible.'} (Ref: ${res.requestId})` : res.error ?? 'Action impossible.'
-      );
-      setCreating(false);
-      return;
-    }
-
-    setInfo(editing ? 'Tâche mise à jour.' : 'Tâche créée.');
-    setModalOpen(false);
     setCreating(false);
-    setEditing(null);
-    await loadTasks();
-  }
+    if (res.ok) {
+      setCreateOpen(false);
+      setCreateTitle('');
+      setCreateDueDate('');
+      await loadMyTasks();
+    }
+  }, [businessId, createTitle, createDueDate, loadMyTasks]);
 
-  async function confirmDelete() {
-    if (!deleteModal) return;
-    if (!isAdmin) {
-      setDeleteError(readOnlyMessage);
-      setReadOnlyInfo(readOnlyMessage);
-      return;
-    }
-    setDeleteError(null);
-    const res = await fetchJson<null>(
-      `/api/pro/businesses/${businessId}/tasks/${deleteModal.id}`,
-      { method: 'DELETE' }
-    );
-
-    if (res.status === 401) {
-      const from = window.location.pathname + window.location.search;
-      window.location.href = `/login?from=${encodeURIComponent(from)}`;
-      return;
-    }
-    if (!res.ok) {
-      setDeleteError(
-        res.requestId ? `${res.error ?? 'Suppression impossible.'} (Ref: ${res.requestId})` : res.error ?? 'Suppression impossible.'
-      );
-      return;
-    }
-    setInfo('Tâche supprimée.');
-    setDeleteModal(null);
-    await loadTasks();
-  }
-
-  async function handleBulkDelete(ids: string[]) {
-    if (!ids.length) return;
-    if (!isAdmin) {
-      setReadOnlyInfo(readOnlyMessage);
-      return;
-    }
-    const ok = window.confirm(ids.length === 1 ? 'Supprimer cette tâche ?' : `Supprimer ${ids.length} tâches ?`);
-    if (!ok) return;
-    setBulkLoading(true);
-    setBulkError(null);
-    setInfo(null);
-    let failed = 0;
-    for (const id of ids) {
-      const res = await fetchJson<null>(`/api/pro/businesses/${businessId}/tasks/${id}`, { method: 'DELETE' });
-      if (!res.ok) {
-        failed += 1;
-        setBulkError((prev) => prev ?? `Suppression partielle. Ref: ${res.requestId ?? 'N/A'}`);
-      }
-    }
-    setBulkLoading(false);
-    clear();
-    await loadTasks();
-    if (failed) {
-      setBulkError((prev) => prev ?? 'Certaines suppressions ont échoué.');
-    } else {
-      setInfo('Tâches supprimées.');
-    }
-  }
+  const hasNoTasks = !loading && (data?.items.length ?? 0) === 0;
 
   return (
     <ProPageShell
       backHref={`/app/pro/${businessId}`}
       backLabel="Dashboard"
-      title="Tâches"
-      subtitle="Base unique des tâches liées aux projets."
+      title="Mes Tâches"
+      subtitle="Organisez et dirigez votre journée"
       actions={
-        <Button
-          onClick={() => {
-            if (!isAdmin) {
-              setReadOnlyInfo(readOnlyMessage);
-              return;
-            }
-            openCreate();
-          }}
-          disabled={!isAdmin}
-        >
-          Nouvelle tâche
-        </Button>
+        canCreate ? (
+          <Button onClick={() => setCreateOpen(true)}>
+            <Plus size={16} className="mr-1" />
+            Nouvelle tâche
+          </Button>
+        ) : undefined
       }
     >
-      {/* KPI cards */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <KpiCard label="Total" value={tasks.length} delay={0} />
-        <KpiCard label="À faire" value={todoCount} delay={50} />
-        <KpiCard label="En cours" value={inProgressCount} delay={100} />
+      {/* KPI strip */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {loading ? (
+          <>
+            <SkeletonKpiCard />
+            <SkeletonKpiCard />
+            <SkeletonKpiCard />
+            <SkeletonKpiCard />
+          </>
+        ) : (
+          <>
+            <KpiCard
+              label="En retard"
+              value={summary.overdue}
+              delay={0}
+              size="compact"
+              className={summary.overdue > 0 ? 'outline-[var(--danger)]' : undefined}
+            />
+            <KpiCard label="Aujourd'hui" value={summary.today} delay={50} size="compact" />
+            <KpiCard label="Cette semaine" value={summary.thisWeek} delay={100} size="compact" />
+            <KpiCard label="En cours" value={summary.inProgress} delay={150} size="compact" />
+          </>
+        )}
       </div>
 
-      {/* Section header: icon + title + filters */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <ClipboardList size={18} style={{ color: 'var(--text-secondary)' }} />
-          <span className="text-sm font-semibold text-[var(--text-primary)]">Tâches</span>
+      {/* Empty state */}
+      {hasNoTasks ? (
+        <div className="flex flex-col items-center justify-center py-20 text-center">
+          <ClipboardList size={48} style={{ color: 'var(--text-faint)' }} />
+          <p className="mt-4 text-lg font-semibold" style={{ color: 'var(--text)' }}>
+            Aucune tâche assignée
+          </p>
+          <p className="mt-1 text-sm" style={{ color: 'var(--text-faint)' }}>
+            Les tâches qui vous sont assignées apparaîtront ici.
+          </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {[{ value: 'ALL' as const, label: 'Tous' }, ...TASK_STATUS_OPTIONS].map((opt) => (
-            <button
-              key={opt.value}
-              type="button"
-              onClick={() => setStatusFilter(opt.value)}
-              className="rounded-full px-3 py-1.5 text-xs font-semibold transition"
-              style={{
-                background: statusFilter === opt.value ? 'var(--shell-accent-dark)' : 'var(--surface)',
-                color: statusFilter === opt.value ? 'white' : 'var(--text)',
-                border: statusFilter === opt.value ? 'none' : '1px solid var(--border)',
-              }}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Feedback messages */}
-      {info ? <span className="text-xs text-[var(--success)]">{info}</span> : null}
-      {error ? <span className="text-xs text-[var(--danger)]">{error}</span> : null}
-      {readOnlyInfo ? <span className="text-xs text-[var(--text-secondary)]">{readOnlyInfo}</span> : null}
-      {referenceError ? (
-        <p className="text-xs text-[var(--danger)]">{referenceError}</p>
       ) : null}
 
-      {/* Table */}
-      {loading ? (
-        <p className="text-sm text-[var(--text-secondary)]">Chargement des tâches…</p>
-      ) : (
-        <div className="space-y-2">
-          {bulkError ? <p className="text-xs font-semibold text-[var(--danger)]">{bulkError}</p> : null}
-          <BulkActionBar
-              count={selectedCount}
-              onClear={clear}
-              actions={[
-                {
-                  label: bulkLoading ? 'Suppression…' : 'Supprimer',
-                  onClick: () => handleBulkDelete(selectedArray),
-                  variant: 'danger',
-                  disabled: !isAdmin || bulkLoading,
-                },
-              ]}
-            />
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-10">
-                    <input
-                      type="checkbox"
-                      aria-label="Tout sélectionner"
-                      className="h-4 w-4 accent-[var(--accent)]"
-                      checked={filteredTasks.length > 0 && filteredTasks.every((t) => isSelected(t.id))}
-                      onChange={() => toggleAll(filteredTasks.map((t) => t.id))}
-                    />
-                  </TableHead>
-                  <TableHead>Titre</TableHead>
-                  <TableHead>Projet</TableHead>
-                  <TableHead>Assignee</TableHead>
-                  <TableHead>Références</TableHead>
-                  <TableHead>Échéance</TableHead>
-                  <TableHead>Statut</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredTasks.length === 0 ? (
-                  <TableEmpty>Aucune tâche.</TableEmpty>
-                ) : (
-                  filteredTasks.map((task) => (
-                    <TableRow key={task.id}>
-                      <TableCell onClick={(e) => e.stopPropagation()}>
-                        <input
-                          type="checkbox"
-                          className="h-4 w-4 accent-[var(--accent)]"
-                          checked={isSelected(task.id)}
-                          onChange={() => toggle(task.id)}
-                          aria-label="Sélectionner"
-                          onClick={(e) => e.stopPropagation()}
-                        />
-                      </TableCell>
-                      <TableCell className="font-semibold text-[var(--text-primary)]">
-                        <Link href={`/app/pro/${businessId}/tasks/${task.id}`} className="hover:underline">
-                          {task.title}
-                        </Link>
-                        <p className="text-[10px] text-[var(--text-secondary)]">
-                          Créée le {formatDate(task.createdAt)}
-                        </p>
-                      </TableCell>
-                      <TableCell>{task.projectName ?? '—'}</TableCell>
-                      <TableCell>{task.assigneeEmail ?? task.assigneeName ?? '—'}</TableCell>
-                      <TableCell>
-                        <div className="flex flex-wrap gap-1">
-                          {task.categoryReferenceName ? (
-                            <Badge variant="neutral" className="bg-indigo-50 text-indigo-700">
-                              {task.categoryReferenceName}
-                            </Badge>
-                          ) : null}
-                          {task.tagReferences?.map((tag) => (
-                            <Badge key={tag.id} variant="neutral" className="bg-[var(--success-bg)] text-[var(--success)]">
-                              {tag.name}
-                            </Badge>
-                          ))}
-                        </div>
-                      </TableCell>
-                      <TableCell>{formatDate(task.dueDate)}</TableCell>
-                      <TableCell>
-                        <Badge
-                          variant="neutral"
-                          className={
-                            task.status === 'DONE'
-                              ? 'bg-[var(--success-bg)] text-[var(--success)]'
-                              : task.status === 'IN_PROGRESS'
-                                ? 'bg-[var(--accent)]/10 text-[var(--accent)]'
-                                : 'bg-[var(--warning-bg)] text-[var(--warning)]'
-                          }
-                        >
-                          {TASK_STATUS_OPTIONS.find((s) => s.value === task.status)?.label ?? task.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-wrap gap-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              if (!isAdmin) {
-                                setReadOnlyInfo(readOnlyMessage);
-                                return;
-                              }
-                              openEdit(task);
-                            }}
-                            disabled={!isAdmin}
-                          >
-                            Modifier
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              if (!isAdmin) {
-                                setReadOnlyInfo(readOnlyMessage);
-                                return;
-                              }
-                              setDeleteModal(task);
-                            }}
-                            disabled={!isAdmin}
-                          >
-                            Supprimer
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
+      {/* Content grid */}
+      {!hasNoTasks ? (
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_280px]">
+          {/* Main: urgency sections */}
+          <div className="space-y-4">
+            {loading ? (
+              <Card className="p-4 space-y-3">
+                <Skeleton width="40%" height="14px" />
+                <Skeleton height="48px" />
+                <Skeleton height="48px" />
+                <Skeleton height="48px" />
+              </Card>
+            ) : (
+              <>
+                <UrgencySection
+                  title="En retard" color="var(--danger)"
+                  tasks={groups.overdue} businessId={businessId}
+                  onStatusToggle={handleStatusToggle} updatingIds={updatingIds}
+                />
+                <UrgencySection
+                  title="Aujourd'hui" color="var(--warning)"
+                  tasks={groups.today} businessId={businessId}
+                  onStatusToggle={handleStatusToggle} updatingIds={updatingIds}
+                />
+                <UrgencySection
+                  title="Cette semaine" color="var(--info)"
+                  tasks={groups.thisWeek} businessId={businessId}
+                  onStatusToggle={handleStatusToggle} updatingIds={updatingIds}
+                />
+                <UrgencySection
+                  title="Plus tard" color="var(--text-faint)"
+                  tasks={groups.later} businessId={businessId}
+                  onStatusToggle={handleStatusToggle} updatingIds={updatingIds}
+                />
+                <UrgencySection
+                  title="Sans date" color="var(--text-faint)"
+                  tasks={groups.noDate} businessId={businessId}
+                  onStatusToggle={handleStatusToggle} updatingIds={updatingIds}
+                />
+              </>
+            )}
           </div>
-        )}
 
+          {/* Sidebar: active projects */}
+          <aside className="space-y-3">
+            <span className="text-sm font-semibold" style={{ color: 'var(--text)' }}>
+              Projets actifs
+            </span>
+            {loading ? (
+              <>
+                <Skeleton height="64px" />
+                <Skeleton height="64px" />
+              </>
+            ) : (data?.activeProjects ?? []).length === 0 ? (
+              <p className="text-xs" style={{ color: 'var(--text-faint)' }}>
+                Aucun projet lié à vos tâches.
+              </p>
+            ) : (
+              (data?.activeProjects ?? []).map((p) => (
+                <ActiveProjectCard key={p.id} project={p} businessId={businessId} />
+              ))
+            )}
+          </aside>
+        </div>
+      ) : null}
+
+      {/* Create modal */}
       <Modal
-        open={modalOpen}
-        onCloseAction={() => {
-          if (creating) return;
-          setModalOpen(false);
-          setEditing(null);
-          setActionError(null);
-        }}
-        title={editing ? 'Modifier la tâche' : 'Nouvelle tâche'}
-        description="Définis le titre, le statut, l’assignee et l’échéance."
+        open={createOpen}
+        onCloseAction={() => { if (!creating) setCreateOpen(false); }}
+        title="Nouvelle tâche"
+        description="Créez une tâche qui vous sera assignée."
       >
-        <form onSubmit={handleSubmit} className="space-y-3">
+        <form
+          onSubmit={(e) => { e.preventDefault(); void handleCreate(); }}
+          className="space-y-3"
+        >
           <Input
             label="Titre"
-            value={form.title}
-            onChange={(e: ChangeEvent<HTMLInputElement>) => handleChange('title', e.target.value)}
-            error={actionError ?? undefined}
+            value={createTitle}
+            onChange={(e) => setCreateTitle(e.target.value)}
+            maxLength={200}
+            autoFocus
           />
-          <Select
-            label="Statut"
-            value={form.status}
-            onChange={(e) => handleChange('status', e.target.value)}
-          >
-            {TASK_STATUS_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </Select>
-          <div className="grid gap-3 md:grid-cols-2">
-            <Input
-              label="Projet ID (optionnel)"
-              value={form.projectId}
-              onChange={(e: ChangeEvent<HTMLInputElement>) => handleChange('projectId', e.target.value)}
-              placeholder="ID projet (même business)"
-            />
-            <Input
-            label="Assignee userId (optionnel)"
-            value={form.assigneeUserId}
-            onChange={(e: ChangeEvent<HTMLInputElement>) =>
-              handleChange('assigneeUserId', e.target.value)
-            }
-            placeholder="ID membre business"
-          />
-          </div>
           <Input
             label="Échéance (optionnel)"
             type="date"
-            value={form.dueDate}
-            onChange={(e: ChangeEvent<HTMLInputElement>) => handleChange('dueDate', e.target.value)}
+            value={createDueDate}
+            onChange={(e) => setCreateDueDate(e.target.value)}
           />
-          <ReferencePicker
-            businessId={businessId}
-            categoryId={form.categoryReferenceId || null}
-            tagIds={form.tagReferenceIds}
-            onCategoryChange={(id) => handleChange('categoryReferenceId', id ?? '')}
-            onTagsChange={(ids) => handleChange('tagReferenceIds', ids)}
-            disabled={!isAdmin || creating}
-            title="Références"
-          />
-          <div className="flex items-center justify-between">
-            {actionError ? <p className="text-xs text-[var(--danger)]">{actionError}</p> : null}
-            {!isAdmin ? (
-              <p className="text-[11px] text-[var(--text-secondary)]">Lecture seule : création/édition bloquée.</p>
-            ) : null}
-            <div className="flex gap-2">
-              <Button variant="outline" type="button" onClick={() => setModalOpen(false)} disabled={creating}>
-                Annuler
-              </Button>
-              <Button type="submit" disabled={creating || !isAdmin}>
-                {creating ? 'Enregistrement…' : editing ? 'Mettre à jour' : 'Créer'}
-              </Button>
-            </div>
-          </div>
-        </form>
-      </Modal>
-
-      <Modal
-        open={!!deleteModal}
-        onCloseAction={() => setDeleteModal(null)}
-        title="Supprimer cette tâche ?"
-        description={deleteModal ? `« ${deleteModal.title} » sera supprimée.` : undefined}
-      >
-        <div className="space-y-3">
-          <p className="text-sm text-[var(--text-secondary)]">
-            Action définitive. Les liens projet/assignee seront perdus.
-          </p>
-          {deleteError ? <p className="text-xs text-[var(--danger)]">{deleteError}</p> : null}
-          {!isAdmin ? (
-            <p className="text-[11px] text-[var(--text-secondary)]">Suppression réservée aux admins/owners.</p>
-          ) : null}
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setDeleteModal(null)}>
+          <div className="flex justify-end gap-2 pt-1">
+            <Button variant="outline" type="button" onClick={() => setCreateOpen(false)} disabled={creating}>
               Annuler
             </Button>
-            <Button variant="danger" onClick={confirmDelete} disabled={!isAdmin}>
-              Supprimer
+            <Button type="submit" disabled={creating || !createTitle.trim()}>
+              {creating ? 'Création…' : 'Créer'}
             </Button>
           </div>
-        </div>
+        </form>
       </Modal>
     </ProPageShell>
   );

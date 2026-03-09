@@ -20,6 +20,7 @@ import {
   IconSavings,
   PivotLogo,
 } from '@/components/pivot-icons';
+import { CalendarDays } from 'lucide-react';
 import { proNavSections } from '@/config/proNav';
 import { pivotIconMap } from '@/config/pivotNavIcons';
 import type { Space, BusinessItem } from './PivotShell';
@@ -141,6 +142,7 @@ export default function PivotMobileNav({ space, pathname, businessId, businesses
                   <DrawerItem icon={(c) => <IconBudget size={20} color={c} />} label="Budgets" href="/app/personal/budgets" onClick={closeDrawer} />
                   <DrawerItem icon={(c) => <IconSubscription size={20} color={c} />} label="Abonnements" href="/app/personal/subscriptions" onClick={closeDrawer} />
                   <DrawerItem icon={(c) => <IconSavings size={20} color={c} />} label="Épargne" href="/app/personal/epargne" onClick={closeDrawer} />
+                  <DrawerItem icon={(c) => <CalendarDays size={20} color={c} />} label="Calendrier" href="/app/personal/calendar" onClick={closeDrawer} />
                 </DrawerSection>
               )}
 

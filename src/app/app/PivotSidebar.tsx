@@ -19,6 +19,7 @@ import {
   IconSavings,
   PivotLogo,
 } from '@/components/pivot-icons';
+import { CalendarDays } from 'lucide-react';
 import type { Space, BusinessItem } from './PivotShell';
 
 type Props = {
@@ -115,6 +116,7 @@ export default function PivotSidebar({ space, pathname, businessId, businesses: 
             <Item icon={(c) => <IconBudget size={20} color={c} />} label="Budgets" href="/app/personal/budgets" active={pathname.startsWith('/app/personal/budgets')} collapsed={collapsed} />
             <Item icon={(c) => <IconSubscription size={20} color={c} />} label="Abonnements" href="/app/personal/subscriptions" active={pathname.startsWith('/app/personal/subscriptions')} collapsed={collapsed} />
             <Item icon={(c) => <IconSavings size={20} color={c} />} label="Épargne" href="/app/personal/epargne" active={pathname.startsWith('/app/personal/epargne')} collapsed={collapsed} />
+            <Item icon={(c) => <CalendarDays size={20} color={c} />} label="Calendrier" href="/app/personal/calendar" active={pathname.startsWith('/app/personal/calendar')} collapsed={collapsed} />
           </Section>
         )}
 

@@ -3,6 +3,7 @@ import {
   LayoutDashboard,
   Briefcase,
   ClipboardList,
+  CalendarDays,
   Users,
   Folder,
   Boxes,
@@ -61,10 +62,17 @@ export const proNavSections: ProNavSectionConfig[] = [
       },
       {
         id: 'tasks',
-        label: 'Tâches',
+        label: 'Mes Tâches',
         icon: ClipboardList,
         href: (biz) => `/app/pro/${biz}/tasks`,
         activePatterns: (biz) => [startsWithRegex(`/app/pro/${biz}/tasks`)],
+      },
+      {
+        id: 'calendar',
+        label: 'Calendrier',
+        icon: CalendarDays,
+        href: (biz) => `/app/pro/${biz}/calendar`,
+        activePatterns: (biz) => [startsWithRegex(`/app/pro/${biz}/calendar`)],
       },
       {
         id: 'team',

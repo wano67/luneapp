@@ -55,7 +55,7 @@ function formatRelativeDate(dateStr: string): string {
 
 const PRO_SUB_LABELS: Record<string, string> = {
   projects: 'Projets',
-  tasks: 'Tâches',
+  tasks: 'Mes Tâches',
   clients: 'CRM',
   prospects: 'CRM',
   agenda: 'CRM',
@@ -68,6 +68,7 @@ const PRO_SUB_LABELS: Record<string, string> = {
   process: 'Processus',
   marketing: 'Marketing',
   invites: 'Invitations',
+  calendar: 'Calendrier',
 };
 
 const PERSO_SUB_LABELS: Record<string, string> = {
@@ -76,6 +77,7 @@ const PERSO_SUB_LABELS: Record<string, string> = {
   budgets: 'Budgets',
   subscriptions: 'Abonnements',
   epargne: 'Épargne',
+  calendar: 'Calendrier',
 };
 
 const FOCUS_SUB_LABELS: Record<string, string> = {
