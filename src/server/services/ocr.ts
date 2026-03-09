@@ -1,6 +1,8 @@
 import { GoogleGenAI } from '@google/genai';
 import { findCategoryByCode, PCG_CATEGORIES } from '@/config/pcg';
 
+const GEMINI_MODEL = 'gemini-2.5-flash';
+
 let client: GoogleGenAI | null = null;
 
 function getClient(): GoogleGenAI | null {
@@ -97,31 +99,37 @@ export async function extractFromDocument(
 
   const base64 = fileBuffer.toString('base64');
 
-  const response = await ai.models.generateContent({
-    model: 'gemini-2.0-flash',
-    contents: [
-      {
-        role: 'user',
-        parts: [
-          {
-            inlineData: {
-              mimeType,
-              data: base64,
+  let text: string | undefined;
+  try {
+    const response = await ai.models.generateContent({
+      model: GEMINI_MODEL,
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            {
+              inlineData: {
+                mimeType,
+                data: base64,
+              },
             },
-          },
-          {
-            text: 'Extrais les informations de ce justificatif.',
-          },
-        ],
+            {
+              text: 'Extrais les informations de ce justificatif.',
+            },
+          ],
+        },
+      ],
+      config: {
+        systemInstruction: SYSTEM_PROMPT,
+        maxOutputTokens: 1024,
       },
-    ],
-    config: {
-      systemInstruction: SYSTEM_PROMPT,
-      maxOutputTokens: 1024,
-    },
-  });
+    });
+    text = response.text;
+  } catch (err) {
+    console.error('[ocr] Gemini API error:', err instanceof Error ? err.message : err);
+    return null;
+  }
 
-  const text = response.text;
   if (!text) return null;
 
   try {
@@ -234,21 +242,27 @@ export async function categorizeBatch(
     .map(e => `- id="${e.id}" libellé="${e.category}" fournisseur="${e.vendor ?? ''}" type=${e.type} montant=${(Number(e.amountCents) / 100).toFixed(2)}€`)
     .join('\n');
 
-  const response = await ai.models.generateContent({
-    model: 'gemini-2.0-flash',
-    contents: [
-      {
-        role: 'user',
-        parts: [{ text: `Classe ces écritures comptables :\n${entriesText}` }],
+  let text: string | undefined;
+  try {
+    const response = await ai.models.generateContent({
+      model: GEMINI_MODEL,
+      contents: [
+        {
+          role: 'user',
+          parts: [{ text: `Classe ces écritures comptables :\n${entriesText}` }],
+        },
+      ],
+      config: {
+        systemInstruction: CATEGORIZE_PROMPT,
+        maxOutputTokens: 2048,
       },
-    ],
-    config: {
-      systemInstruction: CATEGORIZE_PROMPT,
-      maxOutputTokens: 2048,
-    },
-  });
+    });
+    text = response.text;
+  } catch (err) {
+    console.error('[categorize] Gemini API error:', err instanceof Error ? err.message : err);
+    return null;
+  }
 
-  const text = response.text;
   if (!text) return null;
 
   try {
