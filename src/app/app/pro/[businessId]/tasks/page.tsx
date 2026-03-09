@@ -41,6 +41,16 @@ type MyTasksData = { items: MyTask[]; summary: Summary; activeProjects: ActivePr
 type Member = { userId: string; name: string | null; email: string; role: string };
 type ProjectOption = { id: string; name: string };
 
+type WeeklyStats = {
+  completedThisWeek: number;
+  pendingThisWeek: number;
+  totalThisWeek: number;
+  percentComplete: number;
+  completedByDay: Record<string, number>;
+  userName: string | null;
+  userId: string;
+};
+
 // ─── Helpers ────────────────────────────────────────────────────────
 const EMPTY_SUMMARY: Summary = { overdue: 0, today: 0, thisWeek: 0, blocked: 0, total: 0 };
 
@@ -247,6 +257,75 @@ function ActiveProjectCard({ project, businessId }: { project: ActiveProject; bu
   );
 }
 
+// ─── Weekly progress card ────────────────────────────────────────────
+function WeeklyProgressCard({ stats, loading: isLoading }: { stats: WeeklyStats | null; loading: boolean }) {
+  if (isLoading) return <Skeleton height="120px" />;
+  if (!stats) return null;
+
+  const { completedThisWeek, pendingThisWeek, totalThisWeek, percentComplete, completedByDay } = stats;
+
+  const r = 38;
+  const circumference = 2 * Math.PI * r;
+  const offset = circumference - (percentComplete / 100) * circumference;
+  const ringColor = totalThisWeek === 0
+    ? 'var(--text-faint)'
+    : percentComplete >= 80
+      ? 'var(--success)'
+      : percentComplete >= 50
+        ? 'var(--warning)'
+        : 'var(--danger)';
+
+  const days = Object.entries(completedByDay);
+  const maxDay = Math.max(...days.map(([, v]) => v), 1);
+  const dayLabels = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
+
+  return (
+    <Card className="p-4">
+      <div className="flex items-center gap-6">
+        <div className="relative shrink-0" style={{ width: 88, height: 88 }}>
+          <svg viewBox="0 0 88 88" className="w-full h-full -rotate-90">
+            <circle cx="44" cy="44" r={r} fill="none" stroke="var(--surface-2)" strokeWidth="6" />
+            <circle
+              cx="44" cy="44" r={r} fill="none" stroke={ringColor} strokeWidth="6"
+              strokeDasharray={circumference}
+              strokeDashoffset={offset}
+              strokeLinecap="round"
+              className="transition-all duration-700"
+            />
+          </svg>
+          <div className="absolute inset-0 flex items-center justify-center">
+            <span className="text-lg font-bold" style={{ color: 'var(--text)' }}>{percentComplete}%</span>
+          </div>
+        </div>
+
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold" style={{ color: 'var(--text)' }}>
+            {completedThisWeek} tâche{completedThisWeek !== 1 ? 's' : ''} accomplie{completedThisWeek !== 1 ? 's' : ''} cette semaine
+          </p>
+          <p className="text-xs mt-0.5" style={{ color: 'var(--text-faint)' }}>
+            {pendingThisWeek} restante{pendingThisWeek !== 1 ? 's' : ''} · {totalThisWeek} total
+          </p>
+
+          <div className="flex items-end gap-1.5 mt-3">
+            {days.map(([date, count], i) => (
+              <div key={date} className="flex flex-col items-center gap-0.5 flex-1">
+                <div
+                  className="w-full rounded-sm transition-all"
+                  style={{
+                    height: count > 0 ? `${Math.max((count / maxDay) * 20, 3)}px` : '2px',
+                    background: count > 0 ? ringColor : 'var(--surface-2)',
+                  }}
+                />
+                <span className="text-[9px]" style={{ color: 'var(--text-faint)' }}>{dayLabels[i]}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
 // ─── Main page ──────────────────────────────────────────────────────
 export default function MyTasksPage() {
   const params = useParams<{ businessId: string }>();
@@ -259,6 +338,10 @@ export default function MyTasksPage() {
   const [data, setData] = useState<MyTasksData | null>(null);
   const [loading, setLoading] = useState(true);
   const [updatingIds, setUpdatingIds] = useState<Record<string, boolean>>({});
+  const [fetchVersion, setFetchVersion] = useState(0);
+  const [selectedMemberId, setSelectedMemberId] = useState('');
+  const [weeklyStats, setWeeklyStats] = useState<WeeklyStats | null>(null);
+  const [weeklyLoading, setWeeklyLoading] = useState(true);
 
   // Create modal state
   const [createOpen, setCreateOpen] = useState(false);
@@ -271,19 +354,6 @@ export default function MyTasksPage() {
   // Dropdown data for modal
   const [members, setMembers] = useState<Member[]>([]);
   const [projects, setProjects] = useState<ProjectOption[]>([]);
-
-  const loadMyTasks = useCallback(async (signal?: AbortSignal) => {
-    if (!businessId) return;
-    setLoading(true);
-    const res = await fetchJson<MyTasksData>(
-      `/api/pro/businesses/${businessId}/my-tasks?includeDone=true`,
-      {},
-      signal,
-    );
-    if (signal?.aborted) return;
-    if (res.ok && res.data) setData(res.data);
-    setLoading(false);
-  }, [businessId]);
 
   // Load members + projects for modal (admin/owner only loads members)
   useEffect(() => {
@@ -311,11 +381,38 @@ export default function MyTasksPage() {
     return () => controller.abort();
   }, [businessId, isAdmin]);
 
+  // Load tasks
   useEffect(() => {
+    if (!businessId) return;
     const controller = new AbortController();
-    void loadMyTasks(controller.signal);
+    setLoading(true);
+    fetchJson<MyTasksData>(
+      `/api/pro/businesses/${businessId}/my-tasks?includeDone=true`,
+      {},
+      controller.signal,
+    ).then(res => {
+      if (controller.signal.aborted) return;
+      if (res.ok && res.data) setData(res.data);
+      setLoading(false);
+    });
     return () => controller.abort();
-  }, [loadMyTasks]);
+  }, [businessId, fetchVersion]);
+
+  // Load weekly stats
+  useEffect(() => {
+    if (!businessId) return;
+    const controller = new AbortController();
+    setWeeklyLoading(true);
+    const url = selectedMemberId
+      ? `/api/pro/businesses/${businessId}/tasks/weekly-stats?userId=${selectedMemberId}`
+      : `/api/pro/businesses/${businessId}/tasks/weekly-stats`;
+    fetchJson<WeeklyStats>(url, {}, controller.signal).then(res => {
+      if (controller.signal.aborted) return;
+      if (res.ok && res.data) setWeeklyStats(res.data);
+      setWeeklyLoading(false);
+    });
+    return () => controller.abort();
+  }, [businessId, selectedMemberId, fetchVersion]);
 
   const summary = data?.summary ?? EMPTY_SUMMARY;
   const groups = useMemo(() => groupByUrgency(data?.items ?? []), [data]);
@@ -328,11 +425,11 @@ export default function MyTasksPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus }),
       });
-      if (res.ok) await loadMyTasks();
+      if (res.ok) setFetchVersion(v => v + 1);
     } finally {
       setUpdatingIds((prev) => ({ ...prev, [taskId]: false }));
     }
-  }, [businessId, loadMyTasks]);
+  }, [businessId]);
 
   const handleCreate = useCallback(async () => {
     const title = createTitle.trim();
@@ -354,9 +451,9 @@ export default function MyTasksPage() {
       setCreateDueDate('');
       setCreateProjectId('');
       setCreateAssigneeId('');
-      await loadMyTasks();
+      setFetchVersion(v => v + 1);
     }
-  }, [businessId, createTitle, createDueDate, createProjectId, createAssigneeId, isAdmin, loadMyTasks]);
+  }, [businessId, createTitle, createDueDate, createProjectId, createAssigneeId, isAdmin]);
 
   const openCreateModal = useCallback(() => {
     setCreateTitle('');
@@ -372,15 +469,31 @@ export default function MyTasksPage() {
     <ProPageShell
       backHref={`/app/pro/${businessId}`}
       backLabel="Dashboard"
-      title="Mes Tâches"
+      title={weeklyStats?.userName ? `Tâches de ${weeklyStats.userName}` : 'Mes Tâches'}
       subtitle="Organisez et dirigez votre journée"
       actions={
-        canCreate ? (
-          <Button onClick={openCreateModal}>
-            <Plus size={16} className="mr-1" />
-            Nouvelle tâche
-          </Button>
-        ) : undefined
+        <div className="flex items-center gap-2">
+          {isAdmin && members.length > 0 ? (
+            <Select
+              className="w-44"
+              value={selectedMemberId}
+              onChange={(e) => setSelectedMemberId(e.target.value)}
+            >
+              <option value="">Moi-même</option>
+              {members.map((m) => (
+                <option key={m.userId} value={m.userId}>
+                  {m.name ?? m.email}
+                </option>
+              ))}
+            </Select>
+          ) : null}
+          {canCreate ? (
+            <Button onClick={openCreateModal}>
+              <Plus size={16} className="mr-1" />
+              Nouvelle tâche
+            </Button>
+          ) : null}
+        </div>
       }
     >
       {/* KPI strip */}
@@ -407,6 +520,9 @@ export default function MyTasksPage() {
           </>
         )}
       </div>
+
+      {/* Weekly progress */}
+      <WeeklyProgressCard stats={weeklyStats} loading={weeklyLoading} />
 
       {/* Empty state */}
       {hasNoTasks ? (
