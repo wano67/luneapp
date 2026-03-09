@@ -6,19 +6,22 @@ import { ensureDelegate } from '@/server/http/delegates';
 import { serializeTask } from '@/server/http/serializeTask';
 import { dayKey, startOfWeek, addDays } from '@/lib/date';
 
-// GET /api/pro/businesses/{businessId}/my-tasks
+// GET /api/pro/businesses/{businessId}/my-tasks?includeDone=true
 export const GET = withBusinessRoute(
   { minRole: 'VIEWER' },
-  async (ctx) => {
+  async (ctx, req) => {
     const { requestId, businessId, userId } = ctx;
 
     const delegateError = ensureDelegate('task');
     if (delegateError) return delegateError;
 
+    const { searchParams } = new URL(req.url);
+    const includeDone = searchParams.get('includeDone') === 'true';
+
     const tasks = await prisma.task.findMany({
       where: {
         businessId,
-        status: { not: TaskStatus.DONE },
+        ...(!includeDone ? { status: { not: TaskStatus.DONE } } : {}),
         OR: [
           { assigneeUserId: userId },
           { assignees: { some: { userId } } },

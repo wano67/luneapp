@@ -3,10 +3,11 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useCallback, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { ClipboardList, ChevronRight, Plus } from 'lucide-react';
+import { ClipboardList, ChevronRight, Plus, Check, ChevronDown, ChevronUp } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Select } from '@/components/ui/select';
 import { Modal } from '@/components/ui/modal';
 import { KpiCard } from '@/components/ui/kpi-card';
 import { Skeleton, SkeletonKpiCard } from '@/components/ui/skeleton';
@@ -24,45 +25,26 @@ type MyTask = {
   dueDate: string | null;
   projectId: string | null;
   projectName: string | null;
+  assigneeUserId: string | null;
+  assigneeName: string | null;
   progress: number;
   isBlocked: boolean;
   checklistCount?: number;
   checklistDoneCount?: number;
   estimatedMinutes: number | null;
+  completedAt: string | null;
 };
 
-type ActiveProject = {
-  id: string;
-  name: string;
-  taskCount: number;
-  overdueCount: number;
-};
-
-type Summary = {
-  overdue: number;
-  today: number;
-  thisWeek: number;
-  inProgress: number;
-  blocked: number;
-  total: number;
-};
-
-type MyTasksData = {
-  items: MyTask[];
-  summary: Summary;
-  activeProjects: ActiveProject[];
-};
+type ActiveProject = { id: string; name: string; taskCount: number; overdueCount: number };
+type Summary = { overdue: number; today: number; thisWeek: number; inProgress: number; blocked: number; total: number };
+type MyTasksData = { items: MyTask[]; summary: Summary; activeProjects: ActiveProject[] };
+type Member = { userId: string; name: string | null; email: string; role: string };
+type ProjectOption = { id: string; name: string };
 
 // ─── Helpers ────────────────────────────────────────────────────────
 const EMPTY_SUMMARY: Summary = { overdue: 0, today: 0, thisWeek: 0, inProgress: 0, blocked: 0, total: 0 };
 
-type GroupedTasks = {
-  overdue: MyTask[];
-  today: MyTask[];
-  thisWeek: MyTask[];
-  later: MyTask[];
-  noDate: MyTask[];
-};
+type GroupedTasks = { overdue: MyTask[]; today: MyTask[]; thisWeek: MyTask[]; later: MyTask[]; noDate: MyTask[]; done: MyTask[] };
 
 function groupByUrgency(items: MyTask[]): GroupedTasks {
   const now = new Date();
@@ -70,8 +52,9 @@ function groupByUrgency(items: MyTask[]): GroupedTasks {
   const monday = startOfWeek(now);
   const sundayStr = dayKey(addDays(monday, 6));
 
-  const groups: GroupedTasks = { overdue: [], today: [], thisWeek: [], later: [], noDate: [] };
+  const groups: GroupedTasks = { overdue: [], today: [], thisWeek: [], later: [], noDate: [], done: [] };
   for (const t of items) {
+    if (t.status === 'DONE') { groups.done.push(t); continue; }
     if (!t.dueDate) { groups.noDate.push(t); continue; }
     const dk = t.dueDate.slice(0, 10);
     if (dk < todayStr) groups.overdue.push(t);
@@ -82,17 +65,15 @@ function groupByUrgency(items: MyTask[]): GroupedTasks {
   return groups;
 }
 
-const NEXT_STATUS: Record<string, string> = { TODO: 'IN_PROGRESS', IN_PROGRESS: 'DONE' };
-
 // ─── Inline components ─────────────────────────────────────────────
 function UrgencySection({
-  title, color, tasks, businessId, onStatusToggle, updatingIds,
+  title, color, tasks, businessId, onStatusChange, updatingIds,
 }: {
   title: string;
   color: string;
   tasks: MyTask[];
   businessId: string;
-  onStatusToggle: (taskId: string, currentStatus: string) => void;
+  onStatusChange: (taskId: string, newStatus: string) => void;
   updatingIds: Record<string, boolean>;
 }) {
   if (tasks.length === 0) return null;
@@ -109,7 +90,7 @@ function UrgencySection({
             key={task.id}
             task={task}
             businessId={businessId}
-            onStatusToggle={onStatusToggle}
+            onStatusChange={onStatusChange}
             updating={!!updatingIds[task.id]}
           />
         ))}
@@ -119,33 +100,36 @@ function UrgencySection({
 }
 
 function TaskRow({
-  task, businessId, onStatusToggle, updating,
+  task, businessId, onStatusChange, updating,
 }: {
   task: MyTask;
   businessId: string;
-  onStatusToggle: (taskId: string, currentStatus: string) => void;
+  onStatusChange: (taskId: string, newStatus: string) => void;
   updating: boolean;
 }) {
   const hasChecklist = typeof task.checklistCount === 'number' && task.checklistCount > 0;
+  const isDone = task.status === 'DONE';
   const isInProgress = task.status === 'IN_PROGRESS';
 
   return (
-    <div className="flex items-center gap-3 px-4 py-3 hover:bg-[var(--surface-hover)] transition-colors">
-      {/* Status toggle */}
+    <div className={`flex items-center gap-3 px-4 py-3 transition-colors ${isDone ? 'opacity-60' : 'hover:bg-[var(--surface-hover)]'}`}>
+      {/* One-click validate / revert */}
       <button
         type="button"
-        disabled={updating || task.status === 'DONE'}
-        onClick={() => onStatusToggle(task.id, task.status)}
+        disabled={updating}
+        onClick={() => onStatusChange(task.id, isDone ? 'TODO' : 'DONE')}
         className="shrink-0 flex items-center justify-center rounded-full border-2 transition-all"
         style={{
           width: 22, height: 22,
-          borderColor: isInProgress ? 'var(--warning)' : 'var(--border)',
-          background: isInProgress ? 'var(--warning-bg)' : 'transparent',
+          borderColor: isDone ? 'var(--success)' : isInProgress ? 'var(--warning)' : 'var(--border)',
+          background: isDone ? 'var(--success)' : isInProgress ? 'var(--warning-bg)' : 'transparent',
           opacity: updating ? 0.5 : 1,
         }}
-        title={task.status === 'TODO' ? 'Passer en cours' : 'Terminer'}
+        title={isDone ? 'Remettre à faire' : 'Valider'}
       >
-        {isInProgress ? (
+        {isDone ? (
+          <Check size={13} color="white" strokeWidth={3} />
+        ) : isInProgress ? (
           <div className="h-2.5 w-2.5 rounded-full" style={{ background: 'var(--warning)' }} />
         ) : null}
       </button>
@@ -154,7 +138,7 @@ function TaskRow({
       <div className="flex-1 min-w-0">
         <Link
           href={`/app/pro/${businessId}/tasks/${task.id}`}
-          className="text-sm font-medium hover:underline truncate block"
+          className={`text-sm font-medium hover:underline truncate block ${isDone ? 'line-through' : ''}`}
           style={{ color: 'var(--text)' }}
         >
           {task.title}
@@ -169,7 +153,7 @@ function TaskRow({
               {task.projectName}
             </Link>
           ) : null}
-          {task.isBlocked ? (
+          {task.isBlocked && !isDone ? (
             <span
               className="text-[10px] font-semibold px-1.5 py-0.5 rounded"
               style={{ background: 'var(--danger-bg)', color: 'var(--danger)' }}
@@ -182,17 +166,14 @@ function TaskRow({
 
       {/* Right side */}
       <div className="flex items-center gap-3 shrink-0">
-        {hasChecklist ? (
+        {hasChecklist && !isDone ? (
           <span className="text-xs" style={{ color: 'var(--text-faint)' }}>
             {task.checklistDoneCount}/{task.checklistCount}
           </span>
         ) : null}
-        {task.progress > 0 && task.progress < 100 ? (
+        {task.progress > 0 && task.progress < 100 && !isDone ? (
           <div className="w-12 h-1.5 rounded-full" style={{ background: 'var(--surface-2)' }}>
-            <div
-              className="h-full rounded-full"
-              style={{ width: `${task.progress}%`, background: 'var(--shell-accent)' }}
-            />
+            <div className="h-full rounded-full" style={{ width: `${task.progress}%`, background: 'var(--shell-accent)' }} />
           </div>
         ) : null}
         {task.dueDate ? (
@@ -205,19 +186,55 @@ function TaskRow({
   );
 }
 
-function ActiveProjectCard({
-  project, businessId,
+function DoneSection({
+  tasks, businessId, onStatusChange, updatingIds,
 }: {
-  project: ActiveProject;
+  tasks: MyTask[];
   businessId: string;
+  onStatusChange: (taskId: string, newStatus: string) => void;
+  updatingIds: Record<string, boolean>;
 }) {
+  const [expanded, setExpanded] = useState(false);
+  if (tasks.length === 0) return null;
+
+  return (
+    <Card className="overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setExpanded((p) => !p)}
+        className="flex items-center gap-2.5 px-4 py-3 w-full text-left hover:bg-[var(--surface-hover)] transition-colors"
+        style={{ borderBottom: expanded ? '1px solid var(--border)' : undefined }}
+      >
+        <div className="h-2 w-2 rounded-full shrink-0" style={{ background: 'var(--success)' }} />
+        <span className="text-sm font-semibold" style={{ color: 'var(--text)' }}>Terminées</span>
+        <span className="text-xs font-medium" style={{ color: 'var(--text-faint)' }}>{tasks.length}</span>
+        <span className="ml-auto">
+          {expanded ? <ChevronUp size={14} style={{ color: 'var(--text-faint)' }} /> : <ChevronDown size={14} style={{ color: 'var(--text-faint)' }} />}
+        </span>
+      </button>
+      {expanded ? (
+        <div className="divide-y divide-[var(--border)]">
+          {tasks.map((task) => (
+            <TaskRow
+              key={task.id}
+              task={task}
+              businessId={businessId}
+              onStatusChange={onStatusChange}
+              updating={!!updatingIds[task.id]}
+            />
+          ))}
+        </div>
+      ) : null}
+    </Card>
+  );
+}
+
+function ActiveProjectCard({ project, businessId }: { project: ActiveProject; businessId: string }) {
   return (
     <Link href={`/app/pro/${businessId}/projects/${project.id}`}>
       <Card className="p-3 hover:border-[var(--border-strong)] transition-colors cursor-pointer">
         <div className="flex items-center justify-between gap-2">
-          <span className="text-sm font-semibold truncate" style={{ color: 'var(--text)' }}>
-            {project.name}
-          </span>
+          <span className="text-sm font-semibold truncate" style={{ color: 'var(--text)' }}>{project.name}</span>
           <ChevronRight size={14} className="shrink-0" style={{ color: 'var(--text-faint)' }} />
         </div>
         <div className="flex items-center gap-3 mt-2">
@@ -241,23 +258,31 @@ export default function MyTasksPage() {
   const businessId = params?.businessId ?? '';
   const activeCtx = useActiveBusiness({ optional: true });
   const actorRole = activeCtx?.activeBusiness?.role ?? null;
-  const canCreate = actorRole === 'OWNER' || actorRole === 'ADMIN' || actorRole === 'MEMBER';
+  const isAdmin = actorRole === 'OWNER' || actorRole === 'ADMIN';
+  const canCreate = isAdmin || actorRole === 'MEMBER';
 
   const [data, setData] = useState<MyTasksData | null>(null);
   const [loading, setLoading] = useState(true);
   const [updatingIds, setUpdatingIds] = useState<Record<string, boolean>>({});
 
-  // Create modal
+  // Create modal state
   const [createOpen, setCreateOpen] = useState(false);
   const [createTitle, setCreateTitle] = useState('');
   const [createDueDate, setCreateDueDate] = useState('');
+  const [createProjectId, setCreateProjectId] = useState('');
+  const [createAssigneeId, setCreateAssigneeId] = useState('');
+  const [createStatus, setCreateStatus] = useState('TODO');
   const [creating, setCreating] = useState(false);
+
+  // Dropdown data for modal
+  const [members, setMembers] = useState<Member[]>([]);
+  const [projects, setProjects] = useState<ProjectOption[]>([]);
 
   const loadMyTasks = useCallback(async (signal?: AbortSignal) => {
     if (!businessId) return;
     setLoading(true);
     const res = await fetchJson<MyTasksData>(
-      `/api/pro/businesses/${businessId}/my-tasks`,
+      `/api/pro/businesses/${businessId}/my-tasks?includeDone=true`,
       {},
       signal,
     );
@@ -265,6 +290,32 @@ export default function MyTasksPage() {
     if (res.ok && res.data) setData(res.data);
     setLoading(false);
   }, [businessId]);
+
+  // Load members + projects for modal (admin/owner only loads members)
+  useEffect(() => {
+    if (!businessId) return;
+    const controller = new AbortController();
+
+    fetchJson<{ items: ProjectOption[] }>(
+      `/api/pro/businesses/${businessId}/projects?scope=ACTIVE`,
+      {},
+      controller.signal,
+    ).then((res) => {
+      if (res.ok && res.data) setProjects(res.data.items);
+    });
+
+    if (isAdmin) {
+      fetchJson<{ items: Member[] }>(
+        `/api/pro/businesses/${businessId}/members`,
+        {},
+        controller.signal,
+      ).then((res) => {
+        if (res.ok && res.data) setMembers(res.data.items);
+      });
+    }
+
+    return () => controller.abort();
+  }, [businessId, isAdmin]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -275,15 +326,13 @@ export default function MyTasksPage() {
   const summary = data?.summary ?? EMPTY_SUMMARY;
   const groups = useMemo(() => groupByUrgency(data?.items ?? []), [data]);
 
-  const handleStatusToggle = useCallback(async (taskId: string, currentStatus: string) => {
-    const nextStatus = NEXT_STATUS[currentStatus];
-    if (!nextStatus) return;
+  const handleStatusChange = useCallback(async (taskId: string, newStatus: string) => {
     setUpdatingIds((prev) => ({ ...prev, [taskId]: true }));
     try {
       const res = await fetchJson(`/api/pro/businesses/${businessId}/tasks/${taskId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: nextStatus }),
+        body: JSON.stringify({ status: newStatus }),
       });
       if (res.ok) await loadMyTasks();
     } finally {
@@ -295,8 +344,10 @@ export default function MyTasksPage() {
     const title = createTitle.trim();
     if (!title || title.length > 200) return;
     setCreating(true);
-    const payload: Record<string, unknown> = { title, status: 'TODO' };
+    const payload: Record<string, unknown> = { title, status: createStatus };
     if (createDueDate) payload.dueDate = new Date(createDueDate).toISOString();
+    if (createProjectId) payload.projectId = createProjectId;
+    if (createAssigneeId && isAdmin) payload.assigneeUserId = createAssigneeId;
     const res = await fetchJson(`/api/pro/businesses/${businessId}/tasks`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -307,9 +358,21 @@ export default function MyTasksPage() {
       setCreateOpen(false);
       setCreateTitle('');
       setCreateDueDate('');
+      setCreateProjectId('');
+      setCreateAssigneeId('');
+      setCreateStatus('TODO');
       await loadMyTasks();
     }
-  }, [businessId, createTitle, createDueDate, loadMyTasks]);
+  }, [businessId, createTitle, createDueDate, createProjectId, createAssigneeId, createStatus, isAdmin, loadMyTasks]);
+
+  const openCreateModal = useCallback(() => {
+    setCreateTitle('');
+    setCreateDueDate('');
+    setCreateProjectId('');
+    setCreateAssigneeId('');
+    setCreateStatus('TODO');
+    setCreateOpen(true);
+  }, []);
 
   const hasNoTasks = !loading && (data?.items.length ?? 0) === 0;
 
@@ -321,7 +384,7 @@ export default function MyTasksPage() {
       subtitle="Organisez et dirigez votre journée"
       actions={
         canCreate ? (
-          <Button onClick={() => setCreateOpen(true)}>
+          <Button onClick={openCreateModal}>
             <Plus size={16} className="mr-1" />
             Nouvelle tâche
           </Button>
@@ -383,27 +446,31 @@ export default function MyTasksPage() {
                 <UrgencySection
                   title="En retard" color="var(--danger)"
                   tasks={groups.overdue} businessId={businessId}
-                  onStatusToggle={handleStatusToggle} updatingIds={updatingIds}
+                  onStatusChange={handleStatusChange} updatingIds={updatingIds}
                 />
                 <UrgencySection
                   title="Aujourd'hui" color="var(--warning)"
                   tasks={groups.today} businessId={businessId}
-                  onStatusToggle={handleStatusToggle} updatingIds={updatingIds}
+                  onStatusChange={handleStatusChange} updatingIds={updatingIds}
                 />
                 <UrgencySection
                   title="Cette semaine" color="var(--info)"
                   tasks={groups.thisWeek} businessId={businessId}
-                  onStatusToggle={handleStatusToggle} updatingIds={updatingIds}
+                  onStatusChange={handleStatusChange} updatingIds={updatingIds}
                 />
                 <UrgencySection
                   title="Plus tard" color="var(--text-faint)"
                   tasks={groups.later} businessId={businessId}
-                  onStatusToggle={handleStatusToggle} updatingIds={updatingIds}
+                  onStatusChange={handleStatusChange} updatingIds={updatingIds}
                 />
                 <UrgencySection
                   title="Sans date" color="var(--text-faint)"
                   tasks={groups.noDate} businessId={businessId}
-                  onStatusToggle={handleStatusToggle} updatingIds={updatingIds}
+                  onStatusChange={handleStatusChange} updatingIds={updatingIds}
+                />
+                <DoneSection
+                  tasks={groups.done} businessId={businessId}
+                  onStatusChange={handleStatusChange} updatingIds={updatingIds}
                 />
               </>
             )}
@@ -437,7 +504,7 @@ export default function MyTasksPage() {
         open={createOpen}
         onCloseAction={() => { if (!creating) setCreateOpen(false); }}
         title="Nouvelle tâche"
-        description="Créez une tâche qui vous sera assignée."
+        description="Définissez le titre, le projet, l'échéance et l'assignation."
       >
         <form
           onSubmit={(e) => { e.preventDefault(); void handleCreate(); }}
@@ -449,19 +516,59 @@ export default function MyTasksPage() {
             onChange={(e) => setCreateTitle(e.target.value)}
             maxLength={200}
             autoFocus
+            placeholder="Ex : Finaliser la maquette…"
           />
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Select
+              label="Projet"
+              value={createProjectId}
+              onChange={(e) => setCreateProjectId(e.target.value)}
+            >
+              <option value="">Aucun projet</option>
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </Select>
+
+            <Select
+              label="Statut"
+              value={createStatus}
+              onChange={(e) => setCreateStatus(e.target.value)}
+            >
+              <option value="TODO">À faire</option>
+              <option value="IN_PROGRESS">En cours</option>
+            </Select>
+          </div>
+
           <Input
-            label="Échéance (optionnel)"
+            label="Échéance"
             type="date"
             value={createDueDate}
             onChange={(e) => setCreateDueDate(e.target.value)}
           />
+
+          {isAdmin ? (
+            <Select
+              label="Assigner à"
+              value={createAssigneeId}
+              onChange={(e) => setCreateAssigneeId(e.target.value)}
+            >
+              <option value="">Moi-même</option>
+              {members.map((m) => (
+                <option key={m.userId} value={m.userId}>
+                  {m.name ?? m.email} ({m.role === 'OWNER' ? 'Owner' : m.role === 'ADMIN' ? 'Admin' : 'Membre'})
+                </option>
+              ))}
+            </Select>
+          ) : null}
+
           <div className="flex justify-end gap-2 pt-1">
             <Button variant="outline" type="button" onClick={() => setCreateOpen(false)} disabled={creating}>
               Annuler
             </Button>
             <Button type="submit" disabled={creating || !createTitle.trim()}>
-              {creating ? 'Création…' : 'Créer'}
+              {creating ? 'Création…' : 'Créer la tâche'}
             </Button>
           </div>
         </form>
