@@ -66,6 +66,14 @@ export const PATCH = withPersonalRoute(async (ctx, req) => {
     }
   }
 
+  // Priority
+  if ('priority' in body) {
+    const p = typeof body.priority === 'number' && Number.isFinite(body.priority)
+      ? Math.max(0, Math.trunc(body.priority))
+      : 0;
+    data.priority = p;
+  }
+
   // Monthly contribution
   if ('monthlyContributionCents' in body) {
     if (body.monthlyContributionCents == null) {

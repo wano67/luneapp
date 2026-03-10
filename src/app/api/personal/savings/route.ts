@@ -15,7 +15,7 @@ export const GET = withPersonalRoute(async (ctx) => {
   const [goals, savingsAccounts, investAccounts, incomeAgg, expenseAgg] = await Promise.all([
     prisma.savingsGoal.findMany({
       where: { userId: ctx.userId },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ priority: 'desc' }, { createdAt: 'asc' }],
       include: {
         account: { select: { id: true, name: true, initialCents: true, type: true } },
       },
@@ -80,14 +80,24 @@ export const GET = withPersonalRoute(async (ctx) => {
     ? totalTargetCents - totalPatrimoineCents
     : 0n;
 
-  // Enrich goals: progress is computed from patrimoine, allocated proportionally
+  // Waterfall allocation: fund highest-priority goals first
+  const fundedMap = new Map<bigint, bigint>();
+  let waterfallRemaining = totalPatrimoineCents;
+  for (const g of activeGoals) {
+    // activeGoals preserves the order from the query (priority DESC, createdAt ASC)
+    const allocated = waterfallRemaining >= g.targetCents
+      ? g.targetCents
+      : waterfallRemaining > 0n ? waterfallRemaining : 0n;
+    fundedMap.set(g.id, allocated);
+    waterfallRemaining -= allocated;
+    if (waterfallRemaining < 0n) waterfallRemaining = 0n;
+  }
+
+  // Enrich goals with waterfall-allocated funding
   const enrichedGoals = goals.map((g) => {
-    // Proportional allocation: this goal's share of patrimoine
     const fundedCents = g.isCompleted
       ? g.targetCents
-      : totalTargetCents > 0n
-        ? (totalPatrimoineCents * g.targetCents) / totalTargetCents
-        : 0n;
+      : fundedMap.get(g.id) ?? 0n;
     const cappedFundedCents = fundedCents > g.targetCents ? g.targetCents : fundedCents;
     const percentComplete = g.targetCents > 0n
       ? Number((cappedFundedCents * 10000n) / g.targetCents) / 100
@@ -106,19 +116,13 @@ export const GET = withPersonalRoute(async (ctx) => {
       monthlyNeededCents = remaining / BigInt(monthsLeft);
     }
 
-    // Projected date at current savings capacity
+    // Projected date: full capacity goes to this goal (sequential)
     let projectedDate: string | null = null;
     if (monthlySavingsCapacityCents > 0n && remaining > 0n) {
-      // This goal's share of monthly capacity (proportional to its share of total remaining)
-      const goalShareOfCapacity = totalRemainingCents > 0n
-        ? (monthlySavingsCapacityCents * remaining) / totalRemainingCents
-        : monthlySavingsCapacityCents;
-      if (goalShareOfCapacity > 0n) {
-        const monthsToGo = Number(remaining / goalShareOfCapacity);
-        const projected = new Date(now);
-        projected.setMonth(projected.getMonth() + monthsToGo);
-        projectedDate = projected.toISOString();
-      }
+      const monthsToGo = Number(remaining / monthlySavingsCapacityCents) + 1;
+      const projected = new Date(now);
+      projected.setMonth(projected.getMonth() + monthsToGo);
+      projectedDate = projected.toISOString();
     }
 
     // Linked account balance
@@ -137,6 +141,8 @@ export const GET = withPersonalRoute(async (ctx) => {
       monthlyNeededCents,
       projectedDate,
       percentComplete,
+      priority: g.priority,
+      monthlyContributionCents: g.monthlyContributionCents,
     };
   });
 
@@ -188,6 +194,16 @@ export const POST = withPersonalRoute(async (ctx, req) => {
     }
   }
 
+  const priority = typeof body.priority === 'number' && Number.isFinite(body.priority)
+    ? Math.max(0, Math.trunc(body.priority))
+    : 0;
+
+  let monthlyContributionCents: bigint | null = null;
+  if (body.monthlyContributionCents != null) {
+    const mc = parseCentsInput(body.monthlyContributionCents);
+    if (mc != null && mc >= 0) monthlyContributionCents = BigInt(mc);
+  }
+
   const goal = await prisma.savingsGoal.create({
     data: {
       userId: ctx.userId,
@@ -197,6 +213,8 @@ export const POST = withPersonalRoute(async (ctx, req) => {
       deadline,
       isCompleted: false,
       accountId,
+      priority,
+      monthlyContributionCents,
     },
   });
 

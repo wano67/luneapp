@@ -22,6 +22,14 @@ import { TransactionAnalytics, type Analytics } from './TransactionAnalytics';
 type AccountItem = { id: string; name: string; currency: string };
 type CategoryItem = { id: string; name: string };
 
+type UncategorizedGroup = {
+  normalizedLabel: string;
+  sampleLabel: string;
+  count: number;
+  avgAmountCents: string;
+  lastDate: string;
+};
+
 type TxItem = {
   id: string;
   type: 'INCOME' | 'EXPENSE' | 'TRANSFER' | string;
@@ -142,6 +150,11 @@ export default function PersoTransactionsPage() {
   const [fCategoryId, setFCategoryId] = useState('');
   const amountRef = useRef<HTMLInputElement | null>(null);
   const [attemptedSubmit, setAttemptedSubmit] = useState(false);
+
+  // Uncategorized groups
+  const [uncatGroups, setUncatGroups] = useState<UncategorizedGroup[]>([]);
+  const [loadingGroups, setLoadingGroups] = useState(true);
+  const [categorizingLabel, setCategorizingLabel] = useState<string | null>(null);
 
   // Edit modal
   const [openEdit, setOpenEdit] = useState(false);
@@ -271,10 +284,45 @@ export default function PersoTransactionsPage() {
     }
   }
 
+  async function fetchUncatGroups() {
+    setLoadingGroups(true);
+    try {
+      const res = await fetchJson<{ items: UncategorizedGroup[] }>('/api/personal/transactions/uncategorized-groups');
+      if (res.ok && res.data) setUncatGroups(res.data.items ?? []);
+    } catch {
+      // optional
+    } finally {
+      setLoadingGroups(false);
+    }
+  }
+
+  async function categorizeGroup(pattern: string, categoryId: string) {
+    setCategorizingLabel(pattern);
+    try {
+      const res = await fetchJson('/api/personal/transactions/categorize-group', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pattern, categoryId }),
+      });
+      if (res.ok) {
+        // Refresh everything
+        await Promise.all([
+          fetchUncatGroups(),
+          fetchTransactions({ reset: true }),
+          fetchAnalytics(),
+        ]);
+      }
+    } catch {
+      // ignore
+    } finally {
+      setCategorizingLabel(null);
+    }
+  }
+
   // ─── Effects ────────────────────────────────────────────────────────────────
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { fetchAccounts(); fetchCategories(); }, []);
+  useEffect(() => { fetchAccounts(); fetchCategories(); fetchUncatGroups(); }, []);
 
   useEffect(() => {
     if (loadingAccounts) return;
@@ -499,6 +547,51 @@ export default function PersoTransactionsPage() {
 
         {/* Analytics Dashboard */}
         <TransactionAnalytics analytics={analytics} loading={loadingAnalytics} periodText={periodText} />
+
+        {/* Uncategorized groups */}
+        {!loadingGroups && !loadingCategories && uncatGroups.length > 0 ? (
+          <section className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] overflow-hidden">
+            <div className="border-b border-[var(--border)] px-5 py-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-[var(--text)]">Transactions récurrentes à catégoriser</p>
+                  <p className="mt-0.5 text-xs text-[var(--text-faint)]">
+                    {uncatGroups.length} groupe{uncatGroups.length > 1 ? 's' : ''} détecté{uncatGroups.length > 1 ? 's' : ''} — catégorise-les pour mieux budgétiser
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="divide-y divide-[var(--border)]">
+              {uncatGroups.map((g) => (
+                <div key={g.normalizedLabel} className="flex flex-col gap-2 px-5 py-3.5 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-[var(--text)]">{g.sampleLabel}</p>
+                    <p className="text-xs text-[var(--text-faint)]">
+                      {g.count} transaction{g.count > 1 ? 's' : ''} · ~{formatCents(g.avgAmountCents, 'EUR')}/tx
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Select
+                      value=""
+                      onChange={(e) => {
+                        if (e.target.value) categorizeGroup(g.normalizedLabel, e.target.value);
+                      }}
+                      disabled={categorizingLabel === g.normalizedLabel}
+                      className="h-9 w-44 rounded-xl text-xs"
+                    >
+                      <option value="">
+                        {categorizingLabel === g.normalizedLabel ? 'Application…' : 'Catégoriser'}
+                      </option>
+                      {categories.map((c) => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                    </Select>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        ) : null}
 
         {/* Bulk selection */}
         {selectedCount > 0 ? (

@@ -280,30 +280,13 @@ export function TransactionFormModal({
         </div>
 
         {/* Actions */}
-        <div className="sticky bottom-0 -mx-6 px-6 pb-6 pt-3">
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black/35 to-transparent" />
-          <div className="relative mx-auto w-fit -translate-y-2 rounded-2xl border border-[var(--border)] bg-[var(--background-alt)]/70 px-3 py-3 shadow-2xl shadow-black/40 backdrop-blur-lg">
-            <div className="flex items-center justify-center gap-2">
-              <Button
-                variant="outline"
-                onClick={onClose}
-                disabled={loading}
-                className="h-12 rounded-2xl px-6 text-base"
-              >
-                Annuler
-              </Button>
-              <Button
-                onClick={onSubmit}
-                disabled={loading || !isValid}
-                className={[
-                  'h-12 rounded-2xl px-6 text-base transition',
-                  isValid ? 'shadow-lg ring-1 ring-[var(--focus-ring)]/30' : 'opacity-70',
-                ].join(' ')}
-              >
-                {loading ? loadingLabel : submitLabel}
-              </Button>
-            </div>
-          </div>
+        <div className="flex justify-end gap-2">
+          <Button size="sm" variant="outline" onClick={onClose} disabled={loading}>
+            Annuler
+          </Button>
+          <Button size="sm" onClick={onSubmit} disabled={loading || !isValid}>
+            {loading ? loadingLabel : submitLabel}
+          </Button>
         </div>
       </div>
     </Modal>

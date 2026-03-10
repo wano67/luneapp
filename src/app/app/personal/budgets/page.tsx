@@ -16,7 +16,8 @@ import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import { formatCentsToEuroDisplay, parseEuroToCents, sanitizeEuroInput } from '@/lib/money';
 import { useUserPreferences } from '@/lib/hooks/useUserPreferences';
 import { SUBSCRIPTION_PROVIDERS, groupProvidersByCategory, type SubscriptionProvider, type SubscriptionPlan } from '@/config/commonSubscriptions';
-import { Plus, Search, ChevronLeft, Zap } from 'lucide-react';
+import { Plus, Search, ChevronLeft, Zap, PiggyBank, Pencil, Check, X } from 'lucide-react';
+import Link from 'next/link';
 
 /* ═══ Types ═══ */
 
@@ -51,6 +52,15 @@ type RecurringCandidate = {
   lastSeen: string;
   categoryId: string | null;
   categoryName: string | null;
+};
+
+type SavingsGoalBudget = {
+  id: string;
+  name: string;
+  targetCents: string;
+  monthlyContributionCents: string | null;
+  priority: number;
+  deadline: string | null;
 };
 
 type BudgetFormState = {
@@ -145,6 +155,13 @@ export default function BudgetsPage() {
   const [catalogSearch, setCatalogSearch] = useState('');
   const [selectedProvider, setSelectedProvider] = useState<SubscriptionProvider | null>(null);
 
+  // ── Savings goals (épargne programmée) state ──
+  const [savingsGoals, setSavingsGoals] = useState<SavingsGoalBudget[]>([]);
+  const [totalSavingsBudgetCents, setTotalSavingsBudgetCents] = useState(0n);
+  const [editingSavingsId, setEditingSavingsId] = useState<string | null>(null);
+  const [editingSavingsAmount, setEditingSavingsAmount] = useState('');
+  const [savingSavingsGoal, setSavingSavingsGoal] = useState(false);
+
   // ── Recurring detection state ──
   const [recurring, setRecurring] = useState<RecurringCandidate[]>([]);
   const [recurringLoading, setRecurringLoading] = useState(false);
@@ -154,13 +171,15 @@ export default function BudgetsPage() {
   const load = useCallback(async () => {
     setLoading(true);
     const [bRes, cRes, sRes] = await Promise.all([
-      fetchJson<{ items: Budget[]; monthExpenseCents: string }>('/api/personal/budgets'),
+      fetchJson<{ items: Budget[]; monthExpenseCents: string; savingsGoals: SavingsGoalBudget[]; totalSavingsBudgetCents: string }>('/api/personal/budgets'),
       fetchJson<{ items: Category[] }>('/api/personal/categories'),
       fetchJson<{ items: Subscription[] }>('/api/personal/subscriptions'),
     ]);
     if (bRes.ok && bRes.data) {
       setBudgets(bRes.data.items ?? []);
       setMonthExpenseCents(BigInt(String(bRes.data.monthExpenseCents ?? '0')));
+      setSavingsGoals(bRes.data.savingsGoals ?? []);
+      setTotalSavingsBudgetCents(BigInt(String(bRes.data.totalSavingsBudgetCents ?? '0')));
     } else {
       setError(bRes.error ?? 'Impossible de charger les budgets.');
     }
@@ -389,6 +408,32 @@ export default function BudgetsPage() {
     setSubModalOpen(true);
   }
 
+  /* ═══ Savings contribution inline edit ═══ */
+
+  function startEditSavings(g: SavingsGoalBudget) {
+    setEditingSavingsId(g.id);
+    setEditingSavingsAmount(g.monthlyContributionCents ? centsToInputValue(g.monthlyContributionCents) : '');
+  }
+
+  async function saveSavingsContribution(goalId: string) {
+    setSavingSavingsGoal(true);
+    try {
+      const cents = editingSavingsAmount.trim()
+        ? parseEuroToCents(editingSavingsAmount.replace(',', '.'))
+        : 0;
+      if (!Number.isFinite(cents) || cents < 0) return;
+      await fetchJson(`/api/personal/savings/${goalId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ monthlyContributionCents: cents || null }),
+      });
+      setEditingSavingsId(null);
+      await load();
+    } finally {
+      setSavingSavingsGoal(false);
+    }
+  }
+
   /* ═══ Computed ═══ */
 
   const activeSubs = subscriptions.filter((s) => s.isActive);
@@ -428,7 +473,7 @@ export default function BudgetsPage() {
       {error ? <p className="text-sm text-[var(--danger)]">{error}</p> : null}
 
       {/* ── KPIs ── */}
-      <div className="grid gap-4 grid-cols-1 sm:grid-cols-4">
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-5">
         <KpiCard label="Total budgété" value={formatCentsToEuroDisplay(totalLimit.toString())} />
         <KpiCard
           label="Dépensé ce mois"
@@ -436,6 +481,7 @@ export default function BudgetsPage() {
           trend={monthExpenseCents > totalLimit ? 'down' : 'up'}
         />
         <KpiCard label="Charges fixes / mois" value={formatCentsToEuroDisplay(fixedMonthlyCents.toString())} />
+        <KpiCard label="Épargne programmée" value={formatCentsToEuroDisplay(totalSavingsBudgetCents.toString())} />
         <KpiCard label="Abonnements actifs" value={String(activeSubs.length)} />
       </div>
 
@@ -500,6 +546,90 @@ export default function BudgetsPage() {
                 </Card>
               );
             })}
+          </div>
+        )}
+      </section>
+
+      {/* ════════════════ ÉPARGNE PROGRAMMÉE SECTION ════════════════ */}
+      <section>
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <PiggyBank size={18} className="text-[var(--primary)]" />
+            <h2 className="text-lg font-semibold">Épargne programmée</h2>
+          </div>
+          <Link href="/app/personal/epargne" className="text-xs text-[var(--primary)] hover:underline">
+            Gérer les objectifs →
+          </Link>
+        </div>
+        {savingsGoals.length === 0 ? (
+          <Card className="p-4">
+            <p className="text-sm text-[var(--text-faint)]">
+              Aucun objectif d&apos;épargne avec contribution mensuelle.{' '}
+              <Link href="/app/personal/epargne" className="text-[var(--primary)] hover:underline">
+                Définis tes objectifs
+              </Link>{' '}
+              et programme un montant mensuel pour chacun.
+            </p>
+          </Card>
+        ) : (
+          <div className="space-y-2">
+            {savingsGoals.map((g) => (
+              <Card key={g.id} className="p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-semibold">{g.name}</p>
+                      {g.priority >= 2 && <Badge variant="danger">Prioritaire</Badge>}
+                      {g.priority === 1 && <Badge variant="neutral">Moyenne</Badge>}
+                    </div>
+                    <p className="mt-1 text-xs text-[var(--text-faint)]">
+                      Objectif : {formatCentsToEuroDisplay(g.targetCents)}
+                      {g.deadline ? ` · Échéance : ${new Date(g.deadline).toLocaleDateString('fr-FR')}` : ''}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {editingSavingsId === g.id ? (
+                      <>
+                        <Input
+                          value={editingSavingsAmount}
+                          onChange={(e) => setEditingSavingsAmount(sanitizeEuroInput(e.target.value))}
+                          placeholder="0.00"
+                          className="w-24 text-right text-sm"
+                        />
+                        <span className="text-xs text-[var(--text-faint)]">€/mois</span>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => void saveSavingsContribution(g.id)}
+                          disabled={savingSavingsGoal}
+                        >
+                          <Check size={14} />
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={() => setEditingSavingsId(null)}>
+                          <X size={14} />
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-sm font-semibold text-[var(--primary)]">
+                          {g.monthlyContributionCents
+                            ? `${formatCentsToEuroDisplay(g.monthlyContributionCents)} / mois`
+                            : '—'}
+                        </p>
+                        <Button size="sm" variant="outline" onClick={() => startEditSavings(g)}>
+                          <Pencil size={14} />
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </Card>
+            ))}
+            <div className="flex justify-end pt-1">
+              <p className="text-sm font-semibold">
+                Total : {formatCentsToEuroDisplay(totalSavingsBudgetCents.toString())} / mois
+              </p>
+            </div>
           </div>
         )}
       </section>

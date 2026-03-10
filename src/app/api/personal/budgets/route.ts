@@ -19,7 +19,7 @@ export const GET = withPersonalRoute(async (ctx) => {
   const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
   const nextMonthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
 
-  const [categorySpending, totalExpenseAgg] = await Promise.all([
+  const [categorySpending, totalExpenseAgg, savingsGoals] = await Promise.all([
     budgets.some((b) => b.categoryId !== null)
       ? prisma.personalTransaction.groupBy({
           by: ['categoryId'],
@@ -40,6 +40,22 @@ export const GET = withPersonalRoute(async (ctx) => {
       },
       _sum: { amountCents: true },
     }),
+    prisma.savingsGoal.findMany({
+      where: {
+        userId: ctx.userId,
+        isCompleted: false,
+        monthlyContributionCents: { not: null, gt: 0n },
+      },
+      orderBy: [{ priority: 'desc' }, { createdAt: 'asc' }],
+      select: {
+        id: true,
+        name: true,
+        targetCents: true,
+        monthlyContributionCents: true,
+        priority: true,
+        deadline: true,
+      },
+    }),
   ]);
 
   const spendMap = new Map<bigint, bigint>();
@@ -49,6 +65,10 @@ export const GET = withPersonalRoute(async (ctx) => {
 
   const raw = totalExpenseAgg._sum.amountCents ?? 0n;
   const monthExpenseCents = raw < 0n ? -raw : raw;
+
+  const totalSavingsBudgetCents = savingsGoals.reduce(
+    (s, g) => s + (g.monthlyContributionCents ?? 0n), 0n,
+  );
 
   return jsonb(
     {
@@ -63,6 +83,15 @@ export const GET = withPersonalRoute(async (ctx) => {
         createdAt: b.createdAt,
         updatedAt: b.updatedAt,
       })),
+      savingsGoals: savingsGoals.map((g) => ({
+        id: g.id,
+        name: g.name,
+        targetCents: g.targetCents,
+        monthlyContributionCents: g.monthlyContributionCents,
+        priority: g.priority,
+        deadline: g.deadline,
+      })),
+      totalSavingsBudgetCents,
     },
     ctx.requestId
   );

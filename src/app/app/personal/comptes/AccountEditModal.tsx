@@ -229,69 +229,77 @@ export function AccountEditModal({ open, account, onClose, onSaved }: Props) {
       title="Modifier un compte"
       description="Mets à jour les informations du compte."
     >
-      <form onSubmit={onEdit} className="space-y-4">
+      <form onSubmit={onEdit}>
         {editErrors.form ? (
-          <div className="rounded-2xl border border-[var(--danger-border)] bg-[var(--danger-bg)] px-4 py-3 text-sm text-[var(--danger)]">
-            {editErrors.form}
-          </div>
+          <p className="text-xs text-[var(--danger)] mb-3">{editErrors.form}</p>
         ) : null}
 
-        <Input
-          label="Nom du compte *"
-          value={editName}
-          onChange={(e) => setEditName(e.target.value)}
-          error={editErrors.name}
-          placeholder="Ex: Courant Revolut"
-          data-autofocus="true"
-        />
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="col-span-2 text-sm">
+            <span className="text-xs text-[var(--text-faint)]">Nom du compte *</span>
+            <Input
+              value={editName}
+              onChange={(e) => setEditName(e.target.value)}
+              error={editErrors.name}
+              placeholder="Ex: Courant Revolut"
+              data-autofocus="true"
+            />
+          </label>
 
-        {/* Type — read-only */}
-        <div className="flex w-full flex-col gap-1">
-          <span className="text-sm font-medium text-[var(--text-secondary)]">Type</span>
-          <div className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-sm text-[var(--text-faint)]">
-            {TYPE_DISPLAY[account?.type ?? 'CURRENT']}
-          </div>
+          <label className="text-sm">
+            <span className="text-xs text-[var(--text-faint)]">Type</span>
+            <div className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-sm text-[var(--text-faint)]">
+              {TYPE_DISPLAY[account?.type ?? 'CURRENT']}
+            </div>
+          </label>
+
+          {account?.institution ? (
+            <label className="text-sm">
+              <span className="text-xs text-[var(--text-faint)]">Banque</span>
+              <div className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-sm text-[var(--text-faint)]">
+                {account.institution}
+              </div>
+            </label>
+          ) : null}
+
+          {account && account.type !== 'CURRENT' && account.type !== 'CASH' ? (
+            <label className="text-sm">
+              <span className="text-xs text-[var(--text-faint)]">Taux d&apos;intérêt annuel (%)</span>
+              <Input
+                value={editRatePct}
+                onChange={(e) => setEditRatePct(e.target.value)}
+                placeholder="1.50"
+              />
+            </label>
+          ) : null}
+
+          <label className="text-sm">
+            <span className="text-xs text-[var(--text-faint)]">
+              {account?.type === 'LOAN' ? 'Capital restant dû (€)' : 'Solde initial (€)'}
+            </span>
+            <Input
+              value={editInitialEuros}
+              onChange={(e) => setEditInitialEuros(e.target.value)}
+              placeholder="0.00"
+              error={editErrors.initialEuros}
+            />
+          </label>
+
+          <label className="col-span-2 text-sm">
+            <span className="text-xs text-[var(--text-faint)]">IBAN (optionnel)</span>
+            <Input
+              value={editIban}
+              onChange={(e) => setEditIban(e.target.value)}
+              placeholder="FR76 ..."
+              error={editErrors.iban}
+            />
+          </label>
         </div>
 
-        {/* Institution — read-only */}
-        {account?.institution ? (
-          <div className="flex w-full flex-col gap-1">
-            <span className="text-sm font-medium text-[var(--text-secondary)]">Banque</span>
-            <div className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-sm text-[var(--text-faint)]">
-              {account.institution}
-            </div>
-          </div>
-        ) : null}
-
-        {/* Interest rate — editable for non-checking */}
-        {account && account.type !== 'CURRENT' && account.type !== 'CASH' ? (
-          <Input
-            label="Taux d'intérêt annuel (%)"
-            value={editRatePct}
-            onChange={(e) => setEditRatePct(e.target.value)}
-            placeholder="1.50"
-          />
-        ) : null}
-
-        <Input
-          label={account?.type === 'LOAN' ? 'Capital restant dû (€)' : 'Solde initial (€)'}
-          value={editInitialEuros}
-          onChange={(e) => setEditInitialEuros(e.target.value)}
-          placeholder="0.00"
-          error={editErrors.initialEuros}
-        />
-
-        <Input
-          label="IBAN (optionnel)"
-          value={editIban}
-          onChange={(e) => setEditIban(e.target.value)}
-          placeholder="FR76 ..."
-          error={editErrors.iban}
-        />
-
-        <div className="flex flex-wrap items-center justify-between gap-2 pt-2">
+        <div className="flex flex-wrap items-center justify-between gap-2 mt-4">
           <div className="flex gap-2">
             <Button
+              size="sm"
               variant="danger"
               type="button"
               onClick={onDeleteAccount}
@@ -300,6 +308,7 @@ export function AccountEditModal({ open, account, onClose, onSaved }: Props) {
               {deleteLoading ? 'Suppression…' : 'Supprimer'}
             </Button>
             <Button
+              size="sm"
               variant="outline"
               type="button"
               onClick={onToggleHidden}
@@ -310,6 +319,7 @@ export function AccountEditModal({ open, account, onClose, onSaved }: Props) {
           </div>
           <div className="flex gap-2">
             <Button
+              size="sm"
               variant="outline"
               type="button"
               onClick={handleClose}
@@ -317,7 +327,7 @@ export function AccountEditModal({ open, account, onClose, onSaved }: Props) {
             >
               Annuler
             </Button>
-            <Button type="submit" disabled={editLoading || deleteLoading}>
+            <Button size="sm" type="submit" disabled={editLoading || deleteLoading}>
               {editLoading ? 'Enregistrement…' : 'Enregistrer'}
             </Button>
           </div>

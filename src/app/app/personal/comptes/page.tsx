@@ -1,7 +1,6 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Card } from '@/components/ui/card';
@@ -20,7 +19,7 @@ const CsvImportModal = dynamic(() => import('@/components/CsvImportModal'), { ss
 import { useFileDropHandler } from '@/components/file-drop/FileDropProvider';
 import { emitWalletRefresh } from '@/lib/personalEvents';
 import { useToast } from '@/components/ui/toast';
-import { Building2, PenLine, Upload, Plus, X } from 'lucide-react';
+import { Building2, PenLine, Upload, Plus } from 'lucide-react';
 
 async function safeJson(res: Response): Promise<unknown> {
   try {
@@ -604,92 +603,72 @@ export default function ComptesPage() {
       />
 
       {/* Add Account Modal */}
-      {showAddModal && typeof document !== 'undefined' && createPortal(
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center"
-          onClick={() => setShowAddModal(false)}
-        >
-          <div className="absolute inset-0 bg-black/50" />
-          <div
-            className="relative w-full max-w-md mx-4 rounded-2xl bg-[var(--surface)] p-6 shadow-xl animate-fade-in-up"
-            onClick={(e) => e.stopPropagation()}
+      <Modal
+        open={showAddModal}
+        onCloseAction={() => setShowAddModal(false)}
+        title="Ajouter un compte"
+        description="Choisis un mode d&apos;ajout."
+      >
+        <div className="flex flex-col gap-3">
+          <button
+            className="flex items-start gap-4 rounded-xl border border-[var(--border)] p-4 text-left hover:bg-[var(--surface-2)] transition-colors disabled:opacity-50"
+            disabled={powensConnecting}
+            onClick={() => {
+              setShowAddModal(false);
+              if (powensConnected) {
+                handlePowensAddBank();
+              } else {
+                handlePowensConnect();
+              }
+            }}
           >
-            <div className="flex items-center justify-between mb-5">
-              <h2 className="text-lg font-bold text-[var(--text)]">Ajouter un compte</h2>
-              <button
-                onClick={() => setShowAddModal(false)}
-                className="rounded-lg p-1.5 text-[var(--text-faint)] hover:bg-[var(--surface-2)] transition-colors"
-              >
-                <X size={18} />
-              </button>
+            <div className="rounded-lg bg-[var(--shell-accent)]/10 p-2.5 text-[var(--shell-accent)]">
+              <Building2 size={20} />
             </div>
-
-            <div className="flex flex-col gap-3">
-              {/* Connecter ma banque / Ajouter une banque */}
-              <button
-                className="flex items-start gap-4 rounded-xl border border-[var(--border)] p-4 text-left hover:bg-[var(--surface-2)] transition-colors disabled:opacity-50"
-                disabled={powensConnecting}
-                onClick={() => {
-                  setShowAddModal(false);
-                  if (powensConnected) {
-                    handlePowensAddBank();
-                  } else {
-                    handlePowensConnect();
-                  }
-                }}
-              >
-                <div className="rounded-lg bg-[var(--shell-accent)]/10 p-2.5 text-[var(--shell-accent)]">
-                  <Building2 size={20} />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-[var(--text)]">
-                    {powensConnected ? 'Ajouter une banque' : 'Connecter ma banque'}
-                  </p>
-                  <p className="text-xs text-[var(--text-faint)] mt-0.5">
-                    Importez automatiquement vos comptes et transactions
-                  </p>
-                </div>
-              </button>
-
-              {/* Créer manuellement */}
-              <button
-                className="flex items-start gap-4 rounded-xl border border-[var(--border)] p-4 text-left hover:bg-[var(--surface-2)] transition-colors"
-                onClick={() => {
-                  setShowAddModal(false);
-                  setWizardError(null);
-                  setSuccessMessage(null);
-                  setOpen(true);
-                }}
-              >
-                <div className="rounded-lg bg-[var(--text-faint)]/10 p-2.5 text-[var(--text-faint)]">
-                  <PenLine size={20} />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-[var(--text)]">Créer manuellement</p>
-                  <p className="text-xs text-[var(--text-faint)] mt-0.5">
-                    Ajoutez un compte en saisissant les détails
-                  </p>
-                </div>
-              </button>
-
-              {/* Importer CSV */}
-              <button
-                className="flex items-center gap-2 justify-center rounded-xl py-2.5 text-xs font-medium text-[var(--text-faint)] hover:text-[var(--text-secondary)] transition-colors"
-                onClick={() => {
-                  setShowAddModal(false);
-                  setImportFile(null);
-                  setImportError(null);
-                  setOpenImport(true);
-                }}
-              >
-                <Upload size={14} />
-                Importer un fichier CSV
-              </button>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-[var(--text)]">
+                {powensConnected ? 'Ajouter une banque' : 'Connecter ma banque'}
+              </p>
+              <p className="text-xs text-[var(--text-faint)] mt-0.5">
+                Importez automatiquement vos comptes et transactions
+              </p>
             </div>
-          </div>
-        </div>,
-        document.body,
-      )}
+          </button>
+
+          <button
+            className="flex items-start gap-4 rounded-xl border border-[var(--border)] p-4 text-left hover:bg-[var(--surface-2)] transition-colors"
+            onClick={() => {
+              setShowAddModal(false);
+              setWizardError(null);
+              setSuccessMessage(null);
+              setOpen(true);
+            }}
+          >
+            <div className="rounded-lg bg-[var(--text-faint)]/10 p-2.5 text-[var(--text-faint)]">
+              <PenLine size={20} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-[var(--text)]">Créer manuellement</p>
+              <p className="text-xs text-[var(--text-faint)] mt-0.5">
+                Ajoutez un compte en saisissant les détails
+              </p>
+            </div>
+          </button>
+
+          <button
+            className="flex items-center gap-2 justify-center rounded-xl py-2.5 text-xs font-medium text-[var(--text-faint)] hover:text-[var(--text-secondary)] transition-colors"
+            onClick={() => {
+              setShowAddModal(false);
+              setImportFile(null);
+              setImportError(null);
+              setOpenImport(true);
+            }}
+          >
+            <Upload size={14} />
+            Importer un fichier CSV
+          </button>
+        </div>
+      </Modal>
 
       {lastImportedFileName ? (
         <div className="rounded-2xl border border-[var(--success-border)] bg-[var(--success-bg)] px-4 py-3 text-sm text-[var(--success)]">
