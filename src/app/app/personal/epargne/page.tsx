@@ -13,7 +13,7 @@ import { PageContainer } from '@/components/layouts/PageContainer';
 import { PageHeader } from '@/components/layouts/PageHeader';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import { formatCentsToEuroDisplay, parseEuroToCents, sanitizeEuroInput } from '@/lib/money';
-import { Landmark } from 'lucide-react';
+import { Landmark, TrendingUp } from 'lucide-react';
 
 /* ═══ Types ═══ */
 
@@ -95,7 +95,10 @@ function deadlineToInputDate(deadline: string | null): string {
 export default function EpargnePage() {
   const [goals, setGoals] = useState<SavingsGoal[]>([]);
   const [savingsAccounts, setSavingsAccounts] = useState<SavingsAccount[]>([]);
+  const [investAccounts, setInvestAccounts] = useState<SavingsAccount[]>([]);
   const [savingsAccountsTotalCents, setSavingsAccountsTotalCents] = useState('0');
+  const [investAccountsTotalCents, setInvestAccountsTotalCents] = useState('0');
+  const [totalPatrimoineCents, setTotalPatrimoineCents] = useState('0');
   const [totalSavedCents, setTotalSavedCents] = useState('0');
   const [totalTargetCents, setTotalTargetCents] = useState('0');
   const [loading, setLoading] = useState(true);
@@ -120,14 +123,20 @@ export default function EpargnePage() {
     const res = await fetchJson<{
       items: SavingsGoal[];
       savingsAccounts: SavingsAccount[];
+      investAccounts: SavingsAccount[];
       savingsAccountsTotalCents: string;
+      investAccountsTotalCents: string;
+      totalPatrimoineCents: string;
       totalSavedCents: string;
       totalTargetCents: string;
     }>('/api/personal/savings');
     if (res.ok && res.data) {
       setGoals(res.data.items ?? []);
       setSavingsAccounts(res.data.savingsAccounts ?? []);
+      setInvestAccounts(res.data.investAccounts ?? []);
       setSavingsAccountsTotalCents(String(res.data.savingsAccountsTotalCents ?? '0'));
+      setInvestAccountsTotalCents(String(res.data.investAccountsTotalCents ?? '0'));
+      setTotalPatrimoineCents(String(res.data.totalPatrimoineCents ?? '0'));
       setTotalSavedCents(String(res.data.totalSavedCents ?? '0'));
       setTotalTargetCents(String(res.data.totalTargetCents ?? '0'));
     } else {
@@ -276,10 +285,11 @@ export default function EpargnePage() {
       {error ? <p className="text-sm text-[var(--danger)]">{error}</p> : null}
 
       {/* ── KPIs ── */}
-      <div className="grid gap-4 grid-cols-1 sm:grid-cols-4">
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-5">
+        <KpiCard label="Patrimoine total" value={formatCentsToEuroDisplay(totalPatrimoineCents)} />
         <KpiCard label="Épargne en banque" value={formatCentsToEuroDisplay(savingsAccountsTotalCents)} />
+        <KpiCard label="Investissements" value={formatCentsToEuroDisplay(investAccountsTotalCents)} />
         <KpiCard label="Objectifs actifs" value={String(activeGoals.length)} />
-        <KpiCard label="Total épargné (objectifs)" value={formatCentsToEuroDisplay(totalSavedCents)} trend="up" />
         <KpiCard
           label="Restant à atteindre"
           value={formatCentsToEuroDisplay(totalRemaining.toString())}
@@ -287,10 +297,10 @@ export default function EpargnePage() {
         />
       </div>
 
-      {/* ── Savings accounts scroll ── */}
-      {savingsAccounts.length > 0 && (
+      {/* ── Accounts scroll ── */}
+      {(savingsAccounts.length > 0 || investAccounts.length > 0) && (
         <section>
-          <h2 className="text-lg font-semibold mb-3">Comptes épargne</h2>
+          <h2 className="text-lg font-semibold mb-3">Comptes épargne & investissement</h2>
           <div className="flex gap-3 overflow-x-auto pb-2">
             {savingsAccounts.map((a) => (
               <Card key={a.id} className="p-4 min-w-[200px] shrink-0">
@@ -299,11 +309,31 @@ export default function EpargnePage() {
                   <p className="text-sm font-semibold truncate">{a.name}</p>
                 </div>
                 <p className="text-lg font-bold">{formatCentsToEuroDisplay(a.balanceCents)}</p>
-                {a.interestRateBps != null ? (
-                  <p className="text-xs text-[var(--text-faint)]">
-                    Taux : {(a.interestRateBps / 100).toFixed(2)} %
-                  </p>
-                ) : null}
+                <div className="flex items-center gap-2 mt-1">
+                  <Badge variant="neutral">Épargne</Badge>
+                  {a.interestRateBps != null ? (
+                    <span className="text-xs text-[var(--text-faint)]">
+                      {(a.interestRateBps / 100).toFixed(2)} %
+                    </span>
+                  ) : null}
+                </div>
+              </Card>
+            ))}
+            {investAccounts.map((a) => (
+              <Card key={a.id} className="p-4 min-w-[200px] shrink-0">
+                <div className="flex items-center gap-2 mb-2">
+                  <TrendingUp size={16} className="text-[var(--text-faint)]" />
+                  <p className="text-sm font-semibold truncate">{a.name}</p>
+                </div>
+                <p className="text-lg font-bold">{formatCentsToEuroDisplay(a.balanceCents)}</p>
+                <div className="flex items-center gap-2 mt-1">
+                  <Badge variant="pro">Investissement</Badge>
+                  {a.interestRateBps != null ? (
+                    <span className="text-xs text-[var(--text-faint)]">
+                      {(a.interestRateBps / 100).toFixed(2)} %
+                    </span>
+                  ) : null}
+                </div>
               </Card>
             ))}
           </div>

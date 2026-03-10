@@ -8,7 +8,7 @@ import { parseDateOpt, parseId } from '@/server/http/parsers';
 
 // GET /api/personal/savings
 export const GET = withPersonalRoute(async (ctx) => {
-  const [goals, savingsAccounts] = await Promise.all([
+  const [goals, savingsAccounts, investAccounts] = await Promise.all([
     prisma.savingsGoal.findMany({
       where: { userId: ctx.userId },
       orderBy: { createdAt: 'desc' },
@@ -20,29 +20,38 @@ export const GET = withPersonalRoute(async (ctx) => {
       where: { userId: ctx.userId, type: 'SAVINGS', hidden: false },
       select: { id: true, name: true, initialCents: true, interestRateBps: true },
     }),
+    prisma.personalAccount.findMany({
+      where: { userId: ctx.userId, type: 'INVEST', hidden: false },
+      select: { id: true, name: true, initialCents: true, interestRateBps: true },
+    }),
   ]);
 
-  // Compute balances for savings accounts (initialCents + SUM(transactions))
-  const accountIds = savingsAccounts.map((a) => a.id);
-  const txSums = accountIds.length > 0
+  // Compute balances for savings + invest accounts (initialCents + SUM(transactions))
+  const allAccountIds = [...savingsAccounts, ...investAccounts].map((a) => a.id);
+  const txSums = allAccountIds.length > 0
     ? await prisma.personalTransaction.groupBy({
         by: ['accountId'],
-        where: { accountId: { in: accountIds } },
+        where: { accountId: { in: allAccountIds } },
         _sum: { amountCents: true },
       })
     : [];
 
   const txSumMap = new Map(txSums.map((t) => [t.accountId.toString(), t._sum.amountCents ?? 0n]));
 
-  const savingsAccountsWithBalance = savingsAccounts.map((a) => {
-    const txSum = txSumMap.get(a.id.toString()) ?? 0n;
-    return {
+  function withBalance<T extends { id: bigint; initialCents: bigint }>(accounts: T[]) {
+    return accounts.map((a) => ({
       ...a,
-      balanceCents: a.initialCents + txSum,
-    };
-  });
+      balanceCents: a.initialCents + (txSumMap.get(a.id.toString()) ?? 0n),
+    }));
+  }
+
+  const savingsAccountsWithBalance = withBalance(savingsAccounts);
+  const investAccountsWithBalance = withBalance(investAccounts);
 
   const savingsAccountsTotalCents = savingsAccountsWithBalance.reduce(
+    (s, a) => s + a.balanceCents, 0n
+  );
+  const investAccountsTotalCents = investAccountsWithBalance.reduce(
     (s, a) => s + a.balanceCents, 0n
   );
 
@@ -97,9 +106,12 @@ export const GET = withPersonalRoute(async (ctx) => {
 
   return jsonb({
     savingsAccountsTotalCents,
+    investAccountsTotalCents,
+    totalPatrimoineCents: savingsAccountsTotalCents + investAccountsTotalCents,
     totalSavedCents,
     totalTargetCents,
     savingsAccounts: savingsAccountsWithBalance,
+    investAccounts: investAccountsWithBalance,
     items: enrichedGoals,
   }, ctx.requestId);
 });
