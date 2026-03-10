@@ -4,6 +4,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { fmtKpi } from '@/lib/format';
 import { loanMonthlyPaymentCents, annualYieldCents, formatRateBps } from '@/lib/finance';
+import { RefreshCw } from 'lucide-react';
 
 export type AccountItem = {
   id: string;
@@ -59,6 +60,15 @@ export default function AccountCard({ account: a, onEdit, onNavigate }: Props) {
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <p className="truncate text-base font-semibold">{a.name}</p>
+            {a.powensAccountId ? (
+              <span
+                className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-[var(--success-bg)] text-[var(--success)] shrink-0"
+                title={a.powensLastSync ? `Dernière sync : ${new Date(a.powensLastSync).toLocaleString('fr-FR')}` : 'Compte synchronisé'}
+              >
+                <RefreshCw size={10} />
+                Sync
+              </span>
+            ) : null}
             {a.hidden ? (
               <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--surface-2)] text-[var(--text-faint)] shrink-0">
                 Masqué

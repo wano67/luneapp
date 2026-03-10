@@ -36,12 +36,12 @@ export async function syncPowensData(userId: bigint): Promise<SyncResult> {
     if (c.connector?.name) connectorNames.set(c.id, c.connector.name);
   }
 
-  // 4. Synchroniser les comptes
+  // 4. Synchroniser les comptes (retourne le mapping powensAccountId → balanceCents)
   const powensAccounts = await powensFetchAccounts(authToken);
-  const accountsSynced = await syncAccounts(userId, powensAccounts, connectorNames);
+  const { synced: accountsSynced, balanceMap } = await syncAccounts(userId, powensAccounts, connectorNames);
 
   // 5. Synchroniser les transactions
-  const transactionsAdded = await syncTransactions(userId, authToken);
+  const transactionsAdded = await syncTransactions(userId, authToken, balanceMap);
 
   // 6. Mettre à jour lastSyncAt
   await prisma.powensConnection.update({
@@ -58,8 +58,10 @@ async function syncAccounts(
   userId: bigint,
   powensAccounts: PowensAccount[],
   connectorNames: Map<number, string>,
-): Promise<number> {
+): Promise<{ synced: number; balanceMap: Map<number, bigint> }> {
   let synced = 0;
+  // Mapping powensAccountId → solde Powens en cents (pour ajuster initialCents après import tx)
+  const balanceMap = new Map<number, bigint>();
 
   for (const pa of powensAccounts) {
     if (pa.disabled) continue;
@@ -80,6 +82,11 @@ async function syncAccounts(
     const loanPrincipalCents = isLoan ? powensValueToCents(Math.abs(pa.balance)) : null;
     // Pour les comptes normaux, le solde Powens servira de base via initialCents
     const balanceCents = powensValueToCents(pa.balance);
+
+    // Stocker le solde Powens pour ajuster initialCents après import tx
+    if (!isLoan) {
+      balanceMap.set(pa.id, balanceCents);
+    }
 
     if (existing) {
       await prisma.personalAccount.update({
@@ -112,12 +119,12 @@ async function syncAccounts(
     synced++;
   }
 
-  return synced;
+  return { synced, balanceMap };
 }
 
 // ─── Transactions ───────────────────────────────────────────
 
-async function syncTransactions(userId: bigint, authToken: string): Promise<number> {
+async function syncTransactions(userId: bigint, authToken: string, powensBalanceMap: Map<number, bigint>): Promise<number> {
   // Récupérer le mapping des comptes Powens → comptes locaux
   const localAccounts = await prisma.personalAccount.findMany({
     where: { userId, powensAccountId: { not: null } },
@@ -175,8 +182,8 @@ async function syncTransactions(userId: bigint, authToken: string): Promise<numb
     if (offset >= total) break;
   }
 
-  // Ajuster initialCents pour que balance = initialCents + SUM(tx)
-  await adjustInitialBalances(userId, accountMap);
+  // Ajuster initialCents pour que balance affichée = solde Powens réel
+  await adjustInitialBalances(userId, accountMap, powensBalanceMap);
 
   return totalAdded;
 }
@@ -257,37 +264,45 @@ async function resolveCategory(
 }
 
 /**
- * Ajuste `initialCents` pour que balance = initialCents + SUM(amountCents)
- * corresponde au solde Powens.
+ * Ajuste `initialCents` pour que balance affichée = solde Powens réel.
+ *
+ * Le solde affiché est calculé comme : initialCents + SUM(amountCents).
+ * Powens ne retourne pas forcément l'historique complet des transactions,
+ * donc on recale initialCents à chaque sync :
+ *   initialCents = solde_Powens - SUM(transactions importées)
  */
 async function adjustInitialBalances(
   userId: bigint,
   accountMap: Map<number, bigint>,
+  powensBalanceMap: Map<number, bigint>,
 ) {
-  // Récupérer les soldes actuels via Powens (déjà dans la DB via syncAccounts)
   const localAccounts = await prisma.personalAccount.findMany({
     where: { userId, powensAccountId: { not: null } },
-    select: { id: true, powensAccountId: true },
+    select: { id: true, powensAccountId: true, initialCents: true },
   });
 
   for (const la of localAccounts) {
     if (la.powensAccountId === null) continue;
 
-    // Somme de toutes les transactions de ce compte
+    const powensBalance = powensBalanceMap.get(la.powensAccountId);
+    if (powensBalance === undefined) continue;
+
+    // Somme de toutes les transactions importées pour ce compte
     const agg = await prisma.personalTransaction.aggregate({
       where: { accountId: la.id },
       _sum: { amountCents: true },
     });
-    const txSum = agg._sum.amountCents || 0n;
+    const txSum = agg._sum.amountCents ?? 0n;
 
-    // Récupérer le solde Powens (on l'a déjà dans les données fetchées)
-    // On va relire le compte Powens via l'API pour obtenir le balance exact
-    // Mais comme on a déjà fait le fetch, on se base sur la balance qu'on a
-    // Pour l'instant, on ne touche pas initialCents si des transactions existent déjà
-    // car le solde sera calculé correctement par initialCents + SUM(tx)
+    // initialCents = solde Powens - somme des transactions
+    // Ainsi balance affichée = initialCents + txSum = solde Powens
+    const newInitialCents = powensBalance - txSum;
 
-    // Si c'est la première sync (pas de tx avant), ajuster initialCents
-    // Pour les syncs suivantes, les nouvelles tx s'ajoutent et le solde reste cohérent
-    void txSum; // utilisé pour le calcul futur si nécessaire
+    if (newInitialCents !== la.initialCents) {
+      await prisma.personalAccount.update({
+        where: { id: la.id },
+        data: { initialCents: newInitialCents },
+      });
+    }
   }
 }

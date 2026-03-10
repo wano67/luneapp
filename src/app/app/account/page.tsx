@@ -9,6 +9,7 @@ import { ProfileSection } from './sections/ProfileSection';
 import { SecuritySection } from './sections/SecuritySection';
 import { PreferencesSection } from './sections/PreferencesSection';
 import { FinancesSection } from './sections/FinancesSection';
+import { BankConnectionSection } from './sections/BankConnectionSection';
 import { NotificationsSection } from './sections/NotificationsSection';
 import { SessionSection } from './sections/SessionSection';
 import { ProBusinessSection } from './sections/ProBusinessSection';
@@ -19,6 +20,7 @@ const SECTIONS = [
   { id: 'securite', label: 'Sécurité' },
   { id: 'preferences', label: 'Préférences' },
   { id: 'finances', label: 'Finances' },
+  { id: 'banque', label: 'Banque' },
   { id: 'notifications', label: 'Notifications' },
   { id: 'session', label: 'Session' },
   { id: 'pro', label: 'Espace PRO' },
@@ -44,6 +46,7 @@ export default function AccountPage() {
         <section id="securite"><SecuritySection /></section>
         <section id="preferences"><PreferencesSection /></section>
         <section id="finances"><FinancesSection /></section>
+        <section id="banque"><BankConnectionSection /></section>
         <section id="notifications"><NotificationsSection /></section>
         <section id="session"><SessionSection /></section>
         <section id="pro"><ProBusinessSection /></section>

@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Card } from '@/components/ui/card';
@@ -19,6 +20,7 @@ const CsvImportModal = dynamic(() => import('@/components/CsvImportModal'), { ss
 import { useFileDropHandler } from '@/components/file-drop/FileDropProvider';
 import { emitWalletRefresh } from '@/lib/personalEvents';
 import { useToast } from '@/components/ui/toast';
+import { Building2, PenLine, Upload, Plus, X } from 'lucide-react';
 
 async function safeJson(res: Response): Promise<unknown> {
   try {
@@ -92,6 +94,9 @@ export default function ComptesPage() {
   const [editOpen, setEditOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState<AccountItem | null>(null);
 
+  // Add account modal
+  const [showAddModal, setShowAddModal] = useState(false);
+
   // Powens
   const [powensConnecting, setPowensConnecting] = useState(false);
   const [powensSyncing, setPowensSyncing] = useState(false);
@@ -125,10 +130,29 @@ export default function ComptesPage() {
 
   useEffect(() => {
     load();
-    // Vérifier le statut Powens
+    // Vérifier le statut Powens et sync automatique si connecté
     fetch('/api/personal/powens/status', { credentials: 'include' })
       .then((r) => r.ok ? r.json() : null)
-      .then((d) => { if (d?.connected) setPowensConnected(true); })
+      .then(async (d) => {
+        if (!d?.connected) return;
+        setPowensConnected(true);
+        // Auto-sync en arrière-plan pour actualiser les soldes
+        try {
+          setPowensSyncing(true);
+          const res = await fetch('/api/personal/powens/sync', {
+            method: 'POST',
+            credentials: 'include',
+          });
+          if (res.ok) {
+            await load();
+            emitWalletRefresh();
+          }
+        } catch {
+          // silent — l'utilisateur voit les données du dernier sync
+        } finally {
+          setPowensSyncing(false);
+        }
+      })
       .catch(() => {});
   }, []);
 
@@ -316,26 +340,23 @@ export default function ComptesPage() {
     }
   }
 
-  async function handlePowensSync() {
-    setPowensSyncing(true);
+  async function handlePowensAddBank() {
+    setPowensConnecting(true);
     try {
-      const res = await fetch('/api/personal/powens/sync', {
+      const res = await fetch('/api/personal/powens/add-connection', {
         method: 'POST',
         credentials: 'include',
       });
       const json = await safeJson(res);
-      if (res.ok && json && typeof json === 'object') {
-        const data = json as { accountsSynced?: number; transactionsAdded?: number };
-        toast.success(`${data.accountsSynced || 0} comptes, ${data.transactionsAdded || 0} transactions`);
-        await load();
-        emitWalletRefresh();
-      } else {
-        toast.error('Erreur de synchronisation');
+      if (res.ok && json && typeof json === 'object' && 'webviewUrl' in json) {
+        window.location.href = (json as { webviewUrl: string }).webviewUrl;
+        return;
       }
+      toast.error(getErrorFromJson(json) ?? 'Impossible de se connecter');
     } catch {
-      toast.error('Erreur de synchronisation');
+      toast.error('Impossible de se connecter');
     } finally {
-      setPowensSyncing(false);
+      setPowensConnecting(false);
     }
   }
 
@@ -402,41 +423,9 @@ export default function ComptesPage() {
               {showHidden ? 'Masquer les cachés' : 'Voir les cachés'}
             </Button>
           ) : null}
-          {powensConnected ? (
-            <Button
-              variant="outline"
-              onClick={handlePowensSync}
-              disabled={powensSyncing}
-            >
-              {powensSyncing ? 'Synchronisation…' : 'Synchroniser'}
-            </Button>
-          ) : (
-            <Button
-              variant="outline"
-              onClick={handlePowensConnect}
-              disabled={powensConnecting}
-            >
-              {powensConnecting ? 'Connexion…' : 'Connecter ma banque'}
-            </Button>
-          )}
-          <Button
-            variant="outline"
-            onClick={() => {
-              setImportFile(null);
-              setImportError(null);
-              setOpenImport(true);
-            }}
-          >
-            Importer CSV
-          </Button>
-          <Button
-            onClick={() => {
-              setWizardError(null);
-              setSuccessMessage(null);
-              setOpen(true);
-            }}
-          >
-            Créer un compte
+          <Button onClick={() => setShowAddModal(true)}>
+            <Plus size={16} />
+            Ajouter un compte
           </Button>
         </div>
       </div>
@@ -502,22 +491,10 @@ export default function ComptesPage() {
           <p className="text-sm text-[var(--text-secondary)]">
             Aucun compte. Connecte ta banque ou crée un compte manuellement.
           </p>
-          <div className="mt-3 flex gap-2 flex-wrap">
-            <Button
-              onClick={handlePowensConnect}
-              disabled={powensConnecting}
-            >
-              {powensConnecting ? 'Connexion…' : 'Connecter ma banque'}
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setWizardError(null);
-                setSuccessMessage(null);
-                setOpen(true);
-              }}
-            >
-              Créer manuellement
+          <div className="mt-3">
+            <Button onClick={() => setShowAddModal(true)}>
+              <Plus size={16} />
+              Ajouter un compte
             </Button>
           </div>
         </Card>
@@ -625,6 +602,94 @@ export default function ComptesPage() {
         onSelectFiles={handleCsvFiles}
         externalError={importError}
       />
+
+      {/* Add Account Modal */}
+      {showAddModal && typeof document !== 'undefined' && createPortal(
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          onClick={() => setShowAddModal(false)}
+        >
+          <div className="absolute inset-0 bg-black/50" />
+          <div
+            className="relative w-full max-w-md mx-4 rounded-2xl bg-[var(--surface)] p-6 shadow-xl animate-fade-in-up"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="text-lg font-bold text-[var(--text)]">Ajouter un compte</h2>
+              <button
+                onClick={() => setShowAddModal(false)}
+                className="rounded-lg p-1.5 text-[var(--text-faint)] hover:bg-[var(--surface-2)] transition-colors"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="flex flex-col gap-3">
+              {/* Connecter ma banque / Ajouter une banque */}
+              <button
+                className="flex items-start gap-4 rounded-xl border border-[var(--border)] p-4 text-left hover:bg-[var(--surface-2)] transition-colors disabled:opacity-50"
+                disabled={powensConnecting}
+                onClick={() => {
+                  setShowAddModal(false);
+                  if (powensConnected) {
+                    handlePowensAddBank();
+                  } else {
+                    handlePowensConnect();
+                  }
+                }}
+              >
+                <div className="rounded-lg bg-[var(--shell-accent)]/10 p-2.5 text-[var(--shell-accent)]">
+                  <Building2 size={20} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-[var(--text)]">
+                    {powensConnected ? 'Ajouter une banque' : 'Connecter ma banque'}
+                  </p>
+                  <p className="text-xs text-[var(--text-faint)] mt-0.5">
+                    Importez automatiquement vos comptes et transactions
+                  </p>
+                </div>
+              </button>
+
+              {/* Créer manuellement */}
+              <button
+                className="flex items-start gap-4 rounded-xl border border-[var(--border)] p-4 text-left hover:bg-[var(--surface-2)] transition-colors"
+                onClick={() => {
+                  setShowAddModal(false);
+                  setWizardError(null);
+                  setSuccessMessage(null);
+                  setOpen(true);
+                }}
+              >
+                <div className="rounded-lg bg-[var(--text-faint)]/10 p-2.5 text-[var(--text-faint)]">
+                  <PenLine size={20} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-[var(--text)]">Créer manuellement</p>
+                  <p className="text-xs text-[var(--text-faint)] mt-0.5">
+                    Ajoutez un compte en saisissant les détails
+                  </p>
+                </div>
+              </button>
+
+              {/* Importer CSV */}
+              <button
+                className="flex items-center gap-2 justify-center rounded-xl py-2.5 text-xs font-medium text-[var(--text-faint)] hover:text-[var(--text-secondary)] transition-colors"
+                onClick={() => {
+                  setShowAddModal(false);
+                  setImportFile(null);
+                  setImportError(null);
+                  setOpenImport(true);
+                }}
+              >
+                <Upload size={14} />
+                Importer un fichier CSV
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )}
 
       {lastImportedFileName ? (
         <div className="rounded-2xl border border-[var(--success-border)] bg-[var(--success-bg)] px-4 py-3 text-sm text-[var(--success)]">
