@@ -34,7 +34,7 @@ export const POST = withPersonalRoute(async (ctx, req) => {
   const name = (body.name as string).trim();
 
   if (!name) {
-    return badRequest('Le nom de l’entreprise ne peut pas Ãªtre vide.');
+    return badRequest('Le nom de l’entreprise ne peut pas être vide.');
   }
 
   const countryCode = typeof body.countryCode === 'string' ? body.countryCode.trim().toUpperCase() : null;

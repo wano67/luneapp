@@ -299,7 +299,7 @@ export function useQuoteWizard({
       }
       } // end else (services not yet posted)
 
-      setQuoteWizardInfo('GÃ©nÃ©ration du devis…');
+      setQuoteWizardInfo('Génération du devis…');
       const quoteRes = await fetchJson<{
         item: { id: string };
         pdfUrl: string;

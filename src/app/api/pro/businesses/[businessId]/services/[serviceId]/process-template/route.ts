@@ -64,17 +64,17 @@ function validateTemplate(body: unknown): TemplateInput | { error: string } {
     if (order === null || order < 0 || order > 1000) return { error: 'Ordre de phase invalide (0-1000).' };
 
     if (!Array.isArray(phaseRaw.steps)) return { error: 'steps doit être un tableau.' };
-    if (phaseRaw.steps.length > 200) return { error: 'Trop d’Ã©tapes (200 max).' };
+    if (phaseRaw.steps.length > 200) return { error: 'Trop d’étapes (200 max).' };
 
     const steps: StepTplInput[] = [];
     for (const stepRaw of phaseRaw.steps) {
       if (!isRecord(stepRaw)) return { error: 'Étape invalide.' };
       const stepName = normalizeStr(stepRaw.name);
-      if (!stepName) return { error: 'Nom d’Ã©tape requis.' };
-      if (stepName.length > 140) return { error: 'Nom d’Ã©tape trop long (140 max).' };
+      if (!stepName) return { error: 'Nom d’étape requis.' };
+      if (stepName.length > 140) return { error: 'Nom d’étape trop long (140 max).' };
       const stepOrder = toInt(stepRaw.order);
       if (stepOrder === null || stepOrder < 0 || stepOrder > 5000) {
-        return { error: 'Ordre d’Ã©tape invalide (0-5000).' };
+        return { error: 'Ordre d’étape invalide (0-5000).' };
       }
       const isBillableMilestone = Boolean(stepRaw.isBillableMilestone);
 
@@ -124,7 +124,7 @@ function validateTemplate(body: unknown): TemplateInput | { error: string } {
     phases.push({ name: phaseName, order, steps });
   }
 
-  if (stepCount > 200) return { error: 'Trop d’Ã©tapes (200 max).' };
+  if (stepCount > 200) return { error: 'Trop d’étapes (200 max).' };
   if (taskCount > 2000) return { error: 'Trop de tâches (2000 max).' };
 
   return { name: name || 'Process service', phases };

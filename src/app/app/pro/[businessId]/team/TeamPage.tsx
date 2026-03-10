@@ -305,7 +305,7 @@ export default function TeamPage({ businessId }: Props) {
                   <option value="VIEWER">Viewer</option>
                 </Select>
                 <Button type="submit" disabled={invites.inviteLoading}>
-                  {invites.inviteLoading ? 'Envoiâ¦' : 'Envoyer l’invitation'}
+                  {invites.inviteLoading ? 'Envoi…' : 'Envoyer l’invitation'}
                 </Button>
               </form>
             )}

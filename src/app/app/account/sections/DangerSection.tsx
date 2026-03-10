@@ -104,7 +104,7 @@ export function DangerSection() {
               onClick={handleDelete}
               disabled={loading || !password.trim()}
             >
-              {loading ? 'Suppression…' : 'Supprimer dÃ©finitivement'}
+              {loading ? 'Suppression…' : 'Supprimer définitivement'}
             </Button>
           </div>
         </div>

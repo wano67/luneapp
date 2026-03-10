@@ -170,7 +170,7 @@ export async function sendPasswordResetEmail(params: PasswordResetEmailParams): 
     await resend.emails.send({
       from: fromAddress,
       to,
-      subject: 'RÃ©initialisation de votre mot de passe — Lune',
+      subject: 'Réinitialisation de votre mot de passe — Lune',
       html,
     });
   } catch (error) {

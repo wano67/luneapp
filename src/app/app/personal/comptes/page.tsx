@@ -426,7 +426,7 @@ export default function ComptesPage() {
                   style={{ fontFamily: 'var(--font-barlow), sans-serif' }}
                 >
                   Détails
-                  <span aria-hidden>â</span>
+                  <span aria-hidden>→</span>
                 </Link>
               </div>
 
@@ -512,7 +512,7 @@ export default function ComptesPage() {
 
       {lastImportedFileName ? (
         <div className="rounded-2xl border border-[var(--success-border)] bg-[var(--success-bg)] px-4 py-3 text-sm text-[var(--success)]">
-          Import rÃ©ussi — {lastImportedFileName}
+          Import réussi — {lastImportedFileName}
         </div>
       ) : null}
       {successMessage ? (

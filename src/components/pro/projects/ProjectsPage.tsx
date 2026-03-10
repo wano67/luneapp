@@ -38,7 +38,7 @@ export default function ProjectsPage({ businessId }: Props) {
       ? 'Aucun projet actif pour l’instant.'
       : scope === 'PLANNED'
         ? 'Aucun projet en attente pour l’instant.'
-        : 'Aucun projet terminÃ© pour l’instant.';
+        : 'Aucun projet terminé pour l’instant.';
 
   return (
     <ProPageShell

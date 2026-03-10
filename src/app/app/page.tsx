@@ -487,7 +487,7 @@ function ClickableKpi({
             <span className="text-[11px] font-medium" style={{
               color: trend === 'up' ? 'var(--success)' : trend === 'down' ? 'var(--danger)' : 'var(--text-faint)',
             }}>
-              {trend === 'up' ? 'â² ' : trend === 'down' ? 'â¼ ' : ''}{sub}
+              {trend === 'up' ? '▲ ' : trend === 'down' ? '▼ ' : ''}{sub}
             </span>
           )}
         </div>

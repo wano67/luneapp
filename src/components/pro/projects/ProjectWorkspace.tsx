@@ -980,7 +980,7 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
                   Annuler
                 </Button>
                 <Button onClick={handleShareCreate} disabled={shareLoading}>
-                  {shareLoading ? 'GÃ©nÃ©ration…' : 'GÃ©nÃ©rer le lien'}
+                  {shareLoading ? 'Génération…' : 'Générer le lien'}
                 </Button>
               </div>
             </>

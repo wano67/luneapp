@@ -181,7 +181,7 @@ export default function ShareProjectPage() {
           </span>
           {project.startDate && (
             <span className="text-xs" style={{ color: 'var(--text-faint)' }}>
-              {fmtDate(project.startDate)} â {fmtDate(project.endDate)}
+              {fmtDate(project.startDate)} → {fmtDate(project.endDate)}
             </span>
           )}
         </div>
@@ -227,7 +227,7 @@ export default function ShareProjectPage() {
                   <div className="mb-1 flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <span className="text-sm" style={{ color: isDone ? 'var(--success)' : 'var(--text-primary)' }}>
-                        {isDone ? 'â' : 'â'}
+                        {isDone ? '✓' : '○'}
                       </span>
                       <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{svc.name}</span>
                     </div>
@@ -288,7 +288,7 @@ export default function ShareProjectPage() {
           {payments.length > 0 && (
             <div className="mt-4 border-t pt-3" style={{ borderColor: 'var(--border)' }}>
               <p className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
-                {payments.length} paiement{payments.length > 1 ? 's' : ''} reÃ§u{payments.length > 1 ? 's' : ''} —{' '}
+                {payments.length} paiement{payments.length > 1 ? 's' : ''} reçu{payments.length > 1 ? 's' : ''} —{' '}
                 <span className="font-semibold" style={{ color: 'var(--success)' }}>
                   {fmtCents(payments.reduce((sum, p) => sum + Number(p.amountCents), 0).toString())}
                 </span>

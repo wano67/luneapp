@@ -369,7 +369,7 @@ export default function ProcessDetailPage() {
         backHref={`/app/pro/${businessId}/process`}
         backLabel="Process"
         title={process?.name ?? `Process #${processId}`}
-        subtitle={process?.description ?? "Suivi des Ã©tapes et de l’exÃ©cution"}
+        subtitle={process?.description ?? "Suivi des étapes et de l’exécution"}
         actions={
           isAdmin ? (
             <div className="flex flex-wrap items-center gap-2">

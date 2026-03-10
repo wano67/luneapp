@@ -418,7 +418,7 @@ export default function PersoTransactionsPage() {
       <div className="space-y-5">
         <PageHeader
           title="Transactions"
-          subtitle="Analyse tes dÃ©penses et revenus en un coup d’oeil."
+          subtitle="Analyse tes dépenses et revenus en un coup d’oeil."
           actions={
             <>
               <Button variant="outline" onClick={resetFilters} disabled={loadingAccounts || loadingList}>

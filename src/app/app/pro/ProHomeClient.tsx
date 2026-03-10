@@ -356,7 +356,7 @@ export default function ProHomeClient() {
       }
 
       const data = res.data;
-      setJoinSuccess(`Tu as rejoint Â« ${data.business?.name ?? "l'entreprise"} Â».`);
+      setJoinSuccess(`Tu as rejoint « ${data.business?.name ?? "l'entreprise"} ».`);
       setJoinToken('');
       await refreshBusinesses();
       setJoinOpen(false);

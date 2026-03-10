@@ -328,7 +328,7 @@ export default function ProjectEditPage() {
       <div className="space-y-4">
         <PageHeader
           title="Modifier le projet"
-          subtitle={`Statut actuel : ${statusLabel ?? project.status}${project.archivedAt ? ' � Archivé' : ''}`}
+          subtitle={`Statut actuel : ${statusLabel ?? project.status}${project.archivedAt ? ' · Archivé' : ''}`}
           backHref={`/app/pro/${businessId}/projects/${projectId}`}
           backLabel="Retour au projet"
           actions={
