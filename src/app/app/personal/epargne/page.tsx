@@ -28,11 +28,10 @@ type SavingsGoal = {
   id: string;
   name: string;
   targetCents: string;
-  currentCents: string;
+  fundedCents: string;
   deadline: string | null;
   isCompleted: boolean;
   accountId: string | null;
-  monthlyContributionCents: string | null;
   account: { id: string; name: string; balanceCents: string } | null;
   monthlyNeededCents: string | null;
   projectedDate: string | null;
@@ -42,36 +41,13 @@ type SavingsGoal = {
 type FormState = {
   name: string;
   targetAmount: string;
-  currentAmount: string;
   deadline: string;
   accountId: string;
-  monthlyContribution: string;
 };
 
-type FeedFormState = {
-  amount: string;
-};
-
-const EMPTY_FORM: FormState = {
-  name: '', targetAmount: '', currentAmount: '',
-  deadline: '', accountId: '', monthlyContribution: '',
-};
-const EMPTY_FEED: FeedFormState = { amount: '' };
+const EMPTY_FORM: FormState = { name: '', targetAmount: '', deadline: '', accountId: '' };
 
 /* ═══ Helpers ═══ */
-
-function centsToInputValue(cents: string | null): string {
-  if (!cents) return '';
-  try {
-    const b = BigInt(cents);
-    const abs = b < 0n ? -b : b;
-    const euros = abs / 100n;
-    const rem = abs % 100n;
-    return `${euros}.${rem.toString().padStart(2, '0')}`;
-  } catch {
-    return '';
-  }
-}
 
 function formatDeadline(deadline: string | null): string {
   if (!deadline) return '';
@@ -90,6 +66,19 @@ function deadlineToInputDate(deadline: string | null): string {
   return deadline.slice(0, 10);
 }
 
+function centsToInputValue(cents: string | null): string {
+  if (!cents) return '';
+  try {
+    const b = BigInt(cents);
+    const abs = b < 0n ? -b : b;
+    const euros = abs / 100n;
+    const rem = abs % 100n;
+    return `${euros}.${rem.toString().padStart(2, '0')}`;
+  } catch {
+    return '';
+  }
+}
+
 /* ═══ Page ═══ */
 
 export default function EpargnePage() {
@@ -99,8 +88,9 @@ export default function EpargnePage() {
   const [savingsAccountsTotalCents, setSavingsAccountsTotalCents] = useState('0');
   const [investAccountsTotalCents, setInvestAccountsTotalCents] = useState('0');
   const [totalPatrimoineCents, setTotalPatrimoineCents] = useState('0');
-  const [totalSavedCents, setTotalSavedCents] = useState('0');
   const [totalTargetCents, setTotalTargetCents] = useState('0');
+  const [totalRemainingCents, setTotalRemainingCents] = useState('0');
+  const [monthlySavingsCapacityCents, setMonthlySavingsCapacityCents] = useState('0');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -111,13 +101,6 @@ export default function EpargnePage() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  // Feed modal
-  const [feedModalOpen, setFeedModalOpen] = useState(false);
-  const [feedingGoal, setFeedingGoal] = useState<SavingsGoal | null>(null);
-  const [feedForm, setFeedForm] = useState<FeedFormState>(EMPTY_FEED);
-  const [feedSaving, setFeedSaving] = useState(false);
-  const [feedError, setFeedError] = useState<string | null>(null);
-
   const load = useCallback(async () => {
     setLoading(true);
     const res = await fetchJson<{
@@ -127,8 +110,9 @@ export default function EpargnePage() {
       savingsAccountsTotalCents: string;
       investAccountsTotalCents: string;
       totalPatrimoineCents: string;
-      totalSavedCents: string;
       totalTargetCents: string;
+      totalRemainingCents: string;
+      monthlySavingsCapacityCents: string;
     }>('/api/personal/savings');
     if (res.ok && res.data) {
       setGoals(res.data.items ?? []);
@@ -137,8 +121,9 @@ export default function EpargnePage() {
       setSavingsAccountsTotalCents(String(res.data.savingsAccountsTotalCents ?? '0'));
       setInvestAccountsTotalCents(String(res.data.investAccountsTotalCents ?? '0'));
       setTotalPatrimoineCents(String(res.data.totalPatrimoineCents ?? '0'));
-      setTotalSavedCents(String(res.data.totalSavedCents ?? '0'));
       setTotalTargetCents(String(res.data.totalTargetCents ?? '0'));
+      setTotalRemainingCents(String(res.data.totalRemainingCents ?? '0'));
+      setMonthlySavingsCapacityCents(String(res.data.monthlySavingsCapacityCents ?? '0'));
     } else {
       setError(res.error ?? 'Impossible de charger les objectifs.');
     }
@@ -163,20 +148,11 @@ export default function EpargnePage() {
     setForm({
       name: g.name,
       targetAmount: centsToInputValue(g.targetCents),
-      currentAmount: centsToInputValue(g.currentCents),
       deadline: deadlineToInputDate(g.deadline),
       accountId: g.accountId ?? '',
-      monthlyContribution: centsToInputValue(g.monthlyContributionCents),
     });
     setSaveError(null);
     setModalOpen(true);
-  }
-
-  function openFeed(g: SavingsGoal) {
-    setFeedingGoal(g);
-    setFeedForm(EMPTY_FEED);
-    setFeedError(null);
-    setFeedModalOpen(true);
   }
 
   async function handleSave() {
@@ -192,20 +168,11 @@ export default function EpargnePage() {
         setSaveError('Nom requis.');
         return;
       }
-      const currentCents = form.currentAmount
-        ? parseEuroToCents(form.currentAmount.replace(',', '.'))
-        : 0;
-      const monthlyContributionCents = form.monthlyContribution
-        ? parseEuroToCents(form.monthlyContribution.replace(',', '.'))
-        : null;
-
       const body = {
         name: form.name.trim(),
         targetCents,
-        currentCents: Number.isFinite(currentCents) ? currentCents : 0,
         deadline: form.deadline || null,
         accountId: form.accountId || null,
-        monthlyContributionCents: monthlyContributionCents && Number.isFinite(monthlyContributionCents) ? monthlyContributionCents : null,
       };
       const res = editingId
         ? await fetchJson(`/api/personal/savings/${editingId}`, {
@@ -231,37 +198,6 @@ export default function EpargnePage() {
     }
   }
 
-  async function handleFeed() {
-    if (!feedingGoal) return;
-    setFeedError(null);
-    setFeedSaving(true);
-    try {
-      const addCents = parseEuroToCents(feedForm.amount.replace(',', '.'));
-      if (!Number.isFinite(addCents) || addCents <= 0) {
-        setFeedError('Montant invalide.');
-        return;
-      }
-      const newCurrentCents = BigInt(feedingGoal.currentCents) + BigInt(addCents);
-      const newTarget = BigInt(feedingGoal.targetCents);
-      const isCompleted = newCurrentCents >= newTarget;
-      const res = await fetchJson(`/api/personal/savings/${feedingGoal.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ currentCents: Number(newCurrentCents), isCompleted }),
-      });
-      if (!res.ok) {
-        setFeedError(res.error ?? 'Erreur lors de la mise à jour.');
-        return;
-      }
-      setFeedModalOpen(false);
-      await load();
-    } catch (e) {
-      setFeedError(getErrorMessage(e));
-    } finally {
-      setFeedSaving(false);
-    }
-  }
-
   async function handleDelete(id: string) {
     const res = await fetchJson(`/api/personal/savings/${id}`, { method: 'DELETE' });
     if (res.ok) await load();
@@ -270,9 +206,13 @@ export default function EpargnePage() {
   /* ═══ Computed ═══ */
 
   const activeGoals = goals.filter((g) => !g.isCompleted);
-  const totalRemaining = BigInt(totalTargetCents) > BigInt(totalSavedCents)
-    ? BigInt(totalTargetCents) - BigInt(totalSavedCents)
-    : 0n;
+  const capacityBigInt = BigInt(monthlySavingsCapacityCents);
+  const remainingBigInt = BigInt(totalRemainingCents);
+
+  // Months to reach all goals at current capacity
+  const monthsToReachAll = capacityBigInt > 0n && remainingBigInt > 0n
+    ? Number(remainingBigInt / capacityBigInt)
+    : null;
 
   return (
     <PageContainer className="space-y-6">
@@ -289,13 +229,55 @@ export default function EpargnePage() {
         <KpiCard label="Patrimoine total" value={formatCentsToEuroDisplay(totalPatrimoineCents)} />
         <KpiCard label="Épargne en banque" value={formatCentsToEuroDisplay(savingsAccountsTotalCents)} />
         <KpiCard label="Investissements" value={formatCentsToEuroDisplay(investAccountsTotalCents)} />
-        <KpiCard label="Objectifs actifs" value={String(activeGoals.length)} />
+        <KpiCard
+          label="Capacité d'épargne / mois"
+          value={formatCentsToEuroDisplay(monthlySavingsCapacityCents)}
+          trend={capacityBigInt > 0n ? 'up' : 'down'}
+        />
         <KpiCard
           label="Restant à atteindre"
-          value={formatCentsToEuroDisplay(totalRemaining.toString())}
-          trend={totalRemaining > 0n ? 'down' : 'up'}
+          value={formatCentsToEuroDisplay(totalRemainingCents)}
+          trend={remainingBigInt > 0n ? 'down' : 'up'}
         />
       </div>
+
+      {/* Summary projection */}
+      {activeGoals.length > 0 && (
+        <Card className="p-4 bg-[var(--surface-2)]">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold">
+                {formatCentsToEuroDisplay(totalPatrimoineCents)} épargnés sur {formatCentsToEuroDisplay(totalTargetCents)} d&apos;objectifs
+              </p>
+              {monthsToReachAll != null && monthsToReachAll > 0 ? (
+                <p className="text-xs text-[var(--text-faint)] mt-0.5">
+                  À votre rythme actuel ({formatCentsToEuroDisplay(monthlySavingsCapacityCents)}/mois), tous vos objectifs seront atteints dans ~{monthsToReachAll} mois
+                </p>
+              ) : remainingBigInt <= 0n ? (
+                <p className="text-xs text-[var(--success)] mt-0.5">
+                  Votre patrimoine couvre l&apos;ensemble de vos objectifs
+                </p>
+              ) : null}
+            </div>
+            {totalTargetCents !== '0' && (
+              <p className="text-2xl font-bold" style={{ color: remainingBigInt <= 0n ? 'var(--success)' : 'var(--accent)' }}>
+                {Math.min(100, Math.round(Number((BigInt(totalPatrimoineCents) * 100n) / BigInt(totalTargetCents))))} %
+              </p>
+            )}
+          </div>
+          {totalTargetCents !== '0' && (
+            <div className="mt-3 h-2 overflow-hidden rounded-full bg-[var(--border)]">
+              <div
+                className="h-full rounded-full transition-all"
+                style={{
+                  width: `${Math.min(100, Math.round(Number((BigInt(totalPatrimoineCents) * 100n) / BigInt(totalTargetCents))))}%`,
+                  backgroundColor: remainingBigInt <= 0n ? 'var(--success)' : 'var(--accent)',
+                }}
+              />
+            </div>
+          )}
+        </Card>
+      )}
 
       {/* ── Accounts scroll ── */}
       {(savingsAccounts.length > 0 || investAccounts.length > 0) && (
@@ -348,7 +330,7 @@ export default function EpargnePage() {
         ) : goals.length === 0 ? (
           <EmptyState
             title="Aucun objectif"
-            description="Crée des objectifs d'épargne pour suivre ta progression vers tes projets."
+            description="Fixe-toi des objectifs d'épargne — la progression se calcule automatiquement depuis tes comptes."
             action={<Button size="sm" onClick={openCreate}>Créer un objectif</Button>}
           />
         ) : (
@@ -362,15 +344,11 @@ export default function EpargnePage() {
                       <div className="flex flex-wrap items-center gap-2">
                         <p className="font-semibold">{g.name}</p>
                         {g.isCompleted ? <Badge variant="pro">Atteint</Badge> : null}
-                        {g.account ? (
-                          <Badge variant="neutral">{g.account.name}</Badge>
-                        ) : null}
-                        {g.deadline ? (
-                          <Badge variant="neutral">{formatDeadline(g.deadline)}</Badge>
-                        ) : null}
+                        {g.account ? <Badge variant="neutral">{g.account.name}</Badge> : null}
+                        {g.deadline ? <Badge variant="neutral">{formatDeadline(g.deadline)}</Badge> : null}
                       </div>
                       <p className="mt-1 text-xs text-[var(--text-faint)]">
-                        {formatCentsToEuroDisplay(g.currentCents)} / {formatCentsToEuroDisplay(g.targetCents)}
+                        {formatCentsToEuroDisplay(g.fundedCents)} / {formatCentsToEuroDisplay(g.targetCents)}
                         {' '}({pct} %)
                       </p>
 
@@ -379,34 +357,25 @@ export default function EpargnePage() {
                         {g.monthlyNeededCents ? (
                           <span>{formatCentsToEuroDisplay(g.monthlyNeededCents)}/mois nécessaires</span>
                         ) : null}
-                        {g.monthlyContributionCents ? (
-                          <span>{formatCentsToEuroDisplay(g.monthlyContributionCents)}/mois planifiés</span>
-                        ) : null}
                         {g.projectedDate ? (
                           <span>Objectif atteint ~{formatProjectedDate(g.projectedDate)}</span>
                         ) : null}
                       </div>
                     </div>
                     <div className="flex flex-wrap gap-2">
-                      {!g.isCompleted ? (
-                        <Button size="sm" variant="outline" onClick={() => openFeed(g)}>Alimenter</Button>
-                      ) : null}
                       <Button size="sm" variant="outline" onClick={() => openEdit(g)}>Modifier</Button>
                       <Button size="sm" variant="danger" onClick={() => handleDelete(g.id)}>Supprimer</Button>
                     </div>
                   </div>
 
-                  {/* Progress bar with deadline marker */}
-                  <div className="mt-3 relative">
-                    <div className="h-2 overflow-hidden rounded-full bg-[var(--surface-2)]">
-                      <div
-                        className="h-full rounded-full transition-all"
-                        style={{
-                          width: `${pct}%`,
-                          backgroundColor: g.isCompleted ? 'var(--success)' : 'var(--accent)',
-                        }}
-                      />
-                    </div>
+                  <div className="mt-3 h-2 overflow-hidden rounded-full bg-[var(--surface-2)]">
+                    <div
+                      className="h-full rounded-full transition-all"
+                      style={{
+                        width: `${pct}%`,
+                        backgroundColor: g.isCompleted ? 'var(--success)' : 'var(--accent)',
+                      }}
+                    />
                   </div>
                 </Card>
               );
@@ -420,7 +389,7 @@ export default function EpargnePage() {
         open={modalOpen}
         onCloseAction={() => setModalOpen(false)}
         title={editingId ? 'Modifier l\'objectif' : 'Nouvel objectif'}
-        description="Définissez un montant cible, une contribution mensuelle et une échéance."
+        description="Fixe un montant cible et une échéance — la progression se calcule automatiquement."
       >
         <div className="space-y-4">
           {saveError ? <p className="text-xs text-[var(--danger)]">{saveError}</p> : null}
@@ -439,22 +408,6 @@ export default function EpargnePage() {
                 value={form.targetAmount}
                 onChange={(e) => setForm((p) => ({ ...p, targetAmount: sanitizeEuroInput(e.target.value) }))}
                 placeholder="3000"
-              />
-            </label>
-            <label className="text-sm">
-              <span className="text-xs text-[var(--text-faint)]">Déjà épargné (€)</span>
-              <Input
-                value={form.currentAmount}
-                onChange={(e) => setForm((p) => ({ ...p, currentAmount: sanitizeEuroInput(e.target.value) }))}
-                placeholder="0"
-              />
-            </label>
-            <label className="text-sm">
-              <span className="text-xs text-[var(--text-faint)]">Contribution mensuelle (€)</span>
-              <Input
-                value={form.monthlyContribution}
-                onChange={(e) => setForm((p) => ({ ...p, monthlyContribution: sanitizeEuroInput(e.target.value) }))}
-                placeholder="200"
               />
             </label>
             <label className="text-sm">
@@ -483,20 +436,29 @@ export default function EpargnePage() {
             )}
           </div>
 
-          {/* Auto-calc preview */}
-          {form.targetAmount && form.monthlyContribution && (() => {
+          {/* Auto preview from real data */}
+          {form.targetAmount && (() => {
             const target = parseEuroToCents(form.targetAmount.replace(',', '.'));
-            const current = form.currentAmount ? parseEuroToCents(form.currentAmount.replace(',', '.')) : 0;
-            const monthly = parseEuroToCents(form.monthlyContribution.replace(',', '.'));
-            if (Number.isFinite(target) && Number.isFinite(monthly) && monthly > 0 && target > current) {
-              const remaining = target - (Number.isFinite(current) ? current : 0);
-              const months = Math.ceil(remaining / monthly);
-              const projected = new Date();
-              projected.setMonth(projected.getMonth() + months);
+            const patrimoine = BigInt(totalPatrimoineCents);
+            const capacity = BigInt(monthlySavingsCapacityCents);
+            if (Number.isFinite(target) && target > 0) {
+              const targetBig = BigInt(target);
+              const funded = patrimoine > targetBig ? targetBig : patrimoine;
+              const remaining = targetBig > funded ? targetBig - funded : 0n;
+              const pct = Math.min(100, Math.round(Number((funded * 100n) / targetBig)));
               return (
-                <p className="text-xs text-[var(--accent)] bg-[var(--surface-2)] rounded-lg px-3 py-2">
-                  À ce rythme, objectif atteint vers {projected.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })} (~{months} mois)
-                </p>
+                <div className="text-xs bg-[var(--surface-2)] rounded-lg px-3 py-2 space-y-1">
+                  <p style={{ color: 'var(--accent)' }}>
+                    Votre patrimoine couvre déjà {pct} % de cet objectif ({formatCentsToEuroDisplay(funded.toString())} / {formatCentsToEuroDisplay(targetBig.toString())})
+                  </p>
+                  {remaining > 0n && capacity > 0n ? (
+                    <p className="text-[var(--text-faint)]">
+                      Il vous reste {formatCentsToEuroDisplay(remaining.toString())} — atteignable en ~{Number(remaining / capacity)} mois à votre rythme actuel
+                    </p>
+                  ) : remaining <= 0n ? (
+                    <p className="text-[var(--success)]">Cet objectif est déjà couvert par votre patrimoine !</p>
+                  ) : null}
+                </div>
               );
             }
             return null;
@@ -506,32 +468,6 @@ export default function EpargnePage() {
             <Button size="sm" variant="outline" onClick={() => setModalOpen(false)}>Annuler</Button>
             <Button size="sm" onClick={handleSave} disabled={saving}>
               {saving ? 'Enregistrement…' : editingId ? 'Enregistrer' : 'Créer'}
-            </Button>
-          </div>
-        </div>
-      </Modal>
-
-      {/* ══════════ FEED MODAL ══════════ */}
-      <Modal
-        open={feedModalOpen}
-        onCloseAction={() => setFeedModalOpen(false)}
-        title="Alimenter l'objectif"
-        description={feedingGoal ? `Ajouter de l'\u00e9pargne \u00e0 "${feedingGoal.name}".` : ''}
-      >
-        <div className="space-y-4">
-          {feedError ? <p className="text-xs text-[var(--danger)]">{feedError}</p> : null}
-          <label className="text-sm">
-            <span className="text-xs text-[var(--text-faint)]">Montant à ajouter (€)</span>
-            <Input
-              value={feedForm.amount}
-              onChange={(e) => setFeedForm((p) => ({ ...p, amount: sanitizeEuroInput(e.target.value) }))}
-              placeholder="100"
-            />
-          </label>
-          <div className="flex justify-end gap-2">
-            <Button size="sm" variant="outline" onClick={() => setFeedModalOpen(false)}>Annuler</Button>
-            <Button size="sm" onClick={handleFeed} disabled={feedSaving}>
-              {feedSaving ? 'Enregistrement…' : 'Ajouter'}
             </Button>
           </div>
         </div>
