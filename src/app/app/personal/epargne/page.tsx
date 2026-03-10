@@ -461,7 +461,7 @@ export default function EpargnePage() {
           </div>
           <div className="flex gap-3 overflow-x-auto pb-1">
             {savingsAccounts.map((a) => (
-              <Card key={a.id} className="p-4 min-w-[200px] shrink-0">
+              <Card key={a.id} className="p-4 min-w-[160px] shrink-0">
                 <div className="flex items-center gap-2 mb-2">
                   <Landmark size={16} className="text-blue-500" />
                   <p className="text-sm font-semibold truncate">{a.name}</p>
@@ -475,7 +475,7 @@ export default function EpargnePage() {
               </Card>
             ))}
             {investAccounts.map((a) => (
-              <Card key={a.id} className="p-4 min-w-[200px] shrink-0">
+              <Card key={a.id} className="p-4 min-w-[160px] shrink-0">
                 <div className="flex items-center gap-2 mb-2">
                   <TrendingUp size={16} className="text-emerald-500" />
                   <p className="text-sm font-semibold truncate">{a.name}</p>
@@ -507,71 +507,23 @@ export default function EpargnePage() {
               const pct = Math.min(100, Math.round(g.percentComplete));
               return (
                 <Card key={g.id} className="p-4">
-                  <div className="flex flex-wrap items-start justify-between gap-2">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="font-semibold">{g.name}</p>
-                        {g.isCompleted ? <Badge variant="pro">Atteint</Badge> : null}
-                        {g.priority >= 3 ? <Badge variant="warning">Prioritaire</Badge>
-                          : g.priority >= 2 ? <Badge variant="neutral">Moyenne</Badge>
-                          : g.priority >= 1 ? <Badge variant="neutral">Basse</Badge>
-                          : null}
-                        {g.account ? <Badge variant="neutral">{g.account.name}</Badge> : null}
-                      </div>
-                      <p className="mt-1 text-sm text-[var(--text)]">
-                        {formatCentsToEuroDisplay(g.fundedCents)} <span className="text-[var(--text-faint)]">sur</span> {formatCentsToEuroDisplay(g.targetCents)}
-                      </p>
-
-                      {/* Projections */}
-                      <div className="mt-2 flex flex-wrap gap-3">
-                        {g.monthlyContributionCents ? (
-                          <div className="flex items-center gap-1.5 text-xs text-[var(--text-faint)]">
-                            <PiggyBank size={12} />
-                            <span>{formatCentsToEuroDisplay(g.monthlyContributionCents)}/mois programmés</span>
-                          </div>
-                        ) : null}
-                        {g.deadline ? (
-                          <div className="flex items-center gap-1.5 text-xs text-[var(--text-faint)]">
-                            <Clock size={12} />
-                            <span>Échéance : {formatDeadline(g.deadline)}</span>
-                          </div>
-                        ) : null}
-                        {g.monthlyNeededCents ? (
-                          <div className="flex items-center gap-1.5 text-xs text-[var(--text-faint)]">
-                            <Wallet size={12} />
-                            <span>{formatCentsToEuroDisplay(g.monthlyNeededCents)}/mois nécessaires</span>
-                          </div>
-                        ) : null}
-                        {g.projectedDate && !g.isCompleted ? (
-                          <div className="flex items-center gap-1.5 text-xs text-[var(--text-faint)]">
-                            <Target size={12} />
-                            <span>Atteint ~{formatProjectedDate(g.projectedDate)}</span>
-                          </div>
-                        ) : null}
-                      </div>
+                  {/* Header: name + badges + percentage */}
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex flex-wrap items-center gap-2 min-w-0">
+                      <p className="font-semibold truncate">{g.name}</p>
+                      {g.isCompleted ? <Badge variant="pro">Atteint</Badge> : null}
+                      {g.priority >= 3 ? <Badge variant="warning">Prioritaire</Badge>
+                        : g.priority >= 2 ? <Badge variant="neutral">Moyenne</Badge>
+                        : g.priority >= 1 ? <Badge variant="neutral">Basse</Badge>
+                        : null}
                     </div>
-                    <div className="flex items-center gap-2">
-                      {!g.isCompleted && (
-                        <div className="flex flex-col">
-                          <button type="button" onClick={() => movePriority(g.id, 'up')} className="p-0.5 text-[var(--text-faint)] hover:text-[var(--text)] transition-colors" title="Monter la priorité">
-                            <ChevronUp size={16} />
-                          </button>
-                          <button type="button" onClick={() => movePriority(g.id, 'down')} className="p-0.5 text-[var(--text-faint)] hover:text-[var(--text)] transition-colors" title="Baisser la priorité">
-                            <ChevronDown size={16} />
-                          </button>
-                        </div>
-                      )}
-                      <span className="text-lg font-bold" style={{ color: g.isCompleted ? 'var(--success)' : 'var(--shell-accent)' }}>
-                        {pct} %
-                      </span>
-                      <div className="flex gap-1">
-                        <Button size="sm" variant="outline" onClick={() => openEdit(g)}>Modifier</Button>
-                        <Button size="sm" variant="danger" onClick={() => handleDelete(g.id)}>Supprimer</Button>
-                      </div>
-                    </div>
+                    <span className="text-lg font-bold shrink-0" style={{ color: g.isCompleted ? 'var(--success)' : 'var(--shell-accent)' }}>
+                      {pct} %
+                    </span>
                   </div>
 
-                  <div className="mt-3 h-2 overflow-hidden rounded-full bg-[var(--surface-2)]">
+                  {/* Progress bar */}
+                  <div className="mt-2 h-2 overflow-hidden rounded-full bg-[var(--surface-2)]">
                     <div
                       className="h-full rounded-full transition-all"
                       style={{
@@ -579,6 +531,48 @@ export default function EpargnePage() {
                         backgroundColor: g.isCompleted ? 'var(--success)' : 'var(--accent)',
                       }}
                     />
+                  </div>
+
+                  {/* Amount + key info */}
+                  <p className="mt-2 text-sm text-[var(--text)]">
+                    {formatCentsToEuroDisplay(g.fundedCents)} <span className="text-[var(--text-faint)]">sur</span> {formatCentsToEuroDisplay(g.targetCents)}
+                    {g.projectedDate && !g.isCompleted ? (
+                      <span className="text-[var(--text-faint)]"> · Atteint ~{formatProjectedDate(g.projectedDate)}</span>
+                    ) : null}
+                  </p>
+
+                  {/* Compact meta */}
+                  <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[var(--text-faint)]">
+                    {g.monthlyContributionCents ? (
+                      <span>{formatCentsToEuroDisplay(g.monthlyContributionCents)}/mois programmés</span>
+                    ) : null}
+                    {g.deadline ? (
+                      <span>Échéance : {formatDeadline(g.deadline)}</span>
+                    ) : null}
+                    {g.monthlyNeededCents ? (
+                      <span>{formatCentsToEuroDisplay(g.monthlyNeededCents)}/mois nécessaires</span>
+                    ) : null}
+                    {g.account ? (
+                      <span>Compte : {g.account.name}</span>
+                    ) : null}
+                  </div>
+
+                  {/* Actions row */}
+                  <div className="mt-3 flex items-center justify-between">
+                    {!g.isCompleted ? (
+                      <div className="flex items-center gap-1">
+                        <button type="button" onClick={() => movePriority(g.id, 'up')} className="p-1 rounded text-[var(--text-faint)] hover:text-[var(--text)] hover:bg-[var(--surface-2)] transition-colors" title="Monter la priorité">
+                          <ChevronUp size={16} />
+                        </button>
+                        <button type="button" onClick={() => movePriority(g.id, 'down')} className="p-1 rounded text-[var(--text-faint)] hover:text-[var(--text)] hover:bg-[var(--surface-2)] transition-colors" title="Baisser la priorité">
+                          <ChevronDown size={16} />
+                        </button>
+                      </div>
+                    ) : <div />}
+                    <div className="flex gap-1">
+                      <Button size="sm" variant="outline" onClick={() => openEdit(g)}>Modifier</Button>
+                      <Button size="sm" variant="danger" onClick={() => handleDelete(g.id)}>Supprimer</Button>
+                    </div>
                   </div>
                 </Card>
               );
@@ -588,56 +582,32 @@ export default function EpargnePage() {
       </section>
 
       {/* ═══ 6. Pour aller plus loin — Cross-links ═══ */}
-      <section className="space-y-3 animate-fade-in-up" style={{ animationDelay: '300ms', animationFillMode: 'backwards' }}>
-        <h2 className="text-lg font-semibold">Pour aller plus loin</h2>
-        <div className="grid gap-3 sm:grid-cols-3">
-          <Link href="/app/focus" className="group">
-            <Card className="p-4 h-full transition-colors hover:bg-[var(--surface-2)]/50">
-              <div className="flex items-center gap-2 mb-2">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500/10">
-                  <TrendingUp size={16} className="text-amber-500" />
-                </div>
-                <span className="text-sm font-semibold">Optimisation</span>
-              </div>
-              <p className="text-xs text-[var(--text-faint)]">
-                Score de santé financière, optimisation de taux et conseils personnalisés.
-              </p>
-              <div className="mt-3 flex items-center gap-1 text-xs font-medium text-[var(--shell-accent)]">
-                Voir le diagnostic <ArrowRight size={12} className="transition-transform group-hover:translate-x-1" />
-              </div>
-            </Card>
+      <section className="animate-fade-in-up" style={{ animationDelay: '300ms', animationFillMode: 'backwards' }}>
+        <h2 className="text-sm font-semibold text-[var(--text-faint)] mb-3">Pour aller plus loin</h2>
+        <div className="flex flex-wrap gap-2">
+          <Link
+            href="/app/focus"
+            className="flex items-center gap-2 rounded-xl border border-[var(--border)] px-4 py-2.5 text-sm font-medium hover:bg-[var(--surface-2)] transition-colors"
+          >
+            <TrendingUp size={14} className="text-amber-500" />
+            Optimisation
+            <ArrowRight size={12} className="text-[var(--text-faint)]" />
           </Link>
-          <Link href="/app/personal/budgets" className="group">
-            <Card className="p-4 h-full transition-colors hover:bg-[var(--surface-2)]/50">
-              <div className="flex items-center gap-2 mb-2">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-500/10">
-                  <Wallet size={16} className="text-blue-500" />
-                </div>
-                <span className="text-sm font-semibold">Budgets</span>
-              </div>
-              <p className="text-xs text-[var(--text-faint)]">
-                Contrôle tes dépenses et tes charges fixes pour augmenter ta capacité d&apos;épargne.
-              </p>
-              <div className="mt-3 flex items-center gap-1 text-xs font-medium text-[var(--shell-accent)]">
-                Gérer mes budgets <ArrowRight size={12} className="transition-transform group-hover:translate-x-1" />
-              </div>
-            </Card>
+          <Link
+            href="/app/personal/budgets"
+            className="flex items-center gap-2 rounded-xl border border-[var(--border)] px-4 py-2.5 text-sm font-medium hover:bg-[var(--surface-2)] transition-colors"
+          >
+            <Wallet size={14} className="text-blue-500" />
+            Budgets
+            <ArrowRight size={12} className="text-[var(--text-faint)]" />
           </Link>
-          <Link href="/app/personal/transactions" className="group">
-            <Card className="p-4 h-full transition-colors hover:bg-[var(--surface-2)]/50">
-              <div className="flex items-center gap-2 mb-2">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-purple-500/10">
-                  <ArrowRight size={16} className="text-purple-500" />
-                </div>
-                <span className="text-sm font-semibold">Transactions</span>
-              </div>
-              <p className="text-xs text-[var(--text-faint)]">
-                Catégorise tes transactions pour comprendre où passe ton argent.
-              </p>
-              <div className="mt-3 flex items-center gap-1 text-xs font-medium text-[var(--shell-accent)]">
-                Voir mes transactions <ArrowRight size={12} className="transition-transform group-hover:translate-x-1" />
-              </div>
-            </Card>
+          <Link
+            href="/app/personal/transactions"
+            className="flex items-center gap-2 rounded-xl border border-[var(--border)] px-4 py-2.5 text-sm font-medium hover:bg-[var(--surface-2)] transition-colors"
+          >
+            <ArrowRight size={14} className="text-purple-500" />
+            Transactions
+            <ArrowRight size={12} className="text-[var(--text-faint)]" />
           </Link>
         </div>
       </section>

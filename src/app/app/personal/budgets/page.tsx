@@ -473,17 +473,25 @@ export default function BudgetsPage() {
       {error ? <p className="text-sm text-[var(--danger)]">{error}</p> : null}
 
       {/* ── KPIs ── */}
-      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-5">
-        <KpiCard label="Total budgété" value={formatCentsToEuroDisplay(totalLimit.toString())} />
-        <KpiCard
-          label="Dépensé ce mois"
-          value={formatCentsToEuroDisplay(monthExpenseCents.toString())}
-          trend={monthExpenseCents > totalLimit ? 'down' : 'up'}
-        />
-        <KpiCard label="Charges fixes / mois" value={formatCentsToEuroDisplay(fixedMonthlyCents.toString())} />
-        <KpiCard label="Épargne programmée" value={formatCentsToEuroDisplay(totalSavingsBudgetCents.toString())} />
-        <KpiCard label="Abonnements actifs" value={String(activeSubs.length)} />
-      </div>
+      {(() => {
+        const remainingCents = totalLimit - monthExpenseCents;
+        const remainingPositive = remainingCents >= 0n;
+        return (
+          <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
+            <KpiCard label="Total budgété" value={formatCentsToEuroDisplay(totalLimit.toString())} />
+            <KpiCard
+              label="Dépensé ce mois"
+              value={formatCentsToEuroDisplay(monthExpenseCents.toString())}
+              trend={monthExpenseCents > totalLimit ? 'down' : 'up'}
+            />
+            <KpiCard
+              label="Reste à dépenser"
+              value={formatCentsToEuroDisplay((remainingPositive ? remainingCents : -remainingCents).toString())}
+              trend={remainingPositive ? 'up' : 'down'}
+            />
+          </div>
+        );
+      })()}
 
       {overBudget > 0 ? (
         <p className="text-sm font-semibold text-[var(--danger)]">

@@ -234,7 +234,7 @@ export default function FocusPage() {
               />
 
               {/* Health score + KPIs */}
-              <div className="grid gap-4 grid-cols-1 sm:grid-cols-4">
+              <div className="grid gap-4 grid-cols-2 sm:grid-cols-4">
                 <Card className="p-4 flex flex-col items-center justify-center gap-1">
                   <p className="text-xs text-[var(--text-faint)]">Score de santé</p>
                   <p

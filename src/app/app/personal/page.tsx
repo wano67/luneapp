@@ -503,7 +503,7 @@ function HeroCard({
       href={href}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      className="flex flex-col min-h-[180px] md:min-h-0 justify-between rounded-xl bg-[var(--surface)] outline outline-[0.5px] outline-[var(--border)] p-3 animate-fade-in-up transition-shadow hover:shadow-md"
+      className="flex flex-col justify-between rounded-xl bg-[var(--surface)] outline outline-[0.5px] outline-[var(--border)] p-3 animate-fade-in-up transition-shadow hover:shadow-md"
       style={{
         animationDelay: delay ? `${delay}ms` : undefined,
         animationFillMode: delay ? 'backwards' : undefined,
