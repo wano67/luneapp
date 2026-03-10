@@ -26,29 +26,39 @@ export const POST = withPersonalRoute(async (ctx, req) => {
     return jsonb({ error: 'Connexion Powens déjà active' }, ctx.requestId, { status: 409 });
   }
 
-  // 1. Créer un utilisateur Powens
-  const powensUser = await powensInitUser();
+  try {
+    // 1. Créer un utilisateur Powens
+    console.log('[powens:connect] Step 1: Creating Powens user…');
+    const powensUser = await powensInitUser();
+    console.log('[powens:connect] Step 1 OK: powensUserId=', powensUser.id);
 
-  // 2. Chiffrer et stocker le token
-  const encrypted = encrypt(powensUser.auth_token);
-  await prisma.powensConnection.create({
-    data: {
-      userId: ctx.userId,
-      powensUserId: powensUser.id,
-      authTokenCipher: encrypted.ciphertext,
-      authTokenIv: encrypted.iv,
-      authTokenTag: encrypted.tag,
-    },
-  });
+    // 2. Chiffrer et stocker le token
+    console.log('[powens:connect] Step 2: Encrypting & storing…');
+    const encrypted = encrypt(powensUser.auth_token);
+    await prisma.powensConnection.create({
+      data: {
+        userId: ctx.userId,
+        powensUserId: powensUser.id,
+        authTokenCipher: encrypted.ciphertext,
+        authTokenIv: encrypted.iv,
+        authTokenTag: encrypted.tag,
+      },
+    });
+    console.log('[powens:connect] Step 2 OK');
 
-  // 3. Obtenir un code temporaire pour la webview
-  const code = await powensGetTempCode(powensUser.auth_token);
+    // 3. Obtenir un code temporaire pour la webview
+    console.log('[powens:connect] Step 3: Getting temp code…');
+    const code = await powensGetTempCode(powensUser.auth_token);
+    console.log('[powens:connect] Step 3 OK');
 
-  // 4. Construire l'URL de la webview
-  // Le redirect URI doit matcher celui enregistré dans le dashboard Powens
-  const baseUrl = buildBaseUrl(req);
-  const redirectUri = `${baseUrl}/app/personal/comptes`;
-  const webviewUrl = buildPowensWebviewUrl(code, redirectUri);
+    // 4. Construire l'URL de la webview
+    const baseUrl = buildBaseUrl(req);
+    const redirectUri = `${baseUrl}/app/personal/comptes`;
+    const webviewUrl = buildPowensWebviewUrl(code, redirectUri);
 
-  return jsonb({ webviewUrl }, ctx.requestId);
+    return jsonb({ webviewUrl }, ctx.requestId);
+  } catch (e) {
+    console.error('[powens:connect] Error:', e instanceof Error ? e.message : e);
+    throw e;
+  }
 });
