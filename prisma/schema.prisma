@@ -268,6 +268,7 @@ model Business {
   notificationPreferences NotificationPreference[]
   calendarEvents CalendarEvent[]
   calendarTokens CalendarToken[]
+  projectShareTokens ProjectShareToken[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -561,6 +562,7 @@ model Project {
   conversations Conversation[]
   notifications Notification[]
   calendarEvents CalendarEvent[] @relation("CalendarEventProject")
+  shareTokens   ProjectShareToken[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1909,4 +1911,20 @@ model PersonalCalendarToken {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([token])
+}
+
+model ProjectShareToken {
+  id          BigInt    @id @default(autoincrement())
+  projectId   BigInt
+  businessId  BigInt
+  token       String    @unique
+  clientEmail String?
+  expiresAt   DateTime?
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  project  Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
 }

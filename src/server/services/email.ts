@@ -177,3 +177,59 @@ export async function sendPasswordResetEmail(params: PasswordResetEmailParams): 
     console.error('[email] Failed to send password reset email:', error instanceof Error ? error.message : 'unknown');
   }
 }
+
+// ── Project share email ────────────────────────────────────────────────────
+
+type ProjectShareEmailParams = {
+  to: string;
+  businessName: string;
+  projectName: string;
+  shareLink: string;
+  expiresAt: Date | null;
+};
+
+export async function sendProjectShareEmail(params: ProjectShareEmailParams): Promise<void> {
+  const resend = getResend();
+  if (!resend) return;
+
+  const { to, businessName, projectName, shareLink, expiresAt } = params;
+  const fromAddress = process.env.RESEND_FROM_EMAIL?.trim() || 'Lune <noreply@lune.app>';
+
+  const expiryLine = expiresAt
+    ? `Ce lien expire le ${new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }).format(expiresAt)}.`
+    : 'Ce lien reste valide jusqu&apos;&agrave; r&eacute;vocation.';
+
+  const html = `<!DOCTYPE html>
+<html lang="fr">
+<head><meta charset="utf-8" /></head>
+<body style="margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f5f5f5;">
+  <div style="max-width:560px;margin:40px auto;background:#fff;border-radius:12px;padding:40px;border:1px solid #e5e5e5;">
+    <h1 style="font-size:20px;color:#111;margin:0 0 8px;">Suivi de votre projet</h1>
+    <p style="color:#555;font-size:14px;line-height:1.6;margin:0 0 8px;">
+      <strong>${businessName}</strong> vous donne acc&egrave;s au suivi de votre projet <strong>&laquo; ${projectName} &raquo;</strong>.
+    </p>
+    <p style="color:#555;font-size:14px;line-height:1.6;margin:0 0 24px;">
+      Consultez l&apos;avancement, les documents et la facturation en temps r&eacute;el.
+    </p>
+    <a href="${shareLink}"
+       style="display:inline-block;padding:12px 28px;background:#111;color:#fff;text-decoration:none;border-radius:8px;font-size:14px;font-weight:600;">
+      Voir mon projet
+    </a>
+    <p style="color:#888;font-size:12px;margin:24px 0 0;">
+      ${expiryLine}
+    </p>
+  </div>
+</body>
+</html>`;
+
+  try {
+    await resend.emails.send({
+      from: fromAddress,
+      to,
+      subject: `${businessName} \u2014 Suivi de votre projet \u00ab ${projectName} \u00bb`,
+      html,
+    });
+  } catch (error) {
+    console.error('[email] Failed to send project share email:', error instanceof Error ? error.message : 'unknown');
+  }
+}

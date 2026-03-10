@@ -1,0 +1,228 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { prisma } from '@/server/db/client';
+import { rateLimit, makeIpKey } from '@/server/security/rateLimit';
+import crypto from 'crypto';
+
+function hashToken(raw: string): string {
+  return crypto.createHash('sha256').update(raw).digest('base64url');
+}
+
+/**
+ * GET /api/share/[token] — Public project data by share token.
+ * No authentication required — the token IS the authorization.
+ */
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ token: string }> }
+) {
+  const limited = rateLimit(request, {
+    key: makeIpKey(request, 'share:view'),
+    limit: 60,
+    windowMs: 60 * 60 * 1000,
+  });
+  if (limited) return limited;
+
+  const { token: rawToken } = await params;
+  if (!rawToken?.trim()) {
+    return NextResponse.json({ error: 'Token requis.' }, { status: 400 });
+  }
+
+  const tokenHash = hashToken(rawToken.trim());
+
+  const shareToken = await prisma.projectShareToken.findUnique({
+    where: { token: tokenHash },
+    select: {
+      expiresAt: true,
+      revokedAt: true,
+      projectId: true,
+      businessId: true,
+    },
+  });
+
+  if (!shareToken) {
+    return NextResponse.json({ error: 'Lien de partage invalide.' }, { status: 404 });
+  }
+
+  if (shareToken.revokedAt) {
+    return NextResponse.json({ error: 'Ce lien a \u00e9t\u00e9 r\u00e9voqu\u00e9.' }, { status: 410 });
+  }
+
+  if (shareToken.expiresAt && shareToken.expiresAt < new Date()) {
+    return NextResponse.json({ error: 'Ce lien a expir\u00e9.' }, { status: 410 });
+  }
+
+  // Fetch project data — non-sensitive fields only
+  const [project, business, taskRows, services, quotes, invoices, payments, documents] = await Promise.all([
+    prisma.project.findUnique({
+      where: { id: shareToken.projectId },
+      select: {
+        id: true,
+        name: true,
+        status: true,
+        startDate: true,
+        endDate: true,
+        prestationsText: true,
+        createdAt: true,
+      },
+    }),
+    prisma.business.findUnique({
+      where: { id: shareToken.businessId },
+      select: { name: true, websiteUrl: true },
+    }),
+    prisma.task.findMany({
+      where: { projectId: shareToken.projectId, businessId: shareToken.businessId },
+      select: { status: true, progress: true, projectServiceId: true },
+    }),
+    prisma.projectService.findMany({
+      where: { projectId: shareToken.projectId },
+      include: {
+        service: { select: { name: true, description: true } },
+        steps: { select: { name: true, phaseName: true, order: true }, orderBy: { order: 'asc' } },
+      },
+      orderBy: { position: 'asc' },
+    }),
+    prisma.quote.findMany({
+      where: {
+        projectId: shareToken.projectId,
+        businessId: shareToken.businessId,
+        status: { in: ['SENT', 'SIGNED'] },
+      },
+      select: {
+        number: true,
+        status: true,
+        totalCents: true,
+        currency: true,
+        issuedAt: true,
+        signedAt: true,
+        expiresAt: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    }),
+    prisma.invoice.findMany({
+      where: {
+        projectId: shareToken.projectId,
+        businessId: shareToken.businessId,
+        status: { in: ['SENT', 'PAID'] },
+      },
+      select: {
+        number: true,
+        status: true,
+        totalCents: true,
+        currency: true,
+        issuedAt: true,
+        dueAt: true,
+        paidAt: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    }),
+    prisma.payment.findMany({
+      where: {
+        projectId: shareToken.projectId,
+        businessId: shareToken.businessId,
+        deletedAt: null,
+      },
+      select: {
+        amountCents: true,
+        paidAt: true,
+        method: true,
+      },
+      orderBy: { paidAt: 'desc' },
+    }),
+    prisma.businessDocument.findMany({
+      where: { projectId: shareToken.projectId, businessId: shareToken.businessId },
+      select: {
+        id: true,
+        title: true,
+        filename: true,
+        mimeType: true,
+        sizeBytes: true,
+        kind: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    }),
+  ]);
+
+  if (!project || !business) {
+    return NextResponse.json({ error: 'Projet introuvable.' }, { status: 404 });
+  }
+
+  // Compute progress
+  const tasksSummary = (() => {
+    if (!taskRows.length) return { total: 0, open: 0, done: 0, progressPct: 0 };
+    let total = 0;
+    let done = 0;
+    let open = 0;
+    let sum = 0;
+    for (const t of taskRows) {
+      total += 1;
+      const pct = t.status === 'DONE' ? 100 : t.status === 'IN_PROGRESS' ? t.progress ?? 0 : 0;
+      sum += pct;
+      if (t.status === 'DONE') done += 1;
+      else open += 1;
+    }
+    return { total, done, open, progressPct: Math.round(sum / total) };
+  })();
+
+  // Compute per-service progress
+  const serviceData = services.map((ps) => {
+    const serviceTasks = taskRows.filter((t) => t.projectServiceId === ps.id);
+    let sTotal = 0;
+    let sDone = 0;
+    let sSum = 0;
+    for (const t of serviceTasks) {
+      sTotal += 1;
+      const pct = t.status === 'DONE' ? 100 : t.status === 'IN_PROGRESS' ? t.progress ?? 0 : 0;
+      sSum += pct;
+      if (t.status === 'DONE') sDone += 1;
+    }
+    return {
+      name: ps.titleOverride || ps.service.name,
+      description: ps.service.description,
+      steps: ps.steps.map((s) => ({ name: s.name, phaseName: s.phaseName })),
+      tasksSummary: {
+        total: sTotal,
+        done: sDone,
+        progressPct: sTotal > 0 ? Math.round(sSum / sTotal) : 0,
+      },
+    };
+  });
+
+  // Serialize BigInts
+  const serialize = (obj: unknown): unknown => {
+    if (obj === null || obj === undefined) return obj;
+    if (typeof obj === 'bigint') return obj.toString();
+    if (obj instanceof Date) return obj.toISOString();
+    if (Array.isArray(obj)) return obj.map(serialize);
+    if (typeof obj === 'object') {
+      const result: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(obj as Record<string, unknown>)) {
+        result[k] = serialize(v);
+      }
+      return result;
+    }
+    return obj;
+  };
+
+  const response = {
+    business: { name: business.name, websiteUrl: business.websiteUrl },
+    project: {
+      name: project.name,
+      status: project.status,
+      startDate: project.startDate?.toISOString() ?? null,
+      endDate: project.endDate?.toISOString() ?? null,
+      prestationsText: project.prestationsText,
+      progressPct: tasksSummary.progressPct,
+      tasksSummary,
+    },
+    services: serviceData,
+    quotes: serialize(quotes),
+    invoices: serialize(invoices),
+    payments: serialize(payments),
+    documents: serialize(documents),
+  };
+
+  return NextResponse.json(response, {
+    headers: { 'Cache-Control': 'public, max-age=60, s-maxage=60' },
+  });
+}

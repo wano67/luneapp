@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Share2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 
@@ -22,6 +22,7 @@ type Props = {
   onMarkCompleted: () => void;
   onPostpone: () => void;
   onBillingClick?: () => void;
+  onShareClick?: () => void;
 };
 
 export function ProjectHeaderSection({
@@ -43,6 +44,7 @@ export function ProjectHeaderSection({
   onMarkCompleted,
   onPostpone,
   onBillingClick,
+  onShareClick,
 }: Props) {
   return (
     <>
@@ -110,6 +112,17 @@ export function ProjectHeaderSection({
           >
             Facturation
           </button>
+          {isAdmin && onShareClick && (
+            <button
+              type="button"
+              onClick={onShareClick}
+              className="flex items-center gap-1.5 rounded-full px-3 py-2 text-sm font-medium transition hover:opacity-80"
+              style={{ background: 'white', color: 'rgba(0,0,0,0.6)' }}
+            >
+              <Share2 size={14} />
+              Partager
+            </button>
+          )}
           {latestPdf && (
             <a
               href={latestPdf.url}

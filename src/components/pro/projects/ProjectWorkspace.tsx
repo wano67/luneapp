@@ -42,6 +42,9 @@ import { useMessaging } from '@/components/pro/projects/hooks/useMessaging';
 import { usePricingEngine } from '@/components/pro/projects/hooks/usePricingEngine';
 import { ProjectHeaderSection } from '@/components/pro/projects/ProjectHeaderSection';
 import { ChargesTab } from '@/components/pro/projects/tabs/ChargesTab';
+import { Modal } from '@/components/ui/modal';
+import { Input } from '@/components/ui/input';
+import { Copy, Check } from 'lucide-react';
 
 type ProjectDetail = {
   id: string;
@@ -143,6 +146,15 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
 
   const [markingCompleted, setMarkingCompleted] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+
+  // Share modal
+  const [shareOpen, setShareOpen] = useState(false);
+  const [shareEmail, setShareEmail] = useState('');
+  const [shareExpiry, setShareExpiry] = useState<number>(30);
+  const [shareLoading, setShareLoading] = useState(false);
+  const [shareLink, setShareLink] = useState<string | null>(null);
+  const [shareError, setShareError] = useState<string | null>(null);
+  const [shareCopied, setShareCopied] = useState(false);
 
   // ─── Data loaders ───────────────────────────────────────────────────────────
 
@@ -528,6 +540,33 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
     onBillingError: setBillingError, onBillingInfo: setBillingInfo,
   });
 
+  // ─── Share modal handler ───────────────────────────────────────────────────
+
+  async function handleShareCreate() {
+    setShareLoading(true);
+    setShareError(null);
+    setShareLink(null);
+    try {
+      const body: { clientEmail?: string; expiresInDays?: number } = {};
+      if (shareEmail.trim()) body.clientEmail = shareEmail.trim();
+      if (shareExpiry > 0) body.expiresInDays = shareExpiry;
+      const res = await fetchJson<{ shareLink: string }>(`/api/pro/businesses/${businessId}/projects/${projectId}/share`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (res.ok && res.data?.shareLink) {
+        setShareLink(res.data.shareLink);
+      } else {
+        setShareError(res.error || 'Erreur lors de la création du lien.');
+      }
+    } catch {
+      setShareError('Erreur de connexion.');
+    } finally {
+      setShareLoading(false);
+    }
+  }
+
   // ─── Task click from overview → switch to work tab ─────────────────────────
 
   const handleTaskClick = useCallback((taskId: string) => {
@@ -575,6 +614,7 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
           setActiveSetupModal('deadline');
         }}
         onBillingClick={() => setActiveTab('billing')}
+        onShareClick={() => setShareOpen(true)}
       />
 
       {/* KPI cards */}
@@ -893,6 +933,98 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
         onApplyShortcut={applyPaymentShortcut}
         onSave={handleSavePayment}
       />
+
+      {/* Share modal */}
+      <Modal
+        open={shareOpen}
+        onCloseAction={() => {
+          if (shareLoading) return;
+          setShareOpen(false);
+          setShareEmail('');
+          setShareLink(null);
+          setShareError(null);
+          setShareCopied(false);
+        }}
+        title="Partager le projet avec un client"
+        description="Générez un lien de suivi accessible sans connexion."
+      >
+        <div className="space-y-4">
+          {!shareLink ? (
+            <>
+              <Input
+                label="Email du client (optionnel)"
+                type="email"
+                value={shareEmail}
+                onChange={(e) => setShareEmail(e.target.value)}
+                placeholder="client@exemple.com"
+              />
+              <div>
+                <label className="mb-1 block text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>
+                  Expiration du lien
+                </label>
+                <select
+                  value={shareExpiry}
+                  onChange={(e) => setShareExpiry(Number(e.target.value))}
+                  className="w-full rounded-xl border px-3 py-2 text-sm"
+                  style={{ borderColor: 'var(--border)', background: 'var(--surface)', color: 'var(--text)' }}
+                >
+                  <option value={7}>7 jours</option>
+                  <option value={30}>30 jours</option>
+                  <option value={90}>90 jours</option>
+                  <option value={0}>Illimité</option>
+                </select>
+              </div>
+              {shareError && <p className="text-xs" style={{ color: 'var(--danger)' }}>{shareError}</p>}
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setShareOpen(false)} disabled={shareLoading}>
+                  Annuler
+                </Button>
+                <Button onClick={handleShareCreate} disabled={shareLoading}>
+                  {shareLoading ? 'Génération\u2026' : 'Générer le lien'}
+                </Button>
+              </div>
+            </>
+          ) : (
+            <>
+              <div>
+                <label className="mb-1 block text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>
+                  Lien de partage
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    readOnly
+                    value={shareLink}
+                    className="flex-1 rounded-xl border px-3 py-2 text-sm"
+                    style={{ borderColor: 'var(--border)', background: 'var(--surface-hover)', color: 'var(--text)' }}
+                    onFocus={(e) => e.target.select()}
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      navigator.clipboard.writeText(shareLink);
+                      setShareCopied(true);
+                      setTimeout(() => setShareCopied(false), 2000);
+                    }}
+                  >
+                    {shareCopied ? <Check size={16} /> : <Copy size={16} />}
+                  </Button>
+                </div>
+              </div>
+              {shareEmail.trim() && (
+                <p className="text-xs" style={{ color: 'var(--success)' }}>
+                  Un email a été envoyé à {shareEmail.trim()}.
+                </p>
+              )}
+              <div className="flex justify-end">
+                <Button onClick={() => { setShareOpen(false); setShareLink(null); setShareEmail(''); setShareCopied(false); }}>
+                  Fermer
+                </Button>
+              </div>
+            </>
+          )}
+        </div>
+      </Modal>
 
       <SetupModals
         activeSetupModal={activeSetupModal}
