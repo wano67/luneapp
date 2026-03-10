@@ -109,7 +109,7 @@ export const GET = withBusinessRoute<{ businessId: string; projectId: string }>(
     const items = tokens.map((t) => ({
       id: t.id,
       clientEmail: t.clientEmail,
-      tokenPreview: `\u2022\u2022\u2022${t.token.slice(-6)}`,
+      tokenPreview: `•••${t.token.slice(-6)}`,
       expiresAt: t.expiresAt,
       revokedAt: t.revokedAt,
       isActive: !t.revokedAt && (!t.expiresAt || t.expiresAt > new Date()),

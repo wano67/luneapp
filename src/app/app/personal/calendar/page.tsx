@@ -179,7 +179,7 @@ export default function PersonalCalendarPage() {
         open={createOpen}
         onCloseAction={() => { if (!creating) setCreateOpen(false); }}
         title={createKind ? (createKind === 'APPOINTMENT' ? 'Nouveau rendez-vous' : 'Nouveau rappel') : 'Ajouter au calendrier'}
-        description={createKind ? undefined : 'Choisissez le type d\u2019événement à créer.'}
+        description={createKind ? undefined : 'Choisissez le type d’Ã©vÃ©nement Ã  crÃ©er.'}
       >
         {!createKind ? (
           <div className="grid grid-cols-2 gap-3">

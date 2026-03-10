@@ -401,7 +401,7 @@ export function ServiceTemplatesModal({
                     <p className="text-sm font-semibold text-[var(--text-primary)]">{tpl.title}</p>
                   </div>
                   <p className="text-[11px] text-[var(--text-secondary)]">
-                    {tpl.defaultDueOffsetDays != null ? `J+${tpl.defaultDueOffsetDays}` : "Pas d\u2019\u00e9ch\u00e9ance auto"}
+                    {tpl.defaultDueOffsetDays != null ? `J+${tpl.defaultDueOffsetDays}` : "Pas d’Ã©chÃ©ance auto"}
                     {tpl.defaultAssigneeRole ? ` · ${tpl.defaultAssigneeRole}` : ''}
                   </p>
                 </div>

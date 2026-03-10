@@ -93,7 +93,7 @@ export const POST = withBusinessRoute<{ businessId: string; quoteId: string }>(
     }
 
     if (quote.project.billingQuoteId && quote.project.billingQuoteId !== quote.id) {
-      return badRequest('Ce devis n\u2019est pas le devis de référence du projet.');
+      return badRequest('Ce devis n’est pas le devis de rÃ©fÃ©rence du projet.');
     }
 
     const dueAt = new Date();

@@ -44,11 +44,11 @@ export async function GET(
   }
 
   if (shareToken.revokedAt) {
-    return NextResponse.json({ error: 'Ce lien a \u00e9t\u00e9 r\u00e9voqu\u00e9.' }, { status: 410 });
+    return NextResponse.json({ error: 'Ce lien a été révoqué.' }, { status: 410 });
   }
 
   if (shareToken.expiresAt && shareToken.expiresAt < new Date()) {
-    return NextResponse.json({ error: 'Ce lien a expir\u00e9.' }, { status: 410 });
+    return NextResponse.json({ error: 'Ce lien a expiré.' }, { status: 410 });
   }
 
   // Fetch project data — non-sensitive fields only

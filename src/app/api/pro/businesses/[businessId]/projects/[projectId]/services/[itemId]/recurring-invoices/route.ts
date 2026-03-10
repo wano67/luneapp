@@ -37,7 +37,7 @@ export const POST = withBusinessRoute<{ businessId: string; projectId: string; i
     if (!projectService) return notFound('Service introuvable.');
 
     if (projectService.billingUnit !== 'MONTHLY') {
-      return badRequest('Ce service n\u2019est pas un abonnement mensuel.');
+      return badRequest('Ce service n’est pas un abonnement mensuel.');
     }
 
     const pricing = resolveServiceUnitPriceCents({

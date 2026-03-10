@@ -35,8 +35,8 @@ function toEuro(value: string | number): number {
 
 function formatEur(value: number) {
   const abs = Math.abs(value);
-  if (abs >= 1000) return `${(value / 1000).toFixed(1).replace(/\.0$/, '')}k\u202F\u20AC`;
-  return `${value.toFixed(0)}\u202F\u20AC`;
+  if (abs >= 1000) return `${(value / 1000).toFixed(1).replace(/\.0$/, '')}k\u202F€`;
+  return `${value.toFixed(0)}\u202F€`;
 }
 
 const MONTH_SHORT: Record<string, string> = {

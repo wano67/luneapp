@@ -328,7 +328,7 @@ export default function ProjectEditPage() {
       <div className="space-y-4">
         <PageHeader
           title="Modifier le projet"
-          subtitle={`Statut actuel : ${statusLabel ?? project.status}${project.archivedAt ? ' \u00b7 Archiv\u00e9' : ''}`}
+          subtitle={`Statut actuel : ${statusLabel ?? project.status}${project.archivedAt ? ' � Archivé' : ''}`}
           backHref={`/app/pro/${businessId}/projects/${projectId}`}
           backLabel="Retour au projet"
           actions={
@@ -349,7 +349,7 @@ export default function ProjectEditPage() {
           }
           context={
             <p className="text-xs text-[var(--text-secondary)]">
-              Statut s\u00e9lectionn\u00e9 : {selectedStatusLabel}
+              Statut sélectionné : {selectedStatusLabel}
             </p>
           }
         />

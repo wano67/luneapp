@@ -28,13 +28,13 @@ export const POST = withPersonalRoute(async (ctx, req) => {
   const body = await readJson(req) as Record<string, unknown> | null;
 
   if (!body || typeof body.name !== 'string') {
-    return badRequest('Le nom de l\u2019entreprise est requis.');
+    return badRequest('Le nom de l’entreprise est requis.');
   }
 
   const name = (body.name as string).trim();
 
   if (!name) {
-    return badRequest('Le nom de l\u2019entreprise ne peut pas \u00eatre vide.');
+    return badRequest('Le nom de l’entreprise ne peut pas Ãªtre vide.');
   }
 
   const countryCode = typeof body.countryCode === 'string' ? body.countryCode.trim().toUpperCase() : null;
@@ -55,14 +55,14 @@ export const POST = withPersonalRoute(async (ctx, req) => {
 
   const siretRaw = typeof body.siret === 'string' ? normalizeSiret(body.siret) : '';
   if (siretRaw && !isValidSiret(siretRaw)) {
-    return badRequest('SIRET invalide (14 chiffres + contr\u00f4le).');
+    return badRequest('SIRET invalide (14 chiffres + contrôle).');
   }
 
   const vatRaw = typeof body.vatNumber === 'string' ? normalizeVat(body.vatNumber) : '';
   if (vatRaw) {
     const vatResult = isValidVat(vatRaw, countryCode);
     if (!vatResult.ok) {
-      return badRequest('Num\u00e9ro de TVA intracom invalide.');
+      return badRequest('Numéro de TVA intracom invalide.');
     }
     if (countryCode === 'FR' && !vatRaw.startsWith('FR')) {
       return badRequest('TVA intracom FR attendue.');

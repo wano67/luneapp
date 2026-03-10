@@ -35,10 +35,10 @@ export default function ProjectsPage({ businessId }: Props) {
   const items = data ?? [];
   const emptyLabel =
     scope === 'ACTIVE'
-      ? 'Aucun projet actif pour l\u2019instant.'
+      ? 'Aucun projet actif pour l’instant.'
       : scope === 'PLANNED'
-        ? 'Aucun projet en attente pour l\u2019instant.'
-        : 'Aucun projet terminé pour l\u2019instant.';
+        ? 'Aucun projet en attente pour l’instant.'
+        : 'Aucun projet terminÃ© pour l’instant.';
 
   return (
     <ProPageShell

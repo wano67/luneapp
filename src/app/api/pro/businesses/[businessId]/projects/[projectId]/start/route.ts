@@ -41,7 +41,7 @@ export const POST = withBusinessRoute<{ businessId: string; projectId: string }>
       return badRequest('Le devis doit être signé/accepté avant démarrage.');
     }
     if (!(project.depositStatus === 'PAID' || project.depositStatus === 'NOT_REQUIRED')) {
-      return badRequest('L\u2019acompte doit être payé ou non requis.');
+      return badRequest('L’acompte doit Ãªtre payÃ© ou non requis.');
     }
 
     const now = new Date();

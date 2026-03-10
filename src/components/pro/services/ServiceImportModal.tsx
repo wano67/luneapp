@@ -263,7 +263,7 @@ export function ServiceImportModal({ open, businessId, isAdmin, onClose, onAfter
             Fermer
           </Button>
           <Button type="submit" disabled={importing || !importRows.length}>
-            {importing ? "Import\u2026" : "Lancer l'import"}
+            {importing ? "Import…" : "Lancer l'import"}
           </Button>
         </div>
       </form>

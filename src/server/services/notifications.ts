@@ -191,7 +191,7 @@ export async function notifyMessageReceived(
 
   const body = messagePreview
     ? messagePreview.length > 100
-      ? messagePreview.slice(0, 100) + '\u2026'
+      ? messagePreview.slice(0, 100) + '…'
       : messagePreview
     : null;
 

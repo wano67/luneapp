@@ -12,7 +12,7 @@ export const TASK_STATUS_OPTIONS: { value: TaskStatus; label: string }[] = [
 ];
 
 export function formatTaskStatus(status: string): string {
-  return TASK_STATUS_LABELS[status as TaskStatus] ?? (status || '\u2014');
+  return TASK_STATUS_LABELS[status as TaskStatus] ?? (status || '—');
 }
 
 export const TASK_STATUS_CLASSES: Record<TaskStatus, string> = {

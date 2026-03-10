@@ -136,7 +136,7 @@ export function useOrganizationUnits({ businessId, redirectToLogin }: UseOrganiz
       );
       if (res.status === 401) { redirectToLogin(); return; }
       if (!res.ok) {
-        const msg = res.error ?? 'Impossible d\u2019assigner le membre.';
+        const msg = res.error ?? 'Impossible d’assigner le membre.';
         setActionError(res.requestId ? `${msg} (Ref: ${res.requestId})` : msg);
         return;
       }

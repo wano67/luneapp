@@ -35,7 +35,7 @@ export function useDocumentUpload({
       }
       await loadProjectDocuments();
     } catch {
-      onError('Erreur réseau lors de l\u2019upload.');
+      onError('Erreur rÃ©seau lors de l’upload.');
     } finally {
       setUploading(false);
     }

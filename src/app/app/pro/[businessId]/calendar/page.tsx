@@ -229,7 +229,7 @@ export default function ProCalendarPage() {
         open={createOpen}
         onCloseAction={() => { if (!creating) setCreateOpen(false); }}
         title={createKind ? (createKind === 'APPOINTMENT' ? 'Nouveau rendez-vous' : createKind === 'REMINDER' ? 'Nouveau rappel' : 'Nouvelle tâche') : 'Ajouter au calendrier'}
-        description={createKind ? undefined : 'Choisissez le type d\u2019événement à créer.'}
+        description={createKind ? undefined : 'Choisissez le type d’Ã©vÃ©nement Ã  crÃ©er.'}
       >
         {!createKind ? (
           <div className="grid grid-cols-3 gap-3">

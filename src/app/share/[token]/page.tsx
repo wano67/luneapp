@@ -72,16 +72,16 @@ type ShareData = {
 /* ═══ Helpers ═══ */
 
 const STATUS_LABELS: Record<string, string> = {
-  PLANNED: 'Planifi\u00e9',
+  PLANNED: 'Planifié',
   ACTIVE: 'En cours',
   ON_HOLD: 'En pause',
-  COMPLETED: 'Termin\u00e9',
-  CANCELLED: 'Annul\u00e9',
-  SENT: 'Envoy\u00e9',
-  SIGNED: 'Sign\u00e9',
-  PAID: 'Pay\u00e9e',
+  COMPLETED: 'Terminé',
+  CANCELLED: 'Annulé',
+  SENT: 'Envoyé',
+  SIGNED: 'Signé',
+  PAID: 'Payée',
   DRAFT: 'Brouillon',
-  EXPIRED: 'Expir\u00e9',
+  EXPIRED: 'Expiré',
 };
 
 function fmtCents(cents: string | number, currency = 'EUR'): string {
@@ -91,7 +91,7 @@ function fmtCents(cents: string | number, currency = 'EUR'): string {
 }
 
 function fmtDate(iso: string | null): string {
-  if (!iso) return '\u2014';
+  if (!iso) return '—';
   return new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(iso));
 }
 
@@ -111,7 +111,7 @@ export default function ShareProjectPage() {
       .then(async (res) => {
         if (!res.ok) {
           const body = await res.json().catch(() => null);
-          setError((body as { error?: string } | null)?.error ?? 'Lien invalide ou expir\u00e9.');
+          setError((body as { error?: string } | null)?.error ?? 'Lien invalide ou expiré.');
           return;
         }
         const json = await res.json();
@@ -181,7 +181,7 @@ export default function ShareProjectPage() {
           </span>
           {project.startDate && (
             <span className="text-xs" style={{ color: 'var(--text-faint)' }}>
-              {fmtDate(project.startDate)} \u2192 {fmtDate(project.endDate)}
+              {fmtDate(project.startDate)} â {fmtDate(project.endDate)}
             </span>
           )}
         </div>
@@ -200,14 +200,14 @@ export default function ShareProjectPage() {
           />
         </div>
         <p className="mt-1 text-xs" style={{ color: 'var(--text-faint)' }}>
-          {project.tasksSummary.done}/{project.tasksSummary.total} t\u00e2ches termin\u00e9es
+          {project.tasksSummary.done}/{project.tasksSummary.total} tâches terminées
         </p>
       </div>
 
       {/* Scope */}
       {project.prestationsText && (
         <div className="rounded-xl border p-5" style={{ borderColor: 'var(--border)', background: 'var(--surface)' }}>
-          <h2 className="mb-3 text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>P\u00e9rim\u00e8tre du projet</h2>
+          <h2 className="mb-3 text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Périmètre du projet</h2>
           <p className="whitespace-pre-wrap text-sm" style={{ color: 'var(--text-secondary)', lineHeight: 1.7 }}>
             {project.prestationsText}
           </p>
@@ -227,12 +227,12 @@ export default function ShareProjectPage() {
                   <div className="mb-1 flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <span className="text-sm" style={{ color: isDone ? 'var(--success)' : 'var(--text-primary)' }}>
-                        {isDone ? '\u2713' : '\u25cb'}
+                        {isDone ? 'â' : 'â'}
                       </span>
                       <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{svc.name}</span>
                     </div>
                     <span className="text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>
-                      {svc.tasksSummary.total > 0 ? `${sp}%` : '\u2014'}
+                      {svc.tasksSummary.total > 0 ? `${sp}%` : '—'}
                     </span>
                   </div>
                   {svc.tasksSummary.total > 0 && (
@@ -262,7 +262,7 @@ export default function ShareProjectPage() {
               <div key={`q-${i}`} className="flex items-center justify-between rounded-lg px-3 py-2" style={{ background: 'var(--surface-hover)' }}>
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>Devis</span>
-                  <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{q.number ?? '\u2014'}</span>
+                  <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{q.number ?? '—'}</span>
                 </div>
                 <div className="flex items-center gap-3">
                   <BillingBadge status={q.status} />
@@ -274,7 +274,7 @@ export default function ShareProjectPage() {
               <div key={`i-${i}`} className="flex items-center justify-between rounded-lg px-3 py-2" style={{ background: 'var(--surface-hover)' }}>
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>Facture</span>
-                  <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{inv.number ?? '\u2014'}</span>
+                  <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{inv.number ?? '—'}</span>
                 </div>
                 <div className="flex items-center gap-3">
                   <BillingBadge status={inv.status} />
@@ -288,7 +288,7 @@ export default function ShareProjectPage() {
           {payments.length > 0 && (
             <div className="mt-4 border-t pt-3" style={{ borderColor: 'var(--border)' }}>
               <p className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
-                {payments.length} paiement{payments.length > 1 ? 's' : ''} re\u00e7u{payments.length > 1 ? 's' : ''} \u2014{' '}
+                {payments.length} paiement{payments.length > 1 ? 's' : ''} reÃ§u{payments.length > 1 ? 's' : ''} —{' '}
                 <span className="font-semibold" style={{ color: 'var(--success)' }}>
                   {fmtCents(payments.reduce((sum, p) => sum + Number(p.amountCents), 0).toString())}
                 </span>

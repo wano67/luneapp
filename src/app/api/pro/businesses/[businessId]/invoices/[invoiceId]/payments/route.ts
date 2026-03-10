@@ -111,7 +111,7 @@ export const POST = withBusinessRoute<{ businessId: string; invoiceId: string }>
     });
     if (!invoice) return withIdNoStore(notFound('Facture introuvable.'), requestId);
     if (invoice.status === InvoiceStatus.CANCELLED) {
-      return withIdNoStore(badRequest('Impossible d\u2019ajouter un paiement sur une facture annulée.'), requestId);
+      return withIdNoStore(badRequest('Impossible d’ajouter un paiement sur une facture annulÃ©e.'), requestId);
     }
 
     try {

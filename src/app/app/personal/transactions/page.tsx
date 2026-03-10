@@ -91,7 +91,7 @@ function periodLabel(from: string, to: string): string {
   if (!from && !to) return 'Ce mois-ci';
   if (from && to) return `${fmtDate(from + 'T00:00:00')} — ${fmtDate(to + 'T00:00:00')}`;
   if (from) return `Depuis le ${fmtDate(from + 'T00:00:00')}`;
-  return `Jusqu\u2019au ${fmtDate(to + 'T00:00:00')}`;
+  return `Jusqu’au ${fmtDate(to + 'T00:00:00')}`;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -418,7 +418,7 @@ export default function PersoTransactionsPage() {
       <div className="space-y-5">
         <PageHeader
           title="Transactions"
-          subtitle="Analyse tes dépenses et revenus en un coup d\u2019oeil."
+          subtitle="Analyse tes dÃ©penses et revenus en un coup d’oeil."
           actions={
             <>
               <Button variant="outline" onClick={resetFilters} disabled={loadingAccounts || loadingList}>
@@ -626,7 +626,7 @@ export default function PersoTransactionsPage() {
           required={required}
           isValid={isValid}
           attemptedSubmit={attemptedSubmit}
-          amountPreview={amountCentsRaw ? formatCents(absCents(amountCentsRaw), fCurrency || 'EUR') : '\u2014'}
+          amountPreview={amountCentsRaw ? formatCents(absCents(amountCentsRaw), fCurrency || 'EUR') : '—'}
           accounts={accounts}
           categories={categories}
           loadingCategories={loadingCategories}

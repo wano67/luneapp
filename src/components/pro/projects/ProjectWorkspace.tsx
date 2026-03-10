@@ -116,7 +116,7 @@ type MemberItem = {
 
 
 const tabs = [
-  { key: 'overview', label: "Vue d\u2019ensemble" },
+  { key: 'overview', label: "Vue d’ensemble" },
   { key: 'work', label: 'Tâches' },
   { key: 'team', label: 'Équipe' },
   { key: 'billing', label: 'Facturation' },
@@ -980,7 +980,7 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
                   Annuler
                 </Button>
                 <Button onClick={handleShareCreate} disabled={shareLoading}>
-                  {shareLoading ? 'Génération\u2026' : 'Générer le lien'}
+                  {shareLoading ? 'GÃ©nÃ©ration…' : 'GÃ©nÃ©rer le lien'}
                 </Button>
               </div>
             </>

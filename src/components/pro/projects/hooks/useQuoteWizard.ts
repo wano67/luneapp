@@ -230,7 +230,7 @@ export function useQuoteWizard({
     }
     setQuoteWizardSaving(true);
     setQuoteWizardError(null);
-    setQuoteWizardInfo('Ajout des prestations\u2026');
+    setQuoteWizardInfo('Ajout des prestations…');
     try {
       const dueOffset = quoteWizardDueOffsetDays.trim()
         ? Math.max(0, Math.min(365, Number(quoteWizardDueOffsetDays)))
@@ -299,7 +299,7 @@ export function useQuoteWizard({
       }
       } // end else (services not yet posted)
 
-      setQuoteWizardInfo('Génération du devis\u2026');
+      setQuoteWizardInfo('GÃ©nÃ©ration du devis…');
       const quoteRes = await fetchJson<{
         item: { id: string };
         pdfUrl: string;

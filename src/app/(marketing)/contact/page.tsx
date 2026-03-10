@@ -96,7 +96,7 @@ export default function ContactPage() {
               )}
               <div className="flex justify-end">
                 <Button type="submit" disabled={sending}>
-                  {sending ? 'Envoi en cours\u2026' : 'Envoyer'}
+                  {sending ? 'Envoi en cours…' : 'Envoyer'}
                 </Button>
               </div>
             </form>

@@ -158,7 +158,7 @@ export function ProjectHeaderSection({
               onClick={onMarkCompleted}
               disabled={!isAdmin || markingCompleted}
             >
-              {markingCompleted ? 'Traitement\u2026' : 'Marquer terminé'}
+              {markingCompleted ? 'Traitement…' : 'Marquer terminÃ©'}
             </Button>
             <Button
               type="button"

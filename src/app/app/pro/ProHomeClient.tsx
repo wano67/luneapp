@@ -356,7 +356,7 @@ export default function ProHomeClient() {
       }
 
       const data = res.data;
-      setJoinSuccess(`Tu as rejoint \u00AB ${data.business?.name ?? "l'entreprise"} \u00BB.`);
+      setJoinSuccess(`Tu as rejoint Â« ${data.business?.name ?? "l'entreprise"} Â».`);
       setJoinToken('');
       await refreshBusinesses();
       setJoinOpen(false);
@@ -390,7 +390,7 @@ export default function ProHomeClient() {
     const projectsActive = projectsFromKpis || projectsFallback;
 
     const totalNet = overview?.totals?.totalNetCents ?? '0';
-    const solde = totalNet ? formatCurrency(totalNet) : '0 \u20AC';
+    const solde = totalNet ? formatCurrency(totalNet) : '0 €';
 
     return { businessCount, projectsActive, solde };
   }, [overview, businessKpis, items.length]);
@@ -401,7 +401,7 @@ export default function ProHomeClient() {
     return (
       <PageContainer className="gap-5">
         <Card className="p-5">
-          <p className="text-sm text-[var(--text-secondary)]">Chargement{'\u2026'}</p>
+          <p className="text-sm text-[var(--text-secondary)]">Chargement{'…'}</p>
         </Card>
       </PageContainer>
     );
@@ -411,7 +411,7 @@ export default function ProHomeClient() {
     <PageContainer className="gap-5">
       {loading ? (
         <Card className="p-5">
-          <p className="text-sm text-[var(--text-secondary)]">Chargement\u2026</p>
+          <p className="text-sm text-[var(--text-secondary)]">Chargement…</p>
         </Card>
       ) : error ? (
         <Card className="p-5">
@@ -487,19 +487,19 @@ export default function ProHomeClient() {
                         <div className="flex items-center justify-between">
                           <span className="text-sm font-medium text-white">Tâches</span>
                           <span className="text-xs font-extrabold text-white">
-                            {typeof kpiData.openTasksCount === 'number' ? kpiData.openTasksCount : '\u2014'}
+                            {typeof kpiData.openTasksCount === 'number' ? kpiData.openTasksCount : '—'}
                           </span>
                         </div>
                         <div className="flex items-center justify-between">
                           <span className="text-sm font-medium text-white">Trésorerie</span>
                           <span className="text-xs font-extrabold text-white">
-                            {kpiData.balanceCents ? formatCurrency(kpiData.balanceCents) : '\u2014'}
+                            {kpiData.balanceCents ? formatCurrency(kpiData.balanceCents) : '—'}
                           </span>
                         </div>
                         <div className="flex items-center justify-between">
                           <span className="text-sm font-medium text-white">Projets actifs</span>
                           <span className="text-xs font-extrabold text-white">
-                            {typeof kpiData.projectsActiveCount === 'number' ? kpiData.projectsActiveCount : '\u2014'}
+                            {typeof kpiData.projectsActiveCount === 'number' ? kpiData.projectsActiveCount : '—'}
                           </span>
                         </div>
                       </div>
@@ -587,7 +587,7 @@ export default function ProHomeClient() {
               Annuler
             </Button>
             <Button type="submit" disabled={joining}>
-              {joining ? 'Verification\u2026' : 'Rejoindre'}
+              {joining ? 'Verification…' : 'Rejoindre'}
             </Button>
           </div>
         </form>

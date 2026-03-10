@@ -122,7 +122,7 @@ export async function sendVerificationEmail(params: VerificationEmailParams): Pr
     await resend.emails.send({
       from: fromAddress,
       to,
-      subject: 'Confirmez votre adresse email \u2014 Lune',
+      subject: 'Confirmez votre adresse email — Lune',
       html,
     });
   } catch (error) {
@@ -170,7 +170,7 @@ export async function sendPasswordResetEmail(params: PasswordResetEmailParams): 
     await resend.emails.send({
       from: fromAddress,
       to,
-      subject: 'R\u00e9initialisation de votre mot de passe \u2014 Lune',
+      subject: 'RÃ©initialisation de votre mot de passe — Lune',
       html,
     });
   } catch (error) {
@@ -226,7 +226,7 @@ export async function sendProjectShareEmail(params: ProjectShareEmailParams): Pr
     await resend.emails.send({
       from: fromAddress,
       to,
-      subject: `${businessName} \u2014 Suivi de votre projet \u00ab ${projectName} \u00bb`,
+      subject: `${businessName} — Suivi de votre projet « ${projectName} »`,
       html,
     });
   } catch (error) {

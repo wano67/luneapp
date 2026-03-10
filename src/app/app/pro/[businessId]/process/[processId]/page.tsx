@@ -369,7 +369,7 @@ export default function ProcessDetailPage() {
         backHref={`/app/pro/${businessId}/process`}
         backLabel="Process"
         title={process?.name ?? `Process #${processId}`}
-        subtitle={process?.description ?? "Suivi des \u00e9tapes et de l\u2019ex\u00e9cution"}
+        subtitle={process?.description ?? "Suivi des Ã©tapes et de l’exÃ©cution"}
         actions={
           isAdmin ? (
             <div className="flex flex-wrap items-center gap-2">
@@ -377,7 +377,7 @@ export default function ProcessDetailPage() {
                 Modifier
               </Button>
               <Button size="sm" onClick={() => openStepModal()}>
-                Ajouter une \u00e9tape
+                Ajouter une étape
               </Button>
             </div>
           ) : undefined

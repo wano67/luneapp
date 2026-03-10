@@ -198,7 +198,7 @@ export default function AppHomePage() {
     }
   }
 
-  const greeting = loading ? 'Chargement\u2026' : userName ? `Bonjour ${userName}` : 'Bonjour';
+  const greeting = loading ? 'Chargement…' : userName ? `Bonjour ${userName}` : 'Bonjour';
   const netCents = summary ? BigInt(summary.monthNetCents) : 0n;
   const netPositive = netCents >= 0n;
 
@@ -230,7 +230,7 @@ export default function AppHomePage() {
                 onClick={() => void acceptInvite(inv.token, inv.id)}
                 disabled={acceptingId === inv.id}
               >
-                {acceptingId === inv.id ? 'Acceptation\u2026' : 'Accepter'}
+                {acceptingId === inv.id ? 'Acceptation…' : 'Accepter'}
               </Button>
             </div>
           ))}
@@ -258,8 +258,8 @@ export default function AppHomePage() {
         />
         <ClickableKpi
           href="/app/personal/epargne"
-          label="Capacite d'\u00e9pargne"
-          value={summary ? `${fmtKpi(summary.savingsCapacityCents)}/mois` : '\u2014'}
+          label="Capacite d'épargne"
+          value={summary ? `${fmtKpi(summary.savingsCapacityCents)}/mois` : '—'}
           sub="Estimation mensuelle"
           loading={loading}
           delay={100}
@@ -406,7 +406,7 @@ export default function AppHomePage() {
 
         <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--border)' }}>
           {loading ? (
-            <EmptyState title="Chargement\u2026" />
+            <EmptyState title="Chargement…" />
           ) : !summary?.transactions?.length ? (
             <EmptyState title="Aucune transaction" />
           ) : (
@@ -422,7 +422,7 @@ export default function AppHomePage() {
                   }}
                 >
                   <div className="min-w-0">
-                    <p className="text-sm font-medium text-[var(--text)] truncate">{tx.label || '\u2014'}</p>
+                    <p className="text-sm font-medium text-[var(--text)] truncate">{tx.label || '—'}</p>
                     <p className="text-[11px] text-[var(--text-faint)]">
                       {tx.account.name} · {new Date(tx.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
                     </p>
@@ -487,7 +487,7 @@ function ClickableKpi({
             <span className="text-[11px] font-medium" style={{
               color: trend === 'up' ? 'var(--success)' : trend === 'down' ? 'var(--danger)' : 'var(--text-faint)',
             }}>
-              {trend === 'up' ? '\u25B2 ' : trend === 'down' ? '\u25BC ' : ''}{sub}
+              {trend === 'up' ? 'â² ' : trend === 'down' ? 'â¼ ' : ''}{sub}
             </span>
           )}
         </div>

@@ -19,11 +19,11 @@ export const UI = {
 // ─── Domain-neutral helpers ───────────────────────────────────────────────────
 
 export function formatDate(value: string | null) {
-  if (!value) return '\u2014';
+  if (!value) return '—';
   try {
     return new Intl.DateTimeFormat('fr-FR').format(new Date(value));
   } catch {
-    return '\u2014';
+    return '—';
   }
 }
 
