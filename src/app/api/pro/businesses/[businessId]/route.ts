@@ -23,6 +23,13 @@ const businessSelect = {
   bankName: true,
   accountHolder: true,
   billingLegalText: true,
+  legalForm: true,
+  taxRegime: true,
+  activityType: true,
+  nafCode: true,
+  nafLabel: true,
+  leaderTitle: true,
+  socialRegime: true,
   ownerId: true,
   createdAt: true,
   updatedAt: true,
@@ -228,6 +235,41 @@ export const PATCH = withBusinessRoute(
         return badRequest('Mentions légales trop longues (2000 max).');
       }
       data.billingLegalText = billingLegalText || null;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(body, 'legalForm')) {
+      const lf = readString((body as Record<string, unknown>).legalForm);
+      data.legalForm = lf || null;
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'taxRegime')) {
+      const tr = readString((body as Record<string, unknown>).taxRegime);
+      if (tr && !['IS', 'IR'].includes(tr)) return badRequest('taxRegime invalide (IS ou IR).');
+      data.taxRegime = tr || null;
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'activityType')) {
+      const at = readString((body as Record<string, unknown>).activityType);
+      if (at && !['SERVICE', 'COMMERCE', 'MIXTE', 'LIBERALE'].includes(at)) return badRequest('activityType invalide.');
+      data.activityType = at || null;
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'nafCode')) {
+      const nc = readString((body as Record<string, unknown>).nafCode);
+      if (nc && nc.length > 10) return badRequest('nafCode trop long (10 max).');
+      data.nafCode = nc || null;
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'nafLabel')) {
+      const nl = readString((body as Record<string, unknown>).nafLabel);
+      if (nl && nl.length > 200) return badRequest('nafLabel trop long (200 max).');
+      data.nafLabel = nl || null;
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'leaderTitle')) {
+      const lt = readString((body as Record<string, unknown>).leaderTitle);
+      if (lt && lt.length > 100) return badRequest('leaderTitle trop long (100 max).');
+      data.leaderTitle = lt || null;
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'socialRegime')) {
+      const sr = readString((body as Record<string, unknown>).socialRegime);
+      if (sr && !['TNS', 'ASSIMILE_SALARIE', 'MICRO_SOCIAL'].includes(sr)) return badRequest('socialRegime invalide.');
+      data.socialRegime = sr || null;
     }
 
     if (Object.keys(data).length === 0) {

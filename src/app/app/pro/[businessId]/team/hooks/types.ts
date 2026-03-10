@@ -12,6 +12,7 @@ export type EmployeeProfile = {
   endDate: string | null;
   weeklyHours: number | null;
   hourlyCostCents: string | null;
+  grossSalaryCents: string | null;
   status: 'ACTIVE' | 'INACTIVE';
   notes: string | null;
   createdAt?: string;
@@ -51,6 +52,10 @@ export type OrganizationUnit = {
   id: string;
   name: string;
   order: number;
+  parentId: string | null;
+  description: string | null;
+  children?: OrganizationUnit[];
+  _count?: { memberships: number };
   createdAt: string;
   updatedAt: string;
 };

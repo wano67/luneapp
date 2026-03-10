@@ -19,8 +19,9 @@ import {
   PivotLogo,
 } from '@/components/pivot-icons';
 import { CalendarDays, Menu } from 'lucide-react';
-import { proNavSections } from '@/config/proNav';
+import { proNavSections, hasMinRole } from '@/config/proNav';
 import { pivotIconMap } from '@/config/pivotNavIcons';
+import { useActiveBusiness } from './pro/ActiveBusinessProvider';
 import type { Space, BusinessItem } from './PivotShell';
 
 type Props = {
@@ -51,16 +52,22 @@ function getPersoItems(): MenuItem[] {
   ];
 }
 
-function getProItems(businessId: string): MenuItem[] {
+function getProItems(businessId: string, role?: string | null, activityType?: string | null): MenuItem[] {
   return proNavSections.flatMap((section) =>
-    section.items.map((item) => {
-      const iconFn = pivotIconMap[item.id];
-      return {
-        icon: iconFn ? iconFn('currentColor') : <IconEntreprise size={22} color="currentColor" />,
-        label: item.label,
-        href: item.href(businessId),
-      };
-    })
+    section.items
+      .filter((item) => {
+        if (item.minRole && !hasMinRole(role, item.minRole)) return false;
+        if (item.activityTypes && activityType && !item.activityTypes.includes(activityType as never)) return false;
+        return true;
+      })
+      .map((item) => {
+        const iconFn = pivotIconMap[item.id];
+        return {
+          icon: iconFn ? iconFn('currentColor') : <IconEntreprise size={22} color="currentColor" />,
+          label: item.label,
+          href: item.href(businessId),
+        };
+      })
   );
 }
 
@@ -99,6 +106,7 @@ function isExactActive(pathname: string, href: string): boolean {
 /* ═══ Mobile Nav ═══ */
 
 export default function PivotMobileNav({ space, pathname, businessId, businesses: _businesses, userName: _userName }: Props) {
+  const activeCtx = useActiveBusiness({ optional: true });
   const [menuOpen, setMenuOpen] = useState(false);
   const [closing, setClosing] = useState(false);
   useBodyScrollLock(menuOpen);
@@ -124,7 +132,7 @@ export default function PivotMobileNav({ space, pathname, businessId, businesses
       { icon: <IconSettings size={22} color="currentColor" />, label: 'Mon compte', href: '/app/account' },
     ];
   } else if (effectiveSpace === 'perso') menuItems = getPersoItems();
-  else if (effectiveSpace === 'pro' && businessId) menuItems = getProItems(businessId);
+  else if (effectiveSpace === 'pro' && businessId) menuItems = getProItems(businessId, activeCtx?.activeBusiness?.role, activeCtx?.activeBusiness?.activityType);
   else if (effectiveSpace === 'pro') menuItems = [{ icon: <IconEntreprise size={22} color="currentColor" />, label: 'Mes entreprises', href: '/app/pro' }];
   else if (effectiveSpace === 'focus') menuItems = getFocusItems();
 

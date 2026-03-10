@@ -166,6 +166,14 @@ export const PATCH = withBusinessRoute(
     }
 
     if (b.vatEnabled !== undefined) data.vatEnabled = bool(b.vatEnabled);
+
+    const vatRegime = str(b.vatRegime);
+    if (vatRegime !== null) {
+      if (!['FRANCHISE', 'SIMPLIFIE', 'REEL_NORMAL'].includes(vatRegime))
+        return withIdNoStore(badRequest('vatRegime invalide.'), ctx.requestId);
+      data.vatRegime = vatRegime;
+    }
+
     if (b.allowMembersInvite !== undefined) data.allowMembersInvite = bool(b.allowMembersInvite);
     if (b.allowViewerExport !== undefined) data.allowViewerExport = bool(b.allowViewerExport);
     if (b.integrationStripeEnabled !== undefined)

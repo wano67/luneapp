@@ -67,6 +67,9 @@ function serializeMember(membership: MembershipWithProfile | null) {
           hourlyCostCents: membership.employeeProfile.hourlyCostCents
             ? membership.employeeProfile.hourlyCostCents.toString()
             : null,
+          grossSalaryCents: membership.employeeProfile.grossSalaryCents
+            ? membership.employeeProfile.grossSalaryCents.toString()
+            : null,
           status: membership.employeeProfile.status,
           notes: membership.employeeProfile.notes,
           createdAt: membership.employeeProfile.createdAt.toISOString(),
@@ -217,6 +220,9 @@ export const PATCH = withBusinessRoute<{ businessId: string; userId: string }>(
 
       const hourlyCost = big(profilePayload.hourlyCostCents);
       if (hourlyCost !== undefined) profileData.hourlyCostCents = hourlyCost;
+
+      const grossSalary = big(profilePayload.grossSalaryCents);
+      if (grossSalary !== undefined) profileData.grossSalaryCents = grossSalary;
 
       const statusRaw = profilePayload.status;
       if (statusRaw !== undefined) {

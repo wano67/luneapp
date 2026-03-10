@@ -3,7 +3,7 @@
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { ChevronDown } from 'lucide-react';
-import { proNavSections } from '@/config/proNav';
+import { proNavSections, hasMinRole } from '@/config/proNav';
 import { pivotIconMap } from '@/config/pivotNavIcons';
 import {
   IconPerso,
@@ -20,6 +20,7 @@ import {
   PivotLogo,
 } from '@/components/pivot-icons';
 import { CalendarDays } from 'lucide-react';
+import { useActiveBusiness } from './pro/ActiveBusinessProvider';
 import type { Space, BusinessItem } from './PivotShell';
 
 type Props = {
@@ -49,6 +50,7 @@ function isExactActive(pathname: string, href: string): boolean {
 /* ═══ Sidebar ═══ */
 
 export default function PivotSidebar({ space, pathname, businessId, businesses: _businesses, userName, collapsed, onToggleCollapse }: Props) {
+  const activeCtx = useActiveBusiness({ optional: true });
   const inBusiness = space === 'pro' && !!businessId;
 
   const nameParts = userName.trim().split(/\s+/);
@@ -87,7 +89,13 @@ export default function PivotSidebar({ space, pathname, businessId, businesses: 
         {inBusiness && (
           <Section title="Navigation" collapsed={collapsed}>
             {proNavSections.flatMap((section) =>
-              section.items.map((item) => {
+              section.items
+              .filter((item) => {
+                if (item.minRole && !hasMinRole(activeCtx?.activeBusiness?.role, item.minRole)) return false;
+                if (item.activityTypes && activeCtx?.activeBusiness?.activityType && !item.activityTypes.includes(activeCtx.activeBusiness.activityType as never)) return false;
+                return true;
+              })
+              .map((item) => {
                 const href = item.href(businessId!);
                 const patterns = item.activePatterns?.(businessId!);
                 const active = isActive(pathname, href, patterns);

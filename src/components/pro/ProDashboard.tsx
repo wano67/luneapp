@@ -9,6 +9,7 @@ import { Card } from '@/components/ui/card';
 import { PageContainer } from '@/components/layouts/PageContainer';
 import { fmtKpi } from '@/lib/format';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
+import { useActiveBusiness } from '@/app/app/pro/ActiveBusinessProvider';
 
 const TreasuryCashflowChart = dynamic(() => import('./charts/TreasuryCashflowChart'), { ssr: false });
 
@@ -190,6 +191,10 @@ function UniverseCard({
 /* ═══ Dashboard ═══ */
 
 export default function ProDashboard({ businessId }: { businessId: string }) {
+  const activeCtx = useActiveBusiness({ optional: true });
+  const role = activeCtx?.activeBusiness?.role;
+  const isAdminOrOwner = role === 'OWNER' || role === 'ADMIN';
+  const isMemberOrAbove = isAdminOrOwner || role === 'MEMBER';
   const [periodDays, setPeriodDays] = useState(0);
   const [dashboard, setDashboard] = useState<DashboardPayload | null>(null);
   const [tasks, setTasks] = useState<TaskItem[]>([]);
@@ -321,21 +326,23 @@ export default function ProDashboard({ businessId }: { businessId: string }) {
 
           {/* ── Universe cards ── */}
           <div className="grid gap-3 sm:grid-cols-2">
-            {/* Finances */}
-            <UniverseCard
-              icon={<Banknote size={16} className="text-[var(--text-faint)]" />}
-              title="Finances"
-              href={`/app/pro/${businessId}/finances`}
-              delay={50}
-            >
-              <p className="text-lg font-bold" style={{ fontFamily: 'var(--font-barlow), sans-serif' }}>
-                {fmtKpi(dashboard?.treasury?.balanceCents)}
-              </p>
-              <div className="flex items-center gap-3 mt-1 text-xs text-[var(--text-faint)]">
-                <span>+{fmtKpi(mtdIncome)} ce mois</span>
-                <span>-{fmtKpi(mtdExpense)}</span>
-              </div>
-            </UniverseCard>
+            {/* Finances — MEMBER+ */}
+            {isMemberOrAbove && (
+              <UniverseCard
+                icon={<Banknote size={16} className="text-[var(--text-faint)]" />}
+                title="Finances"
+                href={`/app/pro/${businessId}/finances`}
+                delay={50}
+              >
+                <p className="text-lg font-bold" style={{ fontFamily: 'var(--font-barlow), sans-serif' }}>
+                  {fmtKpi(dashboard?.treasury?.balanceCents)}
+                </p>
+                <div className="flex items-center gap-3 mt-1 text-xs text-[var(--text-faint)]">
+                  <span>+{fmtKpi(mtdIncome)} ce mois</span>
+                  <span>-{fmtKpi(mtdExpense)}</span>
+                </div>
+              </UniverseCard>
+            )}
 
             {/* Projets */}
             <UniverseCard
@@ -377,65 +384,71 @@ export default function ProDashboard({ businessId }: { businessId: string }) {
               </div>
             </UniverseCard>
 
-            {/* CRM */}
-            <UniverseCard
-              icon={<BookUser size={16} className="text-[var(--text-faint)]" />}
-              title="CRM"
-              href={`/app/pro/${businessId}/agenda`}
-              delay={200}
-            >
-              <div className="flex items-center gap-3">
-                <span className="text-lg font-bold" style={{ fontFamily: 'var(--font-barlow), sans-serif' }}>
-                  {clientsCount} client{clientsCount > 1 ? 's' : ''}
-                </span>
-              </div>
-              {upcomingInteractions > 0 && (
-                <p className="text-xs mt-1" style={{ color: 'var(--warning)' }}>
-                  {upcomingInteractions} relance{upcomingInteractions > 1 ? 's' : ''} a faire
-                </p>
-              )}
-            </UniverseCard>
-
-            {/* Facturation */}
-            <UniverseCard
-              icon={<Receipt size={16} className="text-[var(--text-faint)]" />}
-              title="Facturation"
-              href={`/app/pro/${businessId}/finances`}
-              delay={250}
-            >
-              <p className="text-lg font-bold" style={{ fontFamily: 'var(--font-barlow), sans-serif' }}>
-                {fmtKpi(pendingCents)} en attente
-              </p>
-              <div className="flex items-center gap-2 mt-1">
-                <span className="text-xs text-[var(--text-faint)]">Recouvrement {collectionPct}%</span>
-                <MiniProgress value={collectionPct} color={collectionPct >= 80 ? 'var(--success)' : 'var(--warning)'} />
-              </div>
-            </UniverseCard>
-          </div>
-
-          {/* ── Cashflow chart ── */}
-          <div
-            className="flex flex-col gap-3 rounded-xl bg-[var(--shell-accent)] p-4 animate-fade-in-up"
-            style={{ animationDelay: '300ms', animationFillMode: 'backwards' }}
-          >
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium text-white">Cash flow</span>
-              <Button asChild variant="outline" size="sm" className="!bg-white !text-black !border-0">
-                <Link href={`/app/pro/${businessId}/finances`}>
-                  <span className="font-semibold text-[16px]" style={{ fontFamily: 'var(--font-barlow), sans-serif' }}>
-                    Voir mes finances
+            {/* CRM — MEMBER+ */}
+            {isMemberOrAbove && (
+              <UniverseCard
+                icon={<BookUser size={16} className="text-[var(--text-faint)]" />}
+                title="CRM"
+                href={`/app/pro/${businessId}/agenda`}
+                delay={200}
+              >
+                <div className="flex items-center gap-3">
+                  <span className="text-lg font-bold" style={{ fontFamily: 'var(--font-barlow), sans-serif' }}>
+                    {clientsCount} client{clientsCount > 1 ? 's' : ''}
                   </span>
-                  <ChevronLeft size={14} className="rotate-180" />
-                </Link>
-              </Button>
-            </div>
-            <TreasuryCashflowChart
-              series={timeSeries}
-              granularity={granularity}
-              openingBalanceCents={dashboard?.treasury?.openingBalanceCents}
-              variant="accent"
-            />
+                </div>
+                {upcomingInteractions > 0 && (
+                  <p className="text-xs mt-1" style={{ color: 'var(--warning)' }}>
+                    {upcomingInteractions} relance{upcomingInteractions > 1 ? 's' : ''} a faire
+                  </p>
+                )}
+              </UniverseCard>
+            )}
+
+            {/* Facturation — MEMBER+ */}
+            {isMemberOrAbove && (
+              <UniverseCard
+                icon={<Receipt size={16} className="text-[var(--text-faint)]" />}
+                title="Facturation"
+                href={`/app/pro/${businessId}/finances`}
+                delay={250}
+              >
+                <p className="text-lg font-bold" style={{ fontFamily: 'var(--font-barlow), sans-serif' }}>
+                  {fmtKpi(pendingCents)} en attente
+                </p>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="text-xs text-[var(--text-faint)]">Recouvrement {collectionPct}%</span>
+                  <MiniProgress value={collectionPct} color={collectionPct >= 80 ? 'var(--success)' : 'var(--warning)'} />
+                </div>
+              </UniverseCard>
+            )}
           </div>
+
+          {/* ── Cashflow chart — MEMBER+ ── */}
+          {isMemberOrAbove && (
+            <div
+              className="flex flex-col gap-3 rounded-xl bg-[var(--shell-accent)] p-4 animate-fade-in-up"
+              style={{ animationDelay: '300ms', animationFillMode: 'backwards' }}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-white">Cash flow</span>
+                <Button asChild variant="outline" size="sm" className="!bg-white !text-black !border-0">
+                  <Link href={`/app/pro/${businessId}/finances`}>
+                    <span className="font-semibold text-[16px]" style={{ fontFamily: 'var(--font-barlow), sans-serif' }}>
+                      Voir mes finances
+                    </span>
+                    <ChevronLeft size={14} className="rotate-180" />
+                  </Link>
+                </Button>
+              </div>
+              <TreasuryCashflowChart
+                series={timeSeries}
+                granularity={granularity}
+                openingBalanceCents={dashboard?.treasury?.openingBalanceCents}
+                variant="accent"
+              />
+            </div>
+          )}
         </>
       )}
     </PageContainer>

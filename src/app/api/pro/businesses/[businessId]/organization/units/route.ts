@@ -8,6 +8,12 @@ export const GET = withBusinessRoute({ minRole: 'VIEWER' }, async (ctx) => {
   const units = await prisma.organizationUnit.findMany({
     where: { businessId: ctx.businessId },
     orderBy: [{ order: 'asc' }, { name: 'asc' }],
+    include: {
+      children: {
+        orderBy: [{ order: 'asc' }, { name: 'asc' }],
+      },
+      _count: { select: { memberships: true } },
+    },
   });
 
   return jsonb({ items: units }, ctx.requestId);
@@ -40,8 +46,21 @@ export const POST = withBusinessRoute({ minRole: 'ADMIN' }, async (ctx, req) => 
     return badRequest('Un pôle avec ce nom existe déjà.');
   }
 
+  const parentIdRaw = (body as { parentId?: unknown }).parentId;
+  const parentId = typeof parentIdRaw === 'string' && parentIdRaw.trim() ? BigInt(parentIdRaw.trim()) : null;
+  if (parentId) {
+    const parent = await prisma.organizationUnit.findFirst({
+      where: { id: parentId, businessId: ctx.businessId },
+      select: { id: true },
+    });
+    if (!parent) return badRequest('Pole parent introuvable.');
+  }
+
+  const descriptionRaw = (body as { description?: unknown }).description;
+  const description = typeof descriptionRaw === 'string' ? descriptionRaw.trim() || null : null;
+
   const created = await prisma.organizationUnit.create({
-    data: { businessId: ctx.businessId, name, order },
+    data: { businessId: ctx.businessId, name, order, parentId, description },
   });
 
   return jsonbCreated({ item: created }, ctx.requestId);

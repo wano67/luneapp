@@ -234,6 +234,11 @@ model Business {
   billingLegalText String?
   legalForm        String?    // SAS, SASU, SARL, EURL, EI, MICRO, SA, SCI, OTHER
   taxRegime        String?    // IS, IR
+  activityType     ActivityType?
+  nafCode          String?
+  nafLabel         String?
+  leaderTitle      String?
+  socialRegime     SocialRegime?
 
   ownerId BigInt
   owner   User   @relation("BusinessOwner", fields: [ownerId], references: [id])
@@ -299,11 +304,15 @@ model BusinessMembership {
 }
 
 model OrganizationUnit {
-  id         BigInt @id @default(autoincrement())
-  businessId BigInt
-  name       String
-  order      Int    @default(0)
+  id          BigInt  @id @default(autoincrement())
+  businessId  BigInt
+  name        String
+  order       Int     @default(0)
+  parentId    BigInt?
+  description String?
 
+  parent      OrganizationUnit?  @relation("UnitHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children    OrganizationUnit[] @relation("UnitHierarchy")
   business    Business           @relation(fields: [businessId], references: [id], onDelete: Cascade)
   memberships BusinessMembership[]
   tasks       Task[]
@@ -313,21 +322,24 @@ model OrganizationUnit {
 
   @@unique([businessId, name])
   @@index([businessId, order])
+  @@index([parentId])
 }
 
 model EmployeeProfile {
-  id           BigInt         @id @default(autoincrement())
-  membershipId BigInt         @unique
-  jobTitle     String?
-  contractType String?
-  startDate    DateTime?
-  endDate      DateTime?
-  weeklyHours  Int?
-  hourlyCostCents BigInt?
-  status       EmployeeStatus @default(ACTIVE)
-  notes        String?
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
+  id               BigInt          @id @default(autoincrement())
+  membershipId     BigInt          @unique
+  jobTitle         String?
+  contractType     String?
+  contractTypeEnum ContractType?
+  startDate        DateTime?
+  endDate          DateTime?
+  weeklyHours      Int?
+  hourlyCostCents  BigInt?
+  grossSalaryCents BigInt?
+  status           EmployeeStatus  @default(ACTIVE)
+  notes            String?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
 
   membership BusinessMembership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
 }
@@ -1294,6 +1306,7 @@ model BusinessSettings {
   enableAutoNumbering    Boolean  @default(true)
   vatRatePercent         Int      @default(20)
   vatEnabled             Boolean  @default(false)
+  vatRegime              VatRegime?
   allowMembersInvite     Boolean  @default(true)
   allowViewerExport      Boolean  @default(false)
   integrationStripeEnabled    Boolean  @default(false)
@@ -1839,6 +1852,35 @@ enum NotificationType {
   MESSAGE_RECEIVED
   PROJECT_OVERDUE
   BUSINESS_INVITE
+}
+
+// ────────── Business Regulation Enums ──────────
+
+enum ActivityType {
+  SERVICE
+  COMMERCE
+  MIXTE
+  LIBERALE
+}
+
+enum VatRegime {
+  FRANCHISE
+  SIMPLIFIE
+  REEL_NORMAL
+}
+
+enum SocialRegime {
+  TNS
+  ASSIMILE_SALARIE
+  MICRO_SOCIAL
+}
+
+enum ContractType {
+  CDI
+  CDD
+  STAGE
+  ALTERNANCE
+  FREELANCE
 }
 
 model Notification {

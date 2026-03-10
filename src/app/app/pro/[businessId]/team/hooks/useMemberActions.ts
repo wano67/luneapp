@@ -36,6 +36,7 @@ export function useMemberActions({
     endDate: '',
     weeklyHours: null,
     hourlyCostCents: '',
+    grossSalaryCents: '',
     status: 'ACTIVE',
     notes: '',
   });
@@ -166,6 +167,7 @@ export function useMemberActions({
       weeklyHours:
         typeof member.employeeProfile?.weeklyHours === 'number' ? member.employeeProfile.weeklyHours : null,
       hourlyCostCents: formatCentsToEuroInput(member.employeeProfile?.hourlyCostCents),
+      grossSalaryCents: formatCentsToEuroInput(member.employeeProfile?.grossSalaryCents),
       status: member.employeeProfile?.status ?? 'ACTIVE',
       notes: member.employeeProfile?.notes ?? '',
     });
@@ -186,6 +188,13 @@ export function useMemberActions({
         setActionError('Coût horaire invalide.');
         return;
       }
+      const grossSalaryCents = employeeDraft.grossSalaryCents
+        ? parseEuroToCents(employeeDraft.grossSalaryCents)
+        : null;
+      if (employeeDraft.grossSalaryCents && !Number.isFinite(grossSalaryCents)) {
+        setActionError('Salaire brut invalide.');
+        return;
+      }
       const res = await fetchJson(
         `/api/pro/businesses/${businessId}/members/${employeeModal.userId}`,
         {
@@ -199,6 +208,7 @@ export function useMemberActions({
               endDate: employeeDraft.endDate || null,
               weeklyHours: employeeDraft.weeklyHours,
               hourlyCostCents: Number.isFinite(hourlyCostCents ?? NaN) ? (hourlyCostCents as number) : null,
+              grossSalaryCents: Number.isFinite(grossSalaryCents ?? NaN) ? (grossSalaryCents as number) : null,
               status: employeeDraft.status,
               notes: employeeDraft.notes || null,
             },

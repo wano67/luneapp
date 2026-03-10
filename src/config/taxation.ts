@@ -15,6 +15,7 @@ export type BusinessLegalForm =
   | 'EI'            // Entreprise Individuelle
   | 'MICRO'         // Micro-entreprise / Auto-entrepreneur
   | 'SCI'
+  | 'SNC'
   | 'OTHER';
 
 export type TaxRegime = 'IS' | 'IR';
@@ -257,8 +258,54 @@ export const TNS = {
  */
 export function estimateTNSCotisations(revenuNet: number): number {
   if (revenuNet <= 0) return 0;
-  // Estimation simplifiée : ~45% du revenu net pour un gérant majoritaire
   return Math.round(revenuNet * 0.45 * 100) / 100;
+}
+
+/**
+ * Détail des cotisations TNS par poste — remplace l'approximation flat 45%.
+ */
+export type TNSDetail = {
+  retraiteBasePlafonnee: number;
+  retraiteBaseDeplafonnee: number;
+  retraiteCompT1: number;
+  retraiteCompT2: number;
+  invaliditeDeces: number;
+  ijMaladie: number;
+  allocationsFamiliales: number;
+  formationPro: number;
+  csgCrds: number;
+  total: number;
+};
+
+export function computeTNSDetaille(revenuNet: number): TNSDetail {
+  if (revenuNet <= 0) {
+    return { retraiteBasePlafonnee: 0, retraiteBaseDeplafonnee: 0, retraiteCompT1: 0, retraiteCompT2: 0, invaliditeDeces: 0, ijMaladie: 0, allocationsFamiliales: 0, formationPro: 0, csgCrds: 0, total: 0 };
+  }
+  const retraiteBasePlafonnee = Math.min(revenuNet, PASS) * TNS.RETRAITE_BASE_PLAFONNEE;
+  const retraiteBaseDeplafonnee = revenuNet * TNS.RETRAITE_BASE_DEPLAFONNEE;
+  const retraiteCompT1 = Math.min(revenuNet, PASS) * TNS.RETRAITE_COMP_T1;
+  const retraiteCompT2 = Math.max(0, Math.min(revenuNet, PASS * 4) - PASS) * TNS.RETRAITE_COMP_T2;
+  const invaliditeDeces = Math.min(revenuNet, PASS) * TNS.INVALIDITE_DECES;
+  const ijMaladie = Math.min(revenuNet, PASS * 5) * TNS.IJ_ARTISAN_COMMERCANT;
+  // Allocations familiales : 0% si revenu < 48 060€, 3.10% au-delà
+  const allocationsFamiliales = revenuNet > PASS ? revenuNet * 0.031 : 0;
+  const formationPro = revenuNet * 0.0025;
+  // CSG-CRDS : 9.7% sur (revenu net + cotisations obligatoires) abattues de 26% (estimé)
+  const baseCSG = revenuNet * (1 - TNS.ABATTEMENT_ASSIETTE_CSG);
+  const csgCrds = baseCSG * TNS.CSG_CRDS;
+  const total = retraiteBasePlafonnee + retraiteBaseDeplafonnee + retraiteCompT1 + retraiteCompT2 + invaliditeDeces + ijMaladie + allocationsFamiliales + formationPro + csgCrds;
+  return {
+    retraiteBasePlafonnee: Math.round(retraiteBasePlafonnee * 100) / 100,
+    retraiteBaseDeplafonnee: Math.round(retraiteBaseDeplafonnee * 100) / 100,
+    retraiteCompT1: Math.round(retraiteCompT1 * 100) / 100,
+    retraiteCompT2: Math.round(retraiteCompT2 * 100) / 100,
+    invaliditeDeces: Math.round(invaliditeDeces * 100) / 100,
+    ijMaladie: Math.round(ijMaladie * 100) / 100,
+    allocationsFamiliales: Math.round(allocationsFamiliales * 100) / 100,
+    formationPro: Math.round(formationPro * 100) / 100,
+    csgCrds: Math.round(csgCrds * 100) / 100,
+    total: Math.round(total * 100) / 100,
+  };
 }
 
 // ── Cotisations assimilé salarié (président SAS/SASU) ────────────────────────────
@@ -273,6 +320,286 @@ export const ASSIMILE_SALARIE = {
   /** Net ≈ 78% du brut */
   RATIO_NET_BRUT: 0.78,
 } as const;
+
+// ── Charges patronales (employeur) ──────────────────────────────────────────────
+
+export type ChargesPatronalesDetail = {
+  maladie: number;
+  vieillessePlafonnee: number;
+  vieillesseDeplafonnee: number;
+  retraiteCompT1: number;
+  retraiteCompT2: number;
+  assuranceChomage: number;
+  ags: number;
+  accidentTravail: number;
+  formationPro: number;
+  taxeApprentissage: number;
+  mutuellePatronale: number;
+  total: number;
+};
+
+/**
+ * Calcule les charges patronales détaillées pour un salarié.
+ * @param grossMensuel — salaire brut mensuel en euros
+ * @param effectif — effectif de l'entreprise (impacte le taux formation pro)
+ */
+export function computeChargesPatronales(grossMensuel: number, effectif = 1): ChargesPatronalesDetail {
+  if (grossMensuel <= 0) {
+    return { maladie: 0, vieillessePlafonnee: 0, vieillesseDeplafonnee: 0, retraiteCompT1: 0, retraiteCompT2: 0, assuranceChomage: 0, ags: 0, accidentTravail: 0, formationPro: 0, taxeApprentissage: 0, mutuellePatronale: 0, total: 0 };
+  }
+  const smicMensuel = SMIC_HORAIRE_BRUT * 151.67;
+  const ratioSmic = grossMensuel / smicMensuel;
+
+  // Assurance maladie : 7% (13% si > 2.5 SMIC)
+  const maladie = grossMensuel * (ratioSmic > 2.5 ? 0.13 : 0.07);
+  // Vieillesse plafonnée : 8.55% sur tranche ≤ PMSS
+  const vieillessePlafonnee = Math.min(grossMensuel, PMSS) * 0.0855;
+  // Vieillesse déplafonnée : 2.02% sur totalité
+  const vieillesseDeplafonnee = grossMensuel * 0.0202;
+  // Retraite complémentaire T1 : 4.72% sur tranche ≤ PMSS
+  const retraiteCompT1 = Math.min(grossMensuel, PMSS) * 0.0472;
+  // Retraite complémentaire T2 : 12.95% sur tranche PMSS → 8×PMSS
+  const retraiteCompT2 = Math.max(0, Math.min(grossMensuel, PMSS * 8) - PMSS) * 0.1295;
+  // Assurance chômage : 4.05%
+  const assuranceChomage = grossMensuel * 0.0405;
+  // AGS (garantie des salaires) : 0.20%
+  const ags = grossMensuel * 0.002;
+  // Accident du travail : taux moyen ~1.50% (varie par secteur)
+  const accidentTravail = grossMensuel * 0.015;
+  // Formation professionnelle : 0.55% (<11 salariés) ou 1% (>=11)
+  const formationPro = grossMensuel * (effectif >= 11 ? 0.01 : 0.0055);
+  // Taxe d'apprentissage : 0.68%
+  const taxeApprentissage = grossMensuel * 0.0068;
+  // Mutuelle patronale minimum : ~1% (part employeur 50% d'environ 2%)
+  const mutuellePatronale = grossMensuel * 0.01;
+
+  const total = maladie + vieillessePlafonnee + vieillesseDeplafonnee + retraiteCompT1 + retraiteCompT2 + assuranceChomage + ags + accidentTravail + formationPro + taxeApprentissage + mutuellePatronale;
+
+  const r = (v: number) => Math.round(v * 100) / 100;
+  return {
+    maladie: r(maladie),
+    vieillessePlafonnee: r(vieillessePlafonnee),
+    vieillesseDeplafonnee: r(vieillesseDeplafonnee),
+    retraiteCompT1: r(retraiteCompT1),
+    retraiteCompT2: r(retraiteCompT2),
+    assuranceChomage: r(assuranceChomage),
+    ags: r(ags),
+    accidentTravail: r(accidentTravail),
+    formationPro: r(formationPro),
+    taxeApprentissage: r(taxeApprentissage),
+    mutuellePatronale: r(mutuellePatronale),
+    total: r(total),
+  };
+}
+
+/**
+ * Calcule le net estimé à partir du brut pour un salarié.
+ * Part salariale ≈ 22% du brut (URSSAF + retraite + CSG-CRDS).
+ */
+export function computeNetFromGross(grossMensuel: number): number {
+  return Math.round(grossMensuel * ASSIMILE_SALARIE.RATIO_NET_BRUT * 100) / 100;
+}
+
+export type MasseSalarialeEmployee = {
+  brutCents: number;
+  chargesPatronalesCents: number;
+  coutEmployeurCents: number;
+  netEstimeCents: number;
+};
+
+export type MasseSalarialeResult = {
+  totalBrutCents: number;
+  totalChargesPatronalesCents: number;
+  totalCoutEmployeurCents: number;
+  totalNetEstimeCents: number;
+  parEmploye: MasseSalarialeEmployee[];
+};
+
+/**
+ * Calcule la masse salariale complète pour une liste d'employés.
+ * @param employees — tableau de salaires bruts mensuels en cents
+ * @param effectif — effectif total (impacte taux formation pro)
+ */
+export function computeMasseSalariale(
+  grossSalaryCentsArray: number[],
+  effectif?: number,
+): MasseSalarialeResult {
+  const eff = effectif ?? grossSalaryCentsArray.length;
+  const parEmploye: MasseSalarialeEmployee[] = grossSalaryCentsArray.map((brutCents) => {
+    const brutEuros = brutCents / 100;
+    const charges = computeChargesPatronales(brutEuros, eff);
+    const netEuros = computeNetFromGross(brutEuros);
+    return {
+      brutCents,
+      chargesPatronalesCents: Math.round(charges.total * 100),
+      coutEmployeurCents: brutCents + Math.round(charges.total * 100),
+      netEstimeCents: Math.round(netEuros * 100),
+    };
+  });
+  return {
+    totalBrutCents: parEmploye.reduce((s, e) => s + e.brutCents, 0),
+    totalChargesPatronalesCents: parEmploye.reduce((s, e) => s + e.chargesPatronalesCents, 0),
+    totalCoutEmployeurCents: parEmploye.reduce((s, e) => s + e.coutEmployeurCents, 0),
+    totalNetEstimeCents: parEmploye.reduce((s, e) => s + e.netEstimeCents, 0),
+    parEmploye,
+  };
+}
+
+/**
+ * Estime la CFE annuelle (base minimum selon CA).
+ */
+export function estimateCFE(ca: number): number {
+  if (ca <= CFE.EXONERATION_CA_MAX) return 0;
+  for (const tranche of CFE.BASES_MINIMALES) {
+    if (ca <= tranche.maxCA) {
+      return Math.round(((tranche.min + tranche.max) / 2) * (1 + CFE.TAXE_ADDITIONNELLE));
+    }
+  }
+  return 0;
+}
+
+/**
+ * Estime la CVAE annuelle.
+ */
+export function estimateCVAE(ca: number, valeurAjoutee: number): number {
+  const taux = computeCVAETaux(ca);
+  if (taux === 0) return 0;
+  return Math.round(valeurAjoutee * taux * 100) / 100;
+}
+
+// ── Configuration par forme juridique ──────────────────────────────────────────
+
+export type SocialRegimeType = 'TNS' | 'ASSIMILE_SALARIE' | 'MICRO_SOCIAL';
+
+export type LegalFormConfig = {
+  code: BusinessLegalForm;
+  label: string;
+  description: string;
+  defaultTaxRegime: TaxRegime;
+  allowedTaxRegimes: TaxRegime[];
+  defaultSocialRegime: SocialRegimeType;
+  minAssocies: number;
+  maxAssocies: number | null;
+  leaderTitle: string;
+  features: { hasStock: boolean; hasTeam: boolean; hasAdvancedAccounting: boolean };
+};
+
+export const LEGAL_FORM_CONFIGS: LegalFormConfig[] = [
+  {
+    code: 'MICRO',
+    label: 'Micro-entreprise',
+    description: 'Regime simplifie, plafonds de CA, cotisations forfaitaires.',
+    defaultTaxRegime: 'IR',
+    allowedTaxRegimes: ['IR'],
+    defaultSocialRegime: 'MICRO_SOCIAL',
+    minAssocies: 1, maxAssocies: 1,
+    leaderTitle: 'Entrepreneur individuel',
+    features: { hasStock: false, hasTeam: false, hasAdvancedAccounting: false },
+  },
+  {
+    code: 'EI',
+    label: 'Entreprise individuelle',
+    description: 'IR par defaut, option IS depuis 2022.',
+    defaultTaxRegime: 'IR',
+    allowedTaxRegimes: ['IR', 'IS'],
+    defaultSocialRegime: 'TNS',
+    minAssocies: 1, maxAssocies: 1,
+    leaderTitle: 'Entrepreneur individuel',
+    features: { hasStock: true, hasTeam: false, hasAdvancedAccounting: true },
+  },
+  {
+    code: 'EURL',
+    label: 'EURL',
+    description: 'Societe unipersonnelle, IR par defaut (option IS).',
+    defaultTaxRegime: 'IR',
+    allowedTaxRegimes: ['IR', 'IS'],
+    defaultSocialRegime: 'TNS',
+    minAssocies: 1, maxAssocies: 1,
+    leaderTitle: 'Gerant',
+    features: { hasStock: true, hasTeam: true, hasAdvancedAccounting: true },
+  },
+  {
+    code: 'SARL',
+    label: 'SARL',
+    description: 'IS par defaut. Gerant majoritaire = TNS.',
+    defaultTaxRegime: 'IS',
+    allowedTaxRegimes: ['IS', 'IR'],
+    defaultSocialRegime: 'TNS',
+    minAssocies: 2, maxAssocies: 100,
+    leaderTitle: 'Gerant',
+    features: { hasStock: true, hasTeam: true, hasAdvancedAccounting: true },
+  },
+  {
+    code: 'SAS',
+    label: 'SAS',
+    description: 'IS, president = assimile salarie.',
+    defaultTaxRegime: 'IS',
+    allowedTaxRegimes: ['IS'],
+    defaultSocialRegime: 'ASSIMILE_SALARIE',
+    minAssocies: 2, maxAssocies: null,
+    leaderTitle: 'President',
+    features: { hasStock: true, hasTeam: true, hasAdvancedAccounting: true },
+  },
+  {
+    code: 'SASU',
+    label: 'SASU',
+    description: 'IS, president = assimile salarie.',
+    defaultTaxRegime: 'IS',
+    allowedTaxRegimes: ['IS'],
+    defaultSocialRegime: 'ASSIMILE_SALARIE',
+    minAssocies: 1, maxAssocies: 1,
+    leaderTitle: 'President',
+    features: { hasStock: true, hasTeam: true, hasAdvancedAccounting: true },
+  },
+  {
+    code: 'SA',
+    label: 'SA',
+    description: 'Societe anonyme, IS, DG = assimile salarie. Capital min 37 000 EUR.',
+    defaultTaxRegime: 'IS',
+    allowedTaxRegimes: ['IS'],
+    defaultSocialRegime: 'ASSIMILE_SALARIE',
+    minAssocies: 2, maxAssocies: null,
+    leaderTitle: 'Directeur general',
+    features: { hasStock: true, hasTeam: true, hasAdvancedAccounting: true },
+  },
+  {
+    code: 'SCI',
+    label: 'SCI',
+    description: 'Societe civile immobiliere, IR par defaut.',
+    defaultTaxRegime: 'IR',
+    allowedTaxRegimes: ['IR', 'IS'],
+    defaultSocialRegime: 'TNS',
+    minAssocies: 2, maxAssocies: null,
+    leaderTitle: 'Gerant',
+    features: { hasStock: false, hasTeam: false, hasAdvancedAccounting: true },
+  },
+  {
+    code: 'SNC',
+    label: 'SNC',
+    description: 'Societe en nom collectif, IR, tous associes = TNS.',
+    defaultTaxRegime: 'IR',
+    allowedTaxRegimes: ['IR', 'IS'],
+    defaultSocialRegime: 'TNS',
+    minAssocies: 2, maxAssocies: null,
+    leaderTitle: 'Gerant',
+    features: { hasStock: true, hasTeam: true, hasAdvancedAccounting: true },
+  },
+  {
+    code: 'OTHER',
+    label: 'Autre',
+    description: 'Forme juridique non listee.',
+    defaultTaxRegime: 'IS',
+    allowedTaxRegimes: ['IS', 'IR'],
+    defaultSocialRegime: 'ASSIMILE_SALARIE',
+    minAssocies: 1, maxAssocies: null,
+    leaderTitle: 'Dirigeant',
+    features: { hasStock: true, hasTeam: true, hasAdvancedAccounting: true },
+  },
+];
+
+export function getLegalFormConfig(code: string): LegalFormConfig | undefined {
+  return LEGAL_FORM_CONFIGS.find((f) => f.code === code);
+}
 
 // ── Estimation fiscale globale ───────────────────────────────────────────────────
 
@@ -385,11 +712,33 @@ export const LEGAL_FORM_LABELS: Record<BusinessLegalForm, string> = {
   EI: 'Entreprise individuelle',
   MICRO: 'Micro-entreprise',
   SCI: 'SCI',
+  SNC: 'SNC',
   OTHER: 'Autre',
 };
 
 export const VAT_REGIME_LABELS: Record<VatRegime, string> = {
   FRANCHISE: 'Franchise en base',
-  SIMPLIFIE: 'Régime simplifié',
-  REEL_NORMAL: 'Régime réel normal',
+  SIMPLIFIE: 'Regime simplifie',
+  REEL_NORMAL: 'Regime reel normal',
+};
+
+export const SOCIAL_REGIME_LABELS: Record<SocialRegimeType, string> = {
+  TNS: 'TNS (Travailleur Non Salarie)',
+  ASSIMILE_SALARIE: 'Assimile salarie',
+  MICRO_SOCIAL: 'Micro-social simplifie',
+};
+
+export const ACTIVITY_TYPE_LABELS: Record<string, string> = {
+  SERVICE: 'Services',
+  COMMERCE: 'Commerce',
+  MIXTE: 'Mixte',
+  LIBERALE: 'Liberale',
+};
+
+export const CONTRACT_TYPE_LABELS: Record<string, string> = {
+  CDI: 'CDI',
+  CDD: 'CDD',
+  STAGE: 'Stage',
+  ALTERNANCE: 'Alternance',
+  FREELANCE: 'Freelance',
 };

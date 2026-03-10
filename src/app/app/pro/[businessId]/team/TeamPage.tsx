@@ -1,6 +1,6 @@
 'use client';
 
-import { type FormEvent, useMemo, useState } from 'react';
+import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { Search, Users, Plus, Pencil, Trash2, ChevronDown, ChevronRight } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -11,6 +11,8 @@ import {
   Table, TableBody, TableCell, TableEmpty, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
 import { ProPageShell } from '@/components/pro/ProPageShell';
+import { formatCents } from '@/lib/money';
+import { fetchJson } from '@/lib/apiClient';
 import { useActiveBusiness } from '../../ActiveBusinessProvider';
 import {
   ROLE_LABELS, canChangeRole, allowedRoles, canEditEmployeeProfile, canRemove, formatDate,
@@ -24,12 +26,14 @@ import { RoleChangeModal } from './RoleChangeModal';
 import { RemoveMemberModal } from './RemoveMemberModal';
 import { EmployeeProfileModal } from './EmployeeProfileModal';
 import { UnitFormModal } from './UnitFormModal';
+import { OrganigrammeTab } from './OrganigrammeTab';
 import type { OrganizationUnit } from './hooks/types';
 
 const TABS = [
   { key: 'membres', label: 'Membres' },
   { key: 'invitations', label: 'Invitations' },
   { key: 'poles', label: 'Pôles' },
+  { key: 'organigramme', label: 'Organigramme' },
 ] as const;
 
 const ROLE_FILTERS: { value: BusinessRole | 'ALL'; label: string }[] = [
@@ -67,6 +71,21 @@ export default function TeamPage({ businessId }: Props) {
     load: teamData.load, redirectToLogin: teamData.redirectToLogin,
   });
   const orgUnits = useOrganizationUnits({ businessId, redirectToLogin: teamData.redirectToLogin });
+
+  // Payroll data (masse salariale KPIs)
+  type PayrollTotals = { totalBrutCents: string; totalChargesPatronalesCents: string; totalCoutEmployeurCents: string; effectif: number };
+  const [payroll, setPayroll] = useState<PayrollTotals | null>(null);
+  const [payrollLoading, setPayrollLoading] = useState(false);
+  const loadPayroll = useCallback(async () => {
+    if (!isAdmin) return;
+    setPayrollLoading(true);
+    try {
+      const res = await fetchJson<{ totals: PayrollTotals }>(`/api/pro/businesses/${businessId}/team/payroll`);
+      if (res.ok && res.data) setPayroll(res.data.totals);
+    } catch { /* ignore */ }
+    finally { setPayrollLoading(false); }
+  }, [businessId, isAdmin]);
+  useEffect(() => { void loadPayroll(); }, [loadPayroll]);
 
   // Filters (Membres tab)
   const [search, setSearch] = useState('');
@@ -155,6 +174,16 @@ export default function TeamPage({ businessId }: Props) {
             <KpiCard label="Inactifs" value={inactiveCount} loading={teamData.loading} delay={100} />
             <KpiCard label="Invitations en attente" value={pendingInviteCount} loading={teamData.loading} delay={150} />
           </div>
+
+          {/* Masse salariale KPIs — Admin+ only */}
+          {isAdmin && payroll && (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <KpiCard label="Effectif salarié" value={payroll.effectif} loading={payrollLoading} delay={0} size="compact" />
+              <KpiCard label="Masse brute /mois" value={formatCents(Number(payroll.totalBrutCents))} loading={payrollLoading} delay={50} size="compact" />
+              <KpiCard label="Charges patronales /mois" value={formatCents(Number(payroll.totalChargesPatronalesCents))} loading={payrollLoading} delay={100} size="compact" />
+              <KpiCard label="Coût employeur /mois" value={formatCents(Number(payroll.totalCoutEmployeurCents))} loading={payrollLoading} delay={150} size="compact" />
+            </div>
+          )}
 
           {/* Feedback */}
           {teamData.error ? <p className="text-xs text-[var(--danger)]">{teamData.error}</p> : null}
@@ -530,6 +559,15 @@ export default function TeamPage({ businessId }: Props) {
             </div>
           )}
         </>
+      )}
+
+      {/* ─── Onglet Organigramme ─── */}
+      {activeTab === 'organigramme' && (
+        <OrganigrammeTab
+          units={orgUnits.units}
+          members={teamData.sortedMembers}
+          loading={teamData.loading || orgUnits.loading}
+        />
       )}
 
       {/* Modals */}

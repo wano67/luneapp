@@ -6,6 +6,7 @@ import { badRequest, readJson } from '@/server/http/apiUtils';
 import { normalizeWebsiteUrl } from '@/lib/normalizeWebsiteUrl';
 import { COUNTRIES, CURRENCIES } from '@/lib/constants/geo';
 import { normalizeSiret, isValidSiret, normalizeVat, isValidVat } from '@/lib/validation/siret';
+import { getLegalFormConfig } from '@/config/taxation';
 
 // GET /api/pro/businesses
 export const GET = withPersonalRoute(async (ctx) => {
@@ -83,6 +84,22 @@ export const POST = withPersonalRoute(async (ctx, req) => {
   const invoicePrefix = typeof body.invoicePrefix === 'string' && (body.invoicePrefix as string).trim().length ? (body.invoicePrefix as string).trim() : 'INV-';
   const quotePrefix = typeof body.quotePrefix === 'string' && (body.quotePrefix as string).trim().length ? (body.quotePrefix as string).trim() : 'DEV-';
 
+  // Forme juridique + type d'activité
+  const legalFormRaw = typeof body.legalForm === 'string' ? body.legalForm.trim() : null;
+  const legalFormConfig = legalFormRaw ? getLegalFormConfig(legalFormRaw) : undefined;
+  const activityTypeRaw = typeof body.activityType === 'string' ? body.activityType.trim().toUpperCase() : null;
+  const validActivities = ['SERVICE', 'COMMERCE', 'MIXTE', 'LIBERALE'];
+  const activityType = activityTypeRaw && validActivities.includes(activityTypeRaw)
+    ? (activityTypeRaw as 'SERVICE' | 'COMMERCE' | 'MIXTE' | 'LIBERALE') : undefined;
+  const nafCode = typeof body.nafCode === 'string' ? body.nafCode.trim() || null : null;
+  const nafLabel = typeof body.nafLabel === 'string' ? body.nafLabel.trim() || null : null;
+  const leaderTitle = legalFormConfig?.leaderTitle ?? (typeof body.leaderTitle === 'string' ? body.leaderTitle.trim() || null : null);
+  const socialRegime = legalFormConfig?.defaultSocialRegime
+    ? (legalFormConfig.defaultSocialRegime as 'TNS' | 'ASSIMILE_SALARIE' | 'MICRO_SOCIAL')
+    : undefined;
+  const taxRegime = legalFormConfig?.defaultTaxRegime ?? undefined;
+  const vatRegime = legalFormRaw === 'MICRO' ? ('FRANCHISE' as const) : undefined;
+
   const business = await prisma.business.create({
     data: {
       name,
@@ -95,6 +112,13 @@ export const POST = withPersonalRoute(async (ctx, req) => {
       addressLine2: addressLine2 ?? undefined,
       postalCode: postalCode ?? undefined,
       city: city ?? undefined,
+      legalForm: legalFormConfig ? legalFormRaw : undefined,
+      taxRegime: taxRegime ?? undefined,
+      activityType,
+      nafCode: nafCode ?? undefined,
+      nafLabel: nafLabel ?? undefined,
+      leaderTitle: leaderTitle ?? undefined,
+      socialRegime,
       ownerId: ctx.userId,
       memberships: {
         create: {
@@ -105,8 +129,9 @@ export const POST = withPersonalRoute(async (ctx, req) => {
       settings: {
         create: {
           currency,
-          vatEnabled,
+          vatEnabled: legalFormRaw === 'MICRO' ? false : vatEnabled,
           vatRatePercent,
+          vatRegime,
           invoicePrefix,
           quotePrefix,
         },

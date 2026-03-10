@@ -18,6 +18,8 @@ export type ActiveBusiness = {
   name: string;
   role?: string | null;
   websiteUrl?: string | null;
+  activityType?: string | null;
+  legalForm?: string | null;
 };
 
 type BusinessListItem = {
@@ -118,7 +120,9 @@ export function ActiveBusinessProvider({ children, initialBusiness }: ProviderPr
         prev?.id === initialBusiness.id &&
         prev?.name === initialBusiness.name &&
         prev?.role === initialBusiness.role &&
-        prev?.websiteUrl === initialBusiness.websiteUrl
+        prev?.websiteUrl === initialBusiness.websiteUrl &&
+        prev?.activityType === initialBusiness.activityType &&
+        prev?.legalForm === initialBusiness.legalForm
       ) {
         return prev;
       }
@@ -126,7 +130,7 @@ export function ActiveBusinessProvider({ children, initialBusiness }: ProviderPr
       return initialBusiness;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialBusiness?.id, initialBusiness?.name, initialBusiness?.role, persistIds]);
+  }, [initialBusiness?.id, initialBusiness?.name, initialBusiness?.role, initialBusiness?.activityType, initialBusiness?.legalForm, persistIds]);
 
   const refreshBusinesses = useCallback(async () => {
     const controller = new AbortController();

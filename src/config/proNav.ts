@@ -12,6 +12,16 @@ import {
   BookUser,
 } from 'lucide-react';
 
+export type BusinessRole = 'OWNER' | 'ADMIN' | 'MEMBER' | 'VIEWER';
+export type ActivityType = 'SERVICE' | 'COMMERCE' | 'MIXTE' | 'LIBERALE';
+
+const ROLE_RANK: Record<BusinessRole, number> = { OWNER: 4, ADMIN: 3, MEMBER: 2, VIEWER: 1 };
+
+export function hasMinRole(actorRole: string | null | undefined, minRole: BusinessRole): boolean {
+  if (!actorRole) return false;
+  return (ROLE_RANK[actorRole as BusinessRole] ?? 0) >= ROLE_RANK[minRole];
+}
+
 export type ProNavItemConfig = {
   id: string;
   label: string;
@@ -19,6 +29,8 @@ export type ProNavItemConfig = {
   icon: LucideIcon;
   secondary?: boolean;
   activePatterns?: (businessId: string) => RegExp[];
+  minRole?: BusinessRole;
+  activityTypes?: ActivityType[];
 };
 
 export type ProNavSectionConfig = {
@@ -73,6 +85,7 @@ export const proNavSections: ProNavSectionConfig[] = [
         label: 'CRM',
         icon: BookUser,
         href: (biz) => `/app/pro/${biz}/agenda`,
+        minRole: 'MEMBER',
         activePatterns: (biz) => [
           startsWithRegex(`/app/pro/${biz}/agenda`),
           startsWithRegex(`/app/pro/${biz}/clients`),
@@ -84,6 +97,7 @@ export const proNavSections: ProNavSectionConfig[] = [
         label: 'Finances',
         icon: Banknote,
         href: (biz) => `/app/pro/${biz}/finances`,
+        minRole: 'MEMBER',
         activePatterns: (biz) => [
           startsWithRegex(`/app/pro/${biz}/finances`),
           startsWithRegex(`/app/pro/${biz}/accounting`),
@@ -100,6 +114,7 @@ export const proNavSections: ProNavSectionConfig[] = [
         label: 'Catalogue services',
         icon: LayoutGrid,
         href: (biz) => `/app/pro/${biz}/services`,
+        minRole: 'MEMBER',
         activePatterns: (biz) => [startsWithRegex(`/app/pro/${biz}/services`)],
       },
       {
@@ -107,6 +122,8 @@ export const proNavSections: ProNavSectionConfig[] = [
         label: 'Stock',
         icon: Boxes,
         href: (biz) => `/app/pro/${biz}/stock`,
+        minRole: 'MEMBER',
+        activityTypes: ['COMMERCE', 'MIXTE'],
         activePatterns: (biz) => [startsWithRegex(`/app/pro/${biz}/stock`)],
       },
       {
@@ -114,6 +131,7 @@ export const proNavSections: ProNavSectionConfig[] = [
         label: 'Équipe',
         icon: Users,
         href: (biz) => `/app/pro/${biz}/team`,
+        minRole: 'ADMIN',
         activePatterns: (biz) => [startsWithRegex(`/app/pro/${biz}/team`)],
       },
     ],
@@ -128,6 +146,7 @@ export const proNavSections: ProNavSectionConfig[] = [
         label: 'Paramètres',
         icon: Settings,
         href: (biz) => `/app/pro/${biz}/settings`,
+        minRole: 'ADMIN',
         activePatterns: (biz) => [
           startsWithRegex(`/app/pro/${biz}/settings`),
           startsWithRegex(`/app/pro/${biz}/organization`),

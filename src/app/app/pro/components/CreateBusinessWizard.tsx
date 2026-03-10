@@ -7,6 +7,7 @@ import { SearchSelect } from '@/components/ui/search-select';
 import { OptionCard } from '@/components/ui/option-card';
 import { COUNTRIES, CURRENCIES } from '@/lib/constants/geo';
 import { isValidSiret, isValidVat } from '@/lib/validation/siret';
+import { LEGAL_FORM_CONFIGS, getLegalFormConfig, ACTIVITY_TYPE_LABELS } from '@/config/taxation';
 
 export type CreateBusinessDraft = {
   name: string;
@@ -30,6 +31,9 @@ export type CreateBusinessDraft = {
   addressLine2?: string;
   postalCode?: string;
   city?: string;
+  legalForm?: string;
+  nafCode?: string;
+  nafLabel?: string;
 };
 
 const defaultDraft: CreateBusinessDraft = {
@@ -119,16 +123,34 @@ export function CreateBusinessWizard({ open, loading, error, draft, onChangeDraf
               placeholder="https://exemple.com"
             />
             <Select
-              label="Secteur / activité"
-              value={draft.sector}
-              onChange={(e) => onChangeDraft({ ...draft, sector: e.target.value })}
+              label="Forme juridique"
+              value={draft.legalForm ?? ''}
+              onChange={(e) => {
+                const code = e.target.value;
+                const cfg = getLegalFormConfig(code);
+                onChangeDraft({
+                  ...draft,
+                  legalForm: code || undefined,
+                  vatEnabled: code === 'MICRO' ? false : draft.vatEnabled,
+                });
+                if (cfg && code === 'MICRO') {
+                  onChangeDraft({ ...draft, legalForm: code, vatEnabled: false });
+                }
+              }}
             >
-              <option value="service">Services</option>
-              <option value="product">Produits</option>
-              <option value="commerce">Commerce</option>
-              <option value="agency">Agence</option>
-              <option value="freelance">Freelance</option>
-              <option value="other">Autre</option>
+              <option value="">Selectionner...</option>
+              {LEGAL_FORM_CONFIGS.map((f) => (
+                <option key={f.code} value={f.code}>{f.label}</option>
+              ))}
+            </Select>
+            <Select
+              label="Type d'activite"
+              value={draft.activityType}
+              onChange={(e) => onChangeDraft({ ...draft, activityType: e.target.value as CreateBusinessDraft['activityType'] })}
+            >
+              {Object.entries(ACTIVITY_TYPE_LABELS).map(([k, v]) => (
+                <option key={k} value={k.toLowerCase()}>{v}</option>
+              ))}
             </Select>
             <Select
               label="Taille"
@@ -160,8 +182,19 @@ export function CreateBusinessWizard({ open, loading, error, draft, onChangeDraf
               items={CURRENCIES.map((c) => ({ code: c.code, label: `${c.code} — ${c.name}` }))}
               placeholder="Rechercher une devise…"
             />
+            {draft.legalForm ? (() => {
+              const cfg = getLegalFormConfig(draft.legalForm!);
+              return cfg ? (
+                <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)]/50 p-3 text-xs text-[var(--text-secondary)]">
+                  <p className="font-semibold text-[var(--text-primary)]">{cfg.label}</p>
+                  <p>{cfg.description}</p>
+                  <p className="mt-1">Regime fiscal : {cfg.defaultTaxRegime} · Regime social : {cfg.defaultSocialRegime === 'TNS' ? 'TNS' : cfg.defaultSocialRegime === 'MICRO_SOCIAL' ? 'Micro-social' : 'Assimile salarie'}</p>
+                  <p>Dirigeant : {cfg.leaderTitle}{cfg.maxAssocies === 1 ? ' (1 associe)' : cfg.maxAssocies ? ` (${cfg.minAssocies}-${cfg.maxAssocies} associes)` : ` (${cfg.minAssocies}+ associes)`}</p>
+                </div>
+              ) : null;
+            })() : null}
             <OptionCard
-              title="TVA activée"
+              title="TVA activee"
               description="Appliquer la TVA sur factures."
               checked={draft.vatEnabled}
               onChange={(next) => onChangeDraft({ ...draft, vatEnabled: next })}
@@ -244,7 +277,8 @@ export function CreateBusinessWizard({ open, loading, error, draft, onChangeDraf
             <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)]/50 p-3 text-xs text-[var(--text-secondary)]">
               <p className="font-semibold text-[var(--text-primary)]">Résumé</p>
               <p>{draft.name} · {draft.countryCode} · {draft.currency}</p>
-              <p>TVA: {draft.vatEnabled ? `${draft.vatRate}%` : 'désactivée'}</p>
+              {draft.legalForm ? <p>Forme : {getLegalFormConfig(draft.legalForm)?.label ?? draft.legalForm}</p> : null}
+              <p>TVA: {draft.vatEnabled ? `${draft.vatRate}%` : 'desactivee'}</p>
               <p>Objectif: {draft.goal}</p>
             </div>
           </div>

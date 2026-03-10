@@ -5,6 +5,9 @@ import { parseDateOpt } from '@/server/http/parsers';
 import {
   estimateFiscal,
   determineVatRegime,
+  estimateCFE,
+  estimateCVAE,
+  computeChargesPatronales,
   type BusinessLegalForm,
   type TaxRegime,
   LEGAL_FORM_LABELS,
@@ -34,39 +37,51 @@ export const GET = withBusinessRoute<{ businessId: string }>(
       ? { ...(fromDate ? { gte: fromDate } : {}), ...(toDate ? { lte: toDate } : {}) }
       : undefined;
 
-    // Load business legal form
-    const business = await prisma.business.findUnique({
-      where: { id: businessIdBigInt },
-      select: { legalForm: true, taxRegime: true },
-    });
+    // Load business info + employee salaries in parallel
+    const [business, finances, employees] = await Promise.all([
+      prisma.business.findUnique({
+        where: { id: businessIdBigInt },
+        select: { legalForm: true, taxRegime: true, activityType: true, socialRegime: true },
+      }),
+      prisma.finance.findMany({
+        where: {
+          businessId: businessIdBigInt,
+          deletedAt: null,
+          ...(dateFilter ? { date: dateFilter } : {}),
+        },
+        select: {
+          type: true,
+          amountCents: true,
+          accountCode: true,
+          vatRate: true,
+          vatCents: true,
+          date: true,
+        },
+      }),
+      prisma.employeeProfile.findMany({
+        where: {
+          membership: { businessId: businessIdBigInt },
+          status: 'ACTIVE',
+          grossSalaryCents: { not: null },
+        },
+        select: { grossSalaryCents: true },
+      }),
+    ]);
+
     const legalForm = (business?.legalForm ?? 'SAS') as BusinessLegalForm;
     const taxRegime = (business?.taxRegime ?? (legalForm === 'MICRO' ? 'IR' : 'IS')) as TaxRegime;
-
-    const finances = await prisma.finance.findMany({
-      where: {
-        businessId: businessIdBigInt,
-        deletedAt: null,
-        ...(dateFilter ? { date: dateFilter } : {}),
-      },
-      select: {
-        type: true,
-        amountCents: true,
-        accountCode: true,
-        vatRate: true,
-        vatCents: true,
-        date: true,
-      },
-    });
+    const activityType = business?.activityType;
+    const isVente = activityType === 'COMMERCE';
 
     let totalRevenueCents = 0n;
     let totalChargeCents = 0n;
     let tvaCollecteeCents = 0n;
     let tvaDeductibleCents = 0n;
+    let sousTraitanceCents = 0n;
+    let personnelCents = 0n;
 
     const chargesParGroupe = new Map<string, { total: bigint; count: number }>();
     const revenusParGroupe = new Map<string, { total: bigint; count: number }>();
-
-    // Monthly evolution
     const monthlyMap = new Map<string, { revenus: bigint; charges: bigint }>();
 
     for (const f of finances) {
@@ -82,7 +97,6 @@ export const GET = withBusinessRoute<{ businessId: string }>(
         monthly.revenus += f.amountCents;
         if (f.vatCents) tvaCollecteeCents += f.vatCents;
 
-        // Group
         const group = getGroupForCode(f.accountCode) ?? 'Autres revenus';
         const existing = revenusParGroupe.get(group);
         if (existing) { existing.total += f.amountCents; existing.count++; }
@@ -91,6 +105,15 @@ export const GET = withBusinessRoute<{ businessId: string }>(
         totalChargeCents += f.amountCents;
         monthly.charges += f.amountCents;
         if (f.vatCents) tvaDeductibleCents += f.vatCents;
+
+        // Track sous-traitance (611, 6411)
+        if (f.accountCode?.startsWith('611') || f.accountCode?.startsWith('6411')) {
+          sousTraitanceCents += f.amountCents;
+        }
+        // Track personnel (641, 645)
+        if (f.accountCode?.startsWith('641') || f.accountCode?.startsWith('645')) {
+          personnelCents += f.amountCents;
+        }
 
         const group = getGroupForCode(f.accountCode) ?? 'Autres charges';
         const existing = chargesParGroupe.get(group);
@@ -102,7 +125,7 @@ export const GET = withBusinessRoute<{ businessId: string }>(
     const resultatCents = totalRevenueCents - totalChargeCents;
     const tvaNetteCents = tvaCollecteeCents - tvaDeductibleCents;
 
-    // Estimation fiscale selon le type de société
+    // Fiscal estimation
     const caEuros = Number(totalRevenueCents) / 100;
     const chargesEuros = Number(totalChargeCents) / 100;
     const fiscal = estimateFiscal({
@@ -110,11 +133,28 @@ export const GET = withBusinessRoute<{ businessId: string }>(
       taxRegime,
       ca: caEuros,
       charges: chargesEuros,
+      isVente,
+      microActivite: activityType === 'LIBERALE' ? 'BNC' : (isVente ? 'VENTE' : 'SERVICES_BIC'),
     });
-    const estimationImpot = fiscal.impot;
-    const tauxEffectif = fiscal.tauxEffectif;
-    const cotisationsSociales = fiscal.cotisationsSociales;
-    const vatRegimeDetecte = determineVatRegime(caEuros, true);
+    const vatRegimeDetecte = determineVatRegime(caEuros, isVente);
+
+    // CFE/CVAE estimation
+    const cfeCents = Math.round(estimateCFE(caEuros) * 100);
+    const valeurAjoutee = caEuros - chargesEuros;
+    const cvaeCents = Math.round(estimateCVAE(caEuros, Math.max(0, valeurAjoutee)) * 100);
+
+    // Masse salariale from employee profiles
+    let masseSalarialeBruteCents = 0;
+    let chargesPatronalesEstimCents = 0;
+    const effectif = employees.length;
+    for (const emp of employees) {
+      if (!emp.grossSalaryCents) continue;
+      const grossCents = Number(emp.grossSalaryCents);
+      masseSalarialeBruteCents += grossCents;
+      const grossEuros = grossCents / 100;
+      const charges = computeChargesPatronales(grossEuros, effectif);
+      chargesPatronalesEstimCents += Math.round(charges.total * 100);
+    }
 
     // Monthly evolution sorted
     const evolution = Array.from(monthlyMap.entries())
@@ -134,14 +174,23 @@ export const GET = withBusinessRoute<{ businessId: string }>(
         tvaCollecteeCents: tvaCollecteeCents.toString(),
         tvaDeductibleCents: tvaDeductibleCents.toString(),
         tvaNetteCents: tvaNetteCents.toString(),
-        legalFormLabel: LEGAL_FORM_LABELS[legalForm],
+        legalFormLabel: LEGAL_FORM_LABELS[legalForm] ?? legalForm,
         taxRegime,
         vatRegime: vatRegimeDetecte,
         vatRegimeLabel: VAT_REGIME_LABELS[vatRegimeDetecte],
-        estimationImpotCents: Math.round(estimationImpot * 100),
-        tauxEffectif: Math.round(tauxEffectif * 100) / 100,
-        cotisationsSocialesCents: Math.round(cotisationsSociales * 100),
+        estimationImpotCents: Math.round(fiscal.impot * 100),
+        tauxEffectif: Math.round(fiscal.tauxEffectif * 100) / 100,
+        cotisationsSocialesCents: Math.round(fiscal.cotisationsSociales * 100),
         revenuNetCents: Math.round(fiscal.revenuNetApresImpots * 100),
+        // New fields
+        sousTraitanceCents: sousTraitanceCents.toString(),
+        personnelCents: personnelCents.toString(),
+        masseSalarialeBruteCents,
+        chargesPatronalesEstimCents,
+        coutEmployeurTotalCents: masseSalarialeBruteCents + chargesPatronalesEstimCents,
+        effectif,
+        cfeCents,
+        cvaeCents,
         chargesParGroupe: Array.from(chargesParGroupe.entries())
           .map(([group, data]) => ({ group, totalCents: data.total.toString(), count: data.count }))
           .sort((a, b) => Number(BigInt(b.totalCents) - BigInt(a.totalCents))),
@@ -155,20 +204,18 @@ export const GET = withBusinessRoute<{ businessId: string }>(
   }
 );
 
-// Simple helper to get PCG group from account code
 function getGroupForCode(code: string | null): string | null {
   if (!code) return null;
-  // Import would create circular dep in some setups, so inline the logic
   const prefix = code.slice(0, 2);
   const groupMap: Record<string, string> = {
     '60': 'Achats',
-    '61': 'Services extérieurs',
+    '61': 'Services exterieurs',
     '62': 'Autres services',
-    '63': 'Impôts & taxes',
+    '63': 'Impots & taxes',
     '64': 'Personnel & sous-traitance',
     '65': 'Autres charges',
-    '66': 'Charges financières',
-    '69': 'Impôts sur bénéfices',
+    '66': 'Charges financieres',
+    '69': 'Impots sur benefices',
     '70': 'Ventes',
     '74': 'Autres produits',
     '75': 'Autres produits',

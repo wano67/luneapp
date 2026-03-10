@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/card';
 import { Select } from '@/components/ui/select';
 import { fetchJson } from '@/lib/apiClient';
 import { formatCents } from '@/lib/money';
+import Link from 'next/link';
 
 type DashboardData = {
   chiffreAffairesCents: string;
@@ -21,12 +22,20 @@ type DashboardData = {
   tauxEffectif: number;
   cotisationsSocialesCents: number;
   revenuNetCents: number;
+  sousTraitanceCents: string;
+  personnelCents: string;
+  masseSalarialeBruteCents: number;
+  chargesPatronalesEstimCents: number;
+  coutEmployeurTotalCents: number;
+  effectif: number;
+  cfeCents: number;
+  cvaeCents: number;
   chargesParGroupe: Array<{ group: string; totalCents: string; count: number }>;
   revenusParGroupe: Array<{ group: string; totalCents: string; count: number }>;
   evolution: Array<{ month: string; revenusCents: string; chargesCents: string; resultatCents: string }>;
 };
 
-function kpi(cents: string) {
+function kpi(cents: string | number) {
   return formatCents(Number(cents));
 }
 
@@ -39,6 +48,7 @@ export function DashboardPanel({ businessId }: { businessId: string }) {
 
   useEffect(() => {
     let cancelled = false;
+    setLoading(true);
     fetchJson<DashboardData>(
       `/api/pro/businesses/${businessId}/accounting/dashboard?year=${year}`
     ).then(res => {
@@ -60,14 +70,9 @@ export function DashboardPanel({ businessId }: { businessId: string }) {
 
   return (
     <div className="space-y-4">
-      {/* Year selector */}
       <div className="flex items-center gap-2">
         <span className="text-xs text-[var(--text-secondary)]">Exercice :</span>
-        <Select
-          className="w-28"
-          value={year}
-          onChange={(e) => setYear(e.target.value)}
-        >
+        <Select className="w-28" value={year} onChange={(e) => setYear(e.target.value)}>
           {Array.from({ length: 5 }, (_, i) => currentYear - i).map((y) => (
             <option key={y} value={y}>{y}</option>
           ))}
@@ -75,50 +80,110 @@ export function DashboardPanel({ businessId }: { businessId: string }) {
       </div>
 
       {error ? <p className="text-sm text-[var(--danger)]">{error}</p> : null}
-      {loading ? <p className="text-sm text-[var(--text-secondary)]">Chargement…</p> : null}
+      {loading ? <p className="text-sm text-[var(--text-secondary)]">Chargement...</p> : null}
 
       {!loading && data ? (
         <>
           {/* KPIs */}
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <Card className="p-4 text-center">
-              <p className="text-xs text-[var(--text-secondary)]">Chiffre d&apos;affaires</p>
+              <p className="text-xs text-[var(--text-secondary)]">Chiffre d&apos;affaires HT</p>
               <p className="text-lg font-semibold text-[var(--text-primary)]">{kpi(data.chiffreAffairesCents)}</p>
             </Card>
             <Card className="p-4 text-center">
-              <p className="text-xs text-[var(--text-secondary)]">Charges</p>
+              <p className="text-xs text-[var(--text-secondary)]">Charges totales</p>
               <p className="text-lg font-semibold text-[var(--text-primary)]">{kpi(data.totalChargesCents)}</p>
             </Card>
             <Card className="p-4 text-center">
-              <p className="text-xs text-[var(--text-secondary)]">Résultat</p>
+              <p className="text-xs text-[var(--text-secondary)]">Resultat</p>
               <p className={`text-lg font-semibold ${resultatNum >= 0 ? 'text-emerald-600' : 'text-[var(--danger)]'}`}>
                 {kpi(data.resultatCents)}
               </p>
             </Card>
             <Card className="p-4 text-center">
-              <p className="text-xs text-[var(--text-secondary)]">TVA nette</p>
-              <p className={`text-lg font-semibold ${tvaNette >= 0 ? 'text-[var(--text-primary)]' : 'text-emerald-600'}`}>
-                {tvaNette >= 0 ? `${kpi(data.tvaNetteCents)} à payer` : `${kpi(String(-tvaNette))} crédit`}
-              </p>
-            </Card>
-            <Card className="p-4 text-center">
-              <p className="text-xs text-[var(--text-secondary)]">
-                Estimation {data.taxRegime === 'IR' ? 'IR' : 'IS'}
-              </p>
-              <p className="text-lg font-semibold text-[var(--text-primary)]">
-                {formatCents(data.estimationImpotCents)}
-                <span className="ml-1 text-xs font-normal text-[var(--text-secondary)]">
-                  ({data.tauxEffectif}%)
-                </span>
+              <p className="text-xs text-[var(--text-secondary)]">Revenu net estime</p>
+              <p className={`text-lg font-semibold ${data.revenuNetCents >= 0 ? 'text-emerald-600' : 'text-[var(--danger)]'}`}>
+                {kpi(data.revenuNetCents)}
               </p>
             </Card>
           </div>
+
+          {/* Financial Synthesis */}
+          <Card className="p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <p className="text-xs font-semibold uppercase tracking-widest text-[var(--text-secondary)]">
+                Synthese financiere
+              </p>
+              <span className="rounded-full bg-[var(--surface)] px-2 py-0.5 text-[10px] text-[var(--text-secondary)]">
+                {data.legalFormLabel} · {data.taxRegime}
+              </span>
+            </div>
+            <div className="space-y-1 text-sm">
+              <SynthLine label="Chiffre d'affaires HT" value={kpi(data.chiffreAffairesCents)} isData />
+              {data.chargesParGroupe.map((g) => (
+                <SynthLine key={g.group} label={g.group} value={`-${kpi(g.totalCents)}`} sub isData />
+              ))}
+              {data.masseSalarialeBruteCents > 0 && (
+                <>
+                  <SynthLine label="Masse salariale brute" value={`-${kpi(data.masseSalarialeBruteCents)}`} sub isData />
+                  <SynthLine label="Charges patronales" value={`-${kpi(data.chargesPatronalesEstimCents)}`} sub isEstim />
+                </>
+              )}
+              <div className="border-t border-[var(--border)]/40 pt-1" />
+              <SynthLine label="Resultat avant impot" value={kpi(data.resultatCents)} bold />
+              <SynthLine label={`${data.taxRegime === 'IR' ? 'IR' : 'IS'} estime (${data.tauxEffectif}%)`} value={`-${kpi(data.estimationImpotCents)}`} sub isEstim />
+              {data.cotisationsSocialesCents > 0 && (
+                <SynthLine label="Cotisations sociales" value={`-${kpi(data.cotisationsSocialesCents)}`} sub isEstim />
+              )}
+              {(data.cfeCents > 0 || data.cvaeCents > 0) && (
+                <SynthLine label="CFE/CVAE" value={`-${kpi(data.cfeCents + data.cvaeCents)}`} sub isEstim />
+              )}
+              <div className="border-t border-[var(--border)]/40 pt-1" />
+              <SynthLine label="Revenu net estime" value={kpi(data.revenuNetCents)} bold highlight={data.revenuNetCents >= 0} />
+            </div>
+
+            {Number(data.sousTraitanceCents) > 0 && (
+              <div className="mt-3 rounded-lg bg-[var(--surface)]/50 p-2 text-xs text-[var(--text-secondary)]">
+                Dont sous-traitance : {kpi(data.sousTraitanceCents)}
+              </div>
+            )}
+
+            <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-[var(--text-secondary)]">
+              <span className="flex items-center gap-1"><span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" /> Donnees reelles</span>
+              <span className="flex items-center gap-1"><span className="inline-block h-1.5 w-1.5 rounded-full bg-amber-500" /> Estimation</span>
+            </div>
+          </Card>
+
+          {/* TVA */}
+          <Card className="p-4">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-[var(--text-secondary)]">TVA</p>
+            <div className="space-y-1.5 text-sm">
+              <div className="flex justify-between">
+                <span className="text-[var(--text-secondary)]">Regime TVA</span>
+                <span className="font-medium">{data.vatRegimeLabel}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[var(--text-secondary)]">TVA collectee</span>
+                <span className="font-medium">{kpi(data.tvaCollecteeCents)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[var(--text-secondary)]">TVA deductible</span>
+                <span className="font-medium">{kpi(data.tvaDeductibleCents)}</span>
+              </div>
+              <div className="flex justify-between border-t border-[var(--border)]/40 pt-1.5">
+                <span className="text-[var(--text-secondary)]">TVA nette</span>
+                <span className={`font-semibold ${tvaNette >= 0 ? '' : 'text-emerald-600'}`}>
+                  {tvaNette >= 0 ? `${kpi(data.tvaNetteCents)} a payer` : `${kpi(String(-tvaNette))} credit`}
+                </span>
+              </div>
+            </div>
+          </Card>
 
           {/* Monthly evolution */}
           {data.evolution.length > 0 ? (
             <Card className="p-4">
               <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-[var(--text-secondary)]">
-                Évolution mensuelle
+                Evolution mensuelle
               </p>
               <div className="space-y-1">
                 {data.evolution.map((m) => {
@@ -129,20 +194,10 @@ export function DashboardPanel({ businessId }: { businessId: string }) {
                     <div key={m.month} className="flex items-center gap-2 text-xs">
                       <span className="w-16 text-[var(--text-secondary)]">{m.month}</span>
                       <div className="flex flex-1 gap-1">
-                        <div
-                          className="h-4 rounded bg-emerald-500/70"
-                          style={{ width: `${(rev / max) * 50}%` }}
-                          title={`Revenus: ${formatCents(rev)}`}
-                        />
-                        <div
-                          className="h-4 rounded bg-red-400/70"
-                          style={{ width: `${(chg / max) * 50}%` }}
-                          title={`Charges: ${formatCents(chg)}`}
-                        />
+                        <div className="h-4 rounded bg-emerald-500/70" style={{ width: `${(rev / max) * 50}%` }} title={`Revenus: ${formatCents(rev)}`} />
+                        <div className="h-4 rounded bg-red-400/70" style={{ width: `${(chg / max) * 50}%` }} title={`Charges: ${formatCents(chg)}`} />
                       </div>
-                      <span className="w-20 text-right text-[var(--text-primary)]">
-                        {formatCents(Number(m.resultatCents))}
-                      </span>
+                      <span className="w-20 text-right text-[var(--text-primary)]">{formatCents(Number(m.resultatCents))}</span>
                     </div>
                   );
                 })}
@@ -154,12 +209,12 @@ export function DashboardPanel({ businessId }: { businessId: string }) {
             </Card>
           ) : null}
 
-          {/* Charges breakdown */}
+          {/* Charges & Revenue breakdown */}
           <div className="grid gap-3 md:grid-cols-2">
             {data.chargesParGroupe.length > 0 ? (
               <Card className="p-4">
                 <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-[var(--text-secondary)]">
-                  Répartition des charges
+                  Repartition des charges
                 </p>
                 <div className="space-y-1.5">
                   {data.chargesParGroupe.map((g) => {
@@ -182,7 +237,7 @@ export function DashboardPanel({ businessId }: { businessId: string }) {
             {data.revenusParGroupe.length > 0 ? (
               <Card className="p-4">
                 <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-[var(--text-secondary)]">
-                  Répartition des revenus
+                  Repartition des revenus
                 </p>
                 <div className="space-y-1.5">
                   {data.revenusParGroupe.map((g) => {
@@ -203,70 +258,57 @@ export function DashboardPanel({ businessId }: { businessId: string }) {
             ) : null}
           </div>
 
-          {/* Fiscal + TVA detail */}
-          <div className="grid gap-3 md:grid-cols-2">
+          {/* Masse salariale */}
+          {data.effectif > 0 && (
             <Card className="p-4">
               <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-[var(--text-secondary)]">
-                Fiscalité
+                Masse salariale ({data.effectif} employe{data.effectif > 1 ? 's' : ''})
               </p>
               <div className="space-y-1.5 text-sm">
                 <div className="flex justify-between">
-                  <span className="text-[var(--text-secondary)]">Forme juridique</span>
-                  <span className="font-medium">{data.legalFormLabel}</span>
+                  <span className="text-[var(--text-secondary)]">Salaires bruts (mensuel)</span>
+                  <span className="font-medium">{kpi(data.masseSalarialeBruteCents)}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-[var(--text-secondary)]">Régime fiscal</span>
-                  <span className="font-medium">{data.taxRegime}</span>
+                  <span className="text-[var(--text-secondary)]">Charges patronales estimees</span>
+                  <span className="font-medium text-amber-600">{kpi(data.chargesPatronalesEstimCents)}</span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-[var(--text-secondary)]">
-                    Estimation {data.taxRegime === 'IR' ? 'IR' : 'IS'}
-                  </span>
-                  <span className="font-medium">{formatCents(data.estimationImpotCents)}</span>
-                </div>
-                {data.cotisationsSocialesCents > 0 ? (
-                  <div className="flex justify-between">
-                    <span className="text-[var(--text-secondary)]">Cotisations sociales</span>
-                    <span className="font-medium">{formatCents(data.cotisationsSocialesCents)}</span>
-                  </div>
-                ) : null}
                 <div className="flex justify-between border-t border-[var(--border)]/40 pt-1.5">
-                  <span className="text-[var(--text-secondary)]">Revenu net estimé</span>
-                  <span className={`font-semibold ${data.revenuNetCents >= 0 ? 'text-emerald-600' : 'text-[var(--danger)]'}`}>
-                    {formatCents(data.revenuNetCents)}
-                  </span>
+                  <span className="text-[var(--text-secondary)]">Cout employeur total</span>
+                  <span className="font-semibold">{kpi(data.coutEmployeurTotalCents)}</span>
                 </div>
               </div>
-            </Card>
-
-            <Card className="p-4">
-              <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-[var(--text-secondary)]">
-                TVA
+              <p className="mt-2 text-[10px] text-[var(--text-secondary)]">
+                Base sur les salaires bruts renseignes dans les profils employes.
+                <Link href={`/app/pro/${businessId}/team`} className="ml-1 underline">Gerer l&apos;equipe</Link>
               </p>
-              <div className="space-y-1.5 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-[var(--text-secondary)]">Régime TVA</span>
-                  <span className="font-medium">{data.vatRegimeLabel}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-[var(--text-secondary)]">TVA collectée</span>
-                  <span className="font-medium">{kpi(data.tvaCollecteeCents)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-[var(--text-secondary)]">TVA déductible</span>
-                  <span className="font-medium">{kpi(data.tvaDeductibleCents)}</span>
-                </div>
-                <div className="flex justify-between border-t border-[var(--border)]/40 pt-1.5">
-                  <span className="text-[var(--text-secondary)]">TVA nette</span>
-                  <span className={`font-semibold ${tvaNette >= 0 ? '' : 'text-emerald-600'}`}>
-                    {tvaNette >= 0 ? `${kpi(data.tvaNetteCents)} à payer` : `${kpi(String(-tvaNette))} crédit`}
-                  </span>
-                </div>
-              </div>
             </Card>
-          </div>
+          )}
         </>
       ) : null}
+    </div>
+  );
+}
+
+function SynthLine({ label, value, sub, bold, isData, isEstim, highlight }: {
+  label: string;
+  value: string;
+  sub?: boolean;
+  bold?: boolean;
+  isData?: boolean;
+  isEstim?: boolean;
+  highlight?: boolean;
+}) {
+  return (
+    <div className={`flex items-center justify-between ${sub ? 'pl-3' : ''}`}>
+      <span className={`flex items-center gap-1.5 ${bold ? 'font-semibold text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'} ${sub ? 'text-xs' : 'text-sm'}`}>
+        {isData && <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" />}
+        {isEstim && <span className="inline-block h-1.5 w-1.5 rounded-full bg-amber-500" />}
+        {label}
+      </span>
+      <span className={`${bold ? 'font-semibold' : 'font-medium'} ${highlight ? 'text-emerald-600' : ''} ${sub ? 'text-xs' : 'text-sm'}`}>
+        {value}
+      </span>
     </div>
   );
 }

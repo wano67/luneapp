@@ -7,7 +7,7 @@ import Link from 'next/link';
 import { LayoutDashboard, Wallet2, Building2, Banknote, FileText, PiggyBank, Target, BarChart3, TrendingUp } from 'lucide-react';
 import { useActiveBusiness } from './pro/ActiveBusinessProvider';
 import { normalizeWebsiteUrl } from '@/lib/website';
-import { proNavSections, type ProNavSectionConfig } from '@/config/proNav';
+import { proNavSections, hasMinRole, type ProNavSectionConfig } from '@/config/proNav';
 
 export type Space = 'home' | 'pro' | 'perso' | 'focus' | null;
 
@@ -95,14 +95,19 @@ function getGlobalSections(): NavSection[] {
   ];
 }
 
-function getProSections(businessId: string | null): NavSection[] {
+function getProSections(businessId: string | null, role?: string | null, activityType?: string | null): NavSection[] {
   const base = businessId ? `/app/pro/${businessId}` : '/app/pro';
   const disabled = !businessId;
 
   function sectionToNav(section: ProNavSectionConfig): NavSection {
+    const filteredItems = section.items.filter((item) => {
+      if (item.minRole && !hasMinRole(role, item.minRole)) return false;
+      if (item.activityTypes && activityType && !item.activityTypes.includes(activityType as never)) return false;
+      return true;
+    });
     return {
       title: section.title,
-      items: section.items.map((item) => {
+      items: filteredItems.map((item) => {
         const href = disabled ? base : item.href(businessId as string);
         return {
           href,
@@ -116,7 +121,7 @@ function getProSections(businessId: string | null): NavSection[] {
     };
   }
 
-  return proNavSections.map(sectionToNav);
+  return proNavSections.map(sectionToNav).filter((s) => s.items.length > 0);
 }
 
 function getWalletSections(): NavSection[] {
@@ -148,8 +153,8 @@ function getFocusSections(): NavSection[] {
   ];
 }
 
-function buildSections(space: Space, businessId: string | null): NavSection[] {
-  if (space === 'pro') return getProSections(businessId);
+function buildSections(space: Space, businessId: string | null, role?: string | null, activityType?: string | null): NavSection[] {
+  if (space === 'pro') return getProSections(businessId, role, activityType);
   if (space === 'perso') return getWalletSections();
   if (space === 'focus') return getFocusSections();
   return getGlobalSections();
@@ -161,9 +166,9 @@ export default function AppSidebar(props: AppSidebarProps) {
   const { space, pathname, businessId, collapsed = false, onNavigateAction } = props;
   const [businesses, setBusinesses] = useState<SidebarBusiness[] | null>(null);
   const [recentBusinessIds, setRecentBusinessIds] = useState<string[]>([]);
-  const sections = buildSections(space, businessId);
-  const activeNavKey = useMemo(() => getActiveNavKey(pathname, sections), [pathname, sections]);
   const activeCtx = useActiveBusiness({ optional: true });
+  const sections = buildSections(space, businessId, activeCtx?.activeBusiness?.role, activeCtx?.activeBusiness?.activityType);
+  const activeNavKey = useMemo(() => getActiveNavKey(pathname, sections), [pathname, sections]);
 
   // hydrate recent business list
   useEffect(() => {

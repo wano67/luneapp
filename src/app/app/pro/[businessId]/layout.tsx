@@ -12,6 +12,8 @@ type Business = {
   name: string;
   websiteUrl?: string | null;
   ownerId: string;
+  activityType?: string | null;
+  legalForm?: string | null;
   createdAt: string;
   updatedAt: string;
   role?: string;
@@ -68,7 +70,14 @@ export default function BusinessLayout({ children }: BusinessLayoutProps) {
   }, [businessId]);
 
   const initialActive: ActiveBusiness | null = business
-    ? { id: business.id, name: business.name, role, websiteUrl: business.websiteUrl }
+    ? {
+        id: business.id,
+        name: business.name,
+        role,
+        websiteUrl: business.websiteUrl,
+        activityType: business.activityType,
+        legalForm: business.legalForm,
+      }
     : null;
 
   return (

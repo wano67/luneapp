@@ -20,7 +20,29 @@ export const PATCH = withBusinessRoute<{ businessId: string; unitId: string }>(
       return badRequest('Payload invalide.');
     }
 
-    const data: { name?: string; order?: number } = {};
+    const data: { name?: string; order?: number; parentId?: bigint | null; description?: string | null } = {};
+
+    if ('parentId' in body) {
+      const parentIdRaw = (body as { parentId?: unknown }).parentId;
+      if (parentIdRaw === null || parentIdRaw === '') {
+        data.parentId = null;
+      } else if (typeof parentIdRaw === 'string' && parentIdRaw.trim()) {
+        const pid = BigInt(parentIdRaw.trim());
+        if (pid === unitId) return badRequest('Un pole ne peut pas etre son propre parent.');
+        const parent = await prisma.organizationUnit.findFirst({
+          where: { id: pid, businessId: ctx.businessId },
+          select: { id: true },
+        });
+        if (!parent) return badRequest('Pole parent introuvable.');
+        data.parentId = pid;
+      }
+    }
+
+    if ('description' in body) {
+      const desc = (body as { description?: unknown }).description;
+      data.description = typeof desc === 'string' ? desc.trim() || null : null;
+    }
+
     if ('name' in body) {
       const nameRaw = (body as { name?: unknown }).name;
       if (typeof nameRaw !== 'string') return badRequest('name invalide.');
