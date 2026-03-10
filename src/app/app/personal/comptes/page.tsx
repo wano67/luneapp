@@ -18,6 +18,7 @@ import { AccountEditModal } from './AccountEditModal';
 const CsvImportModal = dynamic(() => import('@/components/CsvImportModal'), { ssr: false });
 import { useFileDropHandler } from '@/components/file-drop/FileDropProvider';
 import { emitWalletRefresh } from '@/lib/personalEvents';
+import { useToast } from '@/components/ui/toast';
 
 async function safeJson(res: Response): Promise<unknown> {
   try {
@@ -69,6 +70,8 @@ export default function ComptesPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const importAutoOpenedRef = useRef(false);
+  const powensCallbackRef = useRef(false);
+  const toast = useToast();
 
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<AccountItem[]>([]);
@@ -88,6 +91,11 @@ export default function ComptesPage() {
   // edit modal
   const [editOpen, setEditOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState<AccountItem | null>(null);
+
+  // Powens
+  const [powensConnecting, setPowensConnecting] = useState(false);
+  const [powensSyncing, setPowensSyncing] = useState(false);
+  const [powensConnected, setPowensConnected] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -117,7 +125,45 @@ export default function ComptesPage() {
 
   useEffect(() => {
     load();
+    // Vérifier le statut Powens
+    fetch('/api/personal/powens/status', { credentials: 'include' })
+      .then((r) => r.ok ? r.json() : null)
+      .then((d) => { if (d?.connected) setPowensConnected(true); })
+      .catch(() => {});
   }, []);
+
+  // Callback Powens (retour de la webview — Powens ajoute ?connection_id=X)
+  useEffect(() => {
+    if (powensCallbackRef.current) return;
+    const connectionId = searchParams?.get('connection_id');
+    if (!connectionId) return;
+    powensCallbackRef.current = true;
+
+    setPowensSyncing(true);
+    fetch('/api/personal/powens/callback', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({}),
+    })
+      .then(async (res) => {
+        const json = await safeJson(res);
+        if (res.ok && json && typeof json === 'object') {
+          const data = json as { accountsSynced?: number; transactionsAdded?: number };
+          toast.success(`${data.accountsSynced || 0} comptes synchronisés, ${data.transactionsAdded || 0} transactions importées`);
+          setPowensConnected(true);
+          await load();
+          emitWalletRefresh();
+        } else {
+          toast.error('Erreur lors de la synchronisation bancaire');
+        }
+      })
+      .catch(() => toast.error('Erreur lors de la synchronisation bancaire'))
+      .finally(() => setPowensSyncing(false));
+
+    // Nettoyer les params
+    router.replace('/app/personal/comptes');
+  }, [searchParams, router, toast]);
 
   useEffect(() => {
     if (importAutoOpenedRef.current) return;
@@ -247,6 +293,52 @@ export default function ComptesPage() {
       .filter((g): g is CategoryGroupData => g !== null);
   }, [visibleItems]);
 
+  /* ═══ Powens handlers ═══ */
+
+  async function handlePowensConnect() {
+    setPowensConnecting(true);
+    try {
+      const res = await fetch('/api/personal/powens/connect', {
+        method: 'POST',
+        credentials: 'include',
+      });
+      const json = await safeJson(res);
+      if (res.ok && json && typeof json === 'object' && 'webviewUrl' in json) {
+        window.location.href = (json as { webviewUrl: string }).webviewUrl;
+        return;
+      }
+      const errMsg = getErrorFromJson(json) ?? 'Impossible de se connecter';
+      toast.error(errMsg);
+    } catch {
+      toast.error('Impossible de se connecter');
+    } finally {
+      setPowensConnecting(false);
+    }
+  }
+
+  async function handlePowensSync() {
+    setPowensSyncing(true);
+    try {
+      const res = await fetch('/api/personal/powens/sync', {
+        method: 'POST',
+        credentials: 'include',
+      });
+      const json = await safeJson(res);
+      if (res.ok && json && typeof json === 'object') {
+        const data = json as { accountsSynced?: number; transactionsAdded?: number };
+        toast.success(`${data.accountsSynced || 0} comptes, ${data.transactionsAdded || 0} transactions`);
+        await load();
+        emitWalletRefresh();
+      } else {
+        toast.error('Erreur de synchronisation');
+      }
+    } catch {
+      toast.error('Erreur de synchronisation');
+    } finally {
+      setPowensSyncing(false);
+    }
+  }
+
   /* ═══ Create handler (wizard) ═══ */
 
   async function onWizardSubmit(data: WizardResult) {
@@ -304,12 +396,29 @@ export default function ComptesPage() {
       {/* Header */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <h1 style={{ color: 'var(--text)', fontSize: 28, fontWeight: 700 }}>Mes Comptes</h1>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           {hasHiddenAccounts ? (
             <Button variant="outline" onClick={() => setShowHidden((v) => !v)}>
               {showHidden ? 'Masquer les cachés' : 'Voir les cachés'}
             </Button>
           ) : null}
+          {powensConnected ? (
+            <Button
+              variant="outline"
+              onClick={handlePowensSync}
+              disabled={powensSyncing}
+            >
+              {powensSyncing ? 'Synchronisation…' : 'Synchroniser'}
+            </Button>
+          ) : (
+            <Button
+              variant="outline"
+              onClick={handlePowensConnect}
+              disabled={powensConnecting}
+            >
+              {powensConnecting ? 'Connexion…' : 'Connecter ma banque'}
+            </Button>
+          )}
           <Button
             variant="outline"
             onClick={() => {
@@ -391,17 +500,24 @@ export default function ComptesPage() {
       ) : items.length === 0 ? (
         <Card className="p-5">
           <p className="text-sm text-[var(--text-secondary)]">
-            Aucun compte. Crée ton premier compte bancaire.
+            Aucun compte. Connecte ta banque ou crée un compte manuellement.
           </p>
-          <div className="mt-3">
+          <div className="mt-3 flex gap-2 flex-wrap">
             <Button
+              onClick={handlePowensConnect}
+              disabled={powensConnecting}
+            >
+              {powensConnecting ? 'Connexion…' : 'Connecter ma banque'}
+            </Button>
+            <Button
+              variant="outline"
               onClick={() => {
                 setWizardError(null);
                 setSuccessMessage(null);
                 setOpen(true);
               }}
             >
-              Créer un compte
+              Créer manuellement
             </Button>
           </div>
         </Card>

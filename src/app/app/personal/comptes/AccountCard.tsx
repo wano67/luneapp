@@ -22,6 +22,9 @@ export type AccountItem = {
   loanDurationMonths: number | null;
   loanStartDate: string | null;
   hidden: boolean;
+  powensAccountId: number | null;
+  powensLastSync: string | null;
+  powensDisabled: boolean;
 };
 
 type Props = {

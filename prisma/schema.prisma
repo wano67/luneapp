@@ -190,6 +190,7 @@ model User {
   calendarTokens       CalendarToken[]
   personalCalendarEvents PersonalCalendarEvent[]
   personalCalendarTokens PersonalCalendarToken[]
+  powensConnection       PowensConnection?
   refreshTokens          RefreshToken[]
 }
 
@@ -1654,6 +1655,11 @@ model PersonalAccount {
   loanStartDate      DateTime?
   hidden             Boolean   @default(false)
 
+  // Powens (open banking)
+  powensAccountId Int?      @unique
+  powensDisabled  Boolean   @default(false)
+  powensLastSync  DateTime?
+
   transactions PersonalTransaction[]
 
   createdAt DateTime @default(now())
@@ -1697,9 +1703,13 @@ model PersonalTransaction {
   label String
   note  String?
 
+  // Powens (open banking)
+  powensTransactionId Int?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@unique([userId, powensTransactionId])
   @@index([userId, date])
   @@index([accountId, date])
 }
@@ -1927,4 +1937,21 @@ model ProjectShareToken {
   business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
 
   @@index([projectId])
+}
+
+// ─── Powens (Open Banking) ────────────────────────────────────
+
+model PowensConnection {
+  id     BigInt @id @default(autoincrement())
+  userId BigInt @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  powensUserId    Int
+  authTokenCipher String
+  authTokenIv     String
+  authTokenTag    String
+
+  lastSyncAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 }
