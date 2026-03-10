@@ -10,6 +10,8 @@ import {
   Banknote,
   Settings,
   BookUser,
+  Workflow,
+  Megaphone,
 } from 'lucide-react';
 
 export type BusinessRole = 'OWNER' | 'ADMIN' | 'MEMBER' | 'VIEWER';
@@ -125,6 +127,22 @@ export const proNavSections: ProNavSectionConfig[] = [
         minRole: 'MEMBER',
         activityTypes: ['COMMERCE', 'MIXTE'],
         activePatterns: (biz) => [startsWithRegex(`/app/pro/${biz}/stock`)],
+      },
+      {
+        id: 'process',
+        label: 'Processus',
+        icon: Workflow,
+        href: (biz) => `/app/pro/${biz}/process`,
+        minRole: 'MEMBER',
+        activePatterns: (biz) => [startsWithRegex(`/app/pro/${biz}/process`)],
+      },
+      {
+        id: 'marketing',
+        label: 'Marketing',
+        icon: Megaphone,
+        href: (biz) => `/app/pro/${biz}/marketing`,
+        minRole: 'MEMBER',
+        activePatterns: (biz) => [startsWithRegex(`/app/pro/${biz}/marketing`)],
       },
       {
         id: 'team',

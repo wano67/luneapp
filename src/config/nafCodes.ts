@@ -931,11 +931,26 @@ export const NAF_CODES: NafEntry[] = [
 // Recherche de codes NAF avec normalisation des accents
 // ---------------------------------------------------------------------------
 
-export function searchNafCodes(query: string): NafEntry[] {
-  const q = query.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
-  if (!q) return NAF_CODES.slice(0, 20);
-  return NAF_CODES.filter(
-    (n) => n.code.toLowerCase().includes(q) ||
-           n.label.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().includes(q)
-  ).slice(0, 30);
+function removeAccents(str: string): string {
+  return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
+export function searchNafCodes(query: string, limit = 30): NafEntry[] {
+  const normalized = removeAccents(query.trim()).toLowerCase();
+  if (!normalized) return [];
+
+  const results: NafEntry[] = [];
+
+  for (const entry of NAF_CODES) {
+    if (results.length >= limit) break;
+
+    const codeMatch = removeAccents(entry.code).toLowerCase().includes(normalized);
+    const labelMatch = removeAccents(entry.label).toLowerCase().includes(normalized);
+
+    if (codeMatch || labelMatch) {
+      results.push(entry);
+    }
+  }
+
+  return results;
 }

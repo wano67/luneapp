@@ -8,7 +8,7 @@ import {
   IconFinance,
   IconSettings,
 } from '@/components/pivot-icons';
-import { ListChecks, CalendarDays, Users } from 'lucide-react';
+import { ListChecks, CalendarDays, Users, Workflow, Megaphone } from 'lucide-react';
 
 /** Maps proNav item IDs to Pivot icon render functions. */
 export const pivotIconMap: Record<string, (color: string) => ReactNode> = {
@@ -22,6 +22,8 @@ export const pivotIconMap: Record<string, (color: string) => ReactNode> = {
   agenda: (c) => <IconCrm size={20} color={c} />,
   catalog: (c) => <IconCatalogue size={20} color={c} />,
   stock: (c) => <IconStock size={20} color={c} />,
+  process: (c) => <Workflow size={20} color={c} />,
+  marketing: (c) => <Megaphone size={20} color={c} />,
   finances: (c) => <IconFinance size={20} color={c} />,
   team: (c) => <Users size={20} color={c} />,
   settings: (c) => <IconSettings size={20} color={c} />,
