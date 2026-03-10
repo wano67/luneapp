@@ -12,6 +12,7 @@ import { FinancesSection } from './sections/FinancesSection';
 import { NotificationsSection } from './sections/NotificationsSection';
 import { SessionSection } from './sections/SessionSection';
 import { ProBusinessSection } from './sections/ProBusinessSection';
+import { DangerSection } from './sections/DangerSection';
 
 const SECTIONS = [
   { id: 'profil', label: 'Profil' },
@@ -21,6 +22,7 @@ const SECTIONS = [
   { id: 'notifications', label: 'Notifications' },
   { id: 'session', label: 'Session' },
   { id: 'pro', label: 'Espace PRO' },
+  { id: 'danger', label: 'Suppression' },
 ] as const;
 
 export default function AccountPage() {
@@ -45,6 +47,7 @@ export default function AccountPage() {
         <section id="notifications"><NotificationsSection /></section>
         <section id="session"><SessionSection /></section>
         <section id="pro"><ProBusinessSection /></section>
+        <section id="danger"><DangerSection /></section>
       </div>
     </PageContainer>
   );
