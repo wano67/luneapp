@@ -1,5 +1,6 @@
 import { useState, useMemo, type ChangeEvent, type FormEvent } from 'react';
 import { fetchJson } from '@/lib/apiClient';
+import { useToast } from '@/components/ui/toast';
 import { formatCentsToEuroInput, parseEuroToCents, sanitizeEuroInput } from '@/lib/money';
 import { findCategoryByCode } from '@/config/pcg';
 
@@ -95,6 +96,7 @@ interface UseFinanceFormParams {
 export function useFinanceForm(params: UseFinanceFormParams) {
   const { businessId, isAdmin, readOnlyMessage, loadFinances, setSelectedId, setInfo, setError } = params;
 
+  const toast = useToast();
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Finance | null>(null);
   const [form, setForm] = useState<FinanceFormState>({ ...EMPTY_FORM });
@@ -232,7 +234,9 @@ export function useFinanceForm(params: UseFinanceFormParams) {
     setModalOpen(false);
     setSelectedId(res.data.item.id);
     const isExpense = res.data.item.type === 'EXPENSE';
-    setInfo(editing ? (isExpense ? 'Charge mise à jour.' : 'Écriture mise à jour.') : isExpense ? 'Charge ajoutée.' : 'Écriture ajoutée.');
+    const msg = editing ? (isExpense ? 'Charge mise à jour.' : 'Écriture mise à jour.') : isExpense ? 'Charge ajoutée.' : 'Écriture ajoutée.';
+    setInfo(msg);
+    toast.success(msg);
     await loadFinances();
   }
 

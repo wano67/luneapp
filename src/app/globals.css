@@ -250,6 +250,11 @@ a:hover {
   to { opacity: 1; transform: translateY(0); }
 }
 
+@keyframes page-enter {
+  0%   { opacity: 0; transform: scale(0.97) translateY(6px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+
 @keyframes count-up-flash {
   0% { opacity: 0.3; transform: scale(0.95); }
   60% { opacity: 1; transform: scale(1.02); }
@@ -328,6 +333,9 @@ a:hover {
   .animate-fade-in-up {
     animation: fade-in-up 0.4s ease-out both;
   }
+  .animate-page-enter {
+    animation: page-enter 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
   .animate-count-up {
     animation: count-up-flash 0.5s ease-out both;
   }
@@ -369,6 +377,22 @@ a:hover {
   .animate-kpi-appear {
     animation: kpi-appear 0.5s ease-out both;
   }
+}
+
+/* ═══ Bubble menu ═══ */
+@keyframes bubble-expand {
+  from { clip-path: circle(0% at 50% 100%); }
+  to   { clip-path: circle(150% at 50% 100%); }
+}
+@keyframes bubble-collapse {
+  from { clip-path: circle(150% at 50% 100%); }
+  to   { clip-path: circle(0% at 50% 100%); }
+}
+.animate-bubble-expand {
+  animation: bubble-expand 0.35s cubic-bezier(0.32, 0.72, 0, 1) forwards;
+}
+.animate-bubble-collapse {
+  animation: bubble-collapse 0.25s cubic-bezier(0.32, 0.72, 0, 1) forwards;
 }
 
 /* Feature card hover lift */

@@ -4,6 +4,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { fetchJson } from '@/lib/apiClient';
+import { useToast } from '@/components/ui/toast';
 import { useActiveBusiness } from '../../../ActiveBusinessProvider';
 
 type Settings = { allowMembersInvite: boolean; allowViewerExport: boolean };
@@ -11,11 +12,11 @@ type Settings = { allowMembersInvite: boolean; allowViewerExport: boolean };
 export function PermissionsSection({ businessId }: { businessId: string }) {
   const activeCtx = useActiveBusiness({ optional: true });
   const canEdit = activeCtx?.activeBusiness?.role === 'ADMIN' || activeCtx?.activeBusiness?.role === 'OWNER';
+  const toast = useToast();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [info, setInfo] = useState<string | null>(null);
   const [allowMembersInvite, setAllowMembersInvite] = useState(true);
   const [allowViewerExport, setAllowViewerExport] = useState(false);
 
@@ -34,7 +35,7 @@ export function PermissionsSection({ businessId }: { businessId: string }) {
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!canEdit) return;
-    setSaving(true); setError(null); setInfo(null);
+    setSaving(true); setError(null);
 
     const res = await fetchJson<{ item: Settings }>(`/api/pro/businesses/${businessId}/settings`, {
       method: 'PATCH',
@@ -48,7 +49,7 @@ export function PermissionsSection({ businessId }: { businessId: string }) {
       setAllowMembersInvite(res.data.item.allowMembersInvite);
       setAllowViewerExport(res.data.item.allowViewerExport);
     }
-    setInfo('Permissions enregistrées.');
+    toast.success('Permissions enregistrées.');
   }
 
   const disabled = !canEdit || loading || saving;
@@ -60,7 +61,6 @@ export function PermissionsSection({ businessId }: { businessId: string }) {
         <p className="text-sm text-[var(--text-secondary)]">Autorisations globales pour les membres.</p>
       </div>
       {error && <p className="text-sm text-[var(--danger)]">{error}</p>}
-      {info && <p className="text-sm text-[var(--success)]">{info}</p>}
       <form onSubmit={handleSubmit} className="space-y-3">
         <label className="flex items-start gap-3 rounded-xl border border-[var(--border)] px-3 py-2">
           <input type="checkbox" className="mt-1" checked={allowMembersInvite} onChange={(e) => setAllowMembersInvite(e.target.checked)} disabled={disabled} />

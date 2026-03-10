@@ -11,6 +11,8 @@ import { Select } from '@/components/ui/select';
 import { PageContainer } from '@/components/layouts/PageContainer';
 import { PageHeader } from '@/components/layouts/PageHeader';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
+import { useToast } from '@/components/ui/toast';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useActiveBusiness } from '../../ActiveBusinessProvider';
 
 type Invite = {
@@ -58,6 +60,7 @@ export default function InvitesPage() {
   const businessId = (params?.businessId ?? '') as string;
   const activeCtx = useActiveBusiness({ optional: true });
   const isAdmin = !!activeCtx?.isAdmin;
+  const toast = useToast();
 
   const [invites, setInvites] = useState<Invite[]>([]);
   const [loading, setLoading] = useState(true);
@@ -163,6 +166,7 @@ export default function InvitesPage() {
       }
 
       setSuccess('Invitation envoyée. Copie le lien ci-dessous.');
+      toast.success('Invitation envoyée.');
       setLastInviteLink(res.data.inviteLink ?? null);
       setLastTokenPreview(res.data.tokenPreview ?? null);
       setForm({ email: '', role: form.role });
@@ -294,7 +298,14 @@ export default function InvitesPage() {
 
       <Card className="p-5">
         {loading ? (
-          <p className="text-sm text-[var(--text-secondary)]">Chargement des invitations…</p>
+          <div className="space-y-3">
+            {[1, 2].map((i) => (
+              <div key={i} className="rounded-xl border border-[var(--border)] bg-[var(--surface)]/70 p-3 space-y-2">
+                <Skeleton width="50%" height="14px" />
+                <Skeleton width="80%" height="12px" />
+              </div>
+            ))}
+          </div>
         ) : error ? (
           <div className="space-y-2">
             <p className="text-sm text-[var(--danger)]">{error}</p>

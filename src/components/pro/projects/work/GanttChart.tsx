@@ -93,7 +93,7 @@ export function GanttChart({ tasks, onTaskClick }: GanttChartProps) {
   const chartHeight = Math.max(200, chartData.length * 40 + 60);
 
   return (
-    <div className="rounded-2xl border border-[var(--border)]/60 bg-[var(--surface)]/80 p-4">
+    <div className="rounded-2xl border border-[var(--border)]/60 bg-[var(--surface)]/80 p-4 overflow-x-auto">
       <ResponsiveContainer width="100%" height={chartHeight}>
         <BarChart
           layout="vertical"

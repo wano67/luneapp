@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import { fetchJson } from '@/lib/apiClient';
+import { useToast } from '@/components/ui/toast';
 
 type Service = { id: string; code: string; name: string };
 
@@ -16,6 +17,7 @@ type Props = {
 };
 
 export function ServiceDeleteConfirmModal({ target, businessId, isAdmin, onClose, onAfterDelete }: Props) {
+  const toast = useToast();
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
   async function confirmDelete() {
@@ -35,6 +37,7 @@ export function ServiceDeleteConfirmModal({ target, businessId, isAdmin, onClose
       return;
     }
     onClose();
+    toast.success('Service supprimé.');
     onAfterDelete();
   }
 

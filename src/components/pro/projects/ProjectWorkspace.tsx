@@ -586,7 +586,7 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
 
       {/* Main content card */}
       <div
-        className="flex flex-1 flex-col gap-4 rounded-3xl p-3"
+        className="flex flex-1 flex-col gap-4 rounded-3xl p-3 min-w-0 overflow-x-hidden"
         style={{ background: 'var(--surface)', outline: '0.5px solid var(--border)' }}
       >
         <TabsPills

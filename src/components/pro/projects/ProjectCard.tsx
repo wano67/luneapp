@@ -202,7 +202,7 @@ export function ProjectCard({ businessId, project, onMutate, index = 0 }: Props)
       <div className="mt-2 flex items-center gap-2">
         <span
           className="inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-medium"
-          style={{ background: 'white', color: 'var(--text)' }}
+          style={{ background: 'white', color: '#1a1a1a' }}
         >
           {statusLabel}
         </span>

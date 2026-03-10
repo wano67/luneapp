@@ -1,8 +1,6 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { ChevronDown, ChevronUp } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/cn';
 import { formatTaskStatus, getTaskStatusBadgeClasses } from '@/lib/taskStatusUi';
 
@@ -71,73 +69,73 @@ export function ServiceProgressRow({
   const showMore = upcomingTasks.length > previewTasks.length;
 
   return (
-    <Card className="rounded-xl border border-[var(--border)]/70 bg-[var(--surface)]/80 p-4 shadow-sm">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="min-w-0">
-          <p className="text-sm font-semibold text-[var(--text-primary)]">{service.name}</p>
-          <p className="text-xs text-[var(--text-secondary)]">
-            {done}/{total || '—'} tâches · {progress}%
-          </p>
+    <div className="rounded-xl border border-[var(--border)]/60 bg-[var(--surface-2)]/40 overflow-hidden">
+      {/* Service header — clickable to expand */}
+      <button
+        type="button"
+        onClick={() => setExpanded((prev) => !prev)}
+        className="flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-[var(--surface-2)]/80"
+        aria-expanded={expanded}
+      >
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <p className="text-sm font-semibold text-[var(--text-primary)] truncate">{service.name}</p>
+            <span className="shrink-0 text-[11px] font-medium text-[var(--text-faint)]">
+              {done}/{total}
+            </span>
+          </div>
+          <div className="mt-1.5">
+            <ProgressBar value={progress} />
+          </div>
         </div>
-        <Button
-          type="button"
-          size="sm"
-          variant="ghost"
-          onClick={() => setExpanded((prev) => !prev)}
-          aria-expanded={expanded}
-        >
-          {expanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-        </Button>
-      </div>
-      <div className="mt-3">
-        <ProgressBar value={progress} />
-      </div>
+        <div className="shrink-0 flex items-center justify-center rounded-full w-7 h-7" style={{ background: 'var(--surface-2)' }}>
+          {expanded ? <ChevronUp size={14} className="text-[var(--text-faint)]" /> : <ChevronDown size={14} className="text-[var(--text-faint)]" />}
+        </div>
+      </button>
+
+      {/* Expanded task list */}
       {expanded ? (
-        <div className="mt-3 space-y-2 text-sm text-[var(--text-secondary)]">
+        <div className="border-t border-[var(--border)]/40 px-4 py-3 space-y-2">
           {previewTasks.map((task) => (
             <button
               key={task.id}
               type="button"
               onClick={() => onTaskClick?.(task.id)}
-              className="block w-full rounded-lg border border-[var(--border)]/60 bg-[var(--surface-2)]/70 px-3 py-2 text-left transition hover:border-[var(--border)] hover:bg-[var(--surface)]"
+              className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition hover:bg-[var(--surface)]/80"
             >
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="truncate text-[var(--text-primary)]">{task.title}</p>
-                  <p className="text-[11px] text-[var(--text-secondary)]">
-                    {task.assigneeName || task.assigneeEmail || 'Non assigné'}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2 text-[11px] text-[var(--text-secondary)]">
-                  <span
-                    className={cn(
-                      'inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide',
-                      getTaskStatusBadgeClasses(task.status)
-                    )}
-                  >
-                    {formatTaskStatus(task.status)}
-                  </span>
-                  <span>{formatDate(task.dueDate)}</span>
-                </div>
+              <div className="flex-1 min-w-0">
+                <p className="truncate text-sm text-[var(--text-primary)]">{task.title}</p>
+                <p className="text-[11px] text-[var(--text-faint)]">
+                  {task.assigneeName || task.assigneeEmail || 'Non assigné'}
+                  {task.dueDate ? ` · ${formatDate(task.dueDate)}` : ''}
+                </p>
               </div>
+              <span
+                className={cn(
+                  'shrink-0 inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide',
+                  getTaskStatusBadgeClasses(task.status)
+                )}
+              >
+                {formatTaskStatus(task.status)}
+              </span>
             </button>
           ))}
           {tasks.length === 0 ? (
-            <p className="text-xs text-[var(--text-secondary)]">Aucune tâche associée.</p>
+            <p className="text-xs text-[var(--text-faint)] px-3">Aucune tâche associée.</p>
           ) : null}
           {tasks.length > 0 && previewTasks.length === 0 ? (
-            <p className="text-xs text-[var(--text-secondary)]">Toutes les tâches sont terminées.</p>
+            <p className="text-xs text-[var(--text-faint)] px-3">Toutes les tâches sont terminées.</p>
           ) : null}
           {showMore ? (
             <Link
               href={`/app/pro/${businessId}/tasks?projectId=${projectId}`}
-              className="inline-flex text-xs font-semibold text-[var(--accent-strong)] hover:underline"
+              className="inline-flex px-3 text-xs font-semibold text-[var(--accent-strong)] hover:underline"
             >
-              Voir +
+              Voir toutes les tâches
             </Link>
           ) : null}
         </div>
       ) : null}
-    </Card>
+    </div>
   );
 }

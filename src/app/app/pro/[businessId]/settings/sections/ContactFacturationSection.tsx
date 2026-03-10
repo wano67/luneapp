@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { fetchJson } from '@/lib/apiClient';
+import { useToast } from '@/components/ui/toast';
 import { useActiveBusiness } from '../../../ActiveBusinessProvider';
 
 type Biz = { billingEmail?: string | null; billingPhone?: string | null };
@@ -12,11 +13,11 @@ type Biz = { billingEmail?: string | null; billingPhone?: string | null };
 export function ContactFacturationSection({ businessId }: { businessId: string }) {
   const activeCtx = useActiveBusiness({ optional: true });
   const canEdit = activeCtx?.activeBusiness?.role === 'ADMIN' || activeCtx?.activeBusiness?.role === 'OWNER';
+  const toast = useToast();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [info, setInfo] = useState<string | null>(null);
   const [billingEmail, setBillingEmail] = useState('');
   const [billingPhone, setBillingPhone] = useState('');
 
@@ -35,7 +36,7 @@ export function ContactFacturationSection({ businessId }: { businessId: string }
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!canEdit) return;
-    setSaving(true); setError(null); setInfo(null);
+    setSaving(true); setError(null);
 
     const res = await fetchJson<{ item: Biz }>(`/api/pro/businesses/${businessId}`, {
       method: 'PATCH',
@@ -50,7 +51,7 @@ export function ContactFacturationSection({ businessId }: { businessId: string }
     if (!res.ok) { setError(res.error ?? 'Mise à jour impossible.'); return; }
     setBillingEmail(res.data?.item?.billingEmail ?? billingEmail);
     setBillingPhone(res.data?.item?.billingPhone ?? billingPhone);
-    setInfo('Contact facturation mis à jour.');
+    toast.success('Contact facturation mis à jour.');
   }
 
   const disabled = !canEdit || loading || saving;
@@ -62,7 +63,6 @@ export function ContactFacturationSection({ businessId }: { businessId: string }
         <p className="text-sm text-[var(--text-secondary)]">Coordonnées utilisées sur les devis et factures.</p>
       </div>
       {error && <p className="text-sm text-[var(--danger)]">{error}</p>}
-      {info && <p className="text-sm text-[var(--success)]">{info}</p>}
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="grid gap-3 md:grid-cols-2">
           <Input label="Email facturation" value={billingEmail} onChange={(e) => setBillingEmail(e.target.value)} disabled={disabled} />

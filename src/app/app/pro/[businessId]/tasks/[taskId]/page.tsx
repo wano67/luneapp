@@ -1,19 +1,20 @@
 // src/app/app/pro/[businessId]/tasks/[taskId]/page.tsx
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Select } from '@/components/ui/select';
+import { Modal } from '@/components/ui/modal';
 import { fetchJson } from '@/lib/apiClient';
-import { ReferencePicker } from '../../references/ReferencePicker';
 import { useActiveBusiness } from '../../../ActiveBusinessProvider';
-import { PageContainer } from '@/components/layouts/PageContainer';
-import { PageHeader } from '@/components/layouts/PageHeader';
-import { formatTaskStatus } from '@/lib/taskStatusUi';
+import { ProPageShell } from '@/components/pro/ProPageShell';
+import { Check, Trash2, Plus, X, Calendar, User, FolderOpen, HelpCircle, AlertTriangle, Users } from 'lucide-react';
+import { TASK_STATUS_OPTIONS, getTaskStatusBadgeClasses } from '@/lib/taskStatusUi';
+import { fmtDate } from '@/lib/format';
 
 type Task = {
   id: string;
@@ -24,16 +25,15 @@ type Task = {
   assigneeUserId: string | null;
   assigneeEmail: string | null;
   assigneeName: string | null;
-  categoryReferenceId: string | null;
-  categoryReferenceName: string | null;
-  tagReferences: { id: string; name: string }[];
   title: string;
   status: string;
   dueDate: string | null;
+  notes: string | null;
+  progress: number;
+  isBlocked: boolean;
+  blockedReason: string | null;
   createdAt: string;
   updatedAt: string;
-  subtasksCount?: number;
-  checklistCount?: number;
 };
 
 type ChecklistItem = {
@@ -47,85 +47,81 @@ type ChecklistItem = {
   updatedAt: string;
 };
 
-type TaskDetailResponse = { item: Task; subtasks?: Task[] };
+type TaskDetailResponse = { item: Task };
 type ChecklistResponse = { items: ChecklistItem[] };
-
-function formatDate(value: string | null) {
-  if (!value) return '—';
-  try {
-    return new Intl.DateTimeFormat('fr-FR').format(new Date(value));
-  } catch {
-    return value;
-  }
-}
+type TeamMember = {
+  userId: string;
+  membershipId: string;
+  name: string | null;
+  email: string;
+  role: string;
+  organizationUnit: { id: string; name: string } | null;
+};
+type ProjectOption = { id: string; name: string };
+type ProjectMember = {
+  userId: string;
+  name: string | null;
+  email: string;
+  implicit: boolean;
+};
 
 export default function TaskDetailPage() {
   const params = useParams();
+  const router = useRouter();
   const businessId = (params?.businessId ?? '') as string;
   const taskId = (params?.taskId ?? '') as string;
   const activeCtx = useActiveBusiness({ optional: true });
   const role = activeCtx?.activeBusiness?.role;
-  const canEditReferences = role === 'ADMIN' || role === 'OWNER';
-  const canEditTask = role === 'ADMIN' || role === 'OWNER';
+  const isAdmin = role === 'ADMIN' || role === 'OWNER';
+  const [myUserId, setMyUserId] = useState('');
+  const canChangeStatus = role === 'ADMIN' || role === 'OWNER' || role === 'MEMBER';
 
   const [task, setTask] = useState<Task | null>(null);
-  const [subtasks, setSubtasks] = useState<Task[]>([]);
   const [checklistItems, setChecklistItems] = useState<ChecklistItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [requestId, setRequestId] = useState<string | null>(null);
-  const [categoryReferenceId, setCategoryReferenceId] = useState<string>('');
-  const [tagReferenceIds, setTagReferenceIds] = useState<string[]>([]);
-  const [referenceError, setReferenceError] = useState<string | null>(null);
-  const [referenceInfo, setReferenceInfo] = useState<string | null>(null);
-  const [referencesSaving, setReferencesSaving] = useState(false);
-  const [subtasksOpen, setSubtasksOpen] = useState(false);
-  const [checklistOpen, setChecklistOpen] = useState(false);
-  const [subtaskTitle, setSubtaskTitle] = useState('');
+
+  // Edit states
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState('');
+  const [saving, setSaving] = useState(false);
+  const titleInputRef = useRef<HTMLInputElement>(null);
+
+  // Checklist
   const [checklistTitle, setChecklistTitle] = useState('');
-  const [subtaskInfo, setSubtaskInfo] = useState<string | null>(null);
-  const [checklistInfo, setChecklistInfo] = useState<string | null>(null);
-  const [subtaskSaving, setSubtaskSaving] = useState(false);
   const [checklistSaving, setChecklistSaving] = useState(false);
 
+  // Delete
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  // Help request
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [helpMessage, setHelpMessage] = useState('');
+  const [helpRecipient, setHelpRecipient] = useState('');
+  const [helpIsProjectGroup, setHelpIsProjectGroup] = useState(false);
+  const [helpSending, setHelpSending] = useState(false);
+
+  // Dropdown data
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
+  const [projectMembers, setProjectMembers] = useState<ProjectMember[]>([]);
+  const [projects, setProjects] = useState<ProjectOption[]>([]);
+
+  // ─── Load task ──────────────────────────────────────────────────────
   const loadChecklist = useCallback(
     async (signal?: AbortSignal) => {
       const res = await fetchJson<ChecklistResponse>(
         `/api/pro/businesses/${businessId}/tasks/${taskId}/checklist`,
         {},
-        signal
+        signal,
       );
-      if (!res.ok || !res.data) {
-        if (res.status === 401) {
-          const from = window.location.pathname + window.location.search;
-          window.location.href = `/login?from=${encodeURIComponent(from)}`;
-          return;
-        }
-        return;
-      }
-      setChecklistItems(res.data.items ?? []);
+      if (res.ok && res.data) setChecklistItems(res.data.items ?? []);
     },
-    [businessId, taskId]
+    [businessId, taskId],
   );
-
-  const reloadTask = useCallback(async () => {
-    const res = await fetchJson<TaskDetailResponse>(
-      `/api/pro/businesses/${businessId}/tasks/${taskId}`
-    );
-    if (!res.ok || !res.data) return;
-    const normalized: Task = {
-      ...res.data.item,
-      categoryReferenceId: res.data.item.categoryReferenceId ?? null,
-      categoryReferenceName: res.data.item.categoryReferenceName ?? null,
-      tagReferences: res.data.item.tagReferences ?? [],
-    };
-    setTask(normalized);
-    setSubtasks(res.data.subtasks ?? []);
-  }, [businessId, taskId]);
 
   useEffect(() => {
     const controller = new AbortController();
-
     async function load() {
       try {
         setLoading(true);
@@ -133,439 +129,897 @@ export default function TaskDetailPage() {
         const res = await fetchJson<TaskDetailResponse>(
           `/api/pro/businesses/${businessId}/tasks/${taskId}`,
           {},
-          controller.signal
+          controller.signal,
         );
-        setRequestId(res.requestId);
         if (controller.signal.aborted) return;
         if (res.status === 401) {
-          const from = window.location.pathname + window.location.search;
-          window.location.href = `/login?from=${encodeURIComponent(from)}`;
+          window.location.href = `/login?from=${encodeURIComponent(window.location.pathname)}`;
           return;
         }
         if (!res.ok || !res.data) {
-          setError(
-            res.requestId ? `${res.error ?? 'Tâche introuvable.'} (Ref: ${res.requestId})` : res.error ?? 'Tâche introuvable.'
-          );
+          setError(res.error ?? 'Tache introuvable.');
           setTask(null);
           return;
         }
-        const normalized: Task = {
-          ...res.data.item,
-          categoryReferenceId: res.data.item.categoryReferenceId ?? null,
-          categoryReferenceName: res.data.item.categoryReferenceName ?? null,
-          tagReferences: res.data.item.tagReferences ?? [],
-        };
-        setTask(normalized);
-        setCategoryReferenceId(normalized.categoryReferenceId ?? '');
-        setTagReferenceIds(normalized.tagReferences.map((t) => t.id));
-        setSubtasks(res.data.subtasks ?? []);
+        setTask(res.data.item);
         void loadChecklist(controller.signal);
-      } catch (err) {
-        if (controller.signal.aborted) return;
-        console.error(err);
-        setError('Impossible de charger la tâche.');
+      } catch {
+        if (!controller.signal.aborted) setError('Impossible de charger la tache.');
       } finally {
         if (!controller.signal.aborted) setLoading(false);
       }
     }
-
     void load();
     return () => controller.abort();
   }, [businessId, taskId, loadChecklist]);
 
-  async function saveReferences() {
-    if (!canEditReferences) return;
-    setReferenceError(null);
-    setReferenceInfo(null);
-    setReferencesSaving(true);
-    const res = await fetchJson<TaskDetailResponse>(
+  // Load current user ID
+  useEffect(() => {
+    fetchJson<{ user: { id: string } }>('/api/auth/me').then((res) => {
+      if (res.ok && res.data?.user?.id) setMyUserId(String(res.data.user.id));
+    });
+  }, []);
+
+  // Load team members (for everyone — needed for help request)
+  useEffect(() => {
+    if (!businessId) return;
+    const controller = new AbortController();
+    fetchJson<{ items: TeamMember[] }>(
+      `/api/pro/businesses/${businessId}/members`,
+      {},
+      controller.signal,
+    ).then((res) => {
+      if (res.ok && res.data) setTeamMembers(res.data.items);
+    });
+    return () => controller.abort();
+  }, [businessId]);
+
+  // Load projects (admin only)
+  useEffect(() => {
+    if (!businessId || !isAdmin) return;
+    const controller = new AbortController();
+    fetchJson<{ items: ProjectOption[] }>(
+      `/api/pro/businesses/${businessId}/projects?scope=ACTIVE`,
+      {},
+      controller.signal,
+    ).then((res) => {
+      if (res.ok && res.data) setProjects(res.data.items);
+    });
+    return () => controller.abort();
+  }, [businessId, isAdmin]);
+
+  // Load project members when task has a project
+  useEffect(() => {
+    if (!businessId || !task?.projectId) return;
+    const controller = new AbortController();
+    fetchJson<{ items: ProjectMember[] }>(
+      `/api/pro/businesses/${businessId}/projects/${task.projectId}/members`,
+      {},
+      controller.signal,
+    ).then((res) => {
+      if (res.ok && res.data) setProjectMembers(res.data.items);
+    });
+    return () => controller.abort();
+  }, [businessId, task?.projectId]);
+
+  // ─── PATCH helper ──────────────────────────────────────────────────
+  const patchTask = useCallback(
+    async (payload: Record<string, unknown>) => {
+      setSaving(true);
+      const res = await fetchJson<TaskDetailResponse>(
+        `/api/pro/businesses/${businessId}/tasks/${taskId}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        },
+      );
+      if (res.ok && res.data) setTask(res.data.item);
+      setSaving(false);
+      return res.ok;
+    },
+    [businessId, taskId],
+  );
+
+  // ─── Handlers ──────────────────────────────────────────────────────
+  function startEditTitle() {
+    if (!isAdmin || !task) return;
+    setTitleDraft(task.title);
+    setEditingTitle(true);
+    setTimeout(() => titleInputRef.current?.focus(), 0);
+  }
+
+  async function saveTitle() {
+    const trimmed = titleDraft.trim();
+    if (!trimmed || trimmed === task?.title) {
+      setEditingTitle(false);
+      return;
+    }
+    await patchTask({ title: trimmed });
+    setEditingTitle(false);
+  }
+
+  async function handleStatusChange(newStatus: string) {
+    if (!canChangeStatus) return;
+    await patchTask({ status: newStatus });
+  }
+
+  async function handleDueDateChange(value: string) {
+    if (!isAdmin) return;
+    await patchTask({ dueDate: value ? new Date(value).toISOString() : null });
+  }
+
+  async function handleAssigneeChange(userId: string) {
+    if (!isAdmin) return;
+    await patchTask({ assigneeUserId: userId || null });
+  }
+
+  async function handleProjectChange(projectId: string) {
+    if (!isAdmin) return;
+    await patchTask({ projectId: projectId || null });
+  }
+
+  async function handleDelete() {
+    setDeleting(true);
+    const res = await fetchJson(
       `/api/pro/businesses/${businessId}/tasks/${taskId}`,
-      {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          categoryReferenceId: categoryReferenceId || null,
-          tagReferenceIds,
-        }),
-      }
+      { method: 'DELETE' },
     );
-    setRequestId(res.requestId);
-    if (res.status === 401) {
-      const from = window.location.pathname + window.location.search;
-      window.location.href = `/login?from=${encodeURIComponent(from)}`;
-      return;
+    setDeleting(false);
+    if (res.ok) {
+      router.push(`/app/pro/${businessId}/tasks`);
     }
-    if (!res.ok || !res.data) {
-      const msg = res.error ?? 'Mise à jour impossible.';
-      setReferenceError(res.requestId ? `${msg} (Ref: ${res.requestId})` : msg);
-      setReferencesSaving(false);
-      return;
-    }
-    const normalized: Task = {
-      ...res.data.item,
-      categoryReferenceId: res.data.item.categoryReferenceId ?? null,
-      categoryReferenceName: res.data.item.categoryReferenceName ?? null,
-      tagReferences: res.data.item.tagReferences ?? [],
-    };
-    setTask(normalized);
-    setCategoryReferenceId(normalized.categoryReferenceId ?? '');
-    setTagReferenceIds(normalized.tagReferences.map((t) => t.id));
-    setReferenceInfo('Références mises à jour.');
-    setReferenceError(null);
-    setReferencesSaving(false);
   }
 
-  async function handleAddSubtask() {
-    if (!canEditTask || subtaskSaving) return;
-    const title = subtaskTitle.trim();
-    if (!title) {
-      setSubtaskInfo('Titre requis.');
-      return;
-    }
-    setSubtaskSaving(true);
-    setSubtaskInfo(null);
-    const res = await fetchJson<TaskDetailResponse>(
-      `/api/pro/businesses/${businessId}/tasks`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, parentTaskId: taskId }),
-      }
-    );
-    if (!res.ok) {
-      setSubtaskInfo(res.error ?? 'Création impossible.');
-      setSubtaskSaving(false);
-      return;
-    }
-    setSubtaskTitle('');
-    setSubtaskInfo('Sous-tâche ajoutée.');
-    await reloadTask();
-    setSubtaskSaving(false);
+  async function handleUnblock() {
+    await patchTask({ isBlocked: false, blockedReason: null });
   }
 
+  // ─── Help request ──────────────────────────────────────────────────
+  async function handleSendHelp() {
+    if ((!helpRecipient && !helpIsProjectGroup) || helpSending) return;
+    setHelpSending(true);
+
+    // 1. Mark task as blocked
+    await patchTask({ isBlocked: true, blockedReason: helpMessage.trim() || 'Demande d\'aide envoyee' });
+
+    const messageContent = helpMessage.trim()
+      ? `Besoin d'aide sur la tache "${task?.title}" :\n${helpMessage.trim()}`
+      : `Besoin d'aide sur la tache "${task?.title}"`;
+
+    let conversationId: string | null = null;
+
+    if (helpIsProjectGroup && task?.projectId) {
+      // 2a. Find or create a GROUP conversation on the project
+      const listRes = await fetchJson<{ items: { id: string; type: string; name: string | null }[] }>(
+        `/api/pro/businesses/${businessId}/projects/${task.projectId}/conversations`,
+      );
+      const existing = listRes.ok && listRes.data
+        ? listRes.data.items.find((c) => c.type === 'GROUP')
+        : null;
+
+      if (existing) {
+        conversationId = existing.id;
+      } else {
+        // Create group with all project members
+        const memberIds = projectMembers
+          .filter((m) => m.userId !== myUserId)
+          .map((m) => m.userId);
+        if (memberIds.length > 0) {
+          const createRes = await fetchJson<{ item: { id: string } }>(
+            `/api/pro/businesses/${businessId}/projects/${task.projectId}/conversations`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                type: 'GROUP',
+                name: task.projectName ?? 'Projet',
+                memberUserIds: memberIds,
+              }),
+            },
+          );
+          if (createRes.ok && createRes.data) conversationId = createRes.data.item.id;
+        }
+      }
+    } else if (helpRecipient) {
+      // 2b. Create or find private conversation
+      const convRes = await fetchJson<{ item: { id: string } }>(
+        `/api/pro/businesses/${businessId}/conversations`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: 'PRIVATE',
+            memberUserIds: [helpRecipient],
+          }),
+        },
+      );
+      if (convRes.ok && convRes.data) conversationId = convRes.data.item.id;
+    }
+
+    // 3. Send message with task reference
+    if (conversationId) {
+      await fetchJson(
+        `/api/pro/businesses/${businessId}/conversations/${conversationId}/messages`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            content: messageContent,
+            taskId,
+          }),
+        },
+      );
+    }
+
+    setHelpSending(false);
+    setHelpOpen(false);
+    setHelpMessage('');
+    setHelpRecipient('');
+    setHelpIsProjectGroup(false);
+  }
+
+  // ─── Checklist handlers ────────────────────────────────────────────
   async function handleAddChecklistItem() {
-    if (!canEditTask || checklistSaving) return;
+    if (!isAdmin || checklistSaving) return;
     const title = checklistTitle.trim();
-    if (!title) {
-      setChecklistInfo('Titre requis.');
-      return;
-    }
+    if (!title) return;
     setChecklistSaving(true);
-    setChecklistInfo(null);
     const res = await fetchJson<{ item: ChecklistItem }>(
       `/api/pro/businesses/${businessId}/tasks/${taskId}/checklist`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title }),
-      }
+      },
     );
-    if (!res.ok) {
-      setChecklistInfo(res.error ?? 'Ajout impossible.');
-      setChecklistSaving(false);
-      return;
+    if (res.ok) {
+      setChecklistTitle('');
+      await loadChecklist();
     }
-    setChecklistTitle('');
-    await loadChecklist();
-    setChecklistInfo('Checklist mise à jour.');
     setChecklistSaving(false);
   }
 
   async function handleToggleChecklistItem(item: ChecklistItem, nextValue: boolean) {
-    if (!canEditTask) return;
-    const res = await fetchJson<{ item: ChecklistItem }>(
+    if (!isAdmin) return;
+    await fetchJson(
       `/api/pro/businesses/${businessId}/tasks/${taskId}/checklist/${item.id}`,
       {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ isCompleted: nextValue }),
-      }
+      },
     );
-    if (!res.ok) {
-      setChecklistInfo(res.error ?? 'Mise à jour impossible.');
-      return;
+    await loadChecklist();
+  }
+
+  async function handleDeleteChecklistItem(itemId: string) {
+    if (!isAdmin) return;
+    await fetchJson(
+      `/api/pro/businesses/${businessId}/tasks/${taskId}/checklist/${itemId}`,
+      { method: 'DELETE' },
+    );
+    await loadChecklist();
+  }
+
+  // ─── Help modal: group members ─────────────────────────────────────
+  function getHelpRecipients() {
+    const otherMembers = teamMembers.filter((m) => m.userId !== myUserId);
+    const projectMemberIds = new Set(projectMembers.filter((m) => m.userId !== myUserId).map((m) => m.userId));
+
+    // Group by: project members, then by pole, then ungrouped
+    const inProject: TeamMember[] = [];
+    const byPole: Record<string, TeamMember[]> = {};
+    const other: TeamMember[] = [];
+
+    for (const m of otherMembers) {
+      if (task?.projectId && projectMemberIds.has(m.userId)) {
+        inProject.push(m);
+      } else if (m.organizationUnit) {
+        const poleName = m.organizationUnit.name;
+        if (!byPole[poleName]) byPole[poleName] = [];
+        byPole[poleName].push(m);
+      } else {
+        other.push(m);
+      }
     }
-    await loadChecklist();
-    setChecklistInfo('Checklist mise à jour.');
+
+    return { inProject, byPole, other };
   }
 
-  async function moveChecklistItem(itemId: string, direction: 'up' | 'down') {
-    if (!canEditTask) return;
-    const sorted = [...checklistItems].sort((a, b) => a.position - b.position);
-    const index = sorted.findIndex((item) => item.id === itemId);
-    const targetIndex = direction === 'up' ? index - 1 : index + 1;
-    if (index < 0 || targetIndex < 0 || targetIndex >= sorted.length) return;
-    const current = sorted[index];
-    const target = sorted[targetIndex];
-    await fetchJson(
-      `/api/pro/businesses/${businessId}/tasks/${taskId}/checklist/${current.id}`,
-      {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ position: target.position }),
-      }
-    );
-    await fetchJson(
-      `/api/pro/businesses/${businessId}/tasks/${taskId}/checklist/${target.id}`,
-      {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ position: current.position }),
-      }
-    );
-    await loadChecklist();
-  }
-
+  // ─── Loading / error states ────────────────────────────────────────
   if (loading) {
     return (
-      <PageContainer>
-        <Card className="p-5">
-          <p className="text-sm text-[var(--text-secondary)]">Chargement de la tâche…</p>
+      <ProPageShell
+        backHref={`/app/pro/${businessId}/tasks`}
+        backLabel="Taches"
+        title="Chargement..."
+      >
+        <Card className="p-6">
+          <p className="text-sm" style={{ color: 'var(--text-faint)' }}>Chargement de la tache...</p>
         </Card>
-      </PageContainer>
+      </ProPageShell>
     );
   }
 
   if (!task) {
     return (
-      <PageContainer>
-        <Card className="space-y-2 p-5">
-          <p className="text-sm font-semibold text-[var(--danger)]">{error ?? 'Tâche introuvable.'}</p>
+      <ProPageShell
+        backHref={`/app/pro/${businessId}/tasks`}
+        backLabel="Taches"
+        title="Tache introuvable"
+      >
+        <Card className="p-6 space-y-3">
+          <p className="text-sm font-semibold" style={{ color: 'var(--danger)' }}>{error ?? 'Tache introuvable.'}</p>
           <Button variant="outline" size="sm" asChild>
-            <Link href={`/app/pro/${businessId}/tasks`}>Retour à la liste</Link>
+            <Link href={`/app/pro/${businessId}/tasks`}>Retour a la liste</Link>
           </Button>
-          {requestId ? (
-            <p className="text-[10px] text-[var(--text-secondary)]">Request ID: {requestId}</p>
-          ) : null}
         </Card>
-      </PageContainer>
+      </ProPageShell>
     );
   }
 
-  const checklistTotal = checklistItems.length;
-  const checklistDone = checklistItems.filter((item) => item.isCompleted).length;
+  const isDone = task.status === 'DONE';
   const checklistSorted = [...checklistItems].sort((a, b) => a.position - b.position);
+  const checklistDone = checklistItems.filter((i) => i.isCompleted).length;
+  const checklistTotal = checklistItems.length;
+  const dueDateValue = task.dueDate ? task.dueDate.slice(0, 10) : '';
+  const { inProject, byPole, other } = getHelpRecipients();
 
   return (
-    <PageContainer>
-    <div className="space-y-4">
-      <PageHeader
-        title={task.title}
-        subtitle={`Business #${task.businessId} · créée le ${formatDate(task.createdAt)}`}
-        backHref={`/app/pro/${businessId}/tasks`}
-        backLabel="Retour"
-        actions={
-          task.projectId ? (
-            <Button size="sm" variant="ghost" asChild>
-              <Link href={`/app/pro/${businessId}/projects/${task.projectId}`}>
-                Voir le projet
-              </Link>
-            </Button>
-          ) : undefined
-        }
-        context={
-          <div className="flex flex-wrap gap-2">
-            <Badge variant="neutral">
-              {formatTaskStatus(task.status)}
-            </Badge>
-            {task.categoryReferenceName ? (
-              <Badge variant="neutral" className="bg-indigo-50 text-indigo-700">
-                {task.categoryReferenceName}
-              </Badge>
-            ) : null}
-            {task.tagReferences?.map((tag) => (
-              <Badge key={tag.id} variant="neutral" className="bg-[var(--success-bg)] text-[var(--success)]">
-                {tag.name}
-              </Badge>
+    <ProPageShell
+      backHref={`/app/pro/${businessId}/tasks`}
+      backLabel="Taches"
+      title="Detail de la tache"
+    >
+      {/* ── Title + Status hero ── */}
+      <Card className="p-5 space-y-4">
+        <div className="flex items-start gap-3">
+          {/* Status toggle button */}
+          <button
+            type="button"
+            disabled={saving || !canChangeStatus}
+            onClick={() => void handleStatusChange(isDone ? 'TODO' : 'DONE')}
+            className="shrink-0 flex items-center justify-center rounded-full border-2 transition-all mt-1"
+            style={{
+              width: 28,
+              height: 28,
+              borderColor: isDone ? 'var(--success)' : 'var(--border)',
+              background: isDone ? 'var(--success)' : 'transparent',
+              opacity: saving ? 0.5 : 1,
+            }}
+            title={isDone ? 'Remettre a faire' : 'Marquer comme terminee'}
+          >
+            {isDone ? <Check size={16} color="white" strokeWidth={3} /> : null}
+          </button>
+
+          {/* Title — click to edit (admin only) */}
+          <div className="flex-1 min-w-0">
+            {editingTitle ? (
+              <input
+                ref={titleInputRef}
+                value={titleDraft}
+                onChange={(e) => setTitleDraft(e.target.value)}
+                onBlur={() => void saveTitle()}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') void saveTitle();
+                  if (e.key === 'Escape') setEditingTitle(false);
+                }}
+                className="w-full bg-transparent outline-none border-b-2 border-[var(--shell-accent)] pb-1"
+                style={{ color: 'var(--text)', fontSize: 22, fontWeight: 700 }}
+                maxLength={200}
+              />
+            ) : (
+              <h1
+                onClick={isAdmin ? startEditTitle : undefined}
+                className={`${isDone ? 'line-through opacity-60' : ''} ${isAdmin ? 'cursor-pointer hover:opacity-80' : ''}`}
+                style={{ color: 'var(--text)', fontSize: 22, fontWeight: 700, lineHeight: 1.3 }}
+              >
+                {task.title}
+              </h1>
+            )}
+            <p className="text-xs mt-1" style={{ color: 'var(--text-faint)' }}>
+              Creee le {fmtDate(task.createdAt)}
+              {task.updatedAt !== task.createdAt ? ` · Modifiee le ${fmtDate(task.updatedAt)}` : ''}
+            </p>
+          </div>
+        </div>
+
+        {/* Status pills + help button */}
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <div className="flex items-center gap-2">
+            {TASK_STATUS_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                disabled={saving || !canChangeStatus}
+                onClick={() => void handleStatusChange(opt.value)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${getTaskStatusBadgeClasses(opt.value)}`}
+                style={{
+                  opacity: task.status === opt.value ? 1 : 0.5,
+                  transform: task.status === opt.value ? 'scale(1.05)' : 'scale(1)',
+                }}
+              >
+                {opt.label}
+              </button>
             ))}
-            {requestId ? (
-              <Badge variant="neutral" className="bg-[var(--surface-2)]">
-                Ref {requestId}
-              </Badge>
-            ) : null}
           </div>
-        }
-      />
 
-      <Card className="space-y-3 p-5">
-        <div className="grid gap-3 md:grid-cols-2">
-          <Card className="border-dashed border-[var(--border)] bg-transparent p-3">
-            <p className="text-xs text-[var(--text-secondary)]">Statut</p>
-            <p className="text-sm text-[var(--text-primary)]">
-              {formatTaskStatus(task.status)}
-            </p>
-          </Card>
-          <Card className="border-dashed border-[var(--border)] bg-transparent p-3">
-            <p className="text-xs text-[var(--text-secondary)]">Échéance</p>
-            <p className="text-sm text-[var(--text-primary)]">{formatDate(task.dueDate)}</p>
-          </Card>
+          {!isDone && canChangeStatus ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setHelpOpen(true)}
+              className="whitespace-nowrap"
+            >
+              <HelpCircle size={14} className="mr-1.5" />
+              Demander de l&apos;aide
+            </Button>
+          ) : null}
         </div>
-        <Card className="border-dashed border-[var(--border)] bg-transparent p-3">
-          <p className="text-xs text-[var(--text-secondary)]">Assignee</p>
-          <p className="text-sm text-[var(--text-primary)]">
-            {task.assigneeEmail ?? task.assigneeName ?? 'Non assigné'}
-          </p>
-        </Card>
-        <Card className="border-dashed border-[var(--border)] bg-transparent p-3">
-          <p className="text-xs text-[var(--text-secondary)]">Projet</p>
-          <p className="text-sm text-[var(--text-primary)]">
-            {task.projectName ?? '—'}
-          </p>
-        </Card>
-      </Card>
 
-      <Card className="space-y-3 p-5">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <p className="text-sm font-semibold text-[var(--text-primary)]">Sous-tâches</p>
-            <p className="text-xs text-[var(--text-secondary)]">
-              {subtasks.length} sous-tâche{subtasks.length > 1 ? 's' : ''}
-            </p>
-          </div>
-          <Button size="sm" variant="ghost" onClick={() => setSubtasksOpen((prev) => !prev)}>
-            {subtasksOpen ? 'Voir moins' : 'Voir +'}
-          </Button>
-        </div>
-        {subtasksOpen ? (
-          <div className="space-y-2">
-            {subtasks.length ? (
-              subtasks.map((subtask) => (
-                <Link
-                  key={subtask.id}
-                  href={`/app/pro/${businessId}/tasks/${subtask.id}`}
-                  className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--border)]/60 bg-[var(--surface-2)]/70 px-3 py-2 text-sm transition hover:border-[var(--border)] hover:bg-[var(--surface)]"
-                >
-                  <div className="min-w-0">
-                    <p className="truncate text-[var(--text-primary)]">{subtask.title}</p>
-                    <p className="text-[11px] text-[var(--text-secondary)]">
-                      {subtask.assigneeName ?? subtask.assigneeEmail ?? 'Non assigné'}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2 text-[11px] text-[var(--text-secondary)]">
-                    <Badge variant="neutral">{formatTaskStatus(subtask.status)}</Badge>
-                    <span>{formatDate(subtask.dueDate)}</span>
-                  </div>
-                </Link>
-              ))
-            ) : (
-              <p className="text-xs text-[var(--text-secondary)]">Aucune sous-tâche.</p>
-            )}
-            {canEditTask ? (
-              <div className="flex flex-wrap items-center gap-2">
-                <Input
-                  className="sm:flex-1"
-                  placeholder="Nouvelle sous-tâche"
-                  value={subtaskTitle}
-                  onChange={(e) => setSubtaskTitle(e.target.value)}
-                />
-                <Button size="sm" onClick={() => void handleAddSubtask()} disabled={subtaskSaving}>
-                  {subtaskSaving ? 'Ajout…' : 'Ajouter'}
-                </Button>
-              </div>
+        {/* Blocked banner */}
+        {task.isBlocked ? (
+          <div
+            className="flex items-center gap-3 rounded-lg px-4 py-3"
+            style={{ background: 'var(--danger-bg)', border: '1px solid var(--danger)', borderColor: 'color-mix(in srgb, var(--danger) 30%, transparent)' }}
+          >
+            <AlertTriangle size={16} style={{ color: 'var(--danger)' }} className="shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold" style={{ color: 'var(--danger)' }}>Tache bloquee</p>
+              {task.blockedReason ? (
+                <p className="text-xs mt-0.5" style={{ color: 'var(--text)' }}>{task.blockedReason}</p>
+              ) : null}
+            </div>
+            {canChangeStatus ? (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => void handleUnblock()}
+                disabled={saving}
+                className="shrink-0"
+              >
+                Debloquer
+              </Button>
             ) : null}
-            {subtaskInfo ? <p className="text-xs text-[var(--success)]">{subtaskInfo}</p> : null}
           </div>
         ) : null}
       </Card>
 
-      <Card className="space-y-3 p-5">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <p className="text-sm font-semibold text-[var(--text-primary)]">Checklist</p>
-            <p className="text-xs text-[var(--text-secondary)]">
-              {checklistDone}/{checklistTotal} terminée{checklistDone > 1 ? 's' : ''}
-            </p>
+      {/* ── Details grid ── */}
+      <Card className="p-5">
+        <div className="grid gap-4 sm:grid-cols-2">
+          {/* Due date */}
+          <div className="space-y-1.5">
+            <label className="flex items-center gap-1.5 text-xs font-medium" style={{ color: 'var(--text-faint)' }}>
+              <Calendar size={13} />
+              Echeance
+            </label>
+            {isAdmin ? (
+              <Input
+                type="date"
+                value={dueDateValue}
+                onChange={(e) => void handleDueDateChange(e.target.value)}
+                disabled={saving}
+              />
+            ) : (
+              <p className="text-sm" style={{ color: 'var(--text)' }}>
+                {task.dueDate ? fmtDate(task.dueDate) : 'Non definie'}
+              </p>
+            )}
           </div>
-          <Button size="sm" variant="ghost" onClick={() => setChecklistOpen((prev) => !prev)}>
-            {checklistOpen ? 'Voir moins' : 'Voir +'}
-          </Button>
+
+          {/* Assignee */}
+          <div className="space-y-1.5">
+            <label className="flex items-center gap-1.5 text-xs font-medium" style={{ color: 'var(--text-faint)' }}>
+              <User size={13} />
+              Assignee
+            </label>
+            {isAdmin ? (
+              <Select
+                value={task.assigneeUserId ?? ''}
+                onChange={(e) => void handleAssigneeChange(e.target.value)}
+                disabled={saving}
+              >
+                <option value="">Non assigne</option>
+                {teamMembers.map((m) => (
+                  <option key={m.userId} value={m.userId}>
+                    {m.name ?? m.email}
+                  </option>
+                ))}
+              </Select>
+            ) : (
+              <p className="text-sm" style={{ color: 'var(--text)' }}>
+                {task.assigneeName ?? task.assigneeEmail ?? 'Non assigne'}
+              </p>
+            )}
+          </div>
+
+          {/* Project */}
+          <div className="space-y-1.5 sm:col-span-2">
+            <label className="flex items-center gap-1.5 text-xs font-medium" style={{ color: 'var(--text-faint)' }}>
+              <FolderOpen size={13} />
+              Projet
+            </label>
+            {isAdmin ? (
+              <div className="flex items-center gap-2">
+                <Select
+                  value={task.projectId ?? ''}
+                  onChange={(e) => void handleProjectChange(e.target.value)}
+                  disabled={saving}
+                  className="flex-1"
+                >
+                  <option value="">Aucun projet</option>
+                  {projects.map((p) => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </Select>
+                {task.projectId ? (
+                  <Button variant="ghost" size="sm" asChild>
+                    <Link href={`/app/pro/${businessId}/projects/${task.projectId}`}>
+                      Voir
+                    </Link>
+                  </Button>
+                ) : null}
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <p className="text-sm" style={{ color: 'var(--text)' }}>
+                  {task.projectName ?? 'Aucun projet'}
+                </p>
+                {task.projectId ? (
+                  <Link
+                    href={`/app/pro/${businessId}/projects/${task.projectId}`}
+                    className="text-xs hover:underline"
+                    style={{ color: 'var(--shell-accent)' }}
+                  >
+                    Voir le projet
+                  </Link>
+                ) : null}
+              </div>
+            )}
+          </div>
         </div>
-        {checklistOpen ? (
-          <div className="space-y-2">
-            {checklistSorted.length ? (
-              checklistSorted.map((item, index) => (
+      </Card>
+
+      {/* ── Checklist ── */}
+      <Card className="p-5 space-y-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm font-semibold" style={{ color: 'var(--text)' }}>Checklist</p>
+            {checklistTotal > 0 ? (
+              <p className="text-xs" style={{ color: 'var(--text-faint)' }}>
+                {checklistDone}/{checklistTotal} terminee{checklistDone > 1 ? 's' : ''}
+              </p>
+            ) : null}
+          </div>
+          {checklistTotal > 0 ? (
+            <div className="flex items-center gap-2">
+              <div className="w-20 h-1.5 rounded-full" style={{ background: 'var(--surface-2)' }}>
                 <div
-                  key={item.id}
-                  className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--border)]/60 bg-[var(--surface-2)]/70 px-3 py-2 text-sm"
-                >
-                  <label className="flex min-w-0 items-center gap-2 text-[var(--text-primary)]">
-                    <input
-                      type="checkbox"
-                      checked={item.isCompleted}
-                      onChange={(e) => void handleToggleChecklistItem(item, e.target.checked)}
-                      disabled={!canEditTask}
-                    />
-                    <span className={item.isCompleted ? 'line-through text-[var(--text-secondary)]' : ''}>
-                      {item.title}
-                    </span>
-                  </label>
-                  <div className="flex items-center gap-1">
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => void moveChecklistItem(item.id, 'up')}
-                      disabled={!canEditTask || index === 0}
-                    >
-                      ↑
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => void moveChecklistItem(item.id, 'down')}
-                      disabled={!canEditTask || index === checklistSorted.length - 1}
-                    >
-                      ↓
-                    </Button>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <p className="text-xs text-[var(--text-secondary)]">Aucun élément.</p>
-            )}
-            {canEditTask ? (
-              <div className="flex flex-wrap items-center gap-2">
-                <Input
-                  className="sm:flex-1"
-                  placeholder="Nouvel item"
-                  value={checklistTitle}
-                  onChange={(e) => setChecklistTitle(e.target.value)}
+                  className="h-full rounded-full transition-all"
+                  style={{
+                    width: `${checklistTotal > 0 ? (checklistDone / checklistTotal) * 100 : 0}%`,
+                    background: checklistDone === checklistTotal ? 'var(--success)' : 'var(--shell-accent)',
+                  }}
                 />
-                <Button size="sm" onClick={() => void handleAddChecklistItem()} disabled={checklistSaving}>
-                  {checklistSaving ? 'Ajout…' : 'Ajouter'}
-                </Button>
               </div>
-            ) : null}
-            {checklistInfo ? <p className="text-xs text-[var(--success)]">{checklistInfo}</p> : null}
+              <span className="text-xs font-medium" style={{ color: checklistDone === checklistTotal ? 'var(--success)' : 'var(--text-faint)' }}>
+                {checklistTotal > 0 ? Math.round((checklistDone / checklistTotal) * 100) : 0}%
+              </span>
+            </div>
+          ) : null}
+        </div>
+
+        {/* Items */}
+        {checklistSorted.length > 0 ? (
+          <div className="space-y-1">
+            {checklistSorted.map((item) => (
+              <div
+                key={item.id}
+                className="flex items-center gap-2 rounded-lg px-3 py-2.5 transition-colors group hover:bg-[var(--surface-hover)]"
+              >
+                <button
+                  type="button"
+                  disabled={!isAdmin}
+                  onClick={() => void handleToggleChecklistItem(item, !item.isCompleted)}
+                  className="shrink-0 flex items-center justify-center rounded border-2 transition-all"
+                  style={{
+                    width: 20,
+                    height: 20,
+                    borderColor: item.isCompleted ? 'var(--success)' : 'var(--border)',
+                    background: item.isCompleted ? 'var(--success)' : 'transparent',
+                    borderRadius: 4,
+                  }}
+                >
+                  {item.isCompleted ? <Check size={12} color="white" strokeWidth={3} /> : null}
+                </button>
+                <span
+                  className={`flex-1 text-sm ${item.isCompleted ? 'line-through' : ''}`}
+                  style={{ color: item.isCompleted ? 'var(--text-faint)' : 'var(--text)' }}
+                >
+                  {item.title}
+                </span>
+                {isAdmin ? (
+                  <button
+                    type="button"
+                    onClick={() => void handleDeleteChecklistItem(item.id)}
+                    className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                    title="Supprimer"
+                  >
+                    <X size={14} style={{ color: 'var(--text-faint)' }} />
+                  </button>
+                ) : null}
+              </div>
+            ))}
           </div>
+        ) : (
+          <p className="text-xs py-2" style={{ color: 'var(--text-faint)' }}>
+            Aucun element dans la checklist.
+          </p>
+        )}
+
+        {isAdmin ? (
+          <form
+            onSubmit={(e) => { e.preventDefault(); void handleAddChecklistItem(); }}
+            className="flex items-center gap-2"
+          >
+            <Input
+              className="flex-1"
+              placeholder="Ajouter un element..."
+              value={checklistTitle}
+              onChange={(e) => setChecklistTitle(e.target.value)}
+              disabled={checklistSaving}
+            />
+            <Button size="sm" type="submit" disabled={checklistSaving || !checklistTitle.trim()}>
+              <Plus size={14} />
+            </Button>
+          </form>
         ) : null}
       </Card>
 
-      <Card className="space-y-3 p-5">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <p className="text-sm font-semibold text-[var(--text-primary)]">Références</p>
-            <p className="text-xs text-[var(--text-secondary)]">Catégorie et tags de la tâche.</p>
-          </div>
-          <Badge variant="neutral">{canEditReferences ? 'Admin/Owner' : 'Lecture seule'}</Badge>
-        </div>
-        <ReferencePicker
-          businessId={businessId}
-          categoryId={categoryReferenceId || null}
-          tagIds={tagReferenceIds}
-          onCategoryChange={(id) => setCategoryReferenceId(id ?? '')}
-          onTagsChange={(ids) => setTagReferenceIds(ids)}
-          disabled={!canEditReferences || referencesSaving}
-          title="Références tâche"
-        />
-        {referenceError ? <p className="text-xs font-semibold text-[var(--danger)]">{referenceError}</p> : null}
-        {referenceInfo ? <p className="text-xs text-[var(--success)]">{referenceInfo}</p> : null}
-        <div className="flex justify-end">
-          <Button onClick={() => void saveReferences()} disabled={!canEditReferences || referencesSaving}>
-            {referencesSaving ? 'Enregistrement…' : 'Enregistrer'}
+      {/* ── Danger zone ── */}
+      {isAdmin ? (
+        <div className="flex justify-end pt-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setDeleteOpen(true)}
+            className="text-[var(--danger)] border-[var(--danger)] hover:bg-[var(--danger-bg)]"
+          >
+            <Trash2 size={14} className="mr-1.5" />
+            Supprimer la tache
           </Button>
         </div>
-      </Card>
+      ) : null}
+
+      {/* ── Delete modal ── */}
+      <Modal
+        open={deleteOpen}
+        onCloseAction={() => { if (!deleting) setDeleteOpen(false); }}
+        title="Supprimer cette tache ?"
+        description="Cette action est irreversible. La tache et sa checklist seront definitivement supprimees."
+      >
+        <div className="flex justify-end gap-2 pt-2">
+          <Button variant="outline" onClick={() => setDeleteOpen(false)} disabled={deleting}>
+            Annuler
+          </Button>
+          <Button
+            onClick={() => void handleDelete()}
+            disabled={deleting}
+            className="bg-[var(--danger)] text-white hover:opacity-90"
+          >
+            {deleting ? 'Suppression...' : 'Supprimer'}
+          </Button>
+        </div>
+      </Modal>
+
+      {/* ── Help request modal ── */}
+      <Modal
+        open={helpOpen}
+        onCloseAction={() => { if (!helpSending) setHelpOpen(false); }}
+        title="Demander de l'aide"
+        description="La tache sera automatiquement marquee comme bloquee et un message sera envoye au destinataire."
+      >
+        <div className="space-y-4">
+          {/* Message */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium" style={{ color: 'var(--text-faint)' }}>
+              Message (optionnel)
+            </label>
+            <textarea
+              value={helpMessage}
+              onChange={(e) => setHelpMessage(e.target.value)}
+              placeholder="Decrivez votre probleme..."
+              className="w-full rounded-lg border px-3 py-2 text-sm resize-none"
+              style={{
+                borderColor: 'var(--border)',
+                background: 'var(--surface)',
+                color: 'var(--text)',
+                minHeight: 80,
+              }}
+              maxLength={2000}
+              disabled={helpSending}
+            />
+          </div>
+
+          {/* Recipient picker */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium" style={{ color: 'var(--text-faint)' }}>
+              Envoyer a
+            </label>
+            <div
+              className="rounded-lg border overflow-hidden"
+              style={{ borderColor: 'var(--border)', maxHeight: 280, overflowY: 'auto' }}
+            >
+              {/* Project group option */}
+              {task.projectId && inProject.length > 0 ? (
+                <div>
+                  <div
+                    className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide"
+                    style={{ color: 'var(--text-faint)', background: 'var(--surface-2)' }}
+                  >
+                    Projet — {task.projectName}
+                  </div>
+                  {/* Group option */}
+                  <button
+                    type="button"
+                    onClick={() => { setHelpIsProjectGroup(true); setHelpRecipient(''); }}
+                    className="flex items-center gap-3 w-full px-3 py-2.5 text-left transition-colors hover:bg-[var(--surface-hover)]"
+                    style={{
+                      background: helpIsProjectGroup ? 'color-mix(in srgb, var(--shell-accent) 10%, transparent)' : undefined,
+                    }}
+                  >
+                    <div
+                      className="shrink-0 rounded-full border-2 flex items-center justify-center"
+                      style={{
+                        width: 18, height: 18,
+                        borderColor: helpIsProjectGroup ? 'var(--shell-accent)' : 'var(--border)',
+                      }}
+                    >
+                      {helpIsProjectGroup ? (
+                        <div className="rounded-full" style={{ width: 10, height: 10, background: 'var(--shell-accent)' }} />
+                      ) : null}
+                    </div>
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                      <Users size={15} style={{ color: 'var(--shell-accent)' }} className="shrink-0" />
+                      <div>
+                        <p className="text-sm font-medium" style={{ color: 'var(--text)' }}>Tout le groupe</p>
+                        <p className="text-[11px]" style={{ color: 'var(--text-faint)' }}>
+                          {inProject.length} membre{inProject.length > 1 ? 's' : ''}
+                        </p>
+                      </div>
+                    </div>
+                  </button>
+                  {/* Individual project members */}
+                  {inProject.map((m) => (
+                    <RecipientRow
+                      key={m.userId}
+                      member={m}
+                      selected={!helpIsProjectGroup && helpRecipient === m.userId}
+                      onSelect={() => { setHelpRecipient(m.userId); setHelpIsProjectGroup(false); }}
+                    />
+                  ))}
+                </div>
+              ) : null}
+
+              {/* Members by pole */}
+              {Object.entries(byPole).map(([poleName, poleMembers]) => (
+                <RecipientGroup
+                  key={poleName}
+                  title={`Pole — ${poleName}`}
+                  members={poleMembers}
+                  selected={!helpIsProjectGroup ? helpRecipient : ''}
+                  onSelect={(id) => { setHelpRecipient(id); setHelpIsProjectGroup(false); }}
+                />
+              ))}
+
+              {/* Other members */}
+              {other.length > 0 ? (
+                <RecipientGroup
+                  title="Equipe"
+                  members={other}
+                  selected={!helpIsProjectGroup ? helpRecipient : ''}
+                  onSelect={(id) => { setHelpRecipient(id); setHelpIsProjectGroup(false); }}
+                />
+              ) : null}
+
+              {inProject.length === 0 && Object.keys(byPole).length === 0 && other.length === 0 ? (
+                <p className="text-xs text-center py-6" style={{ color: 'var(--text-faint)' }}>
+                  Aucun membre disponible.
+                </p>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-1">
+            <Button variant="outline" onClick={() => setHelpOpen(false)} disabled={helpSending}>
+              Annuler
+            </Button>
+            <Button
+              onClick={() => void handleSendHelp()}
+              disabled={helpSending || (!helpRecipient && !helpIsProjectGroup)}
+            >
+              {helpSending ? 'Envoi...' : 'Envoyer'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+    </ProPageShell>
+  );
+}
+
+/* ═══ Recipient row (for help modal) ═══ */
+
+function RecipientRow({
+  member: m,
+  selected,
+  onSelect,
+}: {
+  member: TeamMember;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className="flex items-center gap-3 w-full px-3 py-2.5 text-left transition-colors hover:bg-[var(--surface-hover)]"
+      style={{
+        background: selected ? 'color-mix(in srgb, var(--shell-accent) 10%, transparent)' : undefined,
+      }}
+    >
+      <div
+        className="shrink-0 rounded-full border-2 flex items-center justify-center"
+        style={{
+          width: 18, height: 18,
+          borderColor: selected ? 'var(--shell-accent)' : 'var(--border)',
+        }}
+      >
+        {selected ? (
+          <div className="rounded-full" style={{ width: 10, height: 10, background: 'var(--shell-accent)' }} />
+        ) : null}
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm truncate" style={{ color: 'var(--text)' }}>{m.name ?? m.email}</p>
+        <p className="text-[11px]" style={{ color: 'var(--text-faint)' }}>
+          {m.role === 'OWNER' ? 'Proprietaire' : m.role === 'ADMIN' ? 'Admin' : 'Membre'}
+          {m.organizationUnit ? ` · ${m.organizationUnit.name}` : ''}
+        </p>
+      </div>
+    </button>
+  );
+}
+
+/* ═══ Recipient group (for help modal) ═══ */
+
+function RecipientGroup({
+  title,
+  members,
+  selected,
+  onSelect,
+}: {
+  title: string;
+  members: TeamMember[];
+  selected: string;
+  onSelect: (userId: string) => void;
+}) {
+  return (
+    <div>
+      <div
+        className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide"
+        style={{ color: 'var(--text-faint)', background: 'var(--surface-2)' }}
+      >
+        {title}
+      </div>
+      {members.map((m) => (
+        <RecipientRow
+          key={m.userId}
+          member={m}
+          selected={selected === m.userId}
+          onSelect={() => onSelect(m.userId)}
+        />
+      ))}
     </div>
-    </PageContainer>
   );
 }

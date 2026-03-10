@@ -213,8 +213,8 @@ export function Modal({ open, onCloseAction, title, description, size = 'md', ch
           className="flex max-h-[90vh] flex-col overflow-hidden rounded-3xl border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] focus:outline-none"
         >
           {/* Header */}
-          <div className="relative shrink-0 border-b border-[var(--border)] px-6 py-5">
-            <div className="pr-14">
+          <div className="relative shrink-0 border-b border-[var(--border)] px-4 py-4 sm:px-6 sm:py-5">
+            <div className="pr-12 sm:pr-14">
               <h3 id={titleId} className="text-xl font-semibold" style={{ fontFamily: 'var(--font-barlow), sans-serif' }}>
                 {title}
               </h3>
@@ -228,7 +228,7 @@ export function Modal({ open, onCloseAction, title, description, size = 'md', ch
             <button
               type="button"
               onClick={requestClose}
-              className="absolute right-4 top-4 inline-flex h-11 w-11 items-center justify-center rounded-full bg-[var(--shell-accent)] text-white hover:opacity-90 transition-opacity focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
+              className="absolute right-3 top-3 inline-flex h-9 w-9 items-center justify-center rounded-full bg-[var(--shell-accent)] text-white hover:opacity-90 transition-opacity focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)] sm:right-4 sm:top-4 sm:h-11 sm:w-11"
               aria-label="Fermer la fenêtre"
               title="Fermer"
             >
@@ -244,7 +244,7 @@ export function Modal({ open, onCloseAction, title, description, size = 'md', ch
           </div>
 
           {/* Body scrollable */}
-          <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-5">
             {children}
           </div>
         </div>
@@ -260,7 +260,7 @@ type ModalFooterStickyProps = {
 
 export function ModalFooterSticky({ children }: ModalFooterStickyProps) {
   return (
-    <div className="sticky bottom-0 -mx-6 mt-6 px-6 pb-5 pt-3">
+    <div className="sticky bottom-0 -mx-4 mt-6 px-4 pb-5 pt-3 sm:-mx-6 sm:px-6">
       {/* barre flottante centrée */}
       <div className="mx-auto w-fit rounded-xl border border-[var(--border)] bg-[var(--background-alt)]/80 px-3 py-3 shadow-lg shadow-black/30 backdrop-blur-md">
         <div className="flex items-center justify-center gap-2">

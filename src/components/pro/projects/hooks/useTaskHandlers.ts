@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
+import { useToast } from '@/components/ui/toast';
 
 interface UseTaskHandlersParams {
   businessId: string;
@@ -12,6 +13,7 @@ interface UseTaskHandlersParams {
 
 export function useTaskHandlers(params: UseTaskHandlersParams) {
   const { businessId, isAdmin, loadTasks, loadActivity, onBillingError } = params;
+  const _toast = useToast();
 
   const [taskGroupExpanded, setTaskGroupExpanded] = useState<Record<string, boolean>>({});
   const [taskRowExpanded, setTaskRowExpanded] = useState<Record<string, boolean>>({});

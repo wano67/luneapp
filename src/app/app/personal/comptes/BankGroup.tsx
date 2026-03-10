@@ -39,7 +39,7 @@ export default function BankGroup({
         </span>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-3 md:grid-cols-2">
         {accounts.map((a) => (
           <AccountCard
             key={a.id}

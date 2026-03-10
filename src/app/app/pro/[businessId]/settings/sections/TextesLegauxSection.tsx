@@ -4,6 +4,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { fetchJson } from '@/lib/apiClient';
+import { useToast } from '@/components/ui/toast';
 import { useActiveBusiness } from '../../../ActiveBusinessProvider';
 
 type Settings = {
@@ -25,11 +26,11 @@ const FIELDS: { key: keyof Settings; label: string }[] = [
 export function TextesLegauxSection({ businessId }: { businessId: string }) {
   const activeCtx = useActiveBusiness({ optional: true });
   const canEdit = activeCtx?.activeBusiness?.role === 'ADMIN' || activeCtx?.activeBusiness?.role === 'OWNER';
+  const toast = useToast();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [info, setInfo] = useState<string | null>(null);
   const [form, setForm] = useState<Record<string, string>>({
     cgvText: '', paymentTermsText: '', lateFeesText: '', fixedIndemnityText: '', legalMentionsText: '',
   });
@@ -55,7 +56,7 @@ export function TextesLegauxSection({ businessId }: { businessId: string }) {
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!canEdit) return;
-    setSaving(true); setError(null); setInfo(null);
+    setSaving(true); setError(null);
 
     const payload: Record<string, string | null> = {};
     for (const f of FIELDS) payload[f.key] = form[f.key]?.trim() || null;
@@ -78,7 +79,7 @@ export function TextesLegauxSection({ businessId }: { businessId: string }) {
         legalMentionsText: s.legalMentionsText ?? '',
       });
     }
-    setInfo('Textes légaux enregistrés.');
+    toast.success('Textes légaux enregistrés.');
   }
 
   const disabled = !canEdit || loading || saving;
@@ -90,7 +91,6 @@ export function TextesLegauxSection({ businessId }: { businessId: string }) {
         <p className="text-sm text-[var(--text-secondary)]">Ces textes sont repris dans les devis et factures.</p>
       </div>
       {error && <p className="text-sm text-[var(--danger)]">{error}</p>}
-      {info && <p className="text-sm text-[var(--success)]">{info}</p>}
       <form onSubmit={handleSubmit} className="space-y-3">
         {FIELDS.map((f) => (
           <label key={f.key} className="block space-y-1">

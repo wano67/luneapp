@@ -6,7 +6,14 @@ import { parseIdOpt } from '@/server/http/parsers';
 
 // PATCH /api/pro/businesses/{businessId}/memberships/{membershipId}
 export const PATCH = withBusinessRoute<{ businessId: string; membershipId: string }>(
-  { minRole: 'ADMIN' },
+  {
+    minRole: 'ADMIN',
+    rateLimit: {
+      key: (ctx) => `pro:memberships:update:${ctx.businessId}:${ctx.userId}`,
+      limit: 200,
+      windowMs: 60 * 60 * 1000,
+    },
+  },
   async (ctx, request, params) => {
     const { requestId, businessId: businessIdBigInt } = ctx;
     const membershipIdBigInt = parseIdOpt(params.membershipId);

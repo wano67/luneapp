@@ -9,6 +9,7 @@ import {
   IconMessage,
   IconSettings,
   IconEntreprise,
+  PivotLogo,
 } from '@/components/pivot-icons';
 import { useToast } from '@/components/ui/toast';
 import { fetchJson } from '@/lib/apiClient';
@@ -152,15 +153,32 @@ export default function PivotTopbar({ space, pathname, businessId, businesses, o
       </div>
 
       {/* Mobile header */}
-      <div className="flex md:hidden items-center justify-between px-4" style={{ height: 56 }}>
-        <span className="text-sm font-medium truncate" style={{ color: 'var(--shell-topbar-text)' }}>
-          {mobileTitle}
-        </span>
-        <div className="flex items-center gap-1">
+      <div className="flex md:hidden items-center justify-between px-3 gap-2" style={{ height: 56 }}>
+        <div className="flex items-center gap-2.5 min-w-0 shrink">
+          <PivotLogo size={28} color="var(--shell-topbar-text)" />
+          <span
+            className="text-sm font-semibold truncate"
+            style={{
+              color: 'var(--shell-topbar-text)',
+              fontFamily: 'var(--font-barlow), sans-serif',
+            }}
+          >
+            {mobileTitle}
+          </span>
+        </div>
+        <div className="flex items-center gap-1 shrink-0">
           <NotificationsDropdown onToggleMessaging={onToggleMessaging} />
-          <Link href={inBusiness ? `/app/pro/${businessId}/settings` : '/app/account'}>
-            <NavIconBtn><IconSettings size={20} color="var(--shell-topbar-text)" /></NavIconBtn>
-          </Link>
+          {inBusiness && (
+            <NavIconBtn onClick={onToggleMessaging}><IconMessage size={20} color="var(--shell-topbar-text)" /></NavIconBtn>
+          )}
+          {inBusiness && businesses.length > 0 && (
+            <BusinessSwitcher businesses={businesses} currentId={businessId} />
+          )}
+          {!inBusiness && (
+            <Link href="/app/account">
+              <NavIconBtn><IconSettings size={18} color="var(--shell-topbar-text)" /></NavIconBtn>
+            </Link>
+          )}
         </div>
       </div>
     </header>
@@ -374,9 +392,8 @@ function NotificationsDropdown({ onToggleMessaging }: { onToggleMessaging?: () =
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
           <div
-            className="absolute right-0 top-full mt-2 rounded-xl z-50 overflow-hidden"
+            className="fixed left-4 right-4 top-[62px] sm:absolute sm:left-auto sm:right-0 sm:top-full sm:mt-2 rounded-xl z-50 overflow-hidden sm:w-[360px]"
             style={{
-              width: 360,
               maxHeight: 420,
               background: 'var(--surface)',
               border: '1px solid var(--border)',
@@ -522,40 +539,83 @@ function BusinessSwitcher({ businesses, currentId }: { businesses: BusinessItem[
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-2 rounded-lg transition-colors"
-        style={{ background: 'var(--shell-sidebar-bg)', padding: '6px 10px' }}
+        className="flex items-center gap-1.5 rounded-lg transition-colors"
+        style={{ background: 'var(--shell-sidebar-bg)', padding: '5px 8px' }}
       >
-        <div className="flex items-center justify-center rounded" style={{ width: 28, height: 28, background: 'var(--surface)' }}>
-          <IconEntreprise size={16} color="var(--shell-sidebar-bg)" />
+        <div className="flex items-center justify-center rounded shrink-0" style={{ width: 24, height: 24, background: 'var(--surface)' }}>
+          <IconEntreprise size={14} color="var(--shell-sidebar-bg)" />
         </div>
         {current && (
-          <span className="text-sm max-w-[120px] truncate" style={{ color: 'var(--shell-sidebar-text)' }}>
+          <span className="text-xs font-medium max-w-[80px] sm:max-w-[120px] truncate" style={{ color: 'var(--shell-sidebar-text)' }}>
             {current.name}
           </span>
         )}
-        <ChevronDown size={12} style={{ color: 'var(--shell-sidebar-text)' }} />
+        <ChevronDown size={10} style={{ color: 'var(--shell-sidebar-text)' }} />
       </button>
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
           <div
-            className="absolute right-0 top-full mt-2 rounded-xl py-2 z-50 min-w-[200px]"
+            className="absolute right-0 top-full mt-2 rounded-xl z-50 min-w-[220px] overflow-hidden"
             style={{ background: 'var(--surface)', border: '1px solid var(--border)', boxShadow: 'var(--shadow)' }}
           >
-            {businesses.map((b) => (
+            {/* Business list */}
+            <div className="py-1">
+              {businesses.map((b) => (
+                <Link
+                  key={b.id}
+                  href={`/app/pro/${b.id}`}
+                  className="flex items-center gap-2.5 px-4 py-2.5 text-sm transition-colors hover:bg-[var(--surface-hover)]"
+                  style={{
+                    color: b.id === currentId ? 'var(--shell-accent)' : 'var(--text)',
+                    fontWeight: b.id === currentId ? 600 : 400,
+                  }}
+                  onClick={() => setOpen(false)}
+                >
+                  <div
+                    className="shrink-0 flex items-center justify-center rounded"
+                    style={{
+                      width: 22, height: 22,
+                      background: b.id === currentId ? 'var(--shell-accent)' : 'var(--surface-2)',
+                    }}
+                  >
+                    <IconEntreprise size={12} color={b.id === currentId ? 'white' : 'var(--text-faint)'} />
+                  </div>
+                  <span className="truncate">{b.name}</span>
+                </Link>
+              ))}
+            </div>
+
+            {/* Divider */}
+            <div style={{ height: 1, background: 'var(--border)' }} />
+
+            {/* Actions */}
+            <div className="py-1">
               <Link
-                key={b.id}
-                href={`/app/pro/${b.id}`}
-                className="block px-4 py-2 text-sm transition-colors"
-                style={{
-                  color: b.id === currentId ? 'var(--shell-accent)' : 'var(--text)',
-                  fontWeight: b.id === currentId ? 600 : 400,
-                }}
+                href="/app/pro/new"
+                className="flex items-center gap-2.5 px-4 py-2.5 text-sm transition-colors hover:bg-[var(--surface-hover)]"
+                style={{ color: 'var(--text)' }}
                 onClick={() => setOpen(false)}
               >
-                {b.name}
+                <div className="shrink-0 flex items-center justify-center rounded" style={{ width: 22, height: 22, background: 'var(--surface-2)' }}>
+                  <span className="text-xs font-bold" style={{ color: 'var(--text-faint)' }}>+</span>
+                </div>
+                Creer ou rejoindre
               </Link>
-            ))}
+              {currentId && (
+                <Link
+                  href={`/app/pro/${currentId}/settings`}
+                  className="flex items-center gap-2.5 px-4 py-2.5 text-sm transition-colors hover:bg-[var(--surface-hover)]"
+                  style={{ color: 'var(--text)' }}
+                  onClick={() => setOpen(false)}
+                >
+                  <div className="shrink-0 flex items-center justify-center rounded" style={{ width: 22, height: 22, background: 'var(--surface-2)' }}>
+                    <IconSettings size={12} color="var(--text-faint)" />
+                  </div>
+                  Parametres
+                </Link>
+              )}
+            </div>
           </div>
         </>
       )}

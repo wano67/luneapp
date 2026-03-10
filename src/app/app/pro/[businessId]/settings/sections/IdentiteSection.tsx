@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { AddressInput } from '@/components/ui/AddressInput';
 import { fetchJson } from '@/lib/apiClient';
+import { useToast } from '@/components/ui/toast';
 import { useActiveBusiness } from '../../../ActiveBusinessProvider';
 
 type BusinessResponse = {
@@ -26,11 +27,11 @@ export function IdentiteSection({ businessId }: { businessId: string }) {
   const activeCtx = useActiveBusiness({ optional: true });
   const role = activeCtx?.activeBusiness?.role ?? null;
   const canEdit = role === 'ADMIN' || role === 'OWNER';
+  const toast = useToast();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [info, setInfo] = useState<string | null>(null);
 
   const [name, setName] = useState('');
   const [websiteUrl, setWebsiteUrl] = useState('');
@@ -67,7 +68,7 @@ export function IdentiteSection({ businessId }: { businessId: string }) {
     if (!canEdit) return;
     const trimmedName = name.trim();
     if (!trimmedName) { setError('Nom requis.'); return; }
-    setSaving(true); setError(null); setInfo(null);
+    setSaving(true); setError(null);
 
     const res = await fetchJson<{ item: BusinessResponse }>(`/api/pro/businesses/${businessId}`, {
       method: 'PATCH',
@@ -93,7 +94,7 @@ export function IdentiteSection({ businessId }: { businessId: string }) {
     setSiret(d.siret ?? ''); setVatNumber(d.vatNumber ?? '');
     setAddressLine1(d.addressLine1 ?? ''); setAddressLine2(d.addressLine2 ?? '');
     setPostalCode(d.postalCode ?? ''); setCity(d.city ?? ''); setCountryCode(d.countryCode ?? '');
-    setInfo('Identité mise à jour.');
+    toast.success('Identité mise à jour.');
   }
 
   const disabled = !canEdit || loading || saving;
@@ -105,7 +106,6 @@ export function IdentiteSection({ businessId }: { businessId: string }) {
         <p className="text-sm text-[var(--text-secondary)]">Nom, raison sociale, SIRET et adresse de l&apos;entreprise.</p>
       </div>
       {error && <p className="text-sm text-[var(--danger)]">{error}</p>}
-      {info && <p className="text-sm text-[var(--success)]">{info}</p>}
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="grid gap-3 md:grid-cols-2">
           <Input label="Nom" value={name} onChange={(e) => setName(e.target.value)} disabled={disabled} required />

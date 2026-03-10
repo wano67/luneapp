@@ -50,7 +50,7 @@ export default function AccountCard({ account: a, onEdit, onNavigate }: Props) {
         e.preventDefault();
         onNavigate(a.id);
       }}
-      className={`p-4 text-left hover:bg-[var(--surface-hover)] cursor-pointer transition-colors ${a.hidden ? 'opacity-60' : ''}`}
+      className={`min-w-0 overflow-hidden p-4 text-left hover:bg-[var(--surface-hover)] cursor-pointer transition-colors ${a.hidden ? 'opacity-60' : ''}`}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">

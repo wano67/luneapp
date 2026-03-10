@@ -37,7 +37,14 @@ export const GET = withBusinessRoute<{ businessId: string; prospectId: string }>
 
 // PATCH /api/pro/businesses/{businessId}/prospects/{prospectId}
 export const PATCH = withBusinessRoute<{ businessId: string; prospectId: string }>(
-  { minRole: 'ADMIN' },
+  {
+    minRole: 'ADMIN',
+    rateLimit: {
+      key: (ctx) => `pro:prospects:update:${ctx.businessId}:${ctx.userId}`,
+      limit: 300,
+      windowMs: 60 * 60 * 1000,
+    },
+  },
   async (ctx, request, params) => {
     const { requestId, businessId: businessIdBigInt } = ctx;
     const prospectIdBigInt = parseIdOpt(params.prospectId);
@@ -184,7 +191,14 @@ export const PATCH = withBusinessRoute<{ businessId: string; prospectId: string 
 
 // DELETE /api/pro/businesses/{businessId}/prospects/{prospectId}
 export const DELETE = withBusinessRoute<{ businessId: string; prospectId: string }>(
-  { minRole: 'ADMIN' },
+  {
+    minRole: 'ADMIN',
+    rateLimit: {
+      key: (ctx) => `pro:prospects:delete:${ctx.businessId}:${ctx.userId}`,
+      limit: 100,
+      windowMs: 60 * 60 * 1000,
+    },
+  },
   async (ctx, _request, params) => {
     const { requestId, businessId: businessIdBigInt } = ctx;
     const prospectIdBigInt = parseIdOpt(params.prospectId);

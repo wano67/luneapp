@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { FolderOpen, Plus, Search } from 'lucide-react';
+import { Plus, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { KpiCard } from '@/components/ui/kpi-card';
@@ -56,7 +56,7 @@ export default function ProjectsPage({ businessId }: Props) {
       }
     >
       {/* KPI cards */}
-      <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
+      <div className="grid gap-4 grid-cols-2 sm:grid-cols-3">
         <KpiCard label="Actifs" value={counts?.active ?? 0} loading={isLoading} delay={0} />
         <KpiCard label="En attente" value={counts?.planned ?? 0} loading={isLoading} delay={50} />
         {/* Tasks KPI with progress bar */}
@@ -92,49 +92,43 @@ export default function ProjectsPage({ businessId }: Props) {
         </div>
       </div>
 
-      {/* Section header: Projet label + search + filter pills */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <FolderOpen size={18} style={{ color: 'var(--text-secondary)' }} />
-          <span className="text-sm font-semibold" style={{ color: 'var(--text)' }}>Projet</span>
+      {/* Section header: search + filter pills */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div
+          className="flex items-center gap-2 rounded-full overflow-hidden flex-1 sm:flex-initial sm:w-auto"
+          style={{ background: 'var(--surface-2)', padding: '8px 14px' }}
+        >
+          <Search size={14} style={{ color: 'var(--text-faint)' }} className="shrink-0" />
+          <input
+            type="text"
+            placeholder="Rechercher un projet..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="bg-transparent text-sm outline-none placeholder:text-[var(--text-faint)] w-full sm:w-40"
+            style={{ color: 'var(--text)' }}
+          />
         </div>
-        <div className="flex items-center gap-3">
-          <div
-            className="flex items-center gap-2 rounded-full overflow-hidden"
-            style={{ background: 'var(--surface-2)', padding: '6px 12px' }}
-          >
-            <Search size={14} style={{ color: 'var(--text-faint)' }} />
-            <input
-              type="text"
-              placeholder="Rechercher..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="bg-transparent text-sm outline-none placeholder:text-[var(--text-faint)]"
-              style={{ color: 'var(--text)', width: 160 }}
-            />
-          </div>
-          <div className="flex items-center gap-1.5">
-            {SCOPES.map((s) => (
-              <button
-                key={s.key}
-                type="button"
-                onClick={() => setScope(s.key)}
-                className="cursor-pointer rounded-xl px-3 py-1.5 text-sm font-medium transition"
-                style={{
-                  background: scope === s.key ? 'var(--shell-accent-dark)' : 'var(--surface)',
-                  color: scope === s.key ? 'white' : 'rgba(0,0,0,0.6)',
-                }}
-              >
-                {s.label}
-              </button>
-            ))}
-          </div>
+        <div className="flex items-center gap-1.5 overflow-x-auto">
+          {SCOPES.map((s) => (
+            <button
+              key={s.key}
+              type="button"
+              onClick={() => setScope(s.key)}
+              className="cursor-pointer whitespace-nowrap rounded-xl px-3 py-1.5 text-sm font-medium transition"
+              style={{
+                background: scope === s.key ? 'var(--shell-accent-dark)' : 'var(--surface)',
+                color: scope === s.key ? 'white' : 'rgba(0,0,0,0.6)',
+              }}
+            >
+              {s.label}
+            </button>
+          ))}
         </div>
       </div>
 
       {/* Project cards grid */}
       {isLoading ? (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {[0, 1, 2, 3].map((key) => (
             <div
               key={key}
@@ -160,7 +154,7 @@ export default function ProjectsPage({ businessId }: Props) {
           </div>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {items.map((project, i) => (
             <ProjectCard key={project.id} businessId={businessId} project={project} onMutate={refetch} index={i} />
           ))}

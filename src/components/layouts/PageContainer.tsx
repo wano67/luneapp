@@ -12,7 +12,7 @@ export function PageContainer({
 }: PageContainerProps) {
   return (
     <div
-      className={cn('flex flex-col animate-fade-in-up px-4 py-5 sm:px-7 sm:py-6 pb-10', className)}
+      className={cn('flex flex-col animate-page-enter px-4 py-5 sm:px-7 sm:py-6 pb-10', className)}
     >
       {children}
     </div>

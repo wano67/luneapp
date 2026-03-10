@@ -51,7 +51,14 @@ export const GET = withBusinessRoute(
 
 // DELETE /api/pro/businesses/{businessId}
 export const DELETE = withBusinessRoute(
-  { minRole: 'OWNER' },
+  {
+    minRole: 'OWNER',
+    rateLimit: {
+      key: (ctx) => `pro:business:delete:${ctx.businessId}:${ctx.userId}`,
+      limit: 10,
+      windowMs: 60 * 60 * 1000,
+    },
+  },
   async (ctx) => {
     const business = await prisma.business.findUnique({ where: { id: ctx.businessId } });
     if (!business) return notFound('Entreprise introuvable.');

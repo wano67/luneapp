@@ -224,7 +224,7 @@ export function ClientAccountingTab({ businessId, clientId, initialData, already
           </div>
         ) : quotes.length ? (
           <div className="mt-4 space-y-2">
-            <div className="grid grid-cols-[minmax(0,1fr)_100px_120px_120px_80px] gap-3 text-[11px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
+            <div className="hidden md:grid md:grid-cols-[minmax(0,1fr)_100px_120px_120px_80px] gap-3 text-[11px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
               <span>Numéro</span>
               <span>Date</span>
               <span>Statut</span>
@@ -234,17 +234,20 @@ export function ClientAccountingTab({ businessId, clientId, initialData, already
             {quotes.map((quote) => (
               <div
                 key={quote.id}
-                className="grid grid-cols-[minmax(0,1fr)_100px_120px_120px_80px] items-center gap-3 rounded-2xl border border-[var(--border)]/70 bg-[var(--surface-hover)]/40 px-3 py-2 text-sm"
+                className="flex flex-col gap-1 rounded-2xl border border-[var(--border)]/70 bg-[var(--surface-hover)]/40 px-3 py-2 text-sm md:grid md:grid-cols-[minmax(0,1fr)_100px_120px_120px_80px] md:items-center md:gap-3"
               >
-                <span className="truncate font-semibold text-[var(--text-primary)]">
-                  {quote.number ?? `DEV-${quote.id}`}
-                </span>
+                <div className="flex items-center justify-between gap-2 md:contents">
+                  <span className="truncate font-semibold text-[var(--text-primary)]">
+                    {quote.number ?? `DEV-${quote.id}`}
+                  </span>
+                  <span className="text-xs text-[var(--text-secondary)] md:hidden">{formatAmount(quote.totalCents)}</span>
+                </div>
                 <span className="text-xs text-[var(--text-secondary)]">{formatDate(quote.issuedAt)}</span>
                 <span className="text-xs text-[var(--text-secondary)]">{formatStatus(quote.status)}</span>
-                <span className="text-right font-semibold text-[var(--text-primary)]">
+                <span className="hidden text-right font-semibold text-[var(--text-primary)] md:block">
                   {formatAmount(quote.totalCents)}
                 </span>
-                <div className="text-right">
+                <div className="text-right md:block">
                   <Link
                     href={quote.pdfUrl}
                     target="_blank"
@@ -279,7 +282,7 @@ export function ClientAccountingTab({ businessId, clientId, initialData, already
           </div>
         ) : invoices.length ? (
           <div className="mt-4 space-y-2">
-            <div className="grid grid-cols-[minmax(0,1fr)_100px_120px_120px_80px] gap-3 text-[11px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
+            <div className="hidden md:grid md:grid-cols-[minmax(0,1fr)_100px_120px_120px_80px] gap-3 text-[11px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
               <span>Numéro</span>
               <span>Date</span>
               <span>Statut</span>
@@ -289,17 +292,20 @@ export function ClientAccountingTab({ businessId, clientId, initialData, already
             {invoices.map((invoice) => (
               <div
                 key={invoice.id}
-                className="grid grid-cols-[minmax(0,1fr)_100px_120px_120px_80px] items-center gap-3 rounded-2xl border border-[var(--border)]/70 bg-[var(--surface-hover)]/40 px-3 py-2 text-sm"
+                className="flex flex-col gap-1 rounded-2xl border border-[var(--border)]/70 bg-[var(--surface-hover)]/40 px-3 py-2 text-sm md:grid md:grid-cols-[minmax(0,1fr)_100px_120px_120px_80px] md:items-center md:gap-3"
               >
-                <span className="truncate font-semibold text-[var(--text-primary)]">
-                  {invoice.number ?? `INV-${invoice.id}`}
-                </span>
+                <div className="flex items-center justify-between gap-2 md:contents">
+                  <span className="truncate font-semibold text-[var(--text-primary)]">
+                    {invoice.number ?? `INV-${invoice.id}`}
+                  </span>
+                  <span className="text-xs text-[var(--text-secondary)] md:hidden">{formatAmount(invoice.totalCents)}</span>
+                </div>
                 <span className="text-xs text-[var(--text-secondary)]">{formatDate(invoice.issuedAt)}</span>
                 <span className="text-xs text-[var(--text-secondary)]">{formatStatus(invoice.status)}</span>
-                <span className="text-right font-semibold text-[var(--text-primary)]">
+                <span className="hidden text-right font-semibold text-[var(--text-primary)] md:block">
                   {formatAmount(invoice.totalCents)}
                 </span>
-                <div className="text-right">
+                <div className="text-right md:block">
                   <Link
                     href={invoice.pdfUrl}
                     target="_blank"

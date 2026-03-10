@@ -44,12 +44,6 @@ const CATEGORY_LABEL: Record<CategoryKey, string> = {
   INVESTMENT: 'Investissement',
   LOAN: 'Prêts',
 };
-const CATEGORY_LABEL_SHORT: Record<CategoryKey, string> = {
-  CHECKING: 'Espèces',
-  SAVINGS: 'Épargne',
-  INVESTMENT: 'Invest',
-  LOAN: 'Prêts',
-};
 const CATEGORY_TYPES: Record<CategoryKey, AccountItem['type'][]> = {
   CHECKING: ['CASH', 'CURRENT'],
   SAVINGS: ['SAVINGS'],
@@ -176,19 +170,6 @@ export default function ComptesPage() {
   const loanEncoursCents = useMemo(() => {
     return loanItems.reduce<bigint>((acc, a) => acc + BigInt(a.loanPrincipalCents || '0'), 0n);
   }, [loanItems]);
-
-  const categoryCounts = useMemo(() => {
-    const counts: Record<CategoryKey, number> = { CHECKING: 0, SAVINGS: 0, INVESTMENT: 0, LOAN: 0 };
-    for (const a of items) {
-      for (const cat of CATEGORY_ORDER) {
-        if (CATEGORY_TYPES[cat].includes(a.type)) {
-          counts[cat]++;
-          break;
-        }
-      }
-    }
-    return counts;
-  }, [items]);
 
   const hasLoans = loanItems.length > 0;
   const deltaPositive = totalDelta30 >= 0n;
@@ -359,7 +340,7 @@ export default function ComptesPage() {
       ) : null}
 
       {/* KPI Cards */}
-      <div className={`grid grid-cols-1 gap-4 ${hasLoans ? 'md:grid-cols-2 lg:grid-cols-4' : 'md:grid-cols-3'}`}>
+      <div className={`grid grid-cols-1 gap-4 ${hasLoans ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}>
         <Card className="p-4 flex flex-col gap-1">
           <span className="text-sm font-medium text-[var(--text-faint)]">Patrimoine net</span>
           {loading ? (
@@ -381,24 +362,6 @@ export default function ComptesPage() {
             >
               {deltaPositive ? '+' : ''}{fmtKpi(totalDelta30.toString())}
             </span>
-          )}
-        </Card>
-        <Card className="p-4 flex flex-col gap-1">
-          <span className="text-sm font-medium text-[var(--text-faint)]">Comptes</span>
-          {loading ? (
-            <div className="h-8 w-28 rounded-lg bg-[var(--surface-2)] animate-skeleton-pulse" />
-          ) : (
-            <>
-              <span className="text-2xl font-extrabold" style={{ color: 'var(--text)' }}>
-                {items.length} {items.length > 1 ? 'comptes' : 'compte'}
-              </span>
-              <span className="text-xs text-[var(--text-faint)]">
-                {CATEGORY_ORDER
-                  .filter((c) => categoryCounts[c] > 0)
-                  .map((c) => `${categoryCounts[c]} ${CATEGORY_LABEL_SHORT[c]}`)
-                  .join(' \u00B7 ')}
-              </span>
-            </>
           )}
         </Card>
         {hasLoans ? (
@@ -444,10 +407,13 @@ export default function ComptesPage() {
         </Card>
       ) : (
         <div className="flex flex-col gap-5">
+          <h2 className="text-lg font-bold text-[var(--text)]">
+            {items.length} {items.length > 1 ? 'comptes' : 'compte'}
+          </h2>
           {categoryGroups.map(({ category: cat, bankGroups, totalCents: groupTotal }) => (
             <section
               key={cat}
-              className="rounded-2xl bg-[var(--shell-accent)] p-5 overflow-hidden"
+              className="rounded-2xl bg-[var(--shell-accent)] p-3 sm:p-5 overflow-hidden"
             >
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-3">
@@ -456,7 +422,7 @@ export default function ComptesPage() {
                 </div>
                 <Link
                   href={`/app/personal/comptes/type/${CATEGORY_TYPE_KEY[cat]}`}
-                  className="flex items-center gap-2 rounded-xl bg-white px-3 py-2 text-sm font-semibold text-[var(--text)] hover:opacity-90 transition-opacity"
+                  className="flex items-center gap-2 rounded-xl bg-white px-3 py-2 text-sm font-semibold text-black hover:opacity-90 transition-opacity"
                   style={{ fontFamily: 'var(--font-barlow), sans-serif' }}
                 >
                   Détails
@@ -470,7 +436,7 @@ export default function ComptesPage() {
 
               <div className="flex flex-col gap-4">
                 {bankGroups.map((bg) => (
-                  <div key={bg.bankKey} className="rounded-xl bg-white/10 p-4 backdrop-blur-sm">
+                  <div key={bg.bankKey} className="rounded-xl bg-white/10 p-3 sm:p-4 backdrop-blur-sm">
                     <BankGroup
                       bankName={bg.bankName}
                       bankWebsiteUrl={bg.bankWebsiteUrl}

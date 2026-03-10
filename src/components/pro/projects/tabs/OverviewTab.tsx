@@ -152,33 +152,29 @@ export function OverviewTab({
           ) : null}
         </div>
         {upcomingTasks.length ? (
-          <div className="space-y-2 text-sm text-[var(--text-secondary)]">
+          <div className="space-y-1">
             {upcomingTasksOverview.map((task) => (
               <button
                 key={task.id}
                 type="button"
                 onClick={() => onTaskClick?.(task.id)}
-                className="block w-full rounded-lg border border-[var(--border)]/60 bg-[var(--surface-2)]/70 px-3 py-2 text-left transition hover:border-[var(--border)] hover:bg-[var(--surface)]"
+                className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition hover:bg-[var(--surface-2)]/80"
               >
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="truncate text-[var(--text-primary)]">{task.title}</p>
-                    <p className="text-[11px] text-[var(--text-secondary)]">
-                      {task.assigneeName || task.assigneeEmail || 'Non assigné'}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2 text-[11px] text-[var(--text-secondary)]">
-                    <span
-                      className={cn(
-                        'inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide',
-                        getStatusBadgeClasses(task.status)
-                      )}
-                    >
-                      {formatTaskStatus(task.status)}
-                    </span>
-                    <span>{formatDate(task.dueDate)}</span>
-                  </div>
+                <div className="flex-1 min-w-0">
+                  <p className="truncate text-sm text-[var(--text-primary)]">{task.title}</p>
+                  <p className="text-[11px] text-[var(--text-faint)]">
+                    {task.assigneeName || task.assigneeEmail || 'Non assigné'}
+                    {task.dueDate ? ` · ${formatDate(task.dueDate)}` : ''}
+                  </p>
                 </div>
+                <span
+                  className={cn(
+                    'shrink-0 inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide',
+                    getStatusBadgeClasses(task.status)
+                  )}
+                >
+                  {formatTaskStatus(task.status)}
+                </span>
               </button>
             ))}
           </div>
@@ -191,8 +187,8 @@ export function OverviewTab({
         )}
       </SectionCard>
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <SectionCard className="space-y-3">
+      <div className="grid gap-4 grid-cols-1 md:grid-cols-2">
+        <SectionCard className="space-y-3 min-w-0">
           <div className="flex items-center justify-between gap-3">
             <p className="text-sm font-semibold text-[var(--text-primary)]">Équipe (accès au projet)</p>
             {isAdmin ? (
@@ -228,7 +224,7 @@ export function OverviewTab({
           {accessInfo ? <p className="text-xs text-[var(--success)]">{accessInfo}</p> : null}
         </SectionCard>
 
-        <SectionCard className="space-y-3">
+        <SectionCard className="space-y-3 min-w-0">
           <div className="flex items-center justify-between gap-3">
             <p className="text-sm font-semibold text-[var(--text-primary)]">Activité récente</p>
             {showActivityToggle ? (
@@ -242,14 +238,21 @@ export function OverviewTab({
               {activityOverview.map((item) => (
                 <div
                   key={`${item.taskId}-${item.occurredAt ?? ''}`}
-                  className="flex items-start gap-3 rounded-lg border border-[var(--border)]/60 bg-[var(--surface-2)]/70 px-3 py-2"
+                  className="flex items-start gap-3 rounded-lg border border-[var(--border)]/60 bg-[var(--surface-2)]/70 px-3 py-2 overflow-hidden"
                 >
                   <InitialsAvatar name={item.actor?.name} email={item.actor?.email} size={26} />
-                  <div className="min-w-0">
-                    <p className="truncate text-[var(--text-primary)]">
-                      {item.actor?.name ?? item.actor?.email ?? "Quelqu'un"} a marqu&eacute; &quot;{item.title}&quot; comme {formatTaskStatus(item.status)}
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[var(--text-primary)] line-clamp-2 break-words text-sm">
+                      <span className="font-medium">{item.actor?.name ?? item.actor?.email ?? "Quelqu'un"}</span>
+                      {' '}a marqué «&nbsp;{item.title}&nbsp;» comme{' '}
+                      <span className={cn(
+                        'inline-flex items-center rounded-full border px-1.5 py-0 text-[10px] font-semibold uppercase tracking-wide align-middle',
+                        getStatusBadgeClasses(item.status)
+                      )}>
+                        {formatTaskStatus(item.status)}
+                      </span>
                     </p>
-                    <p className="text-[11px] text-[var(--text-secondary)]">
+                    <p className="text-[11px] text-[var(--text-secondary)] mt-0.5">
                       {item.serviceName ? `${item.serviceName} · ` : ''}{formatDate(item.occurredAt)}
                     </p>
                   </div>

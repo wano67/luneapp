@@ -46,48 +46,52 @@ export function ProjectHeaderSection({
 }: Props) {
   return (
     <>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-6">
-          <Button asChild variant="outline" size="sm">
-            <Link href={`/app/pro/${businessId}/projects`}>
-              <ChevronLeft size={16} />
-              <span style={{ fontFamily: 'var(--font-barlow), sans-serif', fontWeight: 600, fontSize: 18 }}>
-                Retour
-              </span>
-            </Link>
-          </Button>
-          <div className="flex items-center gap-3">
-            <h1
-              style={{
-                fontSize: 40,
-                fontWeight: 800,
-                lineHeight: '40px',
-                color: 'var(--text)',
-              }}
-            >
-              {projectName ?? `Projet #${projectId}`}
-            </h1>
-            <span
-              className="rounded-xl px-3 py-2 text-sm font-medium"
-              style={{ background: 'var(--surface-2)', color: 'var(--shell-accent-dark)' }}
-            >
-              {statusLabel}
+      <div className="space-y-3">
+        {/* Back button */}
+        <Button asChild variant="outline" size="sm">
+          <Link href={`/app/pro/${businessId}/projects`}>
+            <ChevronLeft size={16} />
+            <span style={{ fontFamily: 'var(--font-barlow), sans-serif', fontWeight: 600, fontSize: 18 }}>
+              Retour
             </span>
-            {showScopeBadge && <Badge variant={scopeVariant}>{scopeLabel}</Badge>}
-            {archivedAt && <Badge variant="performance">Archivé</Badge>}
-            {clientId && clientName && (
-              <Link
-                href={`/app/pro/${businessId}/clients/${clientId}`}
-                className="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-medium transition hover:opacity-80"
-                style={{ background: 'var(--shell-accent)', color: 'white' }}
-              >
-                {clientName}
-                <ChevronRight size={14} />
-              </Link>
-            )}
-          </div>
+          </Link>
+        </Button>
+
+        {/* Title + badges */}
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+          <h1
+            className="min-w-0 break-words"
+            style={{
+              fontSize: 'clamp(24px, 5vw, 40px)',
+              fontWeight: 800,
+              lineHeight: 1,
+              color: 'var(--text)',
+            }}
+          >
+            {projectName ?? `Projet #${projectId}`}
+          </h1>
+          <span
+            className="shrink-0 rounded-xl px-3 py-2 text-sm font-medium"
+            style={{ background: 'var(--surface-2)', color: 'var(--shell-accent-dark)' }}
+          >
+            {statusLabel}
+          </span>
+          {showScopeBadge && <Badge variant={scopeVariant}>{scopeLabel}</Badge>}
+          {archivedAt && <Badge variant="performance">Archivé</Badge>}
+          {clientId && clientName && (
+            <Link
+              href={`/app/pro/${businessId}/clients/${clientId}`}
+              className="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-medium transition hover:opacity-80 shrink-0"
+              style={{ background: 'var(--shell-accent)', color: 'white' }}
+            >
+              {clientName}
+              <ChevronRight size={14} />
+            </Link>
+          )}
         </div>
-        <div className="flex items-center gap-3">
+
+        {/* Action buttons */}
+        <div className="flex flex-wrap items-center gap-2">
           <Button
             asChild
             size="sm"

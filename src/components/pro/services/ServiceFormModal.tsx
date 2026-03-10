@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { Modal } from '@/components/ui/modal';
 import { fetchJson } from '@/lib/apiClient';
+import { useToast } from '@/components/ui/toast';
 import { formatCentsToEuroInput, parseEuroToCents, sanitizeEuroInput } from '@/lib/money';
 import { ReferencePicker } from '@/app/app/pro/[businessId]/references/ReferencePicker';
 import type { ServiceItem } from './service-types';
@@ -61,6 +62,7 @@ type Props = {
 
 export function ServiceFormModal({ open, editing, businessId, isAdmin, onClose, onAfterSave }: Props) {
   const router = useRouter();
+  const toast = useToast();
 
   const [form, setForm] = useState<ServiceFormState>(emptyForm);
   const [saving, setSaving] = useState(false);
@@ -159,6 +161,7 @@ export function ServiceFormModal({ open, editing, businessId, isAdmin, onClose, 
     const createdId = res.data.item?.id ?? null;
     setSaving(false);
     onClose();
+    toast.success(isEdit ? 'Service mis à jour.' : 'Service créé.');
     await onAfterSave(createdId, isEdit);
 
     if (!isEdit && createdId) {

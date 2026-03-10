@@ -1,5 +1,6 @@
 import { type FormEvent, useState } from 'react';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
+import { useToast } from '@/components/ui/toast';
 import type { BusinessRole, InviteItem } from './types';
 import { isValidEmail } from './types';
 
@@ -20,6 +21,7 @@ export function useInviteManagement({
   load,
   redirectToLogin,
 }: UseInviteManagementOptions) {
+  const toast = useToast();
   const [inviteDraft, setInviteDraft] = useState<{ email: string; role: BusinessRole }>({
     email: '',
     role: 'MEMBER',
@@ -47,6 +49,7 @@ export function useInviteManagement({
         document.body.removeChild(el);
       }
       setInviteSuccess('Lien copié.');
+      toast.success('Lien copié.');
     } catch (err) {
       console.error(err);
       setInviteError('Impossible de copier le lien.');
@@ -102,6 +105,7 @@ export function useInviteManagement({
 
       setInviteDraft({ email: '', role: 'MEMBER' });
       setInviteSuccess('Invitation envoyée.');
+      toast.success('Invitation envoyée.');
       setLastInviteLink(res.data.inviteLink ?? null);
       await load();
     } catch (err) {
@@ -138,6 +142,7 @@ export function useInviteManagement({
       }
 
       setInviteSuccess('Invitation révoquée.');
+      toast.success('Invitation révoquée.');
       await load();
     } catch (err) {
       console.error(err);

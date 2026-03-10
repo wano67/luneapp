@@ -17,31 +17,42 @@ export const GET = withPersonalRoute(async (ctx) => {
   // For each MONTHLY budget, compute spending this month
   const now = new Date();
   const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const nextMonthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
 
-  const categoryIds = budgets
-    .filter((b) => b.categoryId !== null)
-    .map((b) => b.categoryId!);
-
-  const spending = categoryIds.length
-    ? await prisma.personalTransaction.groupBy({
-        by: ['categoryId'],
-        where: {
-          userId: ctx.userId,
-          categoryId: { in: categoryIds },
-          date: { gte: monthStart },
-          type: 'EXPENSE',
-        },
-        _sum: { amountCents: true },
-      })
-    : [];
+  const [categorySpending, totalExpenseAgg] = await Promise.all([
+    budgets.some((b) => b.categoryId !== null)
+      ? prisma.personalTransaction.groupBy({
+          by: ['categoryId'],
+          where: {
+            userId: ctx.userId,
+            categoryId: { in: budgets.filter((b) => b.categoryId !== null).map((b) => b.categoryId!) },
+            date: { gte: monthStart, lt: nextMonthStart },
+            type: 'EXPENSE',
+          },
+          _sum: { amountCents: true },
+        })
+      : Promise.resolve([]),
+    prisma.personalTransaction.aggregate({
+      where: {
+        userId: ctx.userId,
+        type: 'EXPENSE',
+        date: { gte: monthStart, lt: nextMonthStart },
+      },
+      _sum: { amountCents: true },
+    }),
+  ]);
 
   const spendMap = new Map<bigint, bigint>();
-  for (const row of spending) {
+  for (const row of categorySpending) {
     if (row.categoryId) spendMap.set(row.categoryId, row._sum.amountCents ?? 0n);
   }
 
+  const raw = totalExpenseAgg._sum.amountCents ?? 0n;
+  const monthExpenseCents = raw < 0n ? -raw : raw;
+
   return jsonb(
     {
+      monthExpenseCents,
       items: budgets.map((b) => ({
         id: b.id,
         name: b.name,

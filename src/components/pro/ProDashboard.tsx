@@ -2,18 +2,15 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { ChevronLeft } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Banknote, Briefcase, ListChecks, BookUser, Receipt } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { Button } from '@/components/ui/button';
-import { KpiCard } from '@/components/ui/kpi-card';
 import { Card } from '@/components/ui/card';
 import { PageContainer } from '@/components/layouts/PageContainer';
 import { fmtKpi } from '@/lib/format';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
-import { TASK_STATUS_LABELS } from '@/lib/taskStatusUi';
 
 const TreasuryCashflowChart = dynamic(() => import('./charts/TreasuryCashflowChart'), { ssr: false });
-const TasksDonut = dynamic(() => import('./charts/TasksDonut'), { ssr: false });
 
 type DashboardPayload = {
   kpis?: {
@@ -43,18 +40,11 @@ type DashboardPayload = {
     avgDurationDays?: number;
     completedProjectsCount?: number;
   };
-  monthFinance?: {
-    income?: { amountCents?: string | number; amount?: number };
-    expense?: { amountCents?: string | number; amount?: number };
+  projects?: {
+    activeCount?: number;
+    totalCount?: number;
   };
-  latestTasks?: Array<{
-    id: string;
-    title: string;
-    status: string;
-    dueDate: string | null;
-    projectId: string | null;
-    projectName: string | null;
-  }>;
+  clientsCount?: number;
   nextActions?: {
     tasks?: Array<{
       id: string;
@@ -83,40 +73,64 @@ type TaskItem = {
   status: string;
   dueDate: string | null;
   createdAt?: string | null;
-  projectId?: string | null;
-  projectName?: string | null;
 };
 
-function countByStatus(tasks: TaskItem[]) {
-  const counts: Record<string, number> = { TODO: 0, DONE: 0 };
-  for (const t of tasks) {
-    const status = t.status === 'DONE' ? 'DONE' : 'TODO';
-    counts[status] = (counts[status] ?? 0) + 1;
-  }
-  return counts;
+/* ═══ Business Score ═══ */
+
+function computeBusinessScore(dashboard: DashboardPayload | null, tasksDone: number, tasksTotal: number) {
+  if (!dashboard) return { score: 0, label: 'Chargement', color: 'var(--text-faint)' };
+
+  // Tasks: 25 pts
+  const taskScore = tasksTotal > 0 ? Math.min(25, Math.round((tasksDone / tasksTotal) * 25)) : 0;
+
+  // Projects: 25 pts
+  const activeProjects = dashboard.projects?.activeCount ?? dashboard.kpis?.projectsActiveCount ?? 0;
+  const completedProjects = dashboard.projectMetrics?.completedProjectsCount ?? 0;
+  const totalProjects = (dashboard.projects?.totalCount ?? 0);
+  const completedRate = totalProjects > 0 ? completedProjects / totalProjects : 0;
+  const projectScore = activeProjects > 0 ? Math.min(25, 15 + Math.round(completedRate * 10)) : 0;
+
+  // Finances: 25 pts
+  const balance = Number(dashboard.treasury?.balanceCents ?? 0);
+  const margin = dashboard.projectMetrics?.avgProfitabilityPercent ?? 0;
+  let financeScore = balance > 0 ? 20 : 10;
+  if (margin > 20) financeScore = Math.min(25, financeScore + 5);
+
+  // Billing: 25 pts
+  const invoiced = Number(dashboard.billing?.totalInvoicedCents ?? 0);
+  const paid = Number(dashboard.billing?.totalPaidCents ?? 0);
+  const billingScore = invoiced > 0 ? Math.min(25, Math.round((paid / invoiced) * 25)) : 0;
+
+  const score = taskScore + projectScore + financeScore + billingScore;
+
+  if (score >= 91) return { score, label: 'Excellent', color: 'var(--success)' };
+  if (score >= 71) return { score, label: 'Bon', color: 'var(--accent)' };
+  if (score >= 41) return { score, label: 'En progression', color: 'var(--warning)' };
+  return { score, label: 'A ameliorer', color: 'var(--danger)' };
 }
 
 /* ═══ Period pills ═══ */
 
 const PERIODS = [
-  { value: 30, label: '30 jours' },
-  { value: 90, label: '90 jours' },
+  { value: 0, label: 'Global' },
+  { value: 30, label: '30j' },
+  { value: 90, label: '90j' },
   { value: 365, label: '1 an' },
 ] as const;
 
 function PeriodPills({ value, onChange }: { value: number; onChange: (v: number) => void }) {
   return (
-    <div className="flex items-center gap-2 flex-wrap">
+    <div className="flex items-center gap-1.5 flex-wrap">
       {PERIODS.map((p) => (
         <button
           key={p.value}
           type="button"
           onClick={() => onChange(p.value)}
-          className="rounded-full px-3 py-1.5 text-sm font-medium transition-colors"
+          className="rounded-full px-3 py-1 text-xs font-medium transition-colors"
           style={
             value === p.value
               ? { background: 'var(--shell-accent-dark)', color: 'white' }
-              : { background: 'var(--surface)', color: 'rgba(0,0,0,0.6)' }
+              : { background: 'var(--surface-2)', color: 'var(--text-faint)' }
           }
         >
           {p.label}
@@ -126,10 +140,57 @@ function PeriodPills({ value, onChange }: { value: number; onChange: (v: number)
   );
 }
 
+/* ═══ Mini progress bar ═══ */
+
+function MiniProgress({ value, color }: { value: number; color: string }) {
+  const pct = Math.max(0, Math.min(100, value));
+  return (
+    <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--surface-2)', width: 60 }}>
+      <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: color }} />
+    </div>
+  );
+}
+
+/* ═══ Universe card ═══ */
+
+function UniverseCard({
+  icon,
+  title,
+  href,
+  children,
+  delay = 0,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  href: string;
+  children: React.ReactNode;
+  delay?: number;
+}) {
+  return (
+    <Link href={href} className="block animate-fade-in-up" style={{ animationDelay: `${delay}ms`, animationFillMode: 'backwards' }}>
+      <Card className="card-interactive p-4">
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2.5">
+            <div
+              className="flex items-center justify-center rounded-lg card-interactive__icon"
+              style={{ width: 32, height: 32, background: 'var(--surface-2)', border: '1px solid var(--border)' }}
+            >
+              {icon}
+            </div>
+            <span className="text-sm font-semibold">{title}</span>
+          </div>
+          <ChevronRight size={16} className="text-[var(--text-faint)]" />
+        </div>
+        {children}
+      </Card>
+    </Link>
+  );
+}
+
 /* ═══ Dashboard ═══ */
 
 export default function ProDashboard({ businessId }: { businessId: string }) {
-  const [periodDays, setPeriodDays] = useState(30);
+  const [periodDays, setPeriodDays] = useState(0);
   const [dashboard, setDashboard] = useState<DashboardPayload | null>(null);
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -167,22 +228,40 @@ export default function ProDashboard({ businessId }: { businessId: string }) {
     };
   }, [businessId, periodDays]);
 
-  const filteredTasks = useMemo(() => {
-    if (periodDays === 0) return tasks;
-    const cutoff = new Date(Date.now() - periodDays * 24 * 60 * 60 * 1000);
-    return tasks.filter((t) => {
-      const d = t.createdAt ? new Date(t.createdAt) : null;
-      return !d || d >= cutoff;
-    });
-  }, [tasks, periodDays]);
-  const tasksByStatus = useMemo(() => countByStatus(filteredTasks), [filteredTasks]);
+  const tasksDone = useMemo(() => tasks.filter((t) => t.status === 'DONE').length, [tasks]);
+  const tasksTotal = tasks.length;
+  const taskCompletionPct = tasksTotal > 0 ? Math.round((tasksDone / tasksTotal) * 100) : 0;
+
+  const businessScore = useMemo(
+    () => computeBusinessScore(dashboard, tasksDone, tasksTotal),
+    [dashboard, tasksDone, tasksTotal],
+  );
+
   const granularity = dashboard?.granularity ?? 'monthly';
   const timeSeries = dashboard?.timeSeries ?? dashboard?.monthlySeries ?? [];
-  const avgProfitability = dashboard?.projectMetrics?.avgProfitabilityPercent ?? 0;
+
+  // Billing
+  const pendingCents = dashboard?.billing?.pendingCollectionCents ?? '0';
+  const invoicedCents = Number(dashboard?.billing?.totalInvoicedCents ?? 0);
+  const paidCents = Number(dashboard?.billing?.totalPaidCents ?? 0);
+  const collectionPct = invoicedCents > 0 ? Math.round((paidCents / invoicedCents) * 100) : 0;
+
+  // Projects
+  const activeProjects = dashboard?.projects?.activeCount ?? dashboard?.kpis?.projectsActiveCount ?? 0;
+  const completedProjects = dashboard?.projectMetrics?.completedProjectsCount ?? 0;
+  const avgMargin = dashboard?.projectMetrics?.avgProfitabilityPercent ?? 0;
+
+  // CRM
+  const clientsCount = dashboard?.clientsCount ?? 0;
+  const upcomingInteractions = dashboard?.nextActions?.interactions?.length ?? 0;
+
+  // Finance
+  const mtdIncome = dashboard?.kpis?.mtdIncomeCents ?? '0';
+  const mtdExpense = dashboard?.kpis?.mtdExpenseCents ?? '0';
 
   return (
     <PageContainer className="gap-5">
-      {/* Top row: Retour + Period pills */}
+      {/* Top row */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Button asChild variant="outline" size="sm">
           <Link href="/app/pro">
@@ -193,30 +272,151 @@ export default function ProDashboard({ businessId }: { businessId: string }) {
         <PeriodPills value={periodDays} onChange={setPeriodDays} />
       </div>
 
-      {/* KPIs — 5 cards */}
-      <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
-        <KpiCard label="Trésorerie" value={fmtKpi(dashboard?.treasury?.balanceCents)} loading={loading} delay={0} />
-        <KpiCard label="CA période" value={fmtKpi(dashboard?.periodRevenueCents)} loading={loading} delay={50} />
-        <KpiCard label="Charges période" value={fmtKpi(dashboard?.periodExpenseCents)} loading={loading} delay={100} />
-        <KpiCard label="En attente" value={fmtKpi(dashboard?.billing?.pendingCollectionCents)} loading={loading} delay={150} />
-        <KpiCard label="Marge brute" value={`${avgProfitability}%`} loading={loading} delay={200} />
-      </div>
-
       {loading ? (
         <Card className="p-5">
-          <p className="text-sm text-[var(--text-secondary)]">Chargement du dashboard\u2026</p>
+          <p className="text-sm text-[var(--text-faint)]">Chargement du dashboard&hellip;</p>
         </Card>
       ) : error ? (
         <Card className="space-y-2 p-5">
           <p className="text-sm font-semibold text-[var(--danger)]">{error}</p>
-          <p className="text-xs text-[var(--text-secondary)]">Verifie la connexion ou reessaie.</p>
+          <p className="text-xs text-[var(--text-faint)]">Verifie la connexion ou reessaie.</p>
         </Card>
       ) : (
-        <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
-          {/* Cashflow card — accent background */}
+        <>
+          {/* ── Score Business ── */}
+          <div
+            className="rounded-xl p-5 animate-fade-in-up"
+            style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
+          >
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-sm font-semibold">Score Business</p>
+              <span
+                className="text-xs font-semibold px-2 py-0.5 rounded-full"
+                style={{ background: businessScore.color, color: 'white' }}
+              >
+                {businessScore.label}
+              </span>
+            </div>
+            <div className="flex items-end gap-3">
+              <span
+                className="text-3xl font-bold tabular-nums"
+                style={{ fontFamily: 'var(--font-barlow), sans-serif', color: businessScore.color }}
+              >
+                {businessScore.score}
+              </span>
+              <span className="text-sm text-[var(--text-faint)] mb-1">/ 100</span>
+            </div>
+            <div className="mt-3 h-2 rounded-full overflow-hidden" style={{ background: 'var(--surface-2)' }}>
+              <div
+                className="h-full rounded-full transition-all duration-700"
+                style={{ width: `${businessScore.score}%`, background: businessScore.color }}
+              />
+            </div>
+            <div className="mt-2 flex gap-4 text-[10px] text-[var(--text-faint)]">
+              <span>Taches {taskCompletionPct}%</span>
+              <span>Projets {activeProjects > 0 ? 'actifs' : '-'}</span>
+              <span>Recouvrement {collectionPct}%</span>
+            </div>
+          </div>
+
+          {/* ── Universe cards ── */}
+          <div className="grid gap-3 sm:grid-cols-2">
+            {/* Finances */}
+            <UniverseCard
+              icon={<Banknote size={16} className="text-[var(--text-faint)]" />}
+              title="Finances"
+              href={`/app/pro/${businessId}/finances`}
+              delay={50}
+            >
+              <p className="text-lg font-bold" style={{ fontFamily: 'var(--font-barlow), sans-serif' }}>
+                {fmtKpi(dashboard?.treasury?.balanceCents)}
+              </p>
+              <div className="flex items-center gap-3 mt-1 text-xs text-[var(--text-faint)]">
+                <span>+{fmtKpi(mtdIncome)} ce mois</span>
+                <span>-{fmtKpi(mtdExpense)}</span>
+              </div>
+            </UniverseCard>
+
+            {/* Projets */}
+            <UniverseCard
+              icon={<Briefcase size={16} className="text-[var(--text-faint)]" />}
+              title="Projets"
+              href={`/app/pro/${businessId}/projects`}
+              delay={100}
+            >
+              <div className="flex items-center gap-3">
+                <span className="text-lg font-bold" style={{ fontFamily: 'var(--font-barlow), sans-serif' }}>
+                  {activeProjects} actif{activeProjects > 1 ? 's' : ''}
+                </span>
+                <span className="text-xs text-[var(--text-faint)]">{completedProjects} termine{completedProjects > 1 ? 's' : ''}</span>
+              </div>
+              {avgMargin > 0 && (
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="text-xs text-[var(--text-faint)]">Marge {avgMargin}%</span>
+                  <MiniProgress value={avgMargin} color={avgMargin >= 20 ? 'var(--success)' : 'var(--warning)'} />
+                </div>
+              )}
+            </UniverseCard>
+
+            {/* Taches */}
+            <UniverseCard
+              icon={<ListChecks size={16} className="text-[var(--text-faint)]" />}
+              title="Taches"
+              href={`/app/pro/${businessId}/tasks`}
+              delay={150}
+            >
+              <div className="flex items-center gap-3">
+                <span className="text-lg font-bold" style={{ fontFamily: 'var(--font-barlow), sans-serif' }}>
+                  {tasksDone}/{tasksTotal}
+                </span>
+                <span className="text-xs text-[var(--text-faint)]">terminees</span>
+              </div>
+              <div className="flex items-center gap-2 mt-1">
+                <MiniProgress value={taskCompletionPct} color={taskCompletionPct >= 80 ? 'var(--success)' : 'var(--accent)'} />
+                <span className="text-xs text-[var(--text-faint)]">{taskCompletionPct}%</span>
+              </div>
+            </UniverseCard>
+
+            {/* CRM */}
+            <UniverseCard
+              icon={<BookUser size={16} className="text-[var(--text-faint)]" />}
+              title="CRM"
+              href={`/app/pro/${businessId}/agenda`}
+              delay={200}
+            >
+              <div className="flex items-center gap-3">
+                <span className="text-lg font-bold" style={{ fontFamily: 'var(--font-barlow), sans-serif' }}>
+                  {clientsCount} client{clientsCount > 1 ? 's' : ''}
+                </span>
+              </div>
+              {upcomingInteractions > 0 && (
+                <p className="text-xs mt-1" style={{ color: 'var(--warning)' }}>
+                  {upcomingInteractions} relance{upcomingInteractions > 1 ? 's' : ''} a faire
+                </p>
+              )}
+            </UniverseCard>
+
+            {/* Facturation */}
+            <UniverseCard
+              icon={<Receipt size={16} className="text-[var(--text-faint)]" />}
+              title="Facturation"
+              href={`/app/pro/${businessId}/finances`}
+              delay={250}
+            >
+              <p className="text-lg font-bold" style={{ fontFamily: 'var(--font-barlow), sans-serif' }}>
+                {fmtKpi(pendingCents)} en attente
+              </p>
+              <div className="flex items-center gap-2 mt-1">
+                <span className="text-xs text-[var(--text-faint)]">Recouvrement {collectionPct}%</span>
+                <MiniProgress value={collectionPct} color={collectionPct >= 80 ? 'var(--success)' : 'var(--warning)'} />
+              </div>
+            </UniverseCard>
+          </div>
+
+          {/* ── Cashflow chart ── */}
           <div
             className="flex flex-col gap-3 rounded-xl bg-[var(--shell-accent)] p-4 animate-fade-in-up"
-            style={{ animationDelay: '200ms', animationFillMode: 'backwards' }}
+            style={{ animationDelay: '300ms', animationFillMode: 'backwards' }}
           >
             <div className="flex items-center justify-between">
               <span className="text-sm font-medium text-white">Cash flow</span>
@@ -236,32 +436,7 @@ export default function ProDashboard({ businessId }: { businessId: string }) {
               variant="accent"
             />
           </div>
-
-          {/* Tasks donut — accent background */}
-          <div
-            className="flex flex-col gap-3 rounded-xl bg-[var(--shell-accent)] p-4 animate-fade-in-up"
-            style={{ animationDelay: '300ms', animationFillMode: 'backwards' }}
-          >
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium text-white">Taches</span>
-              <Button asChild variant="outline" size="sm" className="!bg-white !text-black !border-0">
-                <Link href={`/app/pro/${businessId}/tasks`}>
-                  <span className="font-semibold text-[16px]" style={{ fontFamily: 'var(--font-barlow), sans-serif' }}>
-                    Taches a faire
-                  </span>
-                  <ChevronLeft size={14} className="rotate-180" />
-                </Link>
-              </Button>
-            </div>
-            <TasksDonut
-              data={[
-                { name: TASK_STATUS_LABELS.TODO, value: tasksByStatus.TODO },
-                { name: TASK_STATUS_LABELS.DONE, value: tasksByStatus.DONE },
-              ]}
-              variant="accent"
-            />
-          </div>
-        </div>
+        </>
       )}
     </PageContainer>
   );

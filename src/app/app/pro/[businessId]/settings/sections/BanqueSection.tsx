@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { fetchJson } from '@/lib/apiClient';
+import { useToast } from '@/components/ui/toast';
 import { useActiveBusiness } from '../../../ActiveBusinessProvider';
 
 type Biz = { iban?: string | null; bic?: string | null; bankName?: string | null; accountHolder?: string | null };
@@ -12,11 +13,11 @@ type Biz = { iban?: string | null; bic?: string | null; bankName?: string | null
 export function BanqueSection({ businessId }: { businessId: string }) {
   const activeCtx = useActiveBusiness({ optional: true });
   const canEdit = activeCtx?.activeBusiness?.role === 'ADMIN' || activeCtx?.activeBusiness?.role === 'OWNER';
+  const toast = useToast();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [info, setInfo] = useState<string | null>(null);
   const [iban, setIban] = useState('');
   const [bic, setBic] = useState('');
   const [bankName, setBankName] = useState('');
@@ -39,7 +40,7 @@ export function BanqueSection({ businessId }: { businessId: string }) {
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!canEdit) return;
-    setSaving(true); setError(null); setInfo(null);
+    setSaving(true); setError(null);
 
     const res = await fetchJson<{ item: Biz }>(`/api/pro/businesses/${businessId}`, {
       method: 'PATCH',
@@ -56,7 +57,7 @@ export function BanqueSection({ businessId }: { businessId: string }) {
     if (!res.ok) { setError(res.error ?? 'Mise à jour impossible.'); return; }
     const d = res.data?.item;
     if (d) { setIban(d.iban ?? ''); setBic(d.bic ?? ''); setBankName(d.bankName ?? ''); setAccountHolder(d.accountHolder ?? ''); }
-    setInfo('Informations bancaires mises à jour.');
+    toast.success('Informations bancaires mises à jour.');
   }
 
   const disabled = !canEdit || loading || saving;
@@ -68,7 +69,6 @@ export function BanqueSection({ businessId }: { businessId: string }) {
         <p className="text-sm text-[var(--text-secondary)]">Coordonnées bancaires reprises sur les factures.</p>
       </div>
       {error && <p className="text-sm text-[var(--danger)]">{error}</p>}
-      {info && <p className="text-sm text-[var(--success)]">{info}</p>}
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="grid gap-3 md:grid-cols-2">
           <Input label="IBAN" value={iban} onChange={(e) => setIban(e.target.value)} disabled={disabled} />

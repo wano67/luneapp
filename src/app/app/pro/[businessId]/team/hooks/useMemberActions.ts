@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
+import { useToast } from '@/components/ui/toast';
 import { formatCentsToEuroInput, parseEuroToCents } from '@/lib/money';
 import type { BusinessRole, EmployeeProfile, Member } from './types';
 import { isValidRole } from './types';
@@ -38,6 +39,7 @@ export function useMemberActions({
     status: 'ACTIVE',
     notes: '',
   });
+  const toast = useToast();
   const [actionLoading, setActionLoading] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -89,6 +91,7 @@ export function useMemberActions({
       }
 
       setSuccess('Rôle mis à jour.');
+      toast.success('Rôle mis à jour.');
       await load();
     } catch (err) {
       console.error(err);
@@ -141,6 +144,7 @@ export function useMemberActions({
       }
 
       setSuccess('Membre retiré.');
+      toast.success('Membre retiré.');
       await load();
     } catch (err) {
       console.error(err);
@@ -217,6 +221,7 @@ export function useMemberActions({
       }
 
       setSuccess('Profil employé mis à jour.');
+      toast.success('Profil employé mis à jour.');
       await load();
     } catch (err) {
       console.error(err);

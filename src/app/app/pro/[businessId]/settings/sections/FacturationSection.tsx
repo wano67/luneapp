@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { fetchJson } from '@/lib/apiClient';
+import { useToast } from '@/components/ui/toast';
 import { useActiveBusiness } from '../../../ActiveBusinessProvider';
 
 type Settings = {
@@ -18,11 +19,11 @@ type Settings = {
 export function FacturationSection({ businessId }: { businessId: string }) {
   const activeCtx = useActiveBusiness({ optional: true });
   const canEdit = activeCtx?.activeBusiness?.role === 'ADMIN' || activeCtx?.activeBusiness?.role === 'OWNER';
+  const toast = useToast();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [info, setInfo] = useState<string | null>(null);
 
   const [invoicePrefix, setInvoicePrefix] = useState('');
   const [quotePrefix, setQuotePrefix] = useState('');
@@ -49,7 +50,7 @@ export function FacturationSection({ businessId }: { businessId: string }) {
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!canEdit) return;
-    setSaving(true); setError(null); setInfo(null);
+    setSaving(true); setError(null);
 
     const res = await fetchJson<{ item: Settings }>(`/api/pro/businesses/${businessId}/settings`, {
       method: 'PATCH',
@@ -64,7 +65,7 @@ export function FacturationSection({ businessId }: { businessId: string }) {
       setDefaultDepositPercent(res.data.item.defaultDepositPercent);
       setEnableAutoNumbering(res.data.item.enableAutoNumbering);
     }
-    setInfo('Paramètres de facturation enregistrés.');
+    toast.success('Paramètres de facturation enregistrés.');
   }
 
   const disabled = !canEdit || loading || saving;
@@ -76,7 +77,6 @@ export function FacturationSection({ businessId }: { businessId: string }) {
         <p className="text-sm text-[var(--text-secondary)]">Préfixes, délais de paiement et acomptes par défaut.</p>
       </div>
       {error && <p className="text-sm text-[var(--danger)]">{error}</p>}
-      {info && <p className="text-sm text-[var(--success)]">{info}</p>}
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="grid gap-3 md:grid-cols-2">
           <Input label="Préfixe factures" value={invoicePrefix} disabled helper="Défini automatiquement." />

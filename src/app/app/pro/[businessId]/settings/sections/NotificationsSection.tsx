@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { fetchJson } from '@/lib/apiClient';
+import { useToast } from '@/components/ui/toast';
 
 const NOTIFICATION_TYPES: { key: string; label: string; description: string }[] = [
   { key: 'TASK_ASSIGNED', label: 'Tâche assignée', description: 'Quand une tâche vous est assignée.' },
@@ -20,6 +21,7 @@ export function NotificationsSection({ businessId }: { businessId: string }) {
   const [prefs, setPrefs] = useState<PrefsMap>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
+  const toast = useToast();
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -46,7 +48,9 @@ export function NotificationsSection({ businessId }: { businessId: string }) {
 
     setSaving(null);
     if (!res.ok) {
-      setError(res.error ?? 'Mise à jour impossible.');
+      const msg = res.error ?? 'Mise à jour impossible.';
+      setError(msg);
+      toast.error(msg);
       // Revert
       setPrefs((prev) => ({ ...prev, [type]: !enabled }));
       return;

@@ -507,8 +507,8 @@ export default function MyTasksPage() {
             </Select>
           ) : null}
           {canCreate ? (
-            <Button onClick={openCreateModal}>
-              <Plus size={16} className="mr-1" />
+            <Button onClick={openCreateModal} className="whitespace-nowrap">
+              <Plus size={16} className="mr-1 shrink-0" />
               Nouvelle tâche
             </Button>
           ) : null}

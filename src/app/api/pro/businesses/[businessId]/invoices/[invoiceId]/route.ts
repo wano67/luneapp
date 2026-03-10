@@ -795,7 +795,14 @@ export const PATCH = withBusinessRoute<{ businessId: string; invoiceId: string }
 
 // DELETE /api/pro/businesses/{businessId}/invoices/{invoiceId}
 export const DELETE = withBusinessRoute<{ businessId: string; invoiceId: string }>(
-  { minRole: 'ADMIN' },
+  {
+    minRole: 'ADMIN',
+    rateLimit: {
+      key: (ctx) => `pro:invoices:delete:${ctx.businessId}:${ctx.userId}`,
+      limit: 100,
+      windowMs: 60 * 60 * 1000,
+    },
+  },
   async (ctx, _request, params) => {
     const { requestId, businessId: businessIdBigInt } = ctx;
 

@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -14,6 +15,8 @@ import { PageHeader } from '@/components/layouts/PageHeader';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import { formatCentsToEuroDisplay, parseEuroToCents, sanitizeEuroInput } from '@/lib/money';
 import { useUserPreferences } from '@/lib/hooks/useUserPreferences';
+import { ChevronRight } from 'lucide-react';
+import { IconSubscription } from '@/components/pivot-icons';
 
 type Category = { id: string; name: string };
 
@@ -24,6 +27,13 @@ type Budget = {
   limitCents: string;
   spentCents: string;
   category: Category | null;
+};
+
+type Subscription = {
+  id: string;
+  amountCents: string;
+  frequency: string;
+  isActive: boolean;
 };
 
 type FormState = {
@@ -47,9 +57,20 @@ function centsToInputValue(cents: string): string {
   }
 }
 
+function toMonthlyCents(amountCents: string, freq: string): bigint {
+  const a = BigInt(amountCents);
+  switch (freq) {
+    case 'WEEKLY':    return (a * 52n) / 12n;
+    case 'QUARTERLY': return (a * 4n) / 12n;
+    case 'YEARLY':    return a / 12n;
+    default:          return a;
+  }
+}
+
 export default function BudgetsPage() {
   const { prefs } = useUserPreferences();
   const [budgets, setBudgets] = useState<Budget[]>([]);
+  const [monthExpenseCents, setMonthExpenseCents] = useState(0n);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -58,36 +79,27 @@ export default function BudgetsPage() {
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-
-  type Subscription = {
-    id: string;
-    amountCents: string;
-    frequency: string;
-    isActive: boolean;
-  };
   const [fixedMonthlyCents, setFixedMonthlyCents] = useState(0n);
+  const [activeSubCount, setActiveSubCount] = useState(0);
 
   const load = useCallback(async () => {
     setLoading(true);
     const [bRes, cRes, subRes] = await Promise.all([
-      fetchJson<{ items: Budget[] }>('/api/personal/budgets'),
+      fetchJson<{ items: Budget[]; monthExpenseCents: string }>('/api/personal/budgets'),
       fetchJson<{ items: Category[] }>('/api/personal/categories'),
       fetchJson<{ items: Subscription[] }>('/api/personal/subscriptions'),
     ]);
-    if (bRes.ok && bRes.data) setBudgets(bRes.data.items ?? []);
-    else setError(bRes.error ?? 'Impossible de charger les budgets.');
+    if (bRes.ok && bRes.data) {
+      setBudgets(bRes.data.items ?? []);
+      setMonthExpenseCents(BigInt(String(bRes.data.monthExpenseCents ?? '0')));
+    } else {
+      setError(bRes.error ?? 'Impossible de charger les budgets.');
+    }
     if (cRes.ok && cRes.data) setCategories(cRes.data.items ?? []);
     if (subRes.ok && subRes.data) {
       const active = (subRes.data.items ?? []).filter((s) => s.isActive);
-      const total = active.reduce((acc, s) => {
-        const a = BigInt(s.amountCents);
-        switch (s.frequency) {
-          case 'WEEKLY':    return acc + (a * 52n) / 12n;
-          case 'QUARTERLY': return acc + (a * 4n) / 12n;
-          case 'YEARLY':    return acc + a / 12n;
-          default:          return acc + a;
-        }
-      }, 0n);
+      setActiveSubCount(active.length);
+      const total = active.reduce((acc, s) => acc + toMonthlyCents(s.amountCents, s.frequency), 0n);
       setFixedMonthlyCents(total);
     }
     setLoading(false);
@@ -165,7 +177,6 @@ export default function BudgetsPage() {
   }
 
   const totalLimit = budgets.reduce((s, b) => s + BigInt(b.limitCents), 0n);
-  const totalSpent = budgets.reduce((s, b) => s + BigInt(b.spentCents), 0n);
   const overBudget = budgets.filter((b) => BigInt(b.spentCents) > BigInt(b.limitCents)).length;
 
   return (
@@ -182,21 +193,23 @@ export default function BudgetsPage() {
 
       {error ? <p className="text-sm text-[var(--danger)]">{error}</p> : null}
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
         <KpiCard label="Total budgété" value={formatCentsToEuroDisplay(totalLimit.toString())} />
         <KpiCard
           label="Dépensé ce mois"
-          value={formatCentsToEuroDisplay(totalSpent.toString())}
-          trend={totalSpent > totalLimit ? 'down' : 'up'}
-        />
-        <KpiCard
-          label="Budgets dépassés"
-          value={String(overBudget)}
-          trend={overBudget > 0 ? 'down' : 'up'}
+          value={formatCentsToEuroDisplay(monthExpenseCents.toString())}
+          trend={monthExpenseCents > totalLimit ? 'down' : 'up'}
         />
         <KpiCard label="Charges fixes / mois" value={formatCentsToEuroDisplay(fixedMonthlyCents.toString())} />
       </div>
 
+      {overBudget > 0 ? (
+        <p className="text-sm font-semibold text-[var(--danger)]">
+          {overBudget} budget{overBudget > 1 ? 's' : ''} dépassé{overBudget > 1 ? 's' : ''}
+        </p>
+      ) : null}
+
+      {/* ── Budgets list ── */}
       {loading ? (
         <p className="text-sm text-[var(--text-faint)]">Chargement…</p>
       ) : budgets.length === 0 ? (
@@ -257,9 +270,34 @@ export default function BudgetsPage() {
               </Card>
             );
           })}
+
+          {/* ── Abonnements special link card ── */}
+          <Link
+            href="/app/personal/subscriptions"
+            className="block"
+          >
+            <Card className="flex items-center justify-between gap-3 p-4 hover:bg-[var(--surface-hover)] transition-colors cursor-pointer">
+              <div className="flex items-center gap-3 min-w-0">
+                <div
+                  className="flex items-center justify-center rounded-xl shrink-0"
+                  style={{ width: 40, height: 40, background: 'var(--shell-accent)' }}
+                >
+                  <IconSubscription size={20} color="white" />
+                </div>
+                <div className="min-w-0">
+                  <p className="font-semibold">Abonnements</p>
+                  <p className="text-xs text-[var(--text-faint)]">
+                    {activeSubCount} actif{activeSubCount > 1 ? 's' : ''} · {formatCentsToEuroDisplay(fixedMonthlyCents.toString())}/mois
+                  </p>
+                </div>
+              </div>
+              <ChevronRight size={18} className="text-[var(--text-faint)] shrink-0" />
+            </Card>
+          </Link>
         </div>
       )}
 
+      {/* ── Budget modal ── */}
       <Modal
         open={modalOpen}
         onCloseAction={() => setModalOpen(false)}

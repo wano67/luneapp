@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { fetchJson } from '@/lib/apiClient';
+import { useToast } from '@/components/ui/toast';
 import { useActiveBusiness } from '../../../ActiveBusinessProvider';
 
 type Settings = { vatEnabled: boolean; vatRatePercent: number };
@@ -12,11 +13,11 @@ type Settings = { vatEnabled: boolean; vatRatePercent: number };
 export function TaxesSection({ businessId }: { businessId: string }) {
   const activeCtx = useActiveBusiness({ optional: true });
   const canEdit = activeCtx?.activeBusiness?.role === 'ADMIN' || activeCtx?.activeBusiness?.role === 'OWNER';
+  const toast = useToast();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [info, setInfo] = useState<string | null>(null);
   const [vatEnabled, setVatEnabled] = useState(false);
   const [vatRatePercent, setVatRatePercent] = useState(20);
 
@@ -35,7 +36,7 @@ export function TaxesSection({ businessId }: { businessId: string }) {
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!canEdit) return;
-    setSaving(true); setError(null); setInfo(null);
+    setSaving(true); setError(null);
 
     const res = await fetchJson<{ item: Settings }>(`/api/pro/businesses/${businessId}/settings`, {
       method: 'PATCH',
@@ -49,7 +50,7 @@ export function TaxesSection({ businessId }: { businessId: string }) {
       setVatEnabled(res.data.item.vatEnabled);
       setVatRatePercent(res.data.item.vatRatePercent);
     }
-    setInfo('Taxes mises à jour.');
+    toast.success('Taxes mises à jour.');
   }
 
   const disabled = !canEdit || loading || saving;
@@ -61,7 +62,6 @@ export function TaxesSection({ businessId }: { businessId: string }) {
         <p className="text-sm text-[var(--text-secondary)]">Configuration de la TVA.</p>
       </div>
       {error && <p className="text-sm text-[var(--danger)]">{error}</p>}
-      {info && <p className="text-sm text-[var(--success)]">{info}</p>}
       <form onSubmit={handleSubmit} className="space-y-4">
         <label className="flex items-start gap-3 rounded-xl border border-[var(--border)] px-3 py-2">
           <input type="checkbox" className="mt-1" checked={vatEnabled} onChange={(e) => setVatEnabled(e.target.checked)} disabled={disabled} />

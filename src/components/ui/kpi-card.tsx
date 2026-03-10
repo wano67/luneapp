@@ -25,7 +25,7 @@ export function KpiCard({ label, value, delta, trend = 'neutral', hint, loading,
     <div
       className={cn(
         'flex flex-col rounded-xl bg-[var(--surface)] outline outline-[0.5px] outline-[var(--border)] animate-fade-in-up',
-        isCompact ? 'gap-2 p-4' : 'min-h-[200px] justify-between p-3',
+        isCompact ? 'gap-2 p-4' : 'min-h-[160px] sm:min-h-[200px] justify-between p-3',
         className
       )}
       style={{
@@ -60,7 +60,7 @@ export function KpiCard({ label, value, delta, trend = 'neutral', hint, loading,
           <span
             className={cn(
               'font-extrabold text-[var(--shell-accent)]',
-              isCompact ? 'text-[20px] leading-[24px]' : 'text-[40px] leading-[40px]'
+              isCompact ? 'text-[20px] leading-[24px]' : 'text-[28px] leading-[28px] sm:text-[40px] sm:leading-[40px]'
             )}
           >
             {value}

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
+import { useToast } from '@/components/ui/toast';
 import { formatCentsToEuroInput, parseEuroToCents } from '@/lib/money';
 import type { StagedInvoiceModalState } from '@/components/pro/projects/modals/StagedInvoiceModal';
 import type { QuoteDateEditorState } from '@/components/pro/projects/modals/QuoteDateModal';
@@ -192,6 +193,8 @@ export function useBillingHandlers({
   onBillingError,
   onBillingInfo,
 }: UseBillingHandlersOptions) {
+  const toast = useToast();
+
   // ─── Quote / Invoice editors ───────────────────────────────────────────────
   const [quoteEditor, setQuoteEditor] = useState<QuoteEditorState | null>(null);
   const [invoiceEditor, setInvoiceEditor] = useState<InvoiceEditorState | null>(null);
@@ -285,6 +288,7 @@ export function useBillingHandlers({
         return;
       }
       onBillingInfo('Devis créé.');
+      toast.success('Devis créé.');
       await Promise.all([loadQuotes(), loadInvoices(), loadProject()]);
     } catch (err) {
       onBillingError(getErrorMessage(err));
@@ -358,6 +362,7 @@ export function useBillingHandlers({
         return;
       }
       onBillingInfo('Devis de référence mis à jour.');
+      toast.success('Devis de référence mis à jour.');
       await loadProject();
     } catch (err) {
       onBillingError(getErrorMessage(err));
@@ -407,6 +412,7 @@ export function useBillingHandlers({
         return;
       }
       onBillingInfo('Facture créée.');
+      toast.success('Facture créée.');
       await Promise.all([loadInvoices(), loadProject()]);
     } catch (err) {
       onBillingError(getErrorMessage(err));
@@ -430,6 +436,7 @@ export function useBillingHandlers({
         return;
       }
       onBillingInfo('Facture mensuelle créée.');
+      toast.success('Facture mensuelle créée.');
       await Promise.all([loadInvoices(), loadProject()]);
     } catch (err) {
       onBillingError(getErrorMessage(err));
@@ -510,6 +517,7 @@ export function useBillingHandlers({
         return;
       }
       onBillingInfo('Facture créée.');
+      toast.success('Facture créée.');
       closeStagedInvoiceModal();
       await Promise.all([loadInvoices(), loadProject()]);
     } catch (err) {
@@ -717,6 +725,7 @@ export function useBillingHandlers({
       if (!res.ok) { setQuoteEditError(res.error ?? 'Mise à jour impossible.'); return; }
       await loadQuotes();
       onBillingInfo('Devis mis à jour.');
+      toast.success('Devis mis à jour.');
       closeQuoteEditor();
     } catch (err) {
       setQuoteEditError(getErrorMessage(err));
@@ -810,6 +819,7 @@ export function useBillingHandlers({
       if (!res.ok) { setInvoiceEditError(res.error ?? 'Mise à jour impossible.'); return; }
       await Promise.all([loadInvoices(), loadProject()]);
       onBillingInfo('Facture mise à jour.');
+      toast.success('Facture mise à jour.');
       closeInvoiceEditor();
     } catch (err) {
       setInvoiceEditError(getErrorMessage(err));

@@ -124,8 +124,8 @@ export default function PivotSidebar({ space, pathname, businessId, businesses: 
         {space === 'focus' && (
           <Section title="Performance" collapsed={collapsed}>
             <Item icon={(c) => <IconFocus size={20} color={c} />} label="Vue d'ensemble" href="/app/focus" active={isExactActive(pathname, '/app/focus')} collapsed={collapsed} />
-            <Item icon={(c) => <IconFocus size={20} color={c} />} label="Analyse Pro" href="/app/performance/pro" active={pathname.startsWith('/app/performance/pro')} collapsed={collapsed} />
-            <Item icon={(c) => <IconFocus size={20} color={c} />} label="Analyse Perso" href="/app/performance/perso" active={pathname.startsWith('/app/performance/perso')} collapsed={collapsed} />
+            <Item icon={(c) => <IconEntreprise size={20} color={c} />} label="Analyse Pro" href="/app/performance/pro" active={pathname.startsWith('/app/performance/pro')} collapsed={collapsed} />
+            <Item icon={(c) => <IconPerso size={20} color={c} />} label="Analyse Perso" href="/app/performance/perso" active={pathname.startsWith('/app/performance/perso')} collapsed={collapsed} />
           </Section>
         )}
       </div>

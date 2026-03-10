@@ -12,6 +12,8 @@ import { Input } from '@/components/ui/input';
 import { KpiCard } from '@/components/ui/kpi-card';
 import { ProPageShell } from '@/components/pro/ProPageShell';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
+import { useToast } from '@/components/ui/toast';
+import { Skeleton } from '@/components/ui/skeleton';
 import { parseEuroToCents, sanitizeEuroInput } from '@/lib/money';
 import { useActiveBusiness } from '../../ActiveBusinessProvider';
 import { useRowSelection } from '../../../components/selection/useRowSelection';
@@ -57,6 +59,7 @@ export default function StockListPage() {
   const [bulkLoading, setBulkLoading] = useState(false);
   const { selectedArray, selectedCount, toggle, toggleAll, clear, isSelected } = useRowSelection();
 
+  const toast = useToast();
   const active = useActiveBusiness({ optional: true });
   const businessId = active?.activeBusiness?.id;
   const role = active?.activeBusiness?.role ?? null;
@@ -146,6 +149,7 @@ export default function StockListPage() {
       }
       setModalOpen(false);
       setDraft({ sku: '', name: '', unit: 'PIECE', salePriceCents: '', purchasePriceCents: '' });
+      toast.success('Produit créé.');
       await load();
     } catch (err) {
       console.error(err);
@@ -181,6 +185,7 @@ export default function StockListPage() {
       setBulkError((prev) => prev ?? 'Certaines suppressions ont échoué.');
     } else {
       setBulkInfo('Produits supprimés.');
+      toast.success('Produits supprimés.');
     }
   }
 
@@ -218,7 +223,14 @@ export default function StockListPage() {
 
       {/* Product list */}
       {loading ? (
-        <p className="text-sm text-[var(--text-secondary)]">Chargement…</p>
+        <div className="space-y-3">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="rounded-xl border border-[var(--border)] bg-[var(--surface)]/70 p-3 space-y-2">
+              <Skeleton width="40%" height="14px" />
+              <Skeleton width="70%" height="12px" />
+            </div>
+          ))}
+        </div>
       ) : error ? (
         <div className="space-y-2">
           <p className="text-sm text-[var(--danger)]">{error}</p>

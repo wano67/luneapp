@@ -201,7 +201,7 @@ export default function WalletHomePage() {
             style={
               periodDays === p.days
                 ? { background: 'var(--shell-accent-dark)', color: 'white' }
-                : { background: 'var(--surface)', color: 'rgba(0,0,0,0.6)' }
+                : { background: 'var(--surface)', color: 'var(--text-secondary)' }
             }
           >
             {p.label}
@@ -211,7 +211,7 @@ export default function WalletHomePage() {
       </div>
 
       {/* ─── Hero KPI cards ─── */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
         <HeroCard
           label="Trésorerie"
           value={kpi?.total ?? '—'}
@@ -228,7 +228,7 @@ export default function WalletHomePage() {
           delta={kpi?.expenseDelta}
           pctChange={kpi?.expensePct}
           positive={kpi?.chargesPositive}
-          href="/app/personal/transactions"
+          href="/app/personal/budgets"
           loading={loading}
           delay={50}
         />
@@ -377,7 +377,7 @@ export default function WalletHomePage() {
 
         {/* ── Right: Budgets + Épargne ── */}
         <div
-          className="w-full lg:w-[381px] shrink-0 rounded-xl p-3 flex flex-col gap-5 animate-fade-in-up md:overflow-y-auto"
+          className="w-full lg:w-[340px] xl:w-[381px] shrink-0 rounded-xl p-3 flex flex-col gap-5 animate-fade-in-up md:overflow-y-auto"
           style={{ background: 'var(--shell-accent)', animationDelay: '160ms', animationFillMode: 'backwards' }}
         >
           {/* Header */}
@@ -569,13 +569,12 @@ function AccentLink({ href, children }: { href: string; children: React.ReactNod
   return (
     <Link
       href={href}
-      className="shrink-0 flex items-center gap-2 rounded-xl bg-white px-3 py-2.5 transition-opacity hover:opacity-80"
+      className="shrink-0 flex items-center gap-2 rounded-xl bg-white px-2.5 py-2 sm:px-3 sm:py-2.5 transition-opacity hover:opacity-80"
     >
       <span
-        className="text-black"
+        className="text-black text-[13px] sm:text-[16px] whitespace-nowrap"
         style={{
           fontFamily: 'var(--font-barlow), sans-serif',
-          fontSize: 16,
           fontWeight: 600,
           lineHeight: '16px',
         }}

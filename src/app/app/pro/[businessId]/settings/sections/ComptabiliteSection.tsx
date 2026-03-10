@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { fetchJson } from '@/lib/apiClient';
+import { useToast } from '@/components/ui/toast';
 import { useActiveBusiness } from '../../../ActiveBusinessProvider';
 
 type Settings = {
@@ -30,11 +31,11 @@ const FIELDS: { key: keyof Settings; label: string; helper: string }[] = [
 export function ComptabiliteSection({ businessId }: { businessId: string }) {
   const activeCtx = useActiveBusiness({ optional: true });
   const canEdit = activeCtx?.activeBusiness?.role === 'ADMIN' || activeCtx?.activeBusiness?.role === 'OWNER';
+  const toast = useToast();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [info, setInfo] = useState<string | null>(null);
   const [form, setForm] = useState<Record<string, string>>({});
 
   useEffect(() => {
@@ -54,7 +55,7 @@ export function ComptabiliteSection({ businessId }: { businessId: string }) {
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!canEdit) return;
-    setSaving(true); setError(null); setInfo(null);
+    setSaving(true); setError(null);
 
     const payload: Record<string, string> = {};
     for (const field of FIELDS) {
@@ -76,7 +77,7 @@ export function ComptabiliteSection({ businessId }: { businessId: string }) {
       for (const field of FIELDS) f[field.key] = (s[field.key] as string) ?? '';
       setForm(f);
     }
-    setInfo('Codes comptables enregistrés.');
+    toast.success('Codes comptables enregistrés.');
   }
 
   const disabled = !canEdit || loading || saving;
@@ -88,7 +89,6 @@ export function ComptabiliteSection({ businessId }: { businessId: string }) {
         <p className="text-sm text-[var(--text-secondary)]">Codes comptables utilisés pour les écritures et le grand livre.</p>
       </div>
       {error && <p className="text-sm text-[var(--danger)]">{error}</p>}
-      {info && <p className="text-sm text-[var(--success)]">{info}</p>}
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="grid gap-3 md:grid-cols-2">
           {FIELDS.map((f) => (
