@@ -1,13 +1,8 @@
-import crypto from 'crypto';
 import { prisma } from '@/server/db/client';
 import { BusinessInviteStatus } from '@/generated/prisma';
 import { withPersonalRoute } from '@/server/http/routeHandler';
 import { jsonb } from '@/server/http/json';
 import { badRequest, notFound, readJson, unauthorized } from '@/server/http/apiUtils';
-
-function hashToken(raw: string) {
-  return crypto.createHash('sha256').update(raw).digest('base64url');
-}
 
 // POST /api/pro/businesses/invites/accept
 export const POST = withPersonalRoute(
@@ -20,10 +15,8 @@ export const POST = withPersonalRoute(
     const token = ((body as Record<string, unknown>).token as string).trim();
     if (!token) return badRequest('Token invalide.');
 
-    const tokenHash = hashToken(token);
-
     const invite = await prisma.businessInvite.findFirst({
-      where: { token: tokenHash },
+      where: { token },
       include: { business: true },
     });
 

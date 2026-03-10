@@ -9,10 +9,6 @@ import { isValidEmail } from '@/lib/validation/email';
 import { sendInviteEmail } from '@/server/services/email';
 import { notify } from '@/server/services/notifications';
 
-function hashToken(raw: string) {
-  return crypto.createHash('sha256').update(raw).digest('base64url');
-}
-
 // GET /api/pro/businesses/{businessId}/invites
 export const GET = withBusinessRoute(
   { minRole: 'ADMIN' },
@@ -119,7 +115,6 @@ export const POST = withBusinessRoute(
     }
 
     const rawToken = crypto.randomBytes(32).toString('base64url');
-    const tokenHash = hashToken(rawToken);
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7); // 7 jours
     const baseUrl = buildBaseUrl(req);
@@ -147,7 +142,7 @@ export const POST = withBusinessRoute(
           where: { id: existingInvite.id },
           data: {
             role,
-            token: tokenHash,
+            token: rawToken,
             expiresAt,
             status: BusinessInviteStatus.PENDING,
           },
@@ -158,7 +153,7 @@ export const POST = withBusinessRoute(
             businessId: ctx.businessId,
             email,
             role,
-            token: tokenHash,
+            token: rawToken,
             status: BusinessInviteStatus.PENDING,
             expiresAt,
           },

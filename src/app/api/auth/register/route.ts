@@ -88,7 +88,7 @@ export async function POST(request: NextRequest) {
       data: {
         emailVerificationToken: verificationHash,
         emailVerificationExpiry: verificationExpiry,
-        ...(inviteToken ? { pendingInviteToken: crypto.createHash('sha256').update(inviteToken).digest('base64url') } : {}),
+        ...(inviteToken ? { pendingInviteToken: inviteToken } : {}),
       },
     });
 
