@@ -11,6 +11,7 @@ import {
 } from '@/server/auth/auth.service';
 import { rateLimit, makeIpKey } from '@/server/security/rateLimit';
 import { getRequestId, withRequestId } from '@/server/http/apiUtils';
+import { buildBaseUrl } from '@/server/http/baseUrl';
 
 // Lazy cleanup: run at most once per 10 minutes
 let lastCleanup = 0;
@@ -102,12 +103,12 @@ export async function GET(request: NextRequest) {
 
   const rawRefresh = request.cookies.get(REFRESH_COOKIE_NAME)?.value;
   if (!rawRefresh) {
-    return NextResponse.redirect(new URL(`/login?from=${encodeURIComponent(safeRedirect)}`, request.url));
+    return NextResponse.redirect(new URL(`/login?from=${encodeURIComponent(safeRedirect)}`, buildBaseUrl(request)));
   }
 
   const result = await validateAndRotateRefreshToken(rawRefresh);
   if (!result) {
-    const res = NextResponse.redirect(new URL(`/login?from=${encodeURIComponent(safeRedirect)}`, request.url));
+    const res = NextResponse.redirect(new URL(`/login?from=${encodeURIComponent(safeRedirect)}`, buildBaseUrl(request)));
     res.cookies.set({
       name: REFRESH_COOKIE_NAME,
       value: '',
@@ -121,7 +122,7 @@ export async function GET(request: NextRequest) {
   const { user, newRawToken } = result;
   const accessToken = await createSessionToken(user);
 
-  const response = NextResponse.redirect(new URL(safeRedirect, request.url));
+  const response = NextResponse.redirect(new URL(safeRedirect, buildBaseUrl(request)));
   response.cookies.set({
     name: AUTH_COOKIE_NAME,
     value: accessToken,

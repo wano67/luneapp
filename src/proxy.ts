@@ -1,6 +1,7 @@
 // src/proxy.ts
 import { verifyAuthToken, AUTH_COOKIE_NAME, REFRESH_COOKIE_NAME } from '@/server/auth/jwt';
 import { NextRequest, NextResponse } from 'next/server';
+import { buildBaseUrl } from '@/server/http/baseUrl';
 
 function unauthorizedResponse(request: NextRequest) {
   const requestId =
@@ -15,7 +16,7 @@ function unauthorizedResponse(request: NextRequest) {
     return res;
   }
 
-  const loginUrl = new URL('/login', request.url);
+  const loginUrl = new URL('/login', buildBaseUrl(request));
   const from = request.nextUrl.pathname + request.nextUrl.search;
   loginUrl.searchParams.set('from', from);
 
@@ -50,7 +51,7 @@ function refreshOrUnauthorized(request: NextRequest): NextResponse {
 
   // Page navigation: redirect to GET refresh endpoint
   const from = request.nextUrl.pathname + request.nextUrl.search;
-  const refreshUrl = new URL('/api/auth/refresh', request.url);
+  const refreshUrl = new URL('/api/auth/refresh', buildBaseUrl(request));
   refreshUrl.searchParams.set('redirect', from);
   return NextResponse.redirect(refreshUrl);
 }
@@ -74,7 +75,7 @@ export async function proxy(request: NextRequest) {
       payload.emailVerified === false &&
       request.nextUrl.pathname.startsWith('/app')
     ) {
-      return NextResponse.redirect(new URL('/verify-email', request.url));
+      return NextResponse.redirect(new URL('/verify-email', buildBaseUrl(request)));
     }
 
     return NextResponse.next();

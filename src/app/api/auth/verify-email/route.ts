@@ -8,6 +8,7 @@ import {
 } from '@/server/auth/auth.service';
 import { rateLimit, makeIpKey } from '@/server/security/rateLimit';
 import { getRequestId, withRequestId } from '@/server/http/apiUtils';
+import { buildBaseUrl } from '@/server/http/baseUrl';
 import crypto from 'crypto';
 
 // No CSRF: the one-time token IS the proof of ownership.
@@ -24,7 +25,7 @@ export async function GET(request: NextRequest) {
 
   const rawToken = request.nextUrl.searchParams.get('token')?.trim();
   if (!rawToken) {
-    return NextResponse.redirect(new URL('/verify-email', request.url));
+    return NextResponse.redirect(new URL('/verify-email', buildBaseUrl(request)));
   }
 
   const tokenHash = crypto.createHash('sha256').update(rawToken).digest('base64url');
@@ -42,7 +43,7 @@ export async function GET(request: NextRequest) {
       where: { emailVerificationToken: tokenHash },
     });
     const errorParam = expiredUser ? 'expired' : 'invalid';
-    return NextResponse.redirect(new URL(`/verify-email?error=${errorParam}`, request.url));
+    return NextResponse.redirect(new URL(`/verify-email?error=${errorParam}`, buildBaseUrl(request)));
   }
 
   await prisma.user.update({
@@ -94,7 +95,7 @@ export async function GET(request: NextRequest) {
     ? `/app/pro/${acceptedBusinessId}`
     : '/verify-email?verified=true';
 
-  const response = NextResponse.redirect(new URL(redirectTarget, request.url));
+  const response = NextResponse.redirect(new URL(redirectTarget, buildBaseUrl(request)));
   response.cookies.set({
     name: AUTH_COOKIE_NAME,
     value: sessionToken,
