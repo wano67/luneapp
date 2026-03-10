@@ -15,7 +15,7 @@ function getConfig() {
 // ─── Types ──────────────────────────────────────────────────
 
 export interface PowensUser {
-  id: number;
+  id_user: number;
   auth_token: string;
 }
 

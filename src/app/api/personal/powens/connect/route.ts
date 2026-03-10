@@ -30,7 +30,7 @@ export const POST = withPersonalRoute(async (ctx, req) => {
     // 1. Créer un utilisateur Powens
     console.log('[powens:connect] Step 1: Creating Powens user…');
     const powensUser = await powensInitUser();
-    console.log('[powens:connect] Step 1 OK: powensUserId=', powensUser.id);
+    console.log('[powens:connect] Step 1 OK: powensUserId=', powensUser.id_user);
 
     // 2. Chiffrer et stocker le token
     console.log('[powens:connect] Step 2: Encrypting & storing…');
@@ -38,7 +38,7 @@ export const POST = withPersonalRoute(async (ctx, req) => {
     await prisma.powensConnection.create({
       data: {
         userId: ctx.userId,
-        powensUserId: powensUser.id,
+        powensUserId: powensUser.id_user,
         authTokenCipher: encrypted.ciphertext,
         authTokenIv: encrypted.iv,
         authTokenTag: encrypted.tag,
