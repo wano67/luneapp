@@ -217,10 +217,14 @@ async function buildTransactionData(
     const type = tx.value >= 0 ? 'INCOME' : 'EXPENSE';
     const label = tx.simplified_wording || tx.original_wording || 'Transaction';
 
-    // Résoudre la catégorie
+    // Résoudre la catégorie : Powens d'abord, puis auto-catégorisation par label
     let categoryId: bigint | null = null;
     if (tx.id_category) {
       categoryId = await resolveCategory(userId, tx.id_category, categoryCache);
+    }
+    if (!categoryId) {
+      const { autoCategorize } = await import('@/server/services/autoCategorize');
+      categoryId = await autoCategorize(userId, label);
     }
 
     data.push({

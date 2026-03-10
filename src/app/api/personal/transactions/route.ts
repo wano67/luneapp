@@ -204,6 +204,13 @@ export const POST = withPersonalRoute(async (ctx, req) => {
     categoryId = catId;
   }
 
+  // Auto-catégorisation si aucune catégorie fournie
+  if (!categoryId && label) {
+    const { autoCategorize } = await import('@/server/services/autoCategorize');
+    const autoId = await autoCategorize(ctx.userId, label);
+    if (autoId) categoryId = autoId;
+  }
+
   // currency: prefer body, else account.currency, else EUR
   const currency =
     typeof currencyRaw === 'string' && currencyRaw.trim()

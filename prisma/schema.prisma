@@ -178,6 +178,7 @@ model User {
   personalBudgets      PersonalBudget[]
   savingsGoals          SavingsGoal[]
   personalSubscriptions PersonalSubscription[]
+  categoryRules         CategoryRule[]
   interactionsCreated  Interaction[] @relation("InteractionCreatedBy")
   inventoryMovements   InventoryMovement[]
   ledgerEntriesCreated LedgerEntry[]
@@ -1661,6 +1662,7 @@ model PersonalAccount {
   powensLastSync  DateTime?
 
   transactions PersonalTransaction[]
+  savingsGoals SavingsGoal[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1673,15 +1675,40 @@ model PersonalCategory {
   userId BigInt
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  name      String
+  name  String
+  icon  String? // Nom d'icône Lucide (ex: "utensils", "car", "home")
+  color String? // Couleur hex (ex: "#6366f1")
+
   createdAt DateTime @default(now())
 
   // ✅ inverse relations
   transactions  PersonalTransaction[]
   budgets       PersonalBudget[]
   subscriptions PersonalSubscription[]
+  rules         CategoryRule[]
 
   @@unique([userId, name])
+}
+
+/**
+ * Règles d'auto-catégorisation par pattern de label
+ */
+model CategoryRule {
+  id     BigInt @id @default(autoincrement())
+  userId BigInt
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  categoryId BigInt
+  category   PersonalCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  pattern   String // Pattern lowercase (ex: "carrefour", "uber eats")
+  matchType String @default("CONTAINS") // CONTAINS | STARTS_WITH | EXACT
+  priority  Int    @default(0) // Plus haut = prioritaire
+
+  createdAt DateTime @default(now())
+
+  @@unique([userId, pattern])
+  @@index([userId])
 }
 
 model PersonalTransaction {
@@ -1760,6 +1787,16 @@ model SavingsGoal {
   currentCents BigInt    @default(0)
   deadline     DateTime?
   isCompleted  Boolean   @default(false)
+
+  // Lien vers un compte épargne
+  accountId BigInt?
+  account   PersonalAccount? @relation(fields: [accountId], references: [id], onDelete: SetNull)
+
+  // Contribution mensuelle cible
+  monthlyContributionCents BigInt?
+
+  // Priorité (pour classement dans Focus)
+  priority Int @default(0)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

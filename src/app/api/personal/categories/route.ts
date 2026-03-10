@@ -8,7 +8,7 @@ export const GET = withPersonalRoute(async (ctx) => {
   const items = await prisma.personalCategory.findMany({
     where: { userId: ctx.userId },
     orderBy: { name: 'asc' },
-    select: { id: true, name: true },
+    select: { id: true, name: true, icon: true, color: true },
   });
 
   return jsonb({ items }, ctx.requestId);
@@ -35,8 +35,11 @@ export const POST = withPersonalRoute(async (ctx, req) => {
   });
   if (existing) return badRequest('Cette catégorie existe déjà.');
 
+  const icon = typeof body.icon === 'string' ? body.icon.trim() || null : null;
+  const color = typeof body.color === 'string' ? body.color.trim() || null : null;
+
   const item = await prisma.personalCategory.create({
-    data: { userId: ctx.userId, name },
+    data: { userId: ctx.userId, name, icon, color },
   });
 
   return jsonbCreated({ item }, ctx.requestId);

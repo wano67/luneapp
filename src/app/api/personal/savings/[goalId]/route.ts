@@ -47,6 +47,36 @@ export const PATCH = withPersonalRoute(async (ctx, req) => {
     data.isCompleted = body.isCompleted;
   }
 
+  // Account link
+  if ('accountId' in body) {
+    if (body.accountId == null) {
+      data.accountId = null;
+    } else {
+      try {
+        const accountId = parseId(String(body.accountId));
+        const acct = await prisma.personalAccount.findFirst({
+          where: { id: accountId, userId: ctx.userId, type: 'SAVINGS' },
+          select: { id: true },
+        });
+        if (!acct) return badRequest('Compte épargne introuvable.');
+        data.accountId = accountId;
+      } catch {
+        return badRequest('accountId invalide.');
+      }
+    }
+  }
+
+  // Monthly contribution
+  if ('monthlyContributionCents' in body) {
+    if (body.monthlyContributionCents == null) {
+      data.monthlyContributionCents = null;
+    } else {
+      const mc = parseCentsInput(body.monthlyContributionCents);
+      if (mc == null || mc < 0) return badRequest('monthlyContributionCents invalide.');
+      data.monthlyContributionCents = BigInt(mc);
+    }
+  }
+
   const updated = await prisma.savingsGoal.update({ where: { id }, data });
 
   return jsonb({ item: updated }, ctx.requestId);

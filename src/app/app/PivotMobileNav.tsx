@@ -13,7 +13,7 @@ import {
   IconBankAccount,
   IconTransaction,
   IconBudget,
-  IconSubscription,
+
   IconSavings,
   IconSettings,
   PivotLogo,
@@ -45,7 +45,7 @@ function getPersoItems(): MenuItem[] {
     { icon: <IconBankAccount size={22} color="currentColor" />, label: 'Comptes', href: '/app/personal/comptes' },
     { icon: <IconTransaction size={22} color="currentColor" />, label: 'Transactions', href: '/app/personal/transactions' },
     { icon: <IconBudget size={22} color="currentColor" />, label: 'Budgets', href: '/app/personal/budgets' },
-    { icon: <IconSubscription size={22} color="currentColor" />, label: 'Abonnements', href: '/app/personal/subscriptions' },
+
     { icon: <IconSavings size={22} color="currentColor" />, label: 'Épargne', href: '/app/personal/epargne' },
     { icon: <CalendarDays size={22} />, label: 'Calendrier', href: '/app/personal/calendar' },
   ];

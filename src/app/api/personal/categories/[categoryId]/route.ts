@@ -23,18 +23,31 @@ export const PATCH = withPersonalRoute(async (ctx, req) => {
   const body = await readJson(req);
   if (!isRecord(body)) return badRequest('Payload invalide.');
 
-  const name = typeof body.name === 'string' ? body.name.trim() : '';
-  if (!name) return badRequest('name requis.');
+  const data: Record<string, unknown> = {};
 
-  const duplicate = await prisma.personalCategory.findFirst({
-    where: { userId: ctx.userId, name, id: { not: id } },
-    select: { id: true },
-  });
-  if (duplicate) return badRequest('Cette catégorie existe déjà.');
+  if (typeof body.name === 'string') {
+    const name = body.name.trim();
+    if (!name) return badRequest('name requis.');
+    const duplicate = await prisma.personalCategory.findFirst({
+      where: { userId: ctx.userId, name, id: { not: id } },
+      select: { id: true },
+    });
+    if (duplicate) return badRequest('Cette catégorie existe déjà.');
+    data.name = name;
+  }
+
+  if (body.icon !== undefined) {
+    data.icon = typeof body.icon === 'string' ? body.icon.trim() || null : null;
+  }
+  if (body.color !== undefined) {
+    data.color = typeof body.color === 'string' ? body.color.trim() || null : null;
+  }
+
+  if (Object.keys(data).length === 0) return badRequest('Aucun champ à modifier.');
 
   const updated = await prisma.personalCategory.update({
     where: { id },
-    data: { name },
+    data,
   });
 
   return jsonb({ item: updated }, ctx.requestId);
