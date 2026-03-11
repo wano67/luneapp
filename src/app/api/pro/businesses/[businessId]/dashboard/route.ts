@@ -47,6 +47,12 @@ export const GET = withBusinessRoute({ minRole: 'VIEWER' }, async (ctx, req) => 
     allTimeIncomeAgg,
     allTimeExpenseAgg,
     latestFinanceRows,
+    prospectsActiveCount,
+    prospectsWonCount,
+    teamCount,
+    overdueTasksCount,
+    overdueInvoicesCount,
+    latestInvoices,
   ] = await Promise.all([
     prisma.client.count({ where: { businessId: ctx.businessId } }),
     getProjectCounts({ businessId: ctx.businessId.toString() }),
@@ -108,6 +114,26 @@ export const GET = withBusinessRoute({ minRole: 'VIEWER' }, async (ctx, req) => 
       orderBy: { date: 'desc' },
       take: 5,
       select: { id: true, type: true, amountCents: true, category: true, vendor: true, date: true, projectId: true },
+    }),
+    // Prospects pipeline
+    prisma.prospect.count({ where: { businessId: ctx.businessId, status: { in: ['NEW', 'FOLLOW_UP'] } } }),
+    prisma.prospect.count({ where: { businessId: ctx.businessId, status: 'WON' } }),
+    // Team size
+    prisma.businessMembership.count({ where: { businessId: ctx.businessId } }),
+    // Overdue tasks
+    prisma.task.count({
+      where: { businessId: ctx.businessId, status: { not: TaskStatus.DONE }, dueDate: { lt: now } },
+    }),
+    // Overdue invoices
+    prisma.invoice.count({
+      where: { businessId: ctx.businessId, status: 'SENT', dueAt: { lt: now } },
+    }),
+    // Latest invoices
+    prisma.invoice.findMany({
+      where: { businessId: ctx.businessId, status: { not: 'CANCELLED' } },
+      orderBy: { createdAt: 'desc' },
+      take: 5,
+      select: { id: true, number: true, status: true, totalCents: true, dueAt: true, clientId: true },
     }),
   ]);
 
@@ -235,6 +261,19 @@ export const GET = withBusinessRoute({ minRole: 'VIEWER' }, async (ctx, req) => 
       totalCount: projectCounts.total,
     },
     clientsCount,
+    prospectsActiveCount,
+    prospectsWonCount,
+    teamCount,
+    overdueTasksCount,
+    overdueInvoicesCount,
+    latestInvoices: latestInvoices.map((inv) => ({
+      id: inv.id,
+      number: inv.number,
+      status: inv.status,
+      totalCents: inv.totalCents,
+      dueDate: inv.dueAt,
+      clientId: inv.clientId,
+    })),
     monthFinance,
     latestTasks,
     latestFinances: latestFinanceRows,

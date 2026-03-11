@@ -106,7 +106,7 @@ function isExactActive(pathname: string, href: string): boolean {
 
 /* ═══ Mobile Nav ═══ */
 
-export default function PivotMobileNav({ space, pathname, businessId, businesses, userName: _userName }: Props) {
+export default function PivotMobileNav({ space, pathname, businessId, businesses, userName }: Props) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [closing, setClosing] = useState(false);
   useBodyScrollLock(menuOpen);
@@ -265,6 +265,43 @@ export default function PivotMobileNav({ space, pathname, businessId, businesses
                 </div>
               </div>
             ))}
+
+            {/* Générale — matches sidebar bottom section */}
+            {effectiveSpace !== 'home' && effectiveSpace !== null && (
+              <div>
+                <p
+                  className="px-4 pb-1 select-none"
+                  style={{
+                    color: 'var(--shell-sidebar-text)',
+                    opacity: 0.5,
+                    fontSize: 11,
+                    fontFamily: 'var(--font-barlow), sans-serif',
+                    fontWeight: 300,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.12em',
+                  }}
+                >
+                  Générale
+                </p>
+                <div className="flex flex-col gap-0.5">
+                  <BubbleMenuItem icon={<IconPerso size={22} color="currentColor" />} label="Perso" href="/app/personal" active={space === 'perso'} onClick={close} compact={compact} />
+                  <BubbleMenuItem icon={<IconEntreprise size={22} color="currentColor" />} label="Entreprise" href="/app/pro" active={space === 'pro'} onClick={close} compact={compact} />
+                  <BubbleMenuItem icon={<BarChart3 size={22} />} label="Focus" href="/app/focus" active={space === 'focus'} onClick={close} compact={compact} />
+                </div>
+              </div>
+            )}
+
+            {/* Mon compte */}
+            <div>
+              <BubbleMenuItem
+                icon={<IconSettings size={22} color="currentColor" />}
+                label={userName || 'Mon compte'}
+                href="/app/account"
+                active={pathname.startsWith('/app/account')}
+                onClick={close}
+                compact={compact}
+              />
+            </div>
           </div>
         </div>
       )}

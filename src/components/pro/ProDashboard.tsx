@@ -2,12 +2,26 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { ChevronLeft, AlertCircle, Briefcase, Users, FileText, FolderKanban } from 'lucide-react';
+import {
+  ChevronLeft,
+  AlertCircle,
+  Briefcase,
+  Users,
+  FileText,
+  FolderKanban,
+  TrendingUp,
+  TrendingDown,
+  AlertTriangle,
+  Clock,
+  UserSearch,
+  CheckCircle2,
+  ChevronRight,
+} from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { PageContainer } from '@/components/layouts/PageContainer';
-import { fmtKpi } from '@/lib/format';
+import { fmtKpi, fmtDate } from '@/lib/format';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import { useActiveBusiness } from '@/app/app/pro/ActiveBusinessProvider';
 import { OnboardingModal } from '@/components/ui/OnboardingModal';
@@ -44,9 +58,23 @@ type DashboardPayload = {
   };
   projects?: {
     activeCount?: number;
+    plannedCount?: number;
     totalCount?: number;
   };
   clientsCount?: number;
+  prospectsActiveCount?: number;
+  prospectsWonCount?: number;
+  teamCount?: number;
+  overdueTasksCount?: number;
+  overdueInvoicesCount?: number;
+  latestInvoices?: Array<{
+    id: string;
+    number: string | null;
+    status: string;
+    totalCents: string;
+    dueDate: string | null;
+    clientName: string | null;
+  }>;
   nextActions?: {
     tasks?: Array<{
       id: string;
@@ -82,23 +110,19 @@ type TaskItem = {
 function computeBusinessScore(dashboard: DashboardPayload | null, tasksDone: number, tasksTotal: number) {
   if (!dashboard) return { score: 0, label: 'Chargement', color: 'var(--text-faint)' };
 
-  // Tasks: 25 pts
   const taskScore = tasksTotal > 0 ? Math.min(25, Math.round((tasksDone / tasksTotal) * 25)) : 0;
 
-  // Projects: 25 pts
   const activeProjects = dashboard.projects?.activeCount ?? dashboard.kpis?.projectsActiveCount ?? 0;
   const completedProjects = dashboard.projectMetrics?.completedProjectsCount ?? 0;
-  const totalProjects = (dashboard.projects?.totalCount ?? 0);
+  const totalProjects = dashboard.projects?.totalCount ?? 0;
   const completedRate = totalProjects > 0 ? completedProjects / totalProjects : 0;
   const projectScore = activeProjects > 0 ? Math.min(25, 15 + Math.round(completedRate * 10)) : 0;
 
-  // Finances: 25 pts
   const balance = Number(dashboard.treasury?.balanceCents ?? 0);
   const margin = dashboard.projectMetrics?.avgProfitabilityPercent ?? 0;
   let financeScore = balance > 0 ? 20 : 10;
   if (margin > 20) financeScore = Math.min(25, financeScore + 5);
 
-  // Billing: 25 pts
   const invoiced = Number(dashboard.billing?.totalInvoicedCents ?? 0);
   const paid = Number(dashboard.billing?.totalPaidCents ?? 0);
   const billingScore = invoiced > 0 ? Math.min(25, Math.round((paid / invoiced) * 25)) : 0;
@@ -142,22 +166,80 @@ function PeriodPills({ value, onChange }: { value: number; onChange: (v: number)
   );
 }
 
-/* ═══ KPI pill ═══ */
+/* ═══ KPI Card ═══ */
 
-function KpiPill({ label, value, sub }: { label: string; value: string; sub?: string }) {
-  return (
+function KpiCard({
+  label,
+  value,
+  sub,
+  icon,
+  href,
+  accent,
+  alert,
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+  icon?: React.ReactNode;
+  href?: string;
+  accent?: boolean;
+  alert?: boolean;
+}) {
+  const inner = (
     <div
-      className="flex-1 min-w-0 rounded-xl p-3 animate-fade-in-up"
-      style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
+      className="flex flex-col gap-1 rounded-xl p-4 animate-fade-in-up transition-colors"
+      style={{
+        background: accent ? 'var(--shell-accent)' : 'var(--surface)',
+        border: alert ? '1px solid var(--danger)' : '1px solid var(--border)',
+      }}
     >
-      <p className="text-[10px] font-medium uppercase tracking-wider" style={{ color: 'var(--text-faint)' }}>
-        {label}
-      </p>
-      <p className="text-base font-bold truncate" style={{ fontFamily: 'var(--font-barlow), sans-serif' }}>
+      <div className="flex items-center justify-between">
+        <p
+          className="text-[11px] font-medium uppercase tracking-wider"
+          style={{ color: accent ? 'rgba(255,255,255,0.7)' : 'var(--text-faint)' }}
+        >
+          {label}
+        </p>
+        {icon && <span style={{ color: accent ? 'rgba(255,255,255,0.7)' : 'var(--text-faint)' }}>{icon}</span>}
+      </div>
+      <p
+        className="text-xl font-bold truncate tabular-nums"
+        style={{
+          fontFamily: 'var(--font-barlow), sans-serif',
+          color: accent ? 'white' : alert ? 'var(--danger)' : undefined,
+        }}
+      >
         {value}
       </p>
       {sub && (
-        <p className="text-[10px] truncate" style={{ color: 'var(--text-faint)' }}>{sub}</p>
+        <p className="text-[11px] truncate" style={{ color: accent ? 'rgba(255,255,255,0.6)' : 'var(--text-faint)' }}>
+          {sub}
+        </p>
+      )}
+    </div>
+  );
+
+  if (href) {
+    return <Link href={href} className="block hover:opacity-90 transition-opacity">{inner}</Link>;
+  }
+  return inner;
+}
+
+/* ═══ Section Header ═══ */
+
+function SectionHeader({ title, href, linkLabel }: { title: string; href?: string; linkLabel?: string }) {
+  return (
+    <div className="flex items-center justify-between">
+      <h2 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{title}</h2>
+      {href && (
+        <Link
+          href={href}
+          className="flex items-center gap-1 text-xs font-medium transition-colors hover:opacity-80"
+          style={{ color: 'var(--shell-accent)' }}
+        >
+          {linkLabel ?? 'Voir tout'}
+          <ChevronRight size={14} />
+        </Link>
       )}
     </div>
   );
@@ -235,10 +317,23 @@ export default function ProDashboard({ businessId }: { businessId: string }) {
 
   // Projects
   const activeProjects = dashboard?.projects?.activeCount ?? dashboard?.kpis?.projectsActiveCount ?? 0;
+  const plannedProjects = dashboard?.projects?.plannedCount ?? 0;
   const completedProjects = dashboard?.projectMetrics?.completedProjectsCount ?? 0;
 
   // Finance
   const mtdIncome = dashboard?.kpis?.mtdIncomeCents ?? '0';
+  const mtdExpense = dashboard?.kpis?.mtdExpenseCents ?? '0';
+  const balanceCents = dashboard?.treasury?.balanceCents ?? '0';
+  const balancePositive = Number(balanceCents) >= 0;
+
+  // Pipeline
+  const prospectsActive = dashboard?.prospectsActiveCount ?? 0;
+  const prospectsWon = dashboard?.prospectsWonCount ?? 0;
+
+  // Alerts
+  const overdueTasks = dashboard?.overdueTasksCount ?? 0;
+  const overdueInvoices = dashboard?.overdueInvoicesCount ?? 0;
+  const hasAlerts = overdueTasks > 0 || overdueInvoices > 0;
 
   return (
     <PageContainer className="gap-5">
@@ -271,6 +366,7 @@ export default function ProDashboard({ businessId }: { businessId: string }) {
           ]}
         />
       )}
+
       {/* Top row */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Button asChild variant="outline" size="sm">
@@ -282,6 +378,7 @@ export default function ProDashboard({ businessId }: { businessId: string }) {
         <PeriodPills value={periodDays} onChange={setPeriodDays} />
       </div>
 
+      {/* Profile banner */}
       {!profileComplete && !bannerDismissed && isAdminOrOwner && (
         <div className="flex items-center gap-3 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 animate-fade-in-up">
           <AlertCircle size={18} className="shrink-0 text-amber-600" />
@@ -307,9 +404,11 @@ export default function ProDashboard({ businessId }: { businessId: string }) {
       )}
 
       {loading ? (
-        <Card className="p-5">
-          <p className="text-sm text-[var(--text-faint)]">Chargement du dashboard&hellip;</p>
-        </Card>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="rounded-xl p-4 animate-skeleton-pulse" style={{ background: 'var(--surface)', border: '1px solid var(--border)', height: 100 }} />
+          ))}
+        </div>
       ) : error ? (
         <Card className="space-y-2 p-5">
           <p className="text-sm font-semibold text-[var(--danger)]">{error}</p>
@@ -317,6 +416,37 @@ export default function ProDashboard({ businessId }: { businessId: string }) {
         </Card>
       ) : (
         <>
+          {/* ── Alerts banner ── */}
+          {hasAlerts && (
+            <div
+              className="flex flex-wrap items-center gap-4 rounded-xl px-4 py-3 animate-fade-in-up"
+              style={{ background: 'var(--danger-bg)', border: '1px solid var(--danger)' }}
+            >
+              <AlertTriangle size={18} style={{ color: 'var(--danger)' }} className="shrink-0" />
+              {overdueTasks > 0 && (
+                <Link
+                  href={`/app/pro/${businessId}/tasks`}
+                  className="text-sm font-medium hover:underline"
+                  style={{ color: 'var(--danger)' }}
+                >
+                  {overdueTasks} tâche{overdueTasks > 1 ? 's' : ''} en retard
+                </Link>
+              )}
+              {overdueTasks > 0 && overdueInvoices > 0 && (
+                <span className="text-sm" style={{ color: 'var(--danger)' }}>·</span>
+              )}
+              {overdueInvoices > 0 && (
+                <Link
+                  href={`/app/pro/${businessId}/finances`}
+                  className="text-sm font-medium hover:underline"
+                  style={{ color: 'var(--danger)' }}
+                >
+                  {overdueInvoices} facture{overdueInvoices > 1 ? 's' : ''} impayée{overdueInvoices > 1 ? 's' : ''}
+                </Link>
+              )}
+            </div>
+          )}
+
           {/* ── Score Business ── */}
           <div
             className="rounded-xl p-5 animate-fade-in-up"
@@ -353,39 +483,109 @@ export default function ProDashboard({ businessId }: { businessId: string }) {
             </div>
           </div>
 
-          {/* ── KPI summary ── */}
+          {/* ── KPIs financiers — MEMBER+ ── */}
+          {isMemberOrAbove && (
+            <>
+              <SectionHeader title="Finances" href={`/app/pro/${businessId}/finances`} />
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                <KpiCard
+                  label="Trésorerie"
+                  value={fmtKpi(balanceCents)}
+                  sub={balancePositive ? 'Solde positif' : 'Solde négatif'}
+                  icon={balancePositive ? <TrendingUp size={16} /> : <TrendingDown size={16} />}
+                  accent={balancePositive}
+                  alert={!balancePositive}
+                  href={`/app/pro/${businessId}/finances`}
+                />
+                <KpiCard
+                  label="Revenus du mois"
+                  value={fmtKpi(mtdIncome)}
+                  sub={`Dépenses : ${fmtKpi(mtdExpense)}`}
+                  icon={<TrendingUp size={16} />}
+                />
+                <KpiCard
+                  label="A encaisser"
+                  value={fmtKpi(pendingCents)}
+                  sub={`Recouvrement ${collectionPct}%`}
+                  icon={<FileText size={16} />}
+                  alert={overdueInvoices > 0}
+                />
+                <KpiCard
+                  label="Devis signés"
+                  value={fmtKpi(dashboard?.billing?.totalPlannedCents)}
+                  sub="Carnet de commandes"
+                  icon={<CheckCircle2 size={16} />}
+                />
+              </div>
+            </>
+          )}
+
+          {/* ── Activité ── */}
+          <SectionHeader title="Activité" />
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            {isMemberOrAbove && (
-              <KpiPill
-                label="Solde"
-                value={fmtKpi(dashboard?.treasury?.balanceCents)}
-                sub={`+${fmtKpi(mtdIncome)} ce mois`}
-              />
-            )}
-            <KpiPill
+            <KpiCard
               label="Projets"
-              value={`${activeProjects} actif${activeProjects > 1 ? 's' : ''}`}
-              sub={`${completedProjects} termine${completedProjects > 1 ? 's' : ''}`}
+              value={`${activeProjects}`}
+              sub={`${plannedProjects} planifié${plannedProjects > 1 ? 's' : ''} · ${completedProjects} terminé${completedProjects > 1 ? 's' : ''}`}
+              icon={<FolderKanban size={16} />}
+              href={`/app/pro/${businessId}/projects`}
             />
-            <KpiPill
-              label="Taches"
+            <KpiCard
+              label="Tâches"
               value={`${tasksDone}/${tasksTotal}`}
-              sub={`${taskCompletionPct}% terminees`}
+              sub={`${taskCompletionPct}% terminées`}
+              icon={<CheckCircle2 size={16} />}
+              alert={overdueTasks > 0}
+              href={`/app/pro/${businessId}/tasks`}
             />
-            {isMemberOrAbove && (
-              <KpiPill
-                label="Facturation"
-                value={fmtKpi(pendingCents)}
-                sub={`Recouvrement ${collectionPct}%`}
-              />
-            )}
+            <KpiCard
+              label="Clients"
+              value={`${dashboard?.clientsCount ?? 0}`}
+              sub={`${prospectsActive} prospect${prospectsActive > 1 ? 's' : ''} actif${prospectsActive > 1 ? 's' : ''}`}
+              icon={<Users size={16} />}
+              href={`/app/pro/${businessId}/agenda`}
+            />
+            <KpiCard
+              label="Équipe"
+              value={`${dashboard?.teamCount ?? 1}`}
+              sub={prospectsWon > 0 ? `${prospectsWon} prospect${prospectsWon > 1 ? 's' : ''} converti${prospectsWon > 1 ? 's' : ''}` : 'Membres actifs'}
+              icon={<UserSearch size={16} />}
+              href={`/app/pro/${businessId}/team`}
+            />
           </div>
 
-          {/* ── Cashflow chart — MEMBER+ ── */}
+          {/* ── Performance projets — si données disponibles ── */}
+          {(dashboard?.projectMetrics?.avgProfitabilityPercent ?? 0) > 0 && (
+            <div
+              className="grid grid-cols-3 gap-3 rounded-xl p-4 animate-fade-in-up"
+              style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
+            >
+              <div className="text-center">
+                <p className="text-[11px] font-medium uppercase tracking-wider" style={{ color: 'var(--text-faint)' }}>Rentabilité moy.</p>
+                <p className="text-lg font-bold tabular-nums" style={{ fontFamily: 'var(--font-barlow), sans-serif' }}>
+                  {dashboard?.projectMetrics?.avgProfitabilityPercent ?? 0}%
+                </p>
+              </div>
+              <div className="text-center">
+                <p className="text-[11px] font-medium uppercase tracking-wider" style={{ color: 'var(--text-faint)' }}>Durée moy.</p>
+                <p className="text-lg font-bold tabular-nums" style={{ fontFamily: 'var(--font-barlow), sans-serif' }}>
+                  {dashboard?.projectMetrics?.avgDurationDays ?? 0}j
+                </p>
+              </div>
+              <div className="text-center">
+                <p className="text-[11px] font-medium uppercase tracking-wider" style={{ color: 'var(--text-faint)' }}>Projets terminés</p>
+                <p className="text-lg font-bold tabular-nums" style={{ fontFamily: 'var(--font-barlow), sans-serif' }}>
+                  {completedProjects}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* ── Cash flow chart — MEMBER+ ── */}
           {isMemberOrAbove && (
             <div
               className="flex flex-col gap-3 rounded-xl bg-[var(--shell-accent)] p-4 animate-fade-in-up"
-              style={{ animationDelay: '300ms', animationFillMode: 'backwards' }}
+              style={{ animationDelay: '200ms', animationFillMode: 'backwards' }}
             >
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium text-white">Cash flow</span>
@@ -406,8 +606,76 @@ export default function ProDashboard({ businessId }: { businessId: string }) {
               />
             </div>
           )}
+
+          {/* ── Prochaines actions ── */}
+          {((dashboard?.nextActions?.tasks?.length ?? 0) > 0 || (dashboard?.nextActions?.interactions?.length ?? 0) > 0) && (
+            <div className="space-y-3 animate-fade-in-up" style={{ animationDelay: '300ms', animationFillMode: 'backwards' }}>
+              <SectionHeader title="Prochaines actions" href={`/app/pro/${businessId}/tasks`} />
+              <div className="space-y-1">
+                {(dashboard?.nextActions?.tasks ?? []).map((task) => (
+                  <Link
+                    key={task.id}
+                    href={`/app/pro/${businessId}/tasks`}
+                    className="flex items-center gap-3 rounded-xl px-4 py-3 transition-colors hover:bg-[var(--surface-hover)]"
+                    style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
+                  >
+                    <Clock size={16} style={{ color: 'var(--text-faint)' }} className="shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{task.title}</p>
+                      {task.projectName && (
+                        <p className="text-[11px] truncate" style={{ color: 'var(--text-faint)' }}>{task.projectName}</p>
+                      )}
+                    </div>
+                    {task.dueDate && (
+                      <span className="text-xs shrink-0" style={{ color: 'var(--text-faint)' }}>
+                        {fmtDate(task.dueDate)}
+                      </span>
+                    )}
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ── Dernières factures — MEMBER+ ── */}
+          {isMemberOrAbove && (dashboard?.latestInvoices?.length ?? 0) > 0 && (
+            <div className="space-y-3 animate-fade-in-up" style={{ animationDelay: '400ms', animationFillMode: 'backwards' }}>
+              <SectionHeader title="Dernières factures" href={`/app/pro/${businessId}/finances`} />
+              <div className="space-y-1">
+                {(dashboard?.latestInvoices ?? []).map((inv) => (
+                  <div
+                    key={inv.id}
+                    className="flex items-center gap-3 rounded-xl px-4 py-3"
+                    style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
+                  >
+                    <FileText size={16} style={{ color: 'var(--text-faint)' }} className="shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">
+                        {inv.number ?? 'Brouillon'} — {inv.clientName ?? 'Client'}
+                      </p>
+                      <p className="text-[11px]" style={{ color: 'var(--text-faint)' }}>
+                        {inv.status === 'PAID' ? 'Payée' : inv.status === 'SENT' ? 'Envoyée' : 'Brouillon'}
+                        {inv.dueDate ? ` · Éch. ${fmtDate(inv.dueDate)}` : ''}
+                      </p>
+                    </div>
+                    <span className="text-sm font-semibold tabular-nums shrink-0" style={{ fontFamily: 'var(--font-barlow), sans-serif' }}>
+                      {fmtKpi(inv.totalCents)}
+                    </span>
+                    <InvoiceStatusDot status={inv.status} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </>
       )}
     </PageContainer>
   );
+}
+
+/* ═══ Invoice Status Dot ═══ */
+
+function InvoiceStatusDot({ status }: { status: string }) {
+  const color = status === 'PAID' ? 'var(--success)' : status === 'SENT' ? 'var(--warning)' : 'var(--text-faint)';
+  return <div className="shrink-0 h-2 w-2 rounded-full" style={{ background: color }} />;
 }

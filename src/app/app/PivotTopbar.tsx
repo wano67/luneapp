@@ -42,10 +42,15 @@ type SearchResultItem = {
 function formatRelativeDate(dateStr: string): string {
   try {
     const d = new Date(dateStr);
-    const diffDays = Math.ceil((d.getTime() - Date.now()) / 86400000);
-    if (diffDays === 0) return "Aujourd'hui";
-    if (diffDays === 1) return 'Demain';
-    if (diffDays > 1 && diffDays <= 7) return `Dans ${diffDays}j`;
+    const diffMs = Date.now() - d.getTime();
+    const diffMins = Math.floor(diffMs / 60_000);
+    if (diffMins < 1) return 'À l\'instant';
+    if (diffMins < 60) return `Il y a ${diffMins} min`;
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffHours < 24) return `Il y a ${diffHours}h`;
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffDays === 1) return 'Hier';
+    if (diffDays <= 7) return `Il y a ${diffDays}j`;
     return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
   } catch {
     return '';
@@ -445,18 +450,20 @@ function NotificationsDropdown({ onToggleMessaging }: { onToggleMessaging?: () =
                 items.map((notif) => {
                   const iconType = NOTIF_ICONS[notif.type] ?? 'task';
                   const href = notif.type === 'BUSINESS_INVITE'
-                    ? '/app'
-                    : notif.clientId && notif.businessId
-                      ? `/app/pro/${notif.businessId}/clients/${notif.clientId}`
-                      : notif.prospectId && notif.businessId
-                        ? `/app/pro/${notif.businessId}/prospects/${notif.prospectId}`
-                        : notif.calendarEventId && notif.businessId
-                          ? `/app/pro/${notif.businessId}/calendar`
-                          : notif.projectId && notif.businessId
-                            ? `/app/pro/${notif.businessId}/projects/${notif.projectId}`
-                            : notif.taskId && notif.businessId
-                              ? `/app/pro/${notif.businessId}/tasks`
-                              : null;
+                    ? '/app/pro'
+                    : notif.conversationId && notif.businessId
+                      ? `/app/pro/${notif.businessId}/tasks`
+                      : notif.clientId && notif.businessId
+                        ? `/app/pro/${notif.businessId}/clients/${notif.clientId}`
+                        : notif.prospectId && notif.businessId
+                          ? `/app/pro/${notif.businessId}/prospects/${notif.prospectId}`
+                          : notif.calendarEventId && notif.businessId
+                            ? `/app/pro/${notif.businessId}/calendar`
+                            : notif.projectId && notif.businessId
+                              ? `/app/pro/${notif.businessId}/projects/${notif.projectId}`
+                              : notif.taskId && notif.businessId
+                                ? `/app/pro/${notif.businessId}/tasks`
+                                : null;
 
                   const inner = (
                     <div className="flex items-start gap-3">
