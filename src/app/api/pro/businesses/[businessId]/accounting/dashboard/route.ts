@@ -8,8 +8,10 @@ import {
   estimateCFE,
   estimateCVAE,
   computeChargesPatronales,
+  computeDirigeantCost,
   type BusinessLegalForm,
   type TaxRegime,
+  type SocialRegimeType,
   LEGAL_FORM_LABELS,
   VAT_REGIME_LABELS,
 } from '@/config/taxation';
@@ -37,11 +39,13 @@ export const GET = withBusinessRoute<{ businessId: string }>(
       ? { ...(fromDate ? { gte: fromDate } : {}), ...(toDate ? { lte: toDate } : {}) }
       : undefined;
 
-    // Load business info + employee salaries in parallel
-    const [business, finances, employees] = await Promise.all([
+    const resolvedYear = yearParam ? Number.parseInt(yearParam, 10) : new Date().getFullYear();
+
+    // Load business info + employee salaries + associates + goals in parallel
+    const [business, finances, employees, associates, goals] = await Promise.all([
       prisma.business.findUnique({
         where: { id: businessIdBigInt },
-        select: { legalForm: true, taxRegime: true, activityType: true, socialRegime: true },
+        select: { legalForm: true, taxRegime: true, activityType: true, socialRegime: true, capital: true },
       }),
       prisma.finance.findMany({
         where: {
@@ -65,6 +69,14 @@ export const GET = withBusinessRoute<{ businessId: string }>(
           grossSalaryCents: { not: null },
         },
         select: { grossSalaryCents: true },
+      }),
+      prisma.businessAssociate.findMany({
+        where: { businessId: businessIdBigInt },
+        orderBy: { createdAt: 'asc' },
+      }),
+      prisma.businessGoal.findMany({
+        where: { businessId: businessIdBigInt, year: Number.isFinite(resolvedYear) ? resolvedYear : new Date().getFullYear() },
+        orderBy: { createdAt: 'asc' },
       }),
     ]);
 
@@ -166,6 +178,61 @@ export const GET = withBusinessRoute<{ businessId: string }>(
         resultatCents: (data.revenus - data.charges).toString(),
       }));
 
+    // Associates cost computation
+    const socialRegime = (business?.socialRegime ?? 'ASSIMILE_SALARIE') as SocialRegimeType;
+    const capitalCents = business?.capital ?? 0;
+    let coutDirigeantTotalCents = 0;
+    const associatesData = associates.map((a) => {
+      const cost = computeDirigeantCost({
+        grossSalaryYearlyCents: Number(a.grossSalaryYearlyCents),
+        dividendsCents: Number(a.dividendsCents),
+        legalForm,
+        socialRegime,
+        capitalCents,
+        ccaCents: Number(a.ccaCents),
+        effectif,
+      });
+      if (a.isLeader) coutDirigeantTotalCents += cost.coutTotalDirigeantCents;
+      return {
+        id: a.id.toString(),
+        name: a.name,
+        role: a.role,
+        isLeader: a.isLeader,
+        sharePercent: Number(a.sharePercent),
+        coutTotal: cost.coutTotalDirigeantCents,
+        revenuNet: cost.revenuNetTotalCents,
+      };
+    });
+
+    // Goals progress
+    const resultatNum = Number(resultatCents) / 100;
+    const goalsData = goals.map((g) => {
+      const targetCents = Number(g.targetCents);
+      let currentCents = 0;
+      switch (g.metric) {
+        case 'CA_HT':
+          currentCents = Number(totalRevenueCents);
+          break;
+        case 'RESULTAT_NET':
+          currentCents = Math.round(resultatNum * 100);
+          break;
+        case 'REVENU_NET_DIRIGEANT':
+          currentCents = Math.round(fiscal.revenuNetApresImpots * 100);
+          break;
+        case 'MARGE_BRUTE':
+          currentCents = Number(totalRevenueCents) - Number(totalChargeCents);
+          break;
+      }
+      return {
+        id: g.id.toString(),
+        name: g.name,
+        metric: g.metric,
+        targetCents,
+        currentCents,
+        progressPercent: targetCents > 0 ? Math.round((currentCents / targetCents) * 10000) / 100 : 0,
+      };
+    });
+
     return jsonb(
       {
         chiffreAffairesCents: totalRevenueCents.toString(),
@@ -198,6 +265,9 @@ export const GET = withBusinessRoute<{ businessId: string }>(
           .map(([group, data]) => ({ group, totalCents: data.total.toString(), count: data.count }))
           .sort((a, b) => Number(BigInt(b.totalCents) - BigInt(a.totalCents))),
         evolution,
+        associates: associatesData,
+        coutDirigeantTotalCents,
+        goals: goalsData,
       },
       requestId
     );

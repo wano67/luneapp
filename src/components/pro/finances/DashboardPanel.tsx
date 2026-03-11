@@ -33,6 +33,9 @@ type DashboardData = {
   chargesParGroupe: Array<{ group: string; totalCents: string; count: number }>;
   revenusParGroupe: Array<{ group: string; totalCents: string; count: number }>;
   evolution: Array<{ month: string; revenusCents: string; chargesCents: string; resultatCents: string }>;
+  associates: Array<{ id: string; name: string; role: string; isLeader: boolean; sharePercent: number; coutTotal: number; revenuNet: number }>;
+  coutDirigeantTotalCents: number;
+  goals: Array<{ id: string; name: string; metric: string; targetCents: number; currentCents: number; progressPercent: number }>;
 };
 
 function kpi(cents: string | number) {
@@ -283,6 +286,62 @@ export function DashboardPanel({ businessId }: { businessId: string }) {
                 Base sur les salaires bruts renseignes dans les profils employes.
                 <Link href={`/app/pro/${businessId}/team`} className="ml-1 underline">Gerer l&apos;equipe</Link>
               </p>
+            </Card>
+          )}
+
+          {/* Cout dirigeant */}
+          {data.associates.filter((a) => a.isLeader).length > 0 && (
+            <Card className="p-4">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-[var(--text-secondary)]">
+                Cout dirigeant(s)
+              </p>
+              <div className="space-y-1.5 text-sm">
+                {data.associates.filter((a) => a.isLeader).map((a) => (
+                  <div key={a.id} className="flex justify-between">
+                    <span className="text-[var(--text-secondary)]">{a.name}</span>
+                    <span className="font-medium">{kpi(a.coutTotal)}</span>
+                  </div>
+                ))}
+                <div className="flex justify-between border-t border-[var(--border)]/40 pt-1.5">
+                  <span className="text-[var(--text-secondary)]">Cout total dirigeant(s)</span>
+                  <span className="font-semibold">{kpi(data.coutDirigeantTotalCents)}</span>
+                </div>
+              </div>
+              <p className="mt-2 text-[10px] text-[var(--text-secondary)]">
+                <Link href={`/app/pro/${businessId}/accounting?tab=dirigeant`} className="underline">Gerer les associes</Link>
+              </p>
+            </Card>
+          )}
+
+          {/* Objectifs financiers */}
+          {data.goals.length > 0 && (
+            <Card className="p-4">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-[var(--text-secondary)]">
+                Objectifs
+              </p>
+              <div className="space-y-2">
+                {data.goals.map((g) => (
+                  <div key={g.id}>
+                    <div className="flex items-center justify-between text-xs mb-0.5">
+                      <span className="text-[var(--text-primary)] font-medium">{g.name}</span>
+                      <span className="text-[var(--text-secondary)]">{g.progressPercent}%</span>
+                    </div>
+                    <div className="h-2 rounded-full bg-[var(--surface-2)]">
+                      <div
+                        className="h-2 rounded-full transition-all"
+                        style={{
+                          width: `${Math.min(100, g.progressPercent)}%`,
+                          background: g.progressPercent >= 100 ? 'var(--success, #10b981)' : 'var(--shell-accent)',
+                        }}
+                      />
+                    </div>
+                    <div className="flex justify-between text-[10px] text-[var(--text-secondary)] mt-0.5">
+                      <span>{kpi(g.currentCents)}</span>
+                      <span>{kpi(g.targetCents)}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </Card>
           )}
         </>

@@ -713,6 +713,266 @@ export function estimateFiscal(params: {
   };
 }
 
+// ── Dividendes ───────────────────────────────────────────────────────────────────
+
+export const PFU = {
+  IR: 0.128,
+  PS: 0.172,
+  TOTAL: 0.30,
+  /** SARL/EURL : seuil au-dela duquel les dividendes sont soumis aux cotisations TNS */
+  SEUIL_TNS_SARL: 0.10,
+} as const;
+
+export type DividendTaxResult = {
+  brutCents: number;
+  pfuIR: number;
+  pfuPS: number;
+  pfuTotal: number;
+  /** Cotisations TNS sur la part excedant le seuil 10% (SARL/EURL uniquement) */
+  tnsSurplus: number;
+  netCents: number;
+};
+
+/**
+ * Calcule la fiscalite des dividendes selon la forme juridique.
+ * - PFU 30% (12.8% IR + 17.2% PS) pour toutes les formes
+ * - SARL/EURL : les dividendes > 10% de (capital + CCA) sont soumis aux cotisations TNS
+ */
+export function computeDividendTax(params: {
+  dividendsCents: number;
+  legalForm: BusinessLegalForm;
+  capitalCents: number;
+  ccaCents: number;
+}): DividendTaxResult {
+  const { dividendsCents, legalForm, capitalCents, ccaCents } = params;
+  if (dividendsCents <= 0) {
+    return { brutCents: 0, pfuIR: 0, pfuPS: 0, pfuTotal: 0, tnsSurplus: 0, netCents: 0 };
+  }
+
+  const brut = dividendsCents / 100;
+  const pfuIR = Math.round(brut * PFU.IR * 100) / 100;
+
+  // SARL/EURL : seuil 10% de (capital + CCA)
+  let tnsSurplus = 0;
+  let pfuPS: number;
+  if (legalForm === 'SARL' || legalForm === 'EURL') {
+    const seuilEuros = ((capitalCents + ccaCents) / 100) * PFU.SEUIL_TNS_SARL;
+    const partSousPFU = Math.min(brut, seuilEuros);
+    const partSousTNS = Math.max(0, brut - seuilEuros);
+    pfuPS = Math.round(partSousPFU * PFU.PS * 100) / 100;
+    tnsSurplus = Math.round(estimateTNSCotisations(partSousTNS) * 100) / 100;
+  } else {
+    pfuPS = Math.round(brut * PFU.PS * 100) / 100;
+  }
+
+  const pfuTotal = pfuIR + pfuPS;
+  const totalTax = pfuTotal + tnsSurplus;
+  const netCents = Math.round((brut - totalTax) * 100);
+
+  return {
+    brutCents: dividendsCents,
+    pfuIR: Math.round(pfuIR * 100),
+    pfuPS: Math.round(pfuPS * 100),
+    pfuTotal: Math.round(pfuTotal * 100),
+    tnsSurplus: Math.round(tnsSurplus * 100),
+    netCents,
+  };
+}
+
+// ── Cout dirigeant ──────────────────────────────────────────────────────────────
+
+export type DirigeantCostResult = {
+  grossSalaryCents: number;
+  chargesPatronalesCents: number;
+  cotisationsTNSCents: number;
+  coutTotalRemunerationCents: number;
+  netAvantIRCents: number;
+  dividendesBrutsCents: number;
+  dividendesTaxCents: number;
+  dividendesNetsCents: number;
+  coutTotalDirigeantCents: number;
+  revenuNetTotalCents: number;
+};
+
+/**
+ * Calcule le cout complet d'un dirigeant (remuneration + dividendes).
+ */
+export function computeDirigeantCost(params: {
+  grossSalaryYearlyCents: number;
+  dividendsCents: number;
+  legalForm: BusinessLegalForm;
+  socialRegime: SocialRegimeType;
+  capitalCents: number;
+  ccaCents: number;
+  effectif: number;
+}): DirigeantCostResult {
+  const { grossSalaryYearlyCents, dividendsCents, legalForm, socialRegime, capitalCents, ccaCents, effectif } = params;
+
+  let chargesPatronalesCents = 0;
+  let cotisationsTNSCents = 0;
+  let netAvantIRCents = 0;
+
+  if (socialRegime === 'ASSIMILE_SALARIE') {
+    // President SAS/SASU/SA : charges patronales sur le brut
+    const grossMensuel = (grossSalaryYearlyCents / 100) / 12;
+    const charges = computeChargesPatronales(grossMensuel, effectif);
+    chargesPatronalesCents = Math.round(charges.total * 12 * 100);
+    netAvantIRCents = Math.round(grossSalaryYearlyCents * ASSIMILE_SALARIE.RATIO_NET_BRUT);
+  } else if (socialRegime === 'TNS') {
+    // Gerant SARL/EURL : cotisations TNS sur le revenu net
+    const revenuNet = grossSalaryYearlyCents / 100;
+    const tns = computeTNSDetaille(revenuNet);
+    cotisationsTNSCents = Math.round(tns.total * 100);
+    netAvantIRCents = grossSalaryYearlyCents - cotisationsTNSCents;
+  } else {
+    // Micro : pas de charges patronales
+    netAvantIRCents = grossSalaryYearlyCents;
+  }
+
+  const coutTotalRemunerationCents = grossSalaryYearlyCents + chargesPatronalesCents + cotisationsTNSCents;
+
+  // Dividendes
+  const divTax = computeDividendTax({ dividendsCents, legalForm, capitalCents, ccaCents });
+
+  return {
+    grossSalaryCents: grossSalaryYearlyCents,
+    chargesPatronalesCents,
+    cotisationsTNSCents,
+    coutTotalRemunerationCents,
+    netAvantIRCents,
+    dividendesBrutsCents: dividendsCents,
+    dividendesTaxCents: divTax.pfuTotal + divTax.tnsSurplus,
+    dividendesNetsCents: divTax.netCents,
+    coutTotalDirigeantCents: coutTotalRemunerationCents + dividendsCents,
+    revenuNetTotalCents: netAvantIRCents + divTax.netCents,
+  };
+}
+
+// ── Optimisation remuneration ─────────────────────────────────────────────────
+
+/**
+ * Teste des repartitions salaire/dividendes par pas de 5%
+ * pour maximiser le net du dirigeant.
+ */
+export function optimizeCompensation(params: {
+  totalBudgetCents: number;
+  legalForm: BusinessLegalForm;
+  socialRegime: SocialRegimeType;
+  capitalCents: number;
+  ccaCents: number;
+  effectif: number;
+}): { optimalSalaryCents: number; optimalDividendsCents: number; netMaxCents: number } {
+  const { totalBudgetCents, legalForm, socialRegime, capitalCents, ccaCents, effectif } = params;
+  if (totalBudgetCents <= 0) {
+    return { optimalSalaryCents: 0, optimalDividendsCents: 0, netMaxCents: 0 };
+  }
+
+  let bestNet = -Infinity;
+  let bestSalary = 0;
+  let bestDiv = 0;
+
+  for (let pct = 0; pct <= 100; pct += 5) {
+    const salary = Math.round(totalBudgetCents * pct / 100);
+    const div = totalBudgetCents - salary;
+    const result = computeDirigeantCost({
+      grossSalaryYearlyCents: salary,
+      dividendsCents: div,
+      legalForm,
+      socialRegime,
+      capitalCents,
+      ccaCents,
+      effectif,
+    });
+    if (result.revenuNetTotalCents > bestNet) {
+      bestNet = result.revenuNetTotalCents;
+      bestSalary = salary;
+      bestDiv = div;
+    }
+  }
+
+  return { optimalSalaryCents: bestSalary, optimalDividendsCents: bestDiv, netMaxCents: bestNet };
+}
+
+// ── CA necessaire pour un revenu net cible ──────────────────────────────────────
+
+/**
+ * Trouve le CA HT necessaire pour atteindre un revenu net cible
+ * apres IS/IR, cotisations sociales et fiscalite des dividendes.
+ * Utilise une recherche par bisection (max 50 iterations).
+ */
+export function computeCAForTargetNet(params: {
+  targetNetCents: number;
+  legalForm: BusinessLegalForm;
+  taxRegime: TaxRegime;
+  socialRegime: SocialRegimeType;
+  chargesFixesCents: number;
+  salaryRatio: number;
+  dividendRatio: number;
+  capitalCents: number;
+  ccaCents: number;
+  effectif: number;
+}): { requiredCACents: number; breakdown: DirigeantCostResult } {
+  const {
+    targetNetCents, legalForm, taxRegime, socialRegime,
+    chargesFixesCents, salaryRatio, dividendRatio,
+    capitalCents, ccaCents, effectif,
+  } = params;
+
+  if (targetNetCents <= 0) {
+    return {
+      requiredCACents: 0,
+      breakdown: computeDirigeantCost({
+        grossSalaryYearlyCents: 0, dividendsCents: 0,
+        legalForm, socialRegime, capitalCents, ccaCents, effectif,
+      }),
+    };
+  }
+
+  function netForCA(caCents: number): { net: number; breakdown: DirigeantCostResult } {
+    const caEuros = caCents / 100;
+    const chargesEuros = chargesFixesCents / 100;
+    const resultat = Math.max(0, caEuros - chargesEuros);
+
+    // IS/IR sur le resultat
+    let impot: number;
+    if (taxRegime === 'IS') {
+      impot = computeIS(resultat);
+    } else {
+      impot = computeIR(resultat);
+    }
+
+    const resultatApresImpot = Math.max(0, resultat - impot);
+    const salaryBudget = Math.round(resultatApresImpot * salaryRatio * 100);
+    const divBudget = Math.round(resultatApresImpot * dividendRatio * 100);
+
+    const breakdown = computeDirigeantCost({
+      grossSalaryYearlyCents: salaryBudget,
+      dividendsCents: divBudget,
+      legalForm, socialRegime, capitalCents, ccaCents, effectif,
+    });
+
+    return { net: breakdown.revenuNetTotalCents, breakdown };
+  }
+
+  // Bisection : chercher le CA entre 0 et 100x le target
+  let lo = 0;
+  let hi = targetNetCents * 100;
+  let bestBreakdown = netForCA(hi).breakdown;
+
+  for (let i = 0; i < 50; i++) {
+    const mid = Math.round((lo + hi) / 2);
+    const { net, breakdown } = netForCA(mid);
+    bestBreakdown = breakdown;
+    if (net < targetNetCents) {
+      lo = mid + 1;
+    } else {
+      hi = mid;
+    }
+  }
+
+  return { requiredCACents: hi, breakdown: bestBreakdown };
+}
+
 // ── Labels ───────────────────────────────────────────────────────────────────────
 
 export const LEGAL_FORM_LABELS: Record<BusinessLegalForm, string> = {

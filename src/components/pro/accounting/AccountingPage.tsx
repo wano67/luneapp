@@ -12,6 +12,7 @@ import { LedgerPanel } from '@/components/pro/finances/LedgerPanel';
 import { FixedChargesPanel } from '@/components/pro/finances/FixedChargesPanel';
 import { DashboardPanel } from '@/components/pro/finances/DashboardPanel';
 import { ReportsPanel } from '@/components/pro/finances/ReportsPanel';
+import { DirigeantPanel } from '@/components/pro/finances/DirigeantPanel';
 
 type Props = { businessId: string };
 
@@ -25,6 +26,7 @@ const TABS = [
   { key: 'forecasting', label: 'Prévisions' },
   { key: 'ledger', label: 'Grand livre' },
   { key: 'reports', label: 'Rapports' },
+  { key: 'dirigeant', label: 'Dirigeant & Associes' },
 ] as const;
 
 type TabKey = (typeof TABS)[number]['key'];
@@ -65,6 +67,8 @@ export default function AccountingPage({ businessId }: Props) {
         return <LedgerPanel businessId={businessId} />;
       case 'reports':
         return <ReportsPanel businessId={businessId} />;
+      case 'dirigeant':
+        return <DirigeantPanel businessId={businessId} />;
       default:
         return <DashboardPanel businessId={businessId} />;
     }

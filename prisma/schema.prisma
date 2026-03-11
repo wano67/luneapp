@@ -281,6 +281,8 @@ model Business {
   calendarEvents CalendarEvent[]
   calendarTokens CalendarToken[]
   projectShareTokens ProjectShareToken[]
+  associates BusinessAssociate[]
+  goals      BusinessGoal[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1893,6 +1895,56 @@ enum ContractType {
   STAGE
   ALTERNANCE
   FREELANCE
+}
+
+enum AssociateRole {
+  PRESIDENT
+  DIRECTEUR_GENERAL
+  GERANT_MAJORITAIRE
+  GERANT_MINORITAIRE
+  ASSOCIE
+}
+
+enum GoalMetric {
+  CA_HT
+  RESULTAT_NET
+  REVENU_NET_DIRIGEANT
+  MARGE_BRUTE
+}
+
+model BusinessAssociate {
+  id                     BigInt        @id @default(autoincrement())
+  businessId             BigInt
+  name                   String
+  role                   AssociateRole
+  isLeader               Boolean       @default(false)
+  sharePercent           Decimal       @db.Decimal(5, 2)
+  grossSalaryYearlyCents BigInt        @default(0)
+  dividendsCents         BigInt        @default(0)
+  ccaCents               BigInt        @default(0)
+  nbParts                Int           @default(1)
+  createdAt              DateTime      @default(now())
+  updatedAt              DateTime      @updatedAt
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([businessId])
+}
+
+model BusinessGoal {
+  id          BigInt     @id @default(autoincrement())
+  businessId  BigInt
+  name        String
+  targetCents BigInt
+  metric      GoalMetric
+  year        Int
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@unique([businessId, metric, year])
+  @@index([businessId])
 }
 
 model Notification {
