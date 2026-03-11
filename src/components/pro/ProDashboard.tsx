@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { ChevronLeft, ChevronRight, Banknote, Briefcase, ListChecks, BookUser, Receipt, AlertCircle, Users, FileText, FolderKanban } from 'lucide-react';
+import { ChevronLeft, AlertCircle, Briefcase, Users, FileText, FolderKanban } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -142,50 +142,24 @@ function PeriodPills({ value, onChange }: { value: number; onChange: (v: number)
   );
 }
 
-/* ═══ Mini progress bar ═══ */
+/* ═══ KPI pill ═══ */
 
-function MiniProgress({ value, color }: { value: number; color: string }) {
-  const pct = Math.max(0, Math.min(100, value));
+function KpiPill({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
-    <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--surface-2)', width: 60 }}>
-      <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: color }} />
+    <div
+      className="flex-1 min-w-0 rounded-xl p-3 animate-fade-in-up"
+      style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
+    >
+      <p className="text-[10px] font-medium uppercase tracking-wider" style={{ color: 'var(--text-faint)' }}>
+        {label}
+      </p>
+      <p className="text-base font-bold truncate" style={{ fontFamily: 'var(--font-barlow), sans-serif' }}>
+        {value}
+      </p>
+      {sub && (
+        <p className="text-[10px] truncate" style={{ color: 'var(--text-faint)' }}>{sub}</p>
+      )}
     </div>
-  );
-}
-
-/* ═══ Universe card ═══ */
-
-function UniverseCard({
-  icon,
-  title,
-  href,
-  children,
-  delay = 0,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  href: string;
-  children: React.ReactNode;
-  delay?: number;
-}) {
-  return (
-    <Link href={href} className="block animate-fade-in-up" style={{ animationDelay: `${delay}ms`, animationFillMode: 'backwards' }}>
-      <Card className="card-interactive p-4">
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-2.5">
-            <div
-              className="flex items-center justify-center rounded-lg card-interactive__icon"
-              style={{ width: 32, height: 32, background: 'var(--surface-2)', border: '1px solid var(--border)' }}
-            >
-              {icon}
-            </div>
-            <span className="text-sm font-semibold">{title}</span>
-          </div>
-          <ChevronRight size={16} className="text-[var(--text-faint)]" />
-        </div>
-        {children}
-      </Card>
-    </Link>
   );
 }
 
@@ -262,15 +236,9 @@ export default function ProDashboard({ businessId }: { businessId: string }) {
   // Projects
   const activeProjects = dashboard?.projects?.activeCount ?? dashboard?.kpis?.projectsActiveCount ?? 0;
   const completedProjects = dashboard?.projectMetrics?.completedProjectsCount ?? 0;
-  const avgMargin = dashboard?.projectMetrics?.avgProfitabilityPercent ?? 0;
-
-  // CRM
-  const clientsCount = dashboard?.clientsCount ?? 0;
-  const upcomingInteractions = dashboard?.nextActions?.interactions?.length ?? 0;
 
   // Finance
   const mtdIncome = dashboard?.kpis?.mtdIncomeCents ?? '0';
-  const mtdExpense = dashboard?.kpis?.mtdExpenseCents ?? '0';
 
   return (
     <PageContainer className="gap-5">
@@ -385,103 +353,31 @@ export default function ProDashboard({ businessId }: { businessId: string }) {
             </div>
           </div>
 
-          {/* ── Universe cards ── */}
-          <div className="grid gap-3 sm:grid-cols-2">
-            {/* Finances — MEMBER+ */}
+          {/* ── KPI summary ── */}
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             {isMemberOrAbove && (
-              <UniverseCard
-                icon={<Banknote size={16} className="text-[var(--text-faint)]" />}
-                title="Finances"
-                href={`/app/pro/${businessId}/finances`}
-                delay={50}
-              >
-                <p className="text-lg font-bold" style={{ fontFamily: 'var(--font-barlow), sans-serif' }}>
-                  {fmtKpi(dashboard?.treasury?.balanceCents)}
-                </p>
-                <div className="flex items-center gap-3 mt-1 text-xs text-[var(--text-faint)]">
-                  <span>+{fmtKpi(mtdIncome)} ce mois</span>
-                  <span>-{fmtKpi(mtdExpense)}</span>
-                </div>
-              </UniverseCard>
+              <KpiPill
+                label="Solde"
+                value={fmtKpi(dashboard?.treasury?.balanceCents)}
+                sub={`+${fmtKpi(mtdIncome)} ce mois`}
+              />
             )}
-
-            {/* Projets */}
-            <UniverseCard
-              icon={<Briefcase size={16} className="text-[var(--text-faint)]" />}
-              title="Projets"
-              href={`/app/pro/${businessId}/projects`}
-              delay={100}
-            >
-              <div className="flex items-center gap-3">
-                <span className="text-lg font-bold" style={{ fontFamily: 'var(--font-barlow), sans-serif' }}>
-                  {activeProjects} actif{activeProjects > 1 ? 's' : ''}
-                </span>
-                <span className="text-xs text-[var(--text-faint)]">{completedProjects} termine{completedProjects > 1 ? 's' : ''}</span>
-              </div>
-              {avgMargin > 0 && (
-                <div className="flex items-center gap-2 mt-1">
-                  <span className="text-xs text-[var(--text-faint)]">Marge {avgMargin}%</span>
-                  <MiniProgress value={avgMargin} color={avgMargin >= 20 ? 'var(--success)' : 'var(--warning)'} />
-                </div>
-              )}
-            </UniverseCard>
-
-            {/* Taches */}
-            <UniverseCard
-              icon={<ListChecks size={16} className="text-[var(--text-faint)]" />}
-              title="Taches"
-              href={`/app/pro/${businessId}/tasks`}
-              delay={150}
-            >
-              <div className="flex items-center gap-3">
-                <span className="text-lg font-bold" style={{ fontFamily: 'var(--font-barlow), sans-serif' }}>
-                  {tasksDone}/{tasksTotal}
-                </span>
-                <span className="text-xs text-[var(--text-faint)]">terminees</span>
-              </div>
-              <div className="flex items-center gap-2 mt-1">
-                <MiniProgress value={taskCompletionPct} color={taskCompletionPct >= 80 ? 'var(--success)' : 'var(--accent)'} />
-                <span className="text-xs text-[var(--text-faint)]">{taskCompletionPct}%</span>
-              </div>
-            </UniverseCard>
-
-            {/* CRM — MEMBER+ */}
+            <KpiPill
+              label="Projets"
+              value={`${activeProjects} actif${activeProjects > 1 ? 's' : ''}`}
+              sub={`${completedProjects} termine${completedProjects > 1 ? 's' : ''}`}
+            />
+            <KpiPill
+              label="Taches"
+              value={`${tasksDone}/${tasksTotal}`}
+              sub={`${taskCompletionPct}% terminees`}
+            />
             {isMemberOrAbove && (
-              <UniverseCard
-                icon={<BookUser size={16} className="text-[var(--text-faint)]" />}
-                title="CRM"
-                href={`/app/pro/${businessId}/agenda`}
-                delay={200}
-              >
-                <div className="flex items-center gap-3">
-                  <span className="text-lg font-bold" style={{ fontFamily: 'var(--font-barlow), sans-serif' }}>
-                    {clientsCount} client{clientsCount > 1 ? 's' : ''}
-                  </span>
-                </div>
-                {upcomingInteractions > 0 && (
-                  <p className="text-xs mt-1" style={{ color: 'var(--warning)' }}>
-                    {upcomingInteractions} relance{upcomingInteractions > 1 ? 's' : ''} a faire
-                  </p>
-                )}
-              </UniverseCard>
-            )}
-
-            {/* Facturation — MEMBER+ */}
-            {isMemberOrAbove && (
-              <UniverseCard
-                icon={<Receipt size={16} className="text-[var(--text-faint)]" />}
-                title="Facturation"
-                href={`/app/pro/${businessId}/finances`}
-                delay={250}
-              >
-                <p className="text-lg font-bold" style={{ fontFamily: 'var(--font-barlow), sans-serif' }}>
-                  {fmtKpi(pendingCents)} en attente
-                </p>
-                <div className="flex items-center gap-2 mt-1">
-                  <span className="text-xs text-[var(--text-faint)]">Recouvrement {collectionPct}%</span>
-                  <MiniProgress value={collectionPct} color={collectionPct >= 80 ? 'var(--success)' : 'var(--warning)'} />
-                </div>
-              </UniverseCard>
+              <KpiPill
+                label="Facturation"
+                value={fmtKpi(pendingCents)}
+                sub={`Recouvrement ${collectionPct}%`}
+              />
             )}
           </div>
 

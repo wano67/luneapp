@@ -11,15 +11,9 @@ import {
   IconFocus,
   IconUser,
   IconToggleSidebar,
-  IconHome,
-  IconBankAccount,
-  IconTransaction,
-  IconBudget,
-
-  IconSavings,
   PivotLogo,
 } from '@/components/pivot-icons';
-import { CalendarDays } from 'lucide-react';
+import { personalNavSections } from '@/config/personalNav';
 import { useActiveBusiness } from './pro/ActiveBusinessProvider';
 import type { Space, BusinessItem } from './PivotShell';
 
@@ -115,18 +109,26 @@ export default function PivotSidebar({ space, pathname, businessId, businesses: 
           );
         })}
 
-        {/* Wallet nav */}
-        {space === 'perso' && (
-          <Section title="Wallet" collapsed={collapsed}>
-            <Item icon={(c) => <IconHome size={20} color={c} />} label="Vue d'accueil" href="/app/personal" active={isExactActive(pathname, '/app/personal')} collapsed={collapsed} />
-            <Item icon={(c) => <IconBankAccount size={20} color={c} />} label="Comptes" href="/app/personal/comptes" active={pathname.startsWith('/app/personal/comptes')} collapsed={collapsed} />
-            <Item icon={(c) => <IconTransaction size={20} color={c} />} label="Transactions" href="/app/personal/transactions" active={pathname.startsWith('/app/personal/transactions')} collapsed={collapsed} />
-            <Item icon={(c) => <IconBudget size={20} color={c} />} label="Budgets" href="/app/personal/budgets" active={pathname.startsWith('/app/personal/budgets')} collapsed={collapsed} />
-
-            <Item icon={(c) => <IconSavings size={20} color={c} />} label="Épargne" href="/app/personal/epargne" active={pathname.startsWith('/app/personal/epargne')} collapsed={collapsed} />
-            <Item icon={(c) => <CalendarDays size={20} color={c} />} label="Calendrier" href="/app/personal/calendar" active={pathname.startsWith('/app/personal/calendar')} collapsed={collapsed} />
+        {/* Personal nav (when in perso space) */}
+        {space === 'perso' && personalNavSections.map((section) => (
+          <Section key={section.id} title={section.title} collapsed={collapsed}>
+            {section.items.map((item) => {
+              const active = item.exact
+                ? isExactActive(pathname, item.href)
+                : pathname.startsWith(item.href);
+              return (
+                <Item
+                  key={item.id}
+                  icon={item.icon}
+                  label={item.label}
+                  href={item.href}
+                  active={active}
+                  collapsed={collapsed}
+                />
+              );
+            })}
           </Section>
-        )}
+        ))}
 
         {/* Focus nav */}
         {space === 'focus' && (

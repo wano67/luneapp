@@ -9,17 +9,12 @@ import {
   IconPerso,
   IconEntreprise,
   IconFocus,
-  IconHome,
-  IconBankAccount,
-  IconTransaction,
-  IconBudget,
-
-  IconSavings,
   IconSettings,
   PivotLogo,
 } from '@/components/pivot-icons';
-import { CalendarDays, Menu } from 'lucide-react';
+import { Menu } from 'lucide-react';
 import { proNavSections, hasMinRole } from '@/config/proNav';
+import { personalNavSections } from '@/config/personalNav';
 import { pivotIconMap } from '@/config/pivotNavIcons';
 import { useActiveBusiness } from './pro/ActiveBusinessProvider';
 import type { Space, BusinessItem } from './PivotShell';
@@ -45,16 +40,15 @@ type MenuSection = {
 
 /* ═══ Menu items per section ═══ */
 
-function getPersoItems(): MenuItem[] {
-  return [
-    { icon: <IconHome size={22} color="currentColor" />, label: 'Vue d\'accueil', href: '/app/personal' },
-    { icon: <IconBankAccount size={22} color="currentColor" />, label: 'Comptes', href: '/app/personal/comptes' },
-    { icon: <IconTransaction size={22} color="currentColor" />, label: 'Transactions', href: '/app/personal/transactions' },
-    { icon: <IconBudget size={22} color="currentColor" />, label: 'Budgets', href: '/app/personal/budgets' },
-
-    { icon: <IconSavings size={22} color="currentColor" />, label: 'Épargne', href: '/app/personal/epargne' },
-    { icon: <CalendarDays size={22} />, label: 'Calendrier', href: '/app/personal/calendar' },
-  ];
+function getPersoSections(): MenuSection[] {
+  return personalNavSections.map((section) => ({
+    title: section.title,
+    items: section.items.map((item) => ({
+      icon: item.icon('currentColor'),
+      label: item.label,
+      href: item.href,
+    })),
+  }));
 }
 
 function getProSections(businessId: string, role?: string | null, activityType?: string | null): MenuSection[] {
@@ -88,7 +82,7 @@ function getFocusItems(): MenuItem[] {
 }
 
 function getSectionTitle(space: Space, inBusiness: boolean): string {
-  if (space === 'perso') return 'Wallet';
+  if (space === 'perso') return 'Finances perso';
   if (space === 'pro' && inBusiness) return 'Entreprise';
   if (space === 'pro') return 'Pro';
   if (space === 'focus') return 'Performance';
@@ -140,7 +134,7 @@ export default function PivotMobileNav({ space, pathname, businessId, businesses
       { icon: <IconSettings size={22} color="currentColor" />, label: 'Mon compte', href: '/app/account' },
     ] }];
   } else if (effectiveSpace === 'perso') {
-    menuSections = [{ title: 'Wallet', items: getPersoItems() }];
+    menuSections = getPersoSections();
   } else if (effectiveSpace === 'pro' && businessId) {
     menuSections = getProSections(businessId, activeCtx?.activeBusiness?.role, activeCtx?.activeBusiness?.activityType);
   } else if (effectiveSpace === 'pro') {
