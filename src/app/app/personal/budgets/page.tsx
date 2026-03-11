@@ -436,10 +436,6 @@ export default function BudgetsPage() {
 
   /* ═══ Computed ═══ */
 
-  const activeSubs = subscriptions.filter((s) => s.isActive);
-  const fixedMonthlyCents = activeSubs.reduce(
-    (acc, s) => acc + toMonthlyCents(s.amountCents, s.frequency), 0n
-  );
   const totalLimit = budgets.reduce((s, b) => s + BigInt(b.limitCents), 0n);
   const overBudget = budgets.filter((b) => BigInt(b.spentCents) > BigInt(b.limitCents)).length;
 

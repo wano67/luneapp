@@ -2,7 +2,7 @@
 
 import type { ReactNode } from 'react';
 import Link from 'next/link';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, ChevronRight } from 'lucide-react';
 import { proNavSections, hasMinRole } from '@/config/proNav';
 import { pivotIconMap } from '@/config/pivotNavIcons';
 import {
@@ -14,7 +14,6 @@ import {
   PivotLogo,
 } from '@/components/pivot-icons';
 import { personalNavSections } from '@/config/personalNav';
-import { useActiveBusiness } from './pro/ActiveBusinessProvider';
 import type { Space, BusinessItem } from './PivotShell';
 
 type Props = {
@@ -43,9 +42,11 @@ function isExactActive(pathname: string, href: string): boolean {
 
 /* ═══ Sidebar ═══ */
 
-export default function PivotSidebar({ space, pathname, businessId, businesses: _businesses, userName, collapsed, onToggleCollapse }: Props) {
-  const activeCtx = useActiveBusiness({ optional: true });
+export default function PivotSidebar({ space, pathname, businessId, businesses, userName, collapsed, onToggleCollapse }: Props) {
   const inBusiness = space === 'pro' && !!businessId;
+  const currentBiz = inBusiness ? businesses.find((b) => b.id === businessId) : null;
+  const userRole = currentBiz?.role ?? null;
+  const activityType = currentBiz?.activityType ?? null;
 
   const nameParts = userName.trim().split(/\s+/);
   const firstName = nameParts[0] || '';
@@ -65,9 +66,20 @@ export default function PivotSidebar({ space, pathname, businessId, businesses: 
       <div className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-6">
         {/* Logo + toggle */}
         {collapsed ? (
-          <Link href="/app" className="self-center hover:opacity-80 transition-opacity">
-            <PivotLogo size={40} color="var(--shell-sidebar-text)" />
-          </Link>
+          <div className="flex flex-col items-center gap-3">
+            <Link href="/app" className="hover:opacity-80 transition-opacity">
+              <PivotLogo size={40} color="var(--shell-sidebar-text)" />
+            </Link>
+            <button
+              type="button"
+              onClick={onToggleCollapse}
+              className="flex items-center justify-center rounded-lg hover:opacity-80 transition-opacity"
+              style={{ width: 32, height: 32, background: 'var(--shell-sidebar-active-bg)' }}
+              title="Ouvrir la sidebar"
+            >
+              <ChevronRight size={16} color="var(--shell-sidebar-text)" />
+            </button>
+          </div>
         ) : (
           <div className="flex items-start justify-between">
             <Link href="/app" className="hover:opacity-80 transition-opacity">
@@ -82,8 +94,8 @@ export default function PivotSidebar({ space, pathname, businessId, businesses: 
         {/* Business nav (when inside a business) */}
         {inBusiness && proNavSections.map((section) => {
           const visibleItems = section.items.filter((item) => {
-            if (item.minRole && !hasMinRole(activeCtx?.activeBusiness?.role, item.minRole)) return false;
-            if (item.activityTypes && activeCtx?.activeBusiness?.activityType && !item.activityTypes.includes(activeCtx.activeBusiness.activityType as never)) return false;
+            if (item.minRole && !hasMinRole(userRole, item.minRole)) return false;
+            if (item.activityTypes && activityType && !item.activityTypes.includes(activityType as never)) return false;
             return true;
           });
           if (visibleItems.length === 0) return null;

@@ -54,13 +54,6 @@ type FormState = {
 
 const EMPTY_FORM: FormState = { name: '', targetAmount: '', deadline: '', accountId: '', priority: '0', monthlyContribution: '' };
 
-const PRIORITY_LABELS: Record<string, string> = {
-  '3': 'Haute',
-  '2': 'Moyenne',
-  '1': 'Basse',
-  '0': 'Aucune',
-};
-
 /* ═══ Helpers ═══ */
 
 function formatDeadline(deadline: string | null): string {
@@ -274,13 +267,6 @@ export default function EpargnePage() {
     ? Math.min(100, Math.round(Number((patrimoineBigInt * 100n) / targetBigInt)))
     : 0;
 
-  const savingsRate = patrimoineBigInt > 0n && savingsBigInt > 0n
-    ? Math.round(Number((savingsBigInt * 100n) / patrimoineBigInt))
-    : 0;
-  const investRate = patrimoineBigInt > 0n && investBigInt > 0n
-    ? Math.round(Number((investBigInt * 100n) / patrimoineBigInt))
-    : 0;
-
   /* ═══ Render ═══ */
 
   if (loading) {
@@ -320,7 +306,6 @@ export default function EpargnePage() {
           if (base <= 0n) return null;
           const savingsPct = Math.round(Number((savingsBigInt * 100n) / base));
           const investPct = Math.round(Number((investBigInt * 100n) / base));
-          const filledPct = savingsPct + investPct;
           return (
             <div className="mt-5">
               {targetBigInt > 0n && (

@@ -28,7 +28,7 @@ export function getBusinessIdFromPath(pathname: string): string | null {
   return m ? m[1] : null;
 }
 
-export type BusinessItem = { id: string; name: string };
+export type BusinessItem = { id: string; name: string; role?: string; activityType?: string | null };
 
 export default function PivotShell({ children }: { children: ReactNode }) {
   const pathname = usePathname() ?? '';
@@ -56,7 +56,12 @@ export default function PivotShell({ children }: { children: ReactNode }) {
       if (biz.ok) {
         setBusinesses(
           (biz.data?.items ?? [])
-            .map((i) => ({ id: String(i.business?.id ?? ''), name: i.business?.name ?? '' }))
+            .map((i) => ({
+              id: String(i.business?.id ?? ''),
+              name: i.business?.name ?? '',
+              role: (i as Record<string, unknown>).role as string | undefined,
+              activityType: (i.business as Record<string, unknown> | undefined)?.activityType as string | null | undefined,
+            }))
             .filter((b) => b.id && b.id !== '0')
         );
       }

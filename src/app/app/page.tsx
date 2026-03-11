@@ -176,7 +176,6 @@ export default function AppHomePage() {
       }
     })();
     return () => ctrl.abort();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function acceptInvite(token: string, inviteId: string) {

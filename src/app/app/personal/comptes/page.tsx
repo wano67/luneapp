@@ -98,7 +98,7 @@ export default function ComptesPage() {
 
   // Powens
   const [powensConnecting, setPowensConnecting] = useState(false);
-  const [powensSyncing, setPowensSyncing] = useState(false);
+  const [, setPowensSyncing] = useState(false);
   const [powensConnected, setPowensConnected] = useState(false);
 
   async function load() {

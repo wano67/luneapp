@@ -67,7 +67,7 @@ async function powensFetch<T>(
   authToken?: string,
   options?: { method?: string; body?: Record<string, unknown> },
 ): Promise<T> {
-  const { apiUrl, clientId, clientSecret } = getConfig();
+  const { apiUrl } = getConfig();
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
   };
