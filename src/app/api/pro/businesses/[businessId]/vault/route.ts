@@ -13,6 +13,7 @@ function parseIdOpt(param: string | undefined | null): bigint | null {
 // ?projectId=X → project-level items
 // no projectId → business-level items (projectId IS NULL)
 // ?scope=all → all items (both business + project level)
+// ?scope=summary → business-level items + project summaries (projectId, projectName, count)
 export const GET = withBusinessRoute(
   {
     minRole: 'MEMBER',
@@ -23,6 +24,54 @@ export const GET = withBusinessRoute(
     const scope = url.searchParams.get('scope');
     const projectIdParam = url.searchParams.get('projectId');
     const projectId = parseIdOpt(projectIdParam);
+
+    const itemSelect = {
+      id: true,
+      businessId: true,
+      projectId: true,
+      title: true,
+      identifier: true,
+      email: true,
+      note: true,
+      createdByUserId: true,
+      createdAt: true,
+      updatedAt: true,
+      // Do NOT select ciphertext/iv/tag — password is only revealed via GET /vault/[itemId]
+    } as const;
+
+    // Summary mode: business-level items + project summaries
+    if (scope === 'summary') {
+      const [items, groups] = await Promise.all([
+        prisma.vaultItem.findMany({
+          where: { businessId: ctx.businessId, projectId: null },
+          orderBy: { createdAt: 'desc' },
+          select: itemSelect,
+        }),
+        prisma.vaultItem.groupBy({
+          by: ['projectId'],
+          where: { businessId: ctx.businessId, projectId: { not: null } },
+          _count: { _all: true },
+        }),
+      ]);
+
+      let projectSummaries: { projectId: bigint; projectName: string; count: number }[] = [];
+      if (groups.length > 0) {
+        const projectIds = groups.map((g) => g.projectId!);
+        const projects = await prisma.project.findMany({
+          where: { id: { in: projectIds }, businessId: ctx.businessId },
+          select: { id: true, name: true },
+        });
+        const nameMap = new Map(projects.map((p) => [String(p.id), p.name]));
+        projectSummaries = groups.map((g) => ({
+          projectId: g.projectId!,
+          projectName: nameMap.get(String(g.projectId!)) ?? 'Projet',
+          count: g._count._all,
+        }));
+        projectSummaries.sort((a, b) => a.projectName.localeCompare(b.projectName));
+      }
+
+      return jsonb({ items, projectSummaries }, ctx.requestId);
+    }
 
     const where: Record<string, unknown> = { businessId: ctx.businessId };
     if (scope === 'all') {
@@ -36,19 +85,7 @@ export const GET = withBusinessRoute(
     const items = await prisma.vaultItem.findMany({
       where,
       orderBy: { createdAt: 'desc' },
-      select: {
-        id: true,
-        businessId: true,
-        projectId: true,
-        title: true,
-        identifier: true,
-        email: true,
-        note: true,
-        createdByUserId: true,
-        createdAt: true,
-        updatedAt: true,
-        // Do NOT select ciphertext/iv/tag — password is only revealed via GET /vault/[itemId]
-      },
+      select: itemSelect,
     });
 
     return jsonb({ items }, ctx.requestId);

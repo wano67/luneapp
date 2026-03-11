@@ -2116,6 +2116,7 @@ model ProjectShareToken {
   token             String    @unique
   clientEmail       String?
   allowClientUpload Boolean   @default(false)
+  allowVaultAccess  Boolean   @default(false)
   expiresAt         DateTime?
   revokedAt         DateTime?
   createdAt         DateTime  @default(now())

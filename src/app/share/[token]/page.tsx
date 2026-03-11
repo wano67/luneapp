@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { FileText, Download, Upload, CheckCircle, AlertCircle, X, Eye } from 'lucide-react';
+import { FileText, Download, Upload, CheckCircle, AlertCircle, X, Eye, KeyRound, Copy, Clock } from 'lucide-react';
 import { LogoAvatar } from '@/components/pro/LogoAvatar';
 
 /* ═══ Types ═══ */
@@ -52,8 +52,19 @@ type DocumentData = {
   createdAt: string;
 };
 
+type VaultItemData = {
+  id: string;
+  title: string;
+  identifier: string | null;
+  email: string | null;
+  password: string;
+  note: string | null;
+  createdAt: string;
+};
+
 type ShareData = {
   allowClientUpload: boolean;
+  allowVaultAccess: boolean;
   business: { name: string; websiteUrl: string | null };
   project: {
     name: string;
@@ -69,9 +80,10 @@ type ShareData = {
   invoices: InvoiceData[];
   payments: PaymentData[];
   documents: DocumentData[];
+  vaultItems: VaultItemData[];
 };
 
-type ActiveTab = 'project' | 'billing' | 'documents';
+type ActiveTab = 'project' | 'billing' | 'documents' | 'vault';
 
 /* ═══ Helpers ═══ */
 
@@ -181,9 +193,12 @@ export default function ShareProjectPage() {
     );
   }
 
-  const { business, project, services, quotes, invoices, payments, documents, allowClientUpload } = data;
+  const { business, project, services, quotes, invoices, payments, documents, allowClientUpload, allowVaultAccess, vaultItems } = data;
   const pct = project.progressPct;
   const previewDoc = previewDocId ? documents.find((d) => d.id === previewDocId) ?? null : null;
+  const isCompleted = project.status === 'COMPLETED';
+  const isOverdue = project.status === 'ACTIVE' && project.endDate && new Date(project.endDate) < new Date();
+  const showVaultTab = allowVaultAccess;
 
   return (
     <div className="flex flex-col gap-0 animate-fade-in-up">
@@ -212,13 +227,14 @@ export default function ShareProjectPage() {
         {/* Status + date range */}
         <div className="flex flex-wrap items-center gap-3 mb-6">
           <span
-            className="inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold"
+            className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold"
             style={{
-              background: project.status === 'COMPLETED' ? 'var(--success-bg)' : project.status === 'ACTIVE' ? 'var(--shell-accent)' : 'var(--surface-hover)',
-              color: project.status === 'COMPLETED' ? 'var(--success)' : project.status === 'ACTIVE' ? 'white' : 'var(--text-secondary)',
+              background: isCompleted ? 'var(--success-bg)' : isOverdue ? 'var(--danger-bg)' : project.status === 'ACTIVE' ? 'var(--shell-accent)' : 'var(--surface-hover)',
+              color: isCompleted ? 'var(--success)' : isOverdue ? 'var(--danger)' : project.status === 'ACTIVE' ? 'white' : 'var(--text-secondary)',
             }}
           >
-            {STATUS_LABELS[project.status] ?? project.status}
+            {isOverdue && <Clock size={12} />}
+            {isOverdue ? 'En retard' : STATUS_LABELS[project.status] ?? project.status}
           </span>
           {project.startDate && (
             <span className="text-xs" style={{ color: 'var(--text-faint)' }}>
@@ -226,6 +242,24 @@ export default function ShareProjectPage() {
             </span>
           )}
         </div>
+
+        {/* Status message */}
+        {isCompleted && (
+          <div className="flex items-center gap-2 rounded-lg px-3 py-2 mb-4" style={{ background: 'var(--success-bg)' }}>
+            <CheckCircle size={14} style={{ color: 'var(--success)' }} />
+            <p className="text-sm" style={{ color: 'var(--success)' }}>
+              Projet livré — vous pouvez récupérer vos documents et identifiants.
+            </p>
+          </div>
+        )}
+        {isOverdue && (
+          <div className="flex items-center gap-2 rounded-lg px-3 py-2 mb-4" style={{ background: 'var(--danger-bg)' }}>
+            <Clock size={14} style={{ color: 'var(--danger)' }} />
+            <p className="text-sm" style={{ color: 'var(--danger)' }}>
+              Ce projet a dépassé sa date de fin prévue.
+            </p>
+          </div>
+        )}
 
         {/* Progress bar */}
         <div>
@@ -254,6 +288,7 @@ export default function ShareProjectPage() {
           { key: 'project' as const, label: 'Projet' },
           { key: 'billing' as const, label: 'Facturation' },
           { key: 'documents' as const, label: 'Documents' },
+          ...(showVaultTab ? [{ key: 'vault' as const, label: 'Trousseau' }] : []),
         ]).map((tab) => (
           <button
             key={tab.key}
@@ -296,6 +331,9 @@ export default function ShareProjectPage() {
             onPreview={setPreviewDocId}
             onUploadSuccess={fetchData}
           />
+        )}
+        {activeTab === 'vault' && showVaultTab && (
+          <TrousseauTab vaultItems={vaultItems} isCompleted={isCompleted} />
         )}
       </div>
     </div>
@@ -795,6 +833,124 @@ function UploadZone({ token, onSuccess }: { token: string; onSuccess: () => void
           {feedback.message}
         </div>
       )}
+    </div>
+  );
+}
+
+/* ═══ Trousseau Tab ═══ */
+
+function TrousseauTab({ vaultItems, isCompleted }: { vaultItems: VaultItemData[]; isCompleted: boolean }) {
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [revealedIds, setRevealedIds] = useState<Set<string>>(new Set());
+
+  async function handleCopy(password: string, id: string) {
+    try {
+      await navigator.clipboard.writeText(password);
+      setCopiedId(id);
+      setTimeout(() => setCopiedId(null), 2000);
+    } catch { /* empty */ }
+  }
+
+  function toggleReveal(id: string) {
+    setRevealedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  if (!isCompleted) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-4 rounded-xl border p-10 text-center animate-fade-in-up" style={{ borderColor: 'var(--border)', background: 'var(--surface)' }}>
+        <div className="rounded-full p-4" style={{ background: 'var(--surface-hover)' }}>
+          <KeyRound size={28} style={{ color: 'var(--text-secondary)' }} />
+        </div>
+        <div>
+          <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Identifiants disponibles à la livraison</p>
+          <p className="mt-1 text-xs" style={{ color: 'var(--text-secondary)' }}>
+            Vos identifiants et mots de passe seront accessibles une fois le projet terminé.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (vaultItems.length === 0) {
+    return (
+      <div className="rounded-xl border p-8 text-center animate-fade-in-up" style={{ borderColor: 'var(--border)', background: 'var(--surface)' }}>
+        <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>Aucun identifiant pour ce projet.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-5 animate-fade-in-up">
+      <div className="rounded-xl border p-5" style={{ borderColor: 'var(--border)', background: 'var(--surface)' }}>
+        <div className="flex items-center gap-2 mb-4">
+          <KeyRound size={18} style={{ color: 'var(--text-secondary)' }} />
+          <h2 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+            Identifiants · {vaultItems.length}
+          </h2>
+        </div>
+        <div className="flex flex-col gap-2">
+          {vaultItems.map((item) => {
+            const isRevealed = revealedIds.has(item.id);
+            const isCopied = copiedId === item.id;
+            return (
+              <div
+                key={item.id}
+                className="rounded-lg px-4 py-3"
+                style={{ background: 'var(--surface-hover)' }}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{item.title}</p>
+                    {item.identifier && (
+                      <p className="text-xs mt-0.5" style={{ color: 'var(--text-secondary)' }}>
+                        Identifiant : <span style={{ color: 'var(--text-primary)' }}>{item.identifier}</span>
+                      </p>
+                    )}
+                    {item.email && (
+                      <p className="text-xs mt-0.5" style={{ color: 'var(--text-secondary)' }}>
+                        Email : <span style={{ color: 'var(--text-primary)' }}>{item.email}</span>
+                      </p>
+                    )}
+                    <div className="flex items-center gap-2 mt-1.5">
+                      <p className="text-xs font-mono px-2 py-0.5 rounded" style={{ background: 'var(--surface)', color: 'var(--text-primary)' }}>
+                        {isRevealed ? item.password : '••••••••'}
+                      </p>
+                    </div>
+                    {item.note && (
+                      <p className="text-xs mt-1.5" style={{ color: 'var(--text-faint)' }}>{item.note}</p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => toggleReveal(item.id)}
+                      className="rounded-md p-1.5 transition-colors hover:bg-black/5"
+                      style={{ color: 'var(--text-secondary)' }}
+                      title={isRevealed ? 'Masquer' : 'Révéler'}
+                    >
+                      <Eye size={14} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleCopy(item.password, item.id)}
+                      className="rounded-md p-1.5 transition-colors hover:bg-black/5"
+                      style={{ color: isCopied ? 'var(--success)' : 'var(--text-secondary)' }}
+                      title={isCopied ? 'Copié !' : 'Copier le mot de passe'}
+                    >
+                      {isCopied ? <CheckCircle size={14} /> : <Copy size={14} />}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 }

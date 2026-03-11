@@ -34,6 +34,7 @@ export const POST = withBusinessRoute<{ businessId: string; projectId: string }>
     const clientEmail = typeof body?.clientEmail === 'string' ? body.clientEmail.trim() || null : null;
     const expiresInDays = typeof body?.expiresInDays === 'number' && body.expiresInDays > 0 ? body.expiresInDays : null;
     const allowClientUpload = body?.allowClientUpload === true;
+    const allowVaultAccess = body?.allowVaultAccess === true;
 
     const rawToken = crypto.randomBytes(32).toString('base64url');
     const tokenHash = hashToken(rawToken);
@@ -50,6 +51,7 @@ export const POST = withBusinessRoute<{ businessId: string; projectId: string }>
         clientEmail: clientEmail ?? project.client?.email ?? null,
         expiresAt,
         allowClientUpload,
+        allowVaultAccess,
       },
     });
 
@@ -104,6 +106,7 @@ export const GET = withBusinessRoute<{ businessId: string; projectId: string }>(
         expiresAt: true,
         revokedAt: true,
         allowClientUpload: true,
+        allowVaultAccess: true,
         createdAt: true,
       },
       orderBy: { createdAt: 'desc' },
@@ -116,6 +119,7 @@ export const GET = withBusinessRoute<{ businessId: string; projectId: string }>(
       expiresAt: t.expiresAt,
       revokedAt: t.revokedAt,
       allowClientUpload: t.allowClientUpload,
+      allowVaultAccess: t.allowVaultAccess,
       isActive: !t.revokedAt && (!t.expiresAt || t.expiresAt > new Date()),
       createdAt: t.createdAt,
     }));
