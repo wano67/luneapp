@@ -482,6 +482,8 @@ export type LegalFormConfig = {
   maxAssocies: number | null;
   leaderTitle: string;
   features: { hasStock: boolean; hasTeam: boolean; hasAdvancedAccounting: boolean };
+  requiresCapital: boolean;
+  capitalMinimumCents: number; // 0 = pas de minimum légal, sinon en cents
 };
 
 export const LEGAL_FORM_CONFIGS: LegalFormConfig[] = [
@@ -495,6 +497,7 @@ export const LEGAL_FORM_CONFIGS: LegalFormConfig[] = [
     minAssocies: 1, maxAssocies: 1,
     leaderTitle: 'Entrepreneur individuel',
     features: { hasStock: false, hasTeam: false, hasAdvancedAccounting: false },
+    requiresCapital: false, capitalMinimumCents: 0,
   },
   {
     code: 'EI',
@@ -506,6 +509,7 @@ export const LEGAL_FORM_CONFIGS: LegalFormConfig[] = [
     minAssocies: 1, maxAssocies: 1,
     leaderTitle: 'Entrepreneur individuel',
     features: { hasStock: true, hasTeam: false, hasAdvancedAccounting: true },
+    requiresCapital: false, capitalMinimumCents: 0,
   },
   {
     code: 'EURL',
@@ -517,6 +521,7 @@ export const LEGAL_FORM_CONFIGS: LegalFormConfig[] = [
     minAssocies: 1, maxAssocies: 1,
     leaderTitle: 'Gerant',
     features: { hasStock: true, hasTeam: true, hasAdvancedAccounting: true },
+    requiresCapital: true, capitalMinimumCents: 0,
   },
   {
     code: 'SARL',
@@ -528,6 +533,7 @@ export const LEGAL_FORM_CONFIGS: LegalFormConfig[] = [
     minAssocies: 2, maxAssocies: 100,
     leaderTitle: 'Gerant',
     features: { hasStock: true, hasTeam: true, hasAdvancedAccounting: true },
+    requiresCapital: true, capitalMinimumCents: 0,
   },
   {
     code: 'SAS',
@@ -539,6 +545,7 @@ export const LEGAL_FORM_CONFIGS: LegalFormConfig[] = [
     minAssocies: 2, maxAssocies: null,
     leaderTitle: 'President',
     features: { hasStock: true, hasTeam: true, hasAdvancedAccounting: true },
+    requiresCapital: true, capitalMinimumCents: 0,
   },
   {
     code: 'SASU',
@@ -550,6 +557,7 @@ export const LEGAL_FORM_CONFIGS: LegalFormConfig[] = [
     minAssocies: 1, maxAssocies: 1,
     leaderTitle: 'President',
     features: { hasStock: true, hasTeam: true, hasAdvancedAccounting: true },
+    requiresCapital: true, capitalMinimumCents: 0,
   },
   {
     code: 'SA',
@@ -561,6 +569,7 @@ export const LEGAL_FORM_CONFIGS: LegalFormConfig[] = [
     minAssocies: 2, maxAssocies: null,
     leaderTitle: 'Directeur general',
     features: { hasStock: true, hasTeam: true, hasAdvancedAccounting: true },
+    requiresCapital: true, capitalMinimumCents: 3_700_000,
   },
   {
     code: 'SCI',
@@ -572,6 +581,7 @@ export const LEGAL_FORM_CONFIGS: LegalFormConfig[] = [
     minAssocies: 2, maxAssocies: null,
     leaderTitle: 'Gerant',
     features: { hasStock: false, hasTeam: false, hasAdvancedAccounting: true },
+    requiresCapital: false, capitalMinimumCents: 0,
   },
   {
     code: 'SNC',
@@ -583,6 +593,7 @@ export const LEGAL_FORM_CONFIGS: LegalFormConfig[] = [
     minAssocies: 2, maxAssocies: null,
     leaderTitle: 'Gerant',
     features: { hasStock: true, hasTeam: true, hasAdvancedAccounting: true },
+    requiresCapital: true, capitalMinimumCents: 0,
   },
   {
     code: 'OTHER',
@@ -594,6 +605,7 @@ export const LEGAL_FORM_CONFIGS: LegalFormConfig[] = [
     minAssocies: 1, maxAssocies: null,
     leaderTitle: 'Dirigeant',
     features: { hasStock: true, hasTeam: true, hasAdvancedAccounting: true },
+    requiresCapital: false, capitalMinimumCents: 0,
   },
 ];
 

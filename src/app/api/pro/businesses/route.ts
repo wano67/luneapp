@@ -84,21 +84,51 @@ export const POST = withPersonalRoute(async (ctx, req) => {
   const invoicePrefix = typeof body.invoicePrefix === 'string' && (body.invoicePrefix as string).trim().length ? (body.invoicePrefix as string).trim() : 'INV-';
   const quotePrefix = typeof body.quotePrefix === 'string' && (body.quotePrefix as string).trim().length ? (body.quotePrefix as string).trim() : 'DEV-';
 
-  // Forme juridique + type d'activité
+  // Forme juridique (obligatoire)
   const legalFormRaw = typeof body.legalForm === 'string' ? body.legalForm.trim() : null;
-  const legalFormConfig = legalFormRaw ? getLegalFormConfig(legalFormRaw) : undefined;
+  if (!legalFormRaw) {
+    return badRequest('La forme juridique est requise.');
+  }
+  const legalFormConfig = getLegalFormConfig(legalFormRaw);
+  if (!legalFormConfig) {
+    return badRequest('Forme juridique invalide.');
+  }
+
+  // Type d'activité
   const activityTypeRaw = typeof body.activityType === 'string' ? body.activityType.trim().toUpperCase() : null;
   const validActivities = ['SERVICE', 'COMMERCE', 'MIXTE', 'LIBERALE'];
   const activityType = activityTypeRaw && validActivities.includes(activityTypeRaw)
     ? (activityTypeRaw as 'SERVICE' | 'COMMERCE' | 'MIXTE' | 'LIBERALE') : undefined;
+
   const nafCode = typeof body.nafCode === 'string' ? body.nafCode.trim() || null : null;
   const nafLabel = typeof body.nafLabel === 'string' ? body.nafLabel.trim() || null : null;
-  const leaderTitle = legalFormConfig?.leaderTitle ?? (typeof body.leaderTitle === 'string' ? body.leaderTitle.trim() || null : null);
-  const socialRegime = legalFormConfig?.defaultSocialRegime
-    ? (legalFormConfig.defaultSocialRegime as 'TNS' | 'ASSIMILE_SALARIE' | 'MICRO_SOCIAL')
-    : undefined;
-  const taxRegime = legalFormConfig?.defaultTaxRegime ?? undefined;
-  const vatRegime = legalFormRaw === 'MICRO' ? ('FRANCHISE' as const) : undefined;
+
+  // Auto-derive from legal form config
+  const leaderTitle = legalFormConfig.leaderTitle;
+  const socialRegime = legalFormConfig.defaultSocialRegime as 'TNS' | 'ASSIMILE_SALARIE' | 'MICRO_SOCIAL';
+
+  // Régime fiscal : use client-provided if allowed, otherwise default
+  const taxRegimeRaw = typeof body.taxRegime === 'string' ? body.taxRegime.trim().toUpperCase() : null;
+  const taxRegime = taxRegimeRaw && legalFormConfig.allowedTaxRegimes.includes(taxRegimeRaw as 'IS' | 'IR')
+    ? taxRegimeRaw
+    : legalFormConfig.defaultTaxRegime;
+
+  // MICRO : forcer franchise TVA
+  const isMicro = legalFormRaw === 'MICRO';
+  const vatRegime = isMicro ? ('FRANCHISE' as const) : undefined;
+
+  // Capital social
+  const capitalRaw = typeof body.capital === 'number' && Number.isFinite(body.capital) ? Math.trunc(body.capital) : null;
+  if (legalFormConfig.capitalMinimumCents > 0 && capitalRaw !== null && capitalRaw < legalFormConfig.capitalMinimumCents) {
+    return badRequest(`Capital minimum pour ${legalFormConfig.label} : ${(legalFormConfig.capitalMinimumCents / 100).toLocaleString('fr-FR')} \u20ac.`);
+  }
+
+  // Profile completeness
+  const hasLegalName = !!legalName;
+  const hasSiret = !!siretRaw;
+  const hasAddress = !!(addressLine1 && postalCode && city);
+  const hasCapital = !legalFormConfig.requiresCapital || (capitalRaw !== null && capitalRaw > 0);
+  const profileComplete = hasLegalName && hasSiret && hasAddress && hasCapital;
 
   const business = await prisma.business.create({
     data: {
@@ -112,13 +142,15 @@ export const POST = withPersonalRoute(async (ctx, req) => {
       addressLine2: addressLine2 ?? undefined,
       postalCode: postalCode ?? undefined,
       city: city ?? undefined,
-      legalForm: legalFormConfig ? legalFormRaw : undefined,
-      taxRegime: taxRegime ?? undefined,
+      legalForm: legalFormRaw,
+      taxRegime,
       activityType,
       nafCode: nafCode ?? undefined,
       nafLabel: nafLabel ?? undefined,
-      leaderTitle: leaderTitle ?? undefined,
+      leaderTitle,
       socialRegime,
+      capital: capitalRaw ?? undefined,
+      profileComplete,
       ownerId: ctx.userId,
       memberships: {
         create: {
@@ -129,8 +161,8 @@ export const POST = withPersonalRoute(async (ctx, req) => {
       settings: {
         create: {
           currency,
-          vatEnabled: legalFormRaw === 'MICRO' ? false : vatEnabled,
-          vatRatePercent,
+          vatEnabled: isMicro ? false : vatEnabled,
+          vatRatePercent: isMicro ? 0 : vatRatePercent,
           vatRegime,
           invoicePrefix,
           quotePrefix,

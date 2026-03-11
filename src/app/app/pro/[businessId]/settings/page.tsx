@@ -36,19 +36,19 @@ const SECTION_GROUPS = [
     ],
   },
   {
-    label: 'Administration',
+    label: 'Organisation',
     items: [
+      { id: 'equipe', label: 'Équipe' },
       { id: 'permissions', label: 'Permissions' },
-      { id: 'comptabilite', label: 'Comptabilité' },
-      { id: 'integrations', label: 'Intégrations' },
+      { id: 'notifications', label: 'Notifications' },
+      { id: 'calendrier', label: 'Calendrier' },
     ],
   },
   {
-    label: 'Organisation',
+    label: 'Administration',
     items: [
-      { id: 'calendrier', label: 'Calendrier' },
-      { id: 'notifications', label: 'Notifications' },
-      { id: 'equipe', label: 'Équipe' },
+      { id: 'comptabilite', label: 'Comptabilité' },
+      { id: 'integrations', label: 'Intégrations' },
     ],
   },
 ];
@@ -110,19 +110,9 @@ export default function BusinessSettingsPage() {
           <section id="taxes"><TaxesSection businessId={businessId} /></section>
         </div>
 
-        {/* ── Administration ── */}
-        <div className="space-y-6">
-          <GroupHeader title="Administration" subtitle="Rôles, comptabilité et intégrations externes" />
-          <section id="permissions"><PermissionsSection businessId={businessId} /></section>
-          <section id="comptabilite"><ComptabiliteSection businessId={businessId} /></section>
-          <section id="integrations"><IntegrationsSection businessId={businessId} /></section>
-        </div>
-
         {/* ── Organisation ── */}
         <div className="space-y-6">
-          <GroupHeader title="Organisation" subtitle="Calendrier, notifications et gestion d'équipe" />
-          <section id="calendrier"><CalendarSyncSection businessId={businessId} /></section>
-          <section id="notifications"><NotificationsSection businessId={businessId} /></section>
+          <GroupHeader title="Organisation" subtitle="Équipe, permissions, notifications et calendrier" />
           <section id="equipe">
             <Card className="flex flex-wrap items-center justify-between gap-3 border-[var(--border)] bg-[var(--surface)]/70 p-5">
               <div>
@@ -137,6 +127,16 @@ export default function BusinessSettingsPage() {
               </Link>
             </Card>
           </section>
+          <section id="permissions"><PermissionsSection businessId={businessId} /></section>
+          <section id="notifications"><NotificationsSection businessId={businessId} /></section>
+          <section id="calendrier"><CalendarSyncSection businessId={businessId} /></section>
+        </div>
+
+        {/* ── Administration ── */}
+        <div className="space-y-6">
+          <GroupHeader title="Administration" subtitle="Comptabilité et intégrations externes" />
+          <section id="comptabilite"><ComptabiliteSection businessId={businessId} /></section>
+          <section id="integrations"><IntegrationsSection businessId={businessId} /></section>
         </div>
       </div>
     </ProPageShell>

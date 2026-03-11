@@ -3,6 +3,7 @@ import { withBusinessRoute } from '@/server/http/routeHandler';
 import { jsonb } from '@/server/http/json';
 import { badRequest, notFound, readJson } from '@/server/http/apiUtils';
 import { normalizeWebsiteUrl } from '@/lib/normalizeWebsiteUrl';
+import { getLegalFormConfig, LEGAL_FORM_CONFIGS } from '@/config/taxation';
 
 const businessSelect = {
   id: true,
@@ -30,6 +31,8 @@ const businessSelect = {
   nafLabel: true,
   leaderTitle: true,
   socialRegime: true,
+  capital: true,
+  profileComplete: true,
   ownerId: true,
   createdAt: true,
   updatedAt: true,
@@ -239,12 +242,33 @@ export const PATCH = withBusinessRoute(
 
     if (Object.prototype.hasOwnProperty.call(body, 'legalForm')) {
       const lf = readString((body as Record<string, unknown>).legalForm);
+      if (lf && !LEGAL_FORM_CONFIGS.some((c) => c.code === lf)) {
+        return badRequest('Forme juridique invalide.');
+      }
       data.legalForm = lf || null;
     }
     if (Object.prototype.hasOwnProperty.call(body, 'taxRegime')) {
       const tr = readString((body as Record<string, unknown>).taxRegime);
       if (tr && !['IS', 'IR'].includes(tr)) return badRequest('taxRegime invalide (IS ou IR).');
+      // Validate against allowedTaxRegimes if legalForm is set
+      const formCode = (data.legalForm as string | null | undefined) ?? undefined;
+      if (tr && formCode) {
+        const formCfg = getLegalFormConfig(formCode);
+        if (formCfg && !formCfg.allowedTaxRegimes.includes(tr as 'IS' | 'IR')) {
+          return badRequest(`Regime fiscal ${tr} non autorise pour ${formCfg.label}.`);
+        }
+      }
       data.taxRegime = tr || null;
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'capital')) {
+      const cap = (body as Record<string, unknown>).capital;
+      if (cap !== null && cap !== undefined) {
+        const capNum = typeof cap === 'number' ? Math.trunc(cap) : null;
+        if (capNum !== null && capNum < 0) return badRequest('Capital invalide.');
+        data.capital = capNum;
+      } else {
+        data.capital = null;
+      }
     }
     if (Object.prototype.hasOwnProperty.call(body, 'activityType')) {
       const at = readString((body as Record<string, unknown>).activityType);
@@ -281,6 +305,22 @@ export const PATCH = withBusinessRoute(
       data,
       select: businessSelect,
     });
+
+    // Recalculate profileComplete
+    const formCfg = updated.legalForm ? getLegalFormConfig(updated.legalForm) : undefined;
+    const hasLegalName = !!updated.legalName;
+    const hasSiret = !!updated.siret;
+    const hasAddress = !!(updated.addressLine1 && updated.postalCode && updated.city);
+    const hasCapital = !formCfg?.requiresCapital || (updated.capital !== null && updated.capital > 0);
+    const newProfileComplete = hasLegalName && hasSiret && hasAddress && hasCapital;
+
+    if (newProfileComplete !== updated.profileComplete) {
+      await prisma.business.update({
+        where: { id: ctx.businessId },
+        data: { profileComplete: newProfileComplete },
+      });
+      (updated as Record<string, unknown>).profileComplete = newProfileComplete;
+    }
 
     return jsonb({ item: updated }, ctx.requestId);
   }
