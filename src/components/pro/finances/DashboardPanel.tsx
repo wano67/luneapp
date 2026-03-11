@@ -43,17 +43,18 @@ export function DashboardPanel({ businessId }: { businessId: string }) {
   const currentYear = new Date().getFullYear();
   const [year, setYear] = useState(String(currentYear));
   const [data, setData] = useState<DashboardData | null>(null);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [fetchedKey, setFetchedKey] = useState('');
+  const currentKey = `${businessId}:${year}`;
+  const loading = fetchedKey !== currentKey;
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
     fetchJson<DashboardData>(
       `/api/pro/businesses/${businessId}/accounting/dashboard?year=${year}`
     ).then(res => {
       if (cancelled) return;
-      setLoading(false);
+      setFetchedKey(`${businessId}:${year}`);
       if (res.ok && res.data) {
         setData(res.data);
         setError(null);

@@ -89,7 +89,7 @@ const STEPS = [
   { key: 'legal', label: 'Identification', icon: FileText },
 ] as const;
 
-type StepKey = (typeof STEPS)[number]['key'];
+type _StepKey = (typeof STEPS)[number]['key'];
 
 /* ═══ Helpers ═══ */
 

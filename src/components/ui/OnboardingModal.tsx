@@ -21,16 +21,16 @@ type OnboardingModalProps = {
 
 export function OnboardingModal({ steps, storageKey, apiField, onComplete }: OnboardingModalProps) {
   const [current, setCurrent] = useState(0);
-  const [visible, setVisible] = useState(false);
+  const [visible, setVisible] = useState(
+    () => !(typeof window !== 'undefined' && localStorage.getItem(storageKey)),
+  );
   const [direction, setDirection] = useState<'in' | 'out'>('in');
 
   useEffect(() => {
-    // Double protection: check localStorage
+    // If already completed, notify parent without calling setState
     if (typeof window !== 'undefined' && localStorage.getItem(storageKey)) {
       onComplete();
-      return;
     }
-    setVisible(true);
   }, [storageKey, onComplete]);
 
   const goNext = useCallback(() => {
