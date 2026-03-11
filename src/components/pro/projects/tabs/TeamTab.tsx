@@ -44,7 +44,7 @@ export type TeamTabProps = {
   tasks: TaskItem[];
   members: TeamMember[];
   onOpenConversation: (id: string) => void;
-  onSendMessage: (content: string, taskId?: string, taskGroupIds?: string[]) => void;
+  onSendMessage: (content: string, taskId?: string, taskGroupIds?: string[], files?: File[]) => void;
   onLoadOlderMessages: () => void;
   onCreateConversation: (type: 'PRIVATE' | 'GROUP', memberUserIds: string[], name?: string) => Promise<string | null>;
 };
@@ -227,6 +227,7 @@ export function TeamTab({
                       loading={loadingMessages}
                       hasMore={hasMoreMessages}
                       conversationName={conversationName}
+                      businessId={businessId}
                       onSend={onSendMessage}
                       onLoadOlder={onLoadOlderMessages}
                       onOpenTaskPicker={() => setShowTaskPicker(true)}
@@ -246,6 +247,7 @@ export function TeamTab({
                   loading={loadingMessages}
                   hasMore={hasMoreMessages}
                   conversationName={conversationName}
+                  businessId={businessId}
                   onSend={onSendMessage}
                   onLoadOlder={onLoadOlderMessages}
                   onOpenTaskPicker={() => setShowTaskPicker(true)}

@@ -28,7 +28,7 @@ function isPrismaKnownError(error: unknown): error is Prisma.PrismaClientKnownRe
 // GET /api/pro/businesses/:businessId/projects/:projectId/documents
 export const GET = withBusinessRoute<{ businessId: string; projectId: string }>(
   { minRole: 'VIEWER' },
-  async (ctx, _req, params) => {
+  async (ctx, req, params) => {
     const projectId = parseId(params.projectId);
 
     const project = await prisma.project.findFirst({
@@ -37,10 +37,17 @@ export const GET = withBusinessRoute<{ businessId: string; projectId: string }>(
     });
     if (!project) return notFound('Projet introuvable.');
 
+    const url = new URL(req.url);
+    const folderIdParam = url.searchParams.get('folderId');
+    const where: Record<string, unknown> = { businessId: ctx.businessId, projectId };
+    if (folderIdParam !== null) {
+      where.folderId = folderIdParam === 'null' ? null : BigInt(folderIdParam);
+    }
+
     let items: Awaited<ReturnType<typeof prisma.businessDocument.findMany>> = [];
     try {
       items = await prisma.businessDocument.findMany({
-        where: { businessId: ctx.businessId, projectId },
+        where,
         orderBy: { createdAt: 'desc' },
         take: 100,
       });
@@ -59,6 +66,7 @@ export const GET = withBusinessRoute<{ businessId: string; projectId: string }>(
         mimeType: d.mimeType,
         sizeBytes: d.sizeBytes,
         kind: d.kind,
+        folderId: d.folderId,
         createdAt: d.createdAt,
       })),
     }, ctx.requestId);
@@ -97,6 +105,18 @@ export const POST = withBusinessRoute<{ businessId: string; projectId: string }>
     const titleRaw = form.get('title');
     const title = typeof titleRaw === 'string' && titleRaw.trim() ? titleRaw.trim() : file.name;
 
+    // Optional folderId from FormData
+    const folderIdRaw = form.get('folderId');
+    let folderId: bigint | null = null;
+    if (typeof folderIdRaw === 'string' && folderIdRaw.trim()) {
+      folderId = parseId(folderIdRaw.trim());
+      const folder = await prisma.documentFolder.findFirst({
+        where: { id: folderId, businessId: ctx.businessId, projectId },
+        select: { id: true },
+      });
+      if (!folder) return badRequest('Dossier introuvable.');
+    }
+
     const buffer = Buffer.from(await file.arrayBuffer());
     const { storageKey, filename, sha } = await saveLocalFile({
       buffer,
@@ -109,6 +129,7 @@ export const POST = withBusinessRoute<{ businessId: string; projectId: string }>
       data: {
         businessId: ctx.businessId,
         projectId,
+        folderId,
         title,
         filename,
         mimeType: mime,

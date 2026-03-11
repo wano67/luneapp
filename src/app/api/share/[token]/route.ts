@@ -36,6 +36,7 @@ export async function GET(
       revokedAt: true,
       projectId: true,
       businessId: true,
+      allowClientUpload: true,
     },
   });
 
@@ -205,6 +206,7 @@ export async function GET(
   };
 
   const response = {
+    allowClientUpload: shareToken.allowClientUpload,
     business: { name: business.name, websiteUrl: business.websiteUrl },
     project: {
       name: project.name,

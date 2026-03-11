@@ -33,6 +33,7 @@ export const POST = withBusinessRoute<{ businessId: string; projectId: string }>
     const body = await req.json().catch(() => null) as Record<string, unknown> | null;
     const clientEmail = typeof body?.clientEmail === 'string' ? body.clientEmail.trim() || null : null;
     const expiresInDays = typeof body?.expiresInDays === 'number' && body.expiresInDays > 0 ? body.expiresInDays : null;
+    const allowClientUpload = body?.allowClientUpload === true;
 
     const rawToken = crypto.randomBytes(32).toString('base64url');
     const tokenHash = hashToken(rawToken);
@@ -48,6 +49,7 @@ export const POST = withBusinessRoute<{ businessId: string; projectId: string }>
         token: tokenHash,
         clientEmail: clientEmail ?? project.client?.email ?? null,
         expiresAt,
+        allowClientUpload,
       },
     });
 
@@ -101,6 +103,7 @@ export const GET = withBusinessRoute<{ businessId: string; projectId: string }>(
         token: true,
         expiresAt: true,
         revokedAt: true,
+        allowClientUpload: true,
         createdAt: true,
       },
       orderBy: { createdAt: 'desc' },
@@ -112,6 +115,7 @@ export const GET = withBusinessRoute<{ businessId: string; projectId: string }>(
       tokenPreview: `•••${t.token.slice(-6)}`,
       expiresAt: t.expiresAt,
       revokedAt: t.revokedAt,
+      allowClientUpload: t.allowClientUpload,
       isActive: !t.revokedAt && (!t.expiresAt || t.expiresAt > new Date()),
       createdAt: t.createdAt,
     }));

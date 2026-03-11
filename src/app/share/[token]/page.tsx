@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
+import { FileText, Download, Upload, CheckCircle, AlertCircle, X, Eye } from 'lucide-react';
 import { LogoAvatar } from '@/components/pro/LogoAvatar';
 
 /* ═══ Types ═══ */
@@ -52,6 +53,7 @@ type DocumentData = {
 };
 
 type ShareData = {
+  allowClientUpload: boolean;
   business: { name: string; websiteUrl: string | null };
   project: {
     name: string;
@@ -68,6 +70,8 @@ type ShareData = {
   payments: PaymentData[];
   documents: DocumentData[];
 };
+
+type ActiveTab = 'project' | 'billing' | 'documents';
 
 /* ═══ Helpers ═══ */
 
@@ -91,8 +95,26 @@ function fmtCents(cents: string | number, currency = 'EUR'): string {
 }
 
 function fmtDate(iso: string | null): string {
-  if (!iso) return '—';
+  if (!iso) return '\u2014';
   return new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(iso));
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} o`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} Ko`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} Mo`;
+}
+
+const PREVIEWABLE_MIMES = new Set([
+  'application/pdf',
+  'image/png',
+  'image/jpeg',
+  'image/webp',
+  'image/svg+xml',
+]);
+
+function isPreviewable(mimeType: string): boolean {
+  return PREVIEWABLE_MIMES.has(mimeType);
 }
 
 /* ═══ Page ═══ */
@@ -104,8 +126,10 @@ export default function ShareProjectPage() {
   const [data, setData] = useState<ShareData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<ActiveTab>('project');
+  const [previewDocId, setPreviewDocId] = useState<string | null>(null);
 
-  useEffect(() => {
+  const fetchData = useCallback(() => {
     if (!token) return;
     fetch(`/api/share/${token}`)
       .then(async (res) => {
@@ -121,13 +145,24 @@ export default function ShareProjectPage() {
       .finally(() => setLoading(false));
   }, [token]);
 
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
   if (loading) {
     return (
       <div className="flex flex-col gap-6 animate-pulse">
-        <div className="h-8 w-48 rounded bg-[var(--surface-hover)]" />
-        <div className="h-4 w-64 rounded bg-[var(--surface-hover)]" />
-        <div className="h-6 w-full rounded-full bg-[var(--surface-hover)]" />
-        <div className="h-40 rounded-xl bg-[var(--surface-hover)]" />
+        <div className="flex items-center gap-4">
+          <div className="h-12 w-12 rounded-xl bg-[var(--surface-hover)]" />
+          <div className="flex flex-col gap-2">
+            <div className="h-5 w-40 rounded bg-[var(--surface-hover)]" />
+            <div className="h-3 w-24 rounded bg-[var(--surface-hover)]" />
+          </div>
+        </div>
+        <div className="h-8 w-64 rounded bg-[var(--surface-hover)]" />
+        <div className="h-3 w-full rounded-full bg-[var(--surface-hover)]" />
+        <div className="h-10 w-80 rounded-xl bg-[var(--surface-hover)]" />
+        <div className="h-48 rounded-xl bg-[var(--surface-hover)]" />
       </div>
     );
   }
@@ -136,11 +171,7 @@ export default function ShareProjectPage() {
     return (
       <div className="flex flex-col items-center justify-center gap-4 py-20 text-center">
         <div className="rounded-full p-4" style={{ background: 'var(--danger-bg)' }}>
-          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--danger)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="12" cy="12" r="10" />
-            <line x1="15" y1="9" x2="9" y2="15" />
-            <line x1="9" y1="9" x2="15" y2="15" />
-          </svg>
+          <AlertCircle size={32} style={{ color: 'var(--danger)' }} />
         </div>
         <h1 className="text-xl font-semibold" style={{ color: 'var(--text-primary)' }}>{error ?? 'Lien invalide'}</h1>
         <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
@@ -150,26 +181,36 @@ export default function ShareProjectPage() {
     );
   }
 
-  const { business, project, services, quotes, invoices, payments, documents } = data;
+  const { business, project, services, quotes, invoices, payments, documents, allowClientUpload } = data;
   const pct = project.progressPct;
+  const previewDoc = previewDocId ? documents.find((d) => d.id === previewDocId) ?? null : null;
 
   return (
-    <div className="flex flex-col gap-8 animate-fade-in-up">
-      {/* Header */}
-      <div className="flex items-center gap-3">
-        <LogoAvatar name={business.name} websiteUrl={business.websiteUrl} size={40} />
-        <div>
-          <p className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>{business.name}</p>
-          <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>Suivi de projet</p>
+    <div className="flex flex-col gap-0 animate-fade-in-up">
+      {/* ═══ Hero Section ═══ */}
+      <div
+        className="rounded-2xl border p-6 md:p-8"
+        style={{ borderColor: 'var(--border)', background: 'var(--surface)' }}
+      >
+        {/* Business identity */}
+        <div className="flex items-center gap-3 mb-6">
+          <LogoAvatar name={business.name} websiteUrl={business.websiteUrl} size={44} />
+          <div>
+            <p className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>{business.name}</p>
+            <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>Suivi de projet</p>
+          </div>
         </div>
-      </div>
 
-      {/* Project title + status */}
-      <div>
-        <h1 className="text-2xl font-bold" style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-barlow), sans-serif' }}>
+        {/* Project name */}
+        <h1
+          className="text-2xl md:text-3xl font-bold mb-3"
+          style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-barlow), sans-serif' }}
+        >
           {project.name}
         </h1>
-        <div className="mt-2 flex flex-wrap items-center gap-3">
+
+        {/* Status + date range */}
+        <div className="flex flex-wrap items-center gap-3 mb-6">
           <span
             className="inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold"
             style={{
@@ -181,33 +222,95 @@ export default function ShareProjectPage() {
           </span>
           {project.startDate && (
             <span className="text-xs" style={{ color: 'var(--text-faint)' }}>
-              {fmtDate(project.startDate)} → {fmtDate(project.endDate)}
+              {fmtDate(project.startDate)} &rarr; {fmtDate(project.endDate)}
             </span>
           )}
         </div>
+
+        {/* Progress bar */}
+        <div>
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>Avancement global</span>
+            <span className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>{pct}%</span>
+          </div>
+          <div className="h-3 overflow-hidden rounded-full" style={{ background: 'var(--surface-hover)' }}>
+            <div
+              className="h-full rounded-full transition-all duration-700"
+              style={{ width: `${pct}%`, background: pct === 100 ? 'var(--success)' : 'var(--shell-accent)' }}
+            />
+          </div>
+          <p className="mt-1.5 text-xs" style={{ color: 'var(--text-faint)' }}>
+            {project.tasksSummary.done}/{project.tasksSummary.total} t\u00e2ches termin\u00e9es
+          </p>
+        </div>
       </div>
 
-      {/* Progress bar */}
-      <div>
-        <div className="mb-2 flex items-center justify-between">
-          <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>Avancement global</span>
-          <span className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>{pct}%</span>
-        </div>
-        <div className="h-3 overflow-hidden rounded-full" style={{ background: 'var(--surface-hover)' }}>
-          <div
-            className="h-full rounded-full transition-all duration-700"
-            style={{ width: `${pct}%`, background: pct === 100 ? 'var(--success)' : 'var(--shell-accent)' }}
+      {/* ═══ Tab Navigation ═══ */}
+      <div
+        className="mt-6 flex items-center gap-1 rounded-xl border p-1"
+        style={{ borderColor: 'var(--border)', background: 'var(--surface)' }}
+      >
+        {([
+          { key: 'project' as const, label: 'Projet' },
+          { key: 'billing' as const, label: 'Facturation' },
+          { key: 'documents' as const, label: 'Documents' },
+        ]).map((tab) => (
+          <button
+            key={tab.key}
+            type="button"
+            onClick={() => { setActiveTab(tab.key); setPreviewDocId(null); }}
+            className="flex-1 rounded-lg px-4 py-2 text-sm font-medium transition-all duration-200"
+            style={{
+              background: activeTab === tab.key ? 'var(--surface-hover)' : 'transparent',
+              color: activeTab === tab.key ? 'var(--text-primary)' : 'var(--text-secondary)',
+              boxShadow: activeTab === tab.key ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+            }}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ═══ Tab Content ═══ */}
+      <div className="mt-6">
+        {activeTab === 'project' && (
+          <ProjetTab
+            project={project}
+            services={services}
           />
-        </div>
-        <p className="mt-1 text-xs" style={{ color: 'var(--text-faint)' }}>
-          {project.tasksSummary.done}/{project.tasksSummary.total} tâches terminées
-        </p>
+        )}
+        {activeTab === 'billing' && (
+          <FacturationTab
+            quotes={quotes}
+            invoices={invoices}
+            payments={payments}
+          />
+        )}
+        {activeTab === 'documents' && (
+          <DocumentsTab
+            token={token}
+            documents={documents}
+            allowClientUpload={allowClientUpload}
+            previewDoc={previewDoc}
+            previewDocId={previewDocId}
+            onPreview={setPreviewDocId}
+            onUploadSuccess={fetchData}
+          />
+        )}
       </div>
+    </div>
+  );
+}
 
+/* ═══ Projet Tab ═══ */
+
+function ProjetTab({ project, services }: { project: ShareData['project']; services: ServiceData[] }) {
+  return (
+    <div className="flex flex-col gap-5 animate-fade-in-up">
       {/* Scope */}
       {project.prestationsText && (
         <div className="rounded-xl border p-5" style={{ borderColor: 'var(--border)', background: 'var(--surface)' }}>
-          <h2 className="mb-3 text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Périmètre du projet</h2>
+          <h2 className="mb-3 text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>P\u00e9rim\u00e8tre du projet</h2>
           <p className="whitespace-pre-wrap text-sm" style={{ color: 'var(--text-secondary)', lineHeight: 1.7 }}>
             {project.prestationsText}
           </p>
@@ -227,12 +330,12 @@ export default function ShareProjectPage() {
                   <div className="mb-1 flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <span className="text-sm" style={{ color: isDone ? 'var(--success)' : 'var(--text-primary)' }}>
-                        {isDone ? '✓' : '○'}
+                        {isDone ? '\u2713' : '\u25CB'}
                       </span>
                       <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{svc.name}</span>
                     </div>
                     <span className="text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>
-                      {svc.tasksSummary.total > 0 ? `${sp}%` : '—'}
+                      {svc.tasksSummary.total > 0 ? `${sp}%` : '\u2014'}
                     </span>
                   </div>
                   {svc.tasksSummary.total > 0 && (
@@ -253,66 +356,443 @@ export default function ShareProjectPage() {
         </div>
       )}
 
-      {/* Facturation */}
-      {(quotes.length > 0 || invoices.length > 0) && (
+      {/* Empty state */}
+      {!project.prestationsText && services.length === 0 && (
+        <div className="rounded-xl border p-8 text-center" style={{ borderColor: 'var(--border)', background: 'var(--surface)' }}>
+          <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>Aucun d\u00e9tail de projet pour l&apos;instant.</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ═══ Facturation Tab ═══ */
+
+function FacturationTab({
+  quotes,
+  invoices,
+  payments,
+}: {
+  quotes: QuoteData[];
+  invoices: InvoiceData[];
+  payments: PaymentData[];
+}) {
+  const hasContent = quotes.length > 0 || invoices.length > 0;
+
+  if (!hasContent) {
+    return (
+      <div className="rounded-xl border p-8 text-center animate-fade-in-up" style={{ borderColor: 'var(--border)', background: 'var(--surface)' }}>
+        <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>Aucun document de facturation pour l&apos;instant.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-5 animate-fade-in-up">
+      {/* Quotes */}
+      {quotes.length > 0 && (
         <div className="rounded-xl border p-5" style={{ borderColor: 'var(--border)', background: 'var(--surface)' }}>
-          <h2 className="mb-4 text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Facturation</h2>
+          <h2 className="mb-3 text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Devis</h2>
           <div className="flex flex-col gap-2">
             {quotes.map((q, i) => (
-              <div key={`q-${i}`} className="flex items-center justify-between rounded-lg px-3 py-2" style={{ background: 'var(--surface-hover)' }}>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>Devis</span>
-                  <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{q.number ?? '—'}</span>
+              <div
+                key={`q-${i}`}
+                className="flex items-center justify-between rounded-lg px-3 py-2.5"
+                style={{ background: 'var(--surface-hover)' }}
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                    {q.number ?? 'Devis'}
+                  </span>
+                  {q.issuedAt && (
+                    <span className="text-xs" style={{ color: 'var(--text-faint)' }}>{fmtDate(q.issuedAt)}</span>
+                  )}
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 shrink-0">
                   <BillingBadge status={q.status} />
-                  <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{fmtCents(q.totalCents, q.currency)}</span>
-                </div>
-              </div>
-            ))}
-            {invoices.map((inv, i) => (
-              <div key={`i-${i}`} className="flex items-center justify-between rounded-lg px-3 py-2" style={{ background: 'var(--surface-hover)' }}>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>Facture</span>
-                  <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{inv.number ?? '—'}</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <BillingBadge status={inv.status} />
-                  <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{fmtCents(inv.totalCents, inv.currency)}</span>
+                  <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+                    {fmtCents(q.totalCents, q.currency)}
+                  </span>
                 </div>
               </div>
             ))}
           </div>
-
-          {/* Payments summary */}
-          {payments.length > 0 && (
-            <div className="mt-4 border-t pt-3" style={{ borderColor: 'var(--border)' }}>
-              <p className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
-                {payments.length} paiement{payments.length > 1 ? 's' : ''} reçu{payments.length > 1 ? 's' : ''} —{' '}
-                <span className="font-semibold" style={{ color: 'var(--success)' }}>
-                  {fmtCents(payments.reduce((sum, p) => sum + Number(p.amountCents), 0).toString())}
-                </span>
-              </p>
-            </div>
-          )}
         </div>
       )}
 
-      {/* Documents */}
-      {documents.length > 0 && (
+      {/* Invoices */}
+      {invoices.length > 0 && (
         <div className="rounded-xl border p-5" style={{ borderColor: 'var(--border)', background: 'var(--surface)' }}>
-          <h2 className="mb-4 text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Documents</h2>
+          <h2 className="mb-3 text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Factures</h2>
           <div className="flex flex-col gap-2">
-            {documents.map((doc) => (
-              <div key={doc.id} className="flex items-center justify-between rounded-lg px-3 py-2" style={{ background: 'var(--surface-hover)' }}>
+            {invoices.map((inv, i) => (
+              <div
+                key={`i-${i}`}
+                className="flex items-center justify-between rounded-lg px-3 py-2.5"
+                style={{ background: 'var(--surface-hover)' }}
+              >
                 <div className="flex items-center gap-2 min-w-0">
-                  <DocIcon kind={doc.kind} />
-                  <span className="truncate text-sm" style={{ color: 'var(--text-primary)' }}>{doc.title || doc.filename}</span>
+                  <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                    {inv.number ?? 'Facture'}
+                  </span>
+                  {inv.issuedAt && (
+                    <span className="text-xs" style={{ color: 'var(--text-faint)' }}>{fmtDate(inv.issuedAt)}</span>
+                  )}
                 </div>
-                <span className="shrink-0 text-xs" style={{ color: 'var(--text-faint)' }}>{fmtDate(doc.createdAt)}</span>
+                <div className="flex items-center gap-3 shrink-0">
+                  <BillingBadge status={inv.status} />
+                  <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+                    {fmtCents(inv.totalCents, inv.currency)}
+                  </span>
+                </div>
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Payments summary */}
+      {payments.length > 0 && (
+        <div className="rounded-xl border p-5" style={{ borderColor: 'var(--border)', background: 'var(--surface)' }}>
+          <h2 className="mb-3 text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Paiements</h2>
+          <div className="flex flex-col gap-2">
+            {payments.map((p, i) => (
+              <div
+                key={`p-${i}`}
+                className="flex items-center justify-between rounded-lg px-3 py-2.5"
+                style={{ background: 'var(--surface-hover)' }}
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <CheckCircle size={14} style={{ color: 'var(--success)' }} />
+                  <span className="text-sm" style={{ color: 'var(--text-primary)' }}>{fmtDate(p.paidAt)}</span>
+                  <span className="text-xs" style={{ color: 'var(--text-faint)' }}>{p.method}</span>
+                </div>
+                <span className="text-sm font-semibold shrink-0" style={{ color: 'var(--success)' }}>
+                  {fmtCents(p.amountCents)}
+                </span>
+              </div>
+            ))}
+          </div>
+          <div className="mt-3 border-t pt-3" style={{ borderColor: 'var(--border)' }}>
+            <p className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>
+              Total re\u00e7u :{' '}
+              <span className="font-semibold" style={{ color: 'var(--success)' }}>
+                {fmtCents(payments.reduce((sum, p) => sum + Number(p.amountCents), 0).toString())}
+              </span>
+            </p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ═══ Documents Tab ═══ */
+
+function DocumentsTab({
+  token,
+  documents,
+  allowClientUpload,
+  previewDoc,
+  previewDocId,
+  onPreview,
+  onUploadSuccess,
+}: {
+  token: string;
+  documents: DocumentData[];
+  allowClientUpload: boolean;
+  previewDoc: DocumentData | null;
+  previewDocId: string | null;
+  onPreview: (id: string | null) => void;
+  onUploadSuccess: () => void;
+}) {
+  return (
+    <div className="flex flex-col gap-5 animate-fade-in-up">
+      {/* Document list */}
+      <div className="rounded-xl border p-5" style={{ borderColor: 'var(--border)', background: 'var(--surface)' }}>
+        <h2 className="mb-4 text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Fichiers</h2>
+
+        {documents.length === 0 ? (
+          <p className="py-4 text-center text-sm" style={{ color: 'var(--text-secondary)' }}>
+            Aucun document pour l&apos;instant.
+          </p>
+        ) : (
+          <div className="flex flex-col gap-1.5">
+            {documents.map((doc) => {
+              const canPreview = isPreviewable(doc.mimeType);
+              const isActive = previewDocId === doc.id;
+              return (
+                <div
+                  key={doc.id}
+                  role={canPreview ? 'button' : undefined}
+                  tabIndex={canPreview ? 0 : undefined}
+                  onClick={() => {
+                    if (canPreview) onPreview(isActive ? null : doc.id);
+                  }}
+                  onKeyDown={(e) => {
+                    if (canPreview && (e.key === 'Enter' || e.key === ' ')) {
+                      e.preventDefault();
+                      onPreview(isActive ? null : doc.id);
+                    }
+                  }}
+                  className="flex items-center justify-between gap-3 rounded-lg px-3 py-2.5 transition-colors"
+                  style={{
+                    background: isActive ? 'var(--shell-accent)' : 'var(--surface-hover)',
+                    cursor: canPreview ? 'pointer' : 'default',
+                  }}
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <FileText
+                      size={18}
+                      className="shrink-0"
+                      style={{ color: isActive ? 'white' : 'var(--text-secondary)' }}
+                    />
+                    <div className="min-w-0">
+                      <p
+                        className="truncate text-sm font-medium"
+                        style={{ color: isActive ? 'white' : 'var(--text-primary)' }}
+                      >
+                        {doc.title || doc.filename}
+                      </p>
+                      <p
+                        className="text-xs"
+                        style={{ color: isActive ? 'rgba(255,255,255,0.7)' : 'var(--text-faint)' }}
+                      >
+                        {formatBytes(doc.sizeBytes)} &middot; {fmtDate(doc.createdAt)}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {canPreview && (
+                      <span
+                        className="rounded-md p-1.5 transition-colors"
+                        style={{
+                          color: isActive ? 'white' : 'var(--text-secondary)',
+                        }}
+                        title="Aper\u00e7u"
+                      >
+                        <Eye size={14} />
+                      </span>
+                    )}
+                    <a
+                      href={`/api/share/${token}/documents/${doc.id}/download`}
+                      download
+                      onClick={(e) => e.stopPropagation()}
+                      className="rounded-md p-1.5 transition-colors hover:bg-black/5"
+                      style={{
+                        color: isActive ? 'white' : 'var(--text-secondary)',
+                      }}
+                      title="T\u00e9l\u00e9charger"
+                    >
+                      <Download size={14} />
+                    </a>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Inline preview */}
+      {previewDoc && (
+        <div
+          className="rounded-xl border overflow-hidden animate-fade-in-up"
+          style={{ borderColor: 'var(--border)', background: 'var(--surface)' }}
+        >
+          <div
+            className="flex items-center justify-between px-4 py-3 border-b"
+            style={{ borderColor: 'var(--border)' }}
+          >
+            <p className="text-sm font-medium truncate" style={{ color: 'var(--text-primary)' }}>
+              {previewDoc.title || previewDoc.filename}
+            </p>
+            <button
+              type="button"
+              onClick={() => onPreview(null)}
+              className="shrink-0 rounded-md p-1 transition-colors hover:bg-[var(--surface-hover)]"
+              style={{ color: 'var(--text-secondary)' }}
+            >
+              <X size={16} />
+            </button>
+          </div>
+          <div className="p-1" style={{ background: 'var(--surface-hover)' }}>
+            {previewDoc.mimeType === 'application/pdf' ? (
+              <iframe
+                src={`/api/share/${token}/documents/${previewDoc.id}/view`}
+                className="h-[70vh] w-full rounded-lg"
+                title={previewDoc.title || previewDoc.filename}
+                style={{ border: 'none' }}
+              />
+            ) : (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={`/api/share/${token}/documents/${previewDoc.id}/view`}
+                alt={previewDoc.title || previewDoc.filename}
+                className="mx-auto max-h-[70vh] rounded-lg object-contain"
+              />
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Upload zone */}
+      {allowClientUpload && (
+        <UploadZone token={token} onSuccess={onUploadSuccess} />
+      )}
+    </div>
+  );
+}
+
+/* ═══ Upload Zone ═══ */
+
+function UploadZone({ token, onSuccess }: { token: string; onSuccess: () => void }) {
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+  const [file, setFile] = useState<File | null>(null);
+  const [title, setTitle] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  function handleFile(f: File) {
+    setFile(f);
+    setFeedback(null);
+    if (!title.trim()) {
+      setTitle(f.name.replace(/\.[^.]+$/, ''));
+    }
+  }
+
+  function handleFiles(files: FileList | null) {
+    if (!files || files.length === 0) return;
+    handleFile(files[0]);
+  }
+
+  async function handleSubmit() {
+    if (!file || uploading) return;
+    setUploading(true);
+    setFeedback(null);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      if (title.trim()) formData.append('title', title.trim());
+
+      const res = await fetch(`/api/share/${token}/upload`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error((body as { error?: string } | null)?.error ?? 'Erreur lors de l\'envoi.');
+      }
+
+      setFeedback({ type: 'success', message: 'Document envoy\u00e9 avec succ\u00e8s.' });
+      setFile(null);
+      setTitle('');
+      onSuccess();
+    } catch (err) {
+      setFeedback({ type: 'error', message: err instanceof Error ? err.message : 'Erreur lors de l\'envoi.' });
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  return (
+    <div className="rounded-xl border p-5" style={{ borderColor: 'var(--border)', background: 'var(--surface)' }}>
+      <h2 className="mb-4 text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Envoyer un document</h2>
+
+      {/* Drop zone */}
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={() => inputRef.current?.click()}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            inputRef.current?.click();
+          }
+        }}
+        onDragOver={(e) => {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'copy';
+          setDragOver(true);
+        }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDragOver(false);
+          handleFiles(e.dataTransfer.files);
+        }}
+        className="flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-4 py-6 text-center transition-colors cursor-pointer"
+        style={{
+          borderColor: dragOver ? 'var(--shell-accent)' : 'var(--border)',
+          background: dragOver ? 'var(--surface-hover)' : 'transparent',
+        }}
+      >
+        <Upload size={24} style={{ color: 'var(--text-faint)' }} />
+        <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+          {file ? file.name : 'Glissez un fichier ici ou cliquez pour s\u00e9lectionner'}
+        </p>
+        {file && (
+          <p className="text-xs" style={{ color: 'var(--text-faint)' }}>
+            {formatBytes(file.size)}
+          </p>
+        )}
+        <input
+          ref={inputRef}
+          type="file"
+          accept=".pdf,.png,.jpg,.jpeg,.webp,.svg,.docx,.xlsx,.zip,.txt"
+          onChange={(e) => { handleFiles(e.target.files); e.target.value = ''; }}
+          className="hidden"
+        />
+      </div>
+
+      {/* Title + submit */}
+      {file && (
+        <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
+          <div className="flex-1">
+            <label className="mb-1 block text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
+              Titre (optionnel)
+            </label>
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Titre du document"
+              className="w-full rounded-lg border px-3 py-2 text-sm outline-none transition-colors bg-transparent"
+              style={{
+                borderColor: 'var(--border)',
+                color: 'var(--text-primary)',
+              }}
+              onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--shell-accent)'; }}
+              onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; }}
+            />
+          </div>
+          <button
+            type="button"
+            onClick={() => void handleSubmit()}
+            disabled={uploading}
+            className="shrink-0 rounded-lg px-5 py-2 text-sm font-medium text-white transition-opacity disabled:opacity-50"
+            style={{ background: 'var(--shell-accent)' }}
+          >
+            {uploading ? 'Envoi en cours\u2026' : 'Envoyer'}
+          </button>
+        </div>
+      )}
+
+      {/* Feedback */}
+      {feedback && (
+        <div
+          className="mt-3 flex items-center gap-2 rounded-lg px-3 py-2 text-sm"
+          style={{
+            background: feedback.type === 'success' ? 'var(--success-bg)' : 'var(--danger-bg)',
+            color: feedback.type === 'success' ? 'var(--success)' : 'var(--danger)',
+          }}
+        >
+          {feedback.type === 'success' ? <CheckCircle size={14} /> : <AlertCircle size={14} />}
+          {feedback.message}
         </div>
       )}
     </div>
@@ -328,21 +808,11 @@ function BillingBadge({ status }: { status: string }) {
     <span
       className="rounded-full px-2 py-0.5 text-[10px] font-semibold"
       style={{
-        background: isPaid ? 'var(--success-bg)' : isSigned ? 'var(--success-bg)' : 'var(--surface)',
-        color: isPaid ? 'var(--success)' : isSigned ? 'var(--success)' : 'var(--text-secondary)',
+        background: isPaid || isSigned ? 'var(--success-bg)' : 'var(--surface)',
+        color: isPaid || isSigned ? 'var(--success)' : 'var(--text-secondary)',
       }}
     >
       {STATUS_LABELS[status] ?? status}
-    </span>
-  );
-}
-
-function DocIcon({ kind }: { kind: string }) {
-  const isInvoice = kind === 'INVOICE';
-  const isQuote = kind === 'QUOTE';
-  return (
-    <span className="shrink-0 text-xs" style={{ color: 'var(--text-faint)' }}>
-      {isInvoice ? '\ud83d\udcc4' : isQuote ? '\ud83d\udcdd' : '\ud83d\udcc1'}
     </span>
   );
 }

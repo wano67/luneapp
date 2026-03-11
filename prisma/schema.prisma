@@ -197,6 +197,7 @@ model User {
   powensConnection       PowensConnection?
   refreshTokens          RefreshToken[]
   vaultItemsCreated      VaultItem[] @relation("VaultItemCreator")
+  foldersCreated         DocumentFolder[] @relation("FolderCreatedBy")
 }
 
 /**
@@ -285,6 +286,7 @@ model Business {
   associates BusinessAssociate[]
   goals      BusinessGoal[]
   vaultItems VaultItem[]
+  documentFolders DocumentFolder[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -590,6 +592,7 @@ model Project {
   calendarEvents CalendarEvent[] @relation("CalendarEventProject")
   shareTokens   ProjectShareToken[]
   vaultItems    VaultItem[]
+  documentFolders DocumentFolder[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1542,6 +1545,7 @@ model BusinessDocument {
   businessId     BigInt
   clientId       BigInt?
   projectId      BigInt?
+  folderId       BigInt?
   title          String
   filename       String
   mimeType       String
@@ -1552,14 +1556,36 @@ model BusinessDocument {
   createdByUserId BigInt
   createdAt      DateTime     @default(now())
 
-  business  Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  client    Client?  @relation(fields: [clientId], references: [id], onDelete: SetNull)
-  project   Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
-  createdBy User     @relation("DocumentCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  business  Business        @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  client    Client?         @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  project   Project?        @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  folder    DocumentFolder? @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  createdBy User            @relation("DocumentCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
 
   @@index([businessId, clientId, createdAt])
   @@index([businessId, projectId, createdAt])
+  @@index([businessId, projectId, folderId])
   @@index([businessId, createdAt])
+}
+
+model DocumentFolder {
+  id              BigInt   @id @default(autoincrement())
+  businessId      BigInt
+  projectId       BigInt
+  parentId        BigInt?
+  name            String
+  createdByUserId BigInt
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  business  Business         @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  project   Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  parent    DocumentFolder?  @relation("FolderTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children  DocumentFolder[] @relation("FolderTree")
+  createdBy User             @relation("FolderCreatedBy", fields: [createdByUserId], references: [id])
+  documents BusinessDocument[]
+
+  @@index([businessId, projectId, parentId])
 }
 
 /**
@@ -2084,14 +2110,15 @@ model PersonalCalendarToken {
 }
 
 model ProjectShareToken {
-  id          BigInt    @id @default(autoincrement())
-  projectId   BigInt
-  businessId  BigInt
-  token       String    @unique
-  clientEmail String?
-  expiresAt   DateTime?
-  revokedAt   DateTime?
-  createdAt   DateTime  @default(now())
+  id                BigInt    @id @default(autoincrement())
+  projectId         BigInt
+  businessId        BigInt
+  token             String    @unique
+  clientEmail       String?
+  allowClientUpload Boolean   @default(false)
+  expiresAt         DateTime?
+  revokedAt         DateTime?
+  createdAt         DateTime  @default(now())
 
   project  Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)

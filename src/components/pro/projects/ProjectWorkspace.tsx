@@ -169,7 +169,7 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
     catalogServices, catalogSearchResults, serviceTemplates, templatesLoading,
     loadProject, loadServices, loadTasks, loadMembers, loadProjectMembers,
     loadOrganizationUnits, loadActivity, loadDocuments, loadProjectDocuments,
-    projectDocuments, loadQuotes, loadInvoices, loadClients,
+    loadQuotes, loadInvoices, loadClients,
     loadCatalogServices, loadServiceTemplates, refetchAll,
   } = useProjectDataLoaders({ businessId, projectId, onBillingError: setBillingError });
 
@@ -824,7 +824,6 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
           invoices={invoices}
           businessId={businessId}
           projectId={projectId}
-          projectDocuments={projectDocuments}
           uploading={docUploading}
           isAdmin={isAdmin}
           onUpload={uploadDocument}

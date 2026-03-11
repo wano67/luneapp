@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useEffect, useState, type FormEvent } from 'react';
-import { Send, Loader2, ArrowUp, ListTodo } from 'lucide-react';
+import { Send, Loader2, ArrowUp, ListTodo, Paperclip, X, Download } from 'lucide-react';
 import type { MessageItem } from '@/components/pro/projects/hooks/useMessaging';
 
 type ChatPanelProps = {
@@ -11,7 +11,8 @@ type ChatPanelProps = {
   loading: boolean;
   hasMore: boolean;
   conversationName: string;
-  onSend: (content: string, taskId?: string, taskGroupIds?: string[]) => void;
+  businessId: string;
+  onSend: (content: string, taskId?: string, taskGroupIds?: string[], files?: File[]) => void;
   onLoadOlder: () => void;
   onOpenTaskPicker?: () => void;
 };
@@ -53,6 +54,12 @@ function getInitials(name: string): string {
   return name.charAt(0).toUpperCase();
 }
 
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} o`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} Ko`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} Mo`;
+}
+
 export function ChatPanel({
   messages,
   currentUserId,
@@ -60,13 +67,16 @@ export function ChatPanel({
   loading,
   hasMore,
   conversationName,
+  businessId,
   onSend,
   onLoadOlder,
   onOpenTaskPicker,
 }: ChatPanelProps) {
   const [input, setInput] = useState('');
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const bottomRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const prevLengthRef = useRef(messages.length);
 
   // Auto-scroll to bottom when new messages arrive
@@ -85,9 +95,10 @@ export function ChatPanel({
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
     const trimmed = input.trim();
-    if (!trimmed || sending) return;
-    onSend(trimmed);
+    if ((!trimmed && pendingFiles.length === 0) || sending) return;
+    onSend(trimmed, undefined, undefined, pendingFiles.length > 0 ? pendingFiles : undefined);
     setInput('');
+    setPendingFiles([]);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -184,15 +195,18 @@ export function ChatPanel({
                   {msg.attachments.length > 0 && (
                     <div className="mt-1 space-y-1">
                       {msg.attachments.map((att) => (
-                        <div
+                        <a
                           key={String(att.id)}
-                          className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-xs"
+                          href={`/api/pro/businesses/${businessId}/attachments/${att.id}/download`}
+                          download={att.filename}
+                          className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-xs transition-colors hover:bg-[var(--surface-hover)]"
                         >
+                          <Download size={12} className="shrink-0 text-[var(--text-secondary)]" />
                           <span className="truncate text-[var(--text-primary)]">{att.filename}</span>
                           <span className="shrink-0 text-[var(--text-secondary)]">
                             {(att.sizeBytes / 1024).toFixed(0)} Ko
                           </span>
-                        </div>
+                        </a>
                       ))}
                     </div>
                   )}
@@ -222,6 +236,27 @@ export function ChatPanel({
               <ListTodo size={18} />
             </button>
           )}
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            className="hidden"
+            onChange={(e) => {
+              const files = e.target.files;
+              if (files) {
+                setPendingFiles((prev) => [...prev, ...Array.from(files)]);
+              }
+              e.target.value = '';
+            }}
+          />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="shrink-0 rounded-lg p-2 text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
+            title="Joindre un fichier"
+          >
+            <Paperclip size={18} />
+          </button>
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -232,12 +267,35 @@ export function ChatPanel({
           />
           <button
             type="submit"
-            disabled={!input.trim() || sending}
+            disabled={(!input.trim() && pendingFiles.length === 0) || sending}
             className="shrink-0 rounded-xl bg-[var(--primary)] p-2 text-white transition-opacity disabled:opacity-40"
           >
             {sending ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
           </button>
         </div>
+
+        {/* Pending files preview strip */}
+        {pendingFiles.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-2">
+            {pendingFiles.map((file, idx) => (
+              <div
+                key={`${file.name}-${idx}`}
+                className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface-hover)] px-2 py-1 text-xs"
+              >
+                <Paperclip size={12} className="shrink-0 text-[var(--text-secondary)]" />
+                <span className="max-w-[140px] truncate text-[var(--text-primary)]">{file.name}</span>
+                <span className="shrink-0 text-[var(--text-secondary)]">{formatFileSize(file.size)}</span>
+                <button
+                  type="button"
+                  onClick={() => setPendingFiles((prev) => prev.filter((_, i) => i !== idx))}
+                  className="shrink-0 rounded p-0.5 text-[var(--text-secondary)] transition-colors hover:text-[var(--danger)]"
+                >
+                  <X size={12} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </form>
     </div>
   );

@@ -138,26 +138,54 @@ export function useMessaging({ businessId, projectId, enabled, onError }: UseMes
 
   // ------- Send message -------
   const sendMessage = useCallback(
-    async (content: string, taskId?: string, taskGroupIds?: string[]) => {
+    async (content: string, taskId?: string, taskGroupIds?: string[], files?: File[]) => {
       if (!activeConversationId) return;
       setSending(true);
       onError(null);
       try {
-        const res = await fetchJson<{ item: MessageItem }>(`${basePath}/${activeConversationId}/messages`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            content: content || null,
-            taskId: taskId || null,
-            taskGroupIds: taskGroupIds?.length ? taskGroupIds : undefined,
-          }),
-        });
-        if (!res.ok) {
-          onError(res.error ?? 'Impossible d\'envoyer le message.');
-          return;
+        let item: MessageItem | null = null;
+
+        if (files && files.length > 0) {
+          // Use FormData for file uploads (raw fetch — fetchJson sets Content-Type: application/json)
+          const form = new FormData();
+          if (content) form.append('content', content);
+          if (taskId) form.append('taskId', taskId);
+          if (taskGroupIds?.length) {
+            taskGroupIds.forEach((id) => form.append('taskGroupIds', id));
+          }
+          files.forEach((f) => form.append('files', f));
+
+          const res = await fetch(`${basePath}/${activeConversationId}/messages`, {
+            method: 'POST',
+            body: form,
+          });
+          if (!res.ok) {
+            const json = await res.json().catch(() => null);
+            onError((json as { error?: string })?.error ?? 'Impossible d\'envoyer le message.');
+            return;
+          }
+          const json = await res.json();
+          item = (json as { item: MessageItem }).item ?? null;
+        } else {
+          // JSON path (no files)
+          const res = await fetchJson<{ item: MessageItem }>(`${basePath}/${activeConversationId}/messages`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              content: content || null,
+              taskId: taskId || null,
+              taskGroupIds: taskGroupIds?.length ? taskGroupIds : undefined,
+            }),
+          });
+          if (!res.ok) {
+            onError(res.error ?? 'Impossible d\'envoyer le message.');
+            return;
+          }
+          item = res.data?.item ?? null;
         }
-        if (res.data?.item) {
-          setMessages((prev) => [...prev, res.data!.item]);
+
+        if (item) {
+          setMessages((prev) => [...prev, item!]);
         }
         // Refresh conversations list to update lastMessage preview
         loadConversations();

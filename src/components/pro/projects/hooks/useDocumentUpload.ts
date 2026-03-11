@@ -16,13 +16,13 @@ export function useDocumentUpload({
 }: UseDocumentUploadOptions) {
   const [uploading, setUploading] = useState(false);
 
-  const uploadDocument = useCallback(async (file: File, title?: string) => {
+  const uploadDocument = useCallback(async (file: File, folderId?: string | null) => {
     setUploading(true);
     onError(null);
     try {
       const form = new FormData();
       form.append('file', file);
-      if (title) form.append('title', title);
+      if (folderId) form.append('folderId', folderId);
 
       const res = await fetch(`/api/pro/businesses/${businessId}/projects/${projectId}/documents`, {
         method: 'POST',

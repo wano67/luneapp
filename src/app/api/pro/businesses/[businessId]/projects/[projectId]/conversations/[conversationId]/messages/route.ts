@@ -4,6 +4,22 @@ import { jsonb, jsonbCreated } from '@/server/http/json';
 import { badRequest, notFound } from '@/server/http/apiUtils';
 import { parseId, parseStr, parseIdOpt } from '@/server/http/parsers';
 import { notifyMessageReceived } from '@/server/services/notifications';
+import { saveLocalFile } from '@/server/storage/local';
+
+const ALLOWED_MIME_TYPES = [
+  'application/pdf',
+  'image/png',
+  'image/jpeg',
+  'image/webp',
+  'image/svg+xml',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/zip',
+  'text/plain',
+];
+
+const MAX_FILES = 5;
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
 
 function serializeMessage(m: {
   id: bigint;
@@ -105,17 +121,52 @@ export const POST = withBusinessRoute<{ businessId: string; projectId: string; c
     });
     if (!member) return notFound('Conversation introuvable.');
 
-    const body = await req.json().catch(() => null);
-    if (!body) return badRequest('Body JSON requis.');
+    let content: string | null = null;
+    let taskId: bigint | null = null;
+    let taskGroupIds: string | null = null;
+    let files: File[] = [];
 
-    const content = parseStr(body.content, 5000);
-    const taskId = parseIdOpt(body.taskId);
-    const taskGroupIds = Array.isArray(body.taskGroupIds)
-      ? body.taskGroupIds.map(String).join(',')
-      : null;
+    const contentType = req.headers.get('content-type') ?? '';
 
-    if (!content && !taskId && !taskGroupIds) {
-      return badRequest('Le message doit contenir du texte ou une référence de tâche.');
+    if (contentType.includes('multipart/form-data')) {
+      const form = await req.formData();
+
+      content = parseStr(form.get('content') as string | null, 5000);
+      taskId = parseIdOpt(form.get('taskId') as string | null);
+      const taskGroupIdsRaw = form.get('taskGroupIds') as string | null;
+      taskGroupIds = taskGroupIdsRaw ? taskGroupIdsRaw.split(',').map((s) => s.trim()).filter(Boolean).join(',') : null;
+
+      files = form.getAll('files').filter((f): f is File => f instanceof File);
+
+      // Validate files
+      if (files.length > MAX_FILES) {
+        return badRequest(`Maximum ${MAX_FILES} fichiers autorisés.`);
+      }
+      for (const file of files) {
+        if (file.size > MAX_FILE_SIZE) {
+          return badRequest(`Le fichier "${file.name}" dépasse la taille maximale de 10 Mo.`);
+        }
+        if (!ALLOWED_MIME_TYPES.includes(file.type)) {
+          return badRequest(`Type de fichier non autorisé : ${file.type}`);
+        }
+      }
+
+      if (!content && !taskId && !taskGroupIds && files.length === 0) {
+        return badRequest('Le message doit contenir du texte, une référence de tâche ou des fichiers.');
+      }
+    } else {
+      const body = await req.json().catch(() => null);
+      if (!body) return badRequest('Body JSON requis.');
+
+      content = parseStr(body.content, 5000);
+      taskId = parseIdOpt(body.taskId);
+      taskGroupIds = Array.isArray(body.taskGroupIds)
+        ? body.taskGroupIds.map(String).join(',')
+        : null;
+
+      if (!content && !taskId && !taskGroupIds) {
+        return badRequest('Le message doit contenir du texte ou une référence de tâche.');
+      }
     }
 
     const message = await prisma.message.create({
@@ -131,6 +182,40 @@ export const POST = withBusinessRoute<{ businessId: string; projectId: string; c
         attachments: true,
       },
     });
+
+    // Save file attachments
+    if (files.length > 0) {
+      const projectId = parseIdOpt(params.projectId);
+      for (const file of files) {
+        const buffer = Buffer.from(await file.arrayBuffer());
+        const { storageKey, filename: savedFilename } = await saveLocalFile({
+          buffer,
+          filename: file.name,
+          businessId: ctx.businessId,
+          projectId,
+        });
+        await prisma.messageAttachment.create({
+          data: {
+            messageId: message.id,
+            filename: savedFilename,
+            mimeType: file.type,
+            sizeBytes: file.size,
+            storageKey,
+          },
+        });
+      }
+    }
+
+    // Re-fetch message with attachments if files were uploaded
+    const finalMessage = files.length > 0
+      ? await prisma.message.findUniqueOrThrow({
+          where: { id: message.id },
+          include: {
+            sender: { select: { id: true, name: true, email: true } },
+            attachments: true,
+          },
+        })
+      : message;
 
     // Touch conversation updatedAt
     await prisma.conversation.update({
@@ -155,6 +240,6 @@ export const POST = withBusinessRoute<{ businessId: string; projectId: string; c
       projectId,
     );
 
-    return jsonbCreated({ item: serializeMessage(message) }, ctx.requestId);
+    return jsonbCreated({ item: serializeMessage(finalMessage) }, ctx.requestId);
   }
 );
