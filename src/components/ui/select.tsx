@@ -8,6 +8,7 @@ import React, {
   type ReactNode,
   type SelectHTMLAttributes,
 } from 'react';
+import { createPortal } from 'react-dom';
 import { cn } from '@/lib/cn';
 
 type SelectProps = SelectHTMLAttributes<HTMLSelectElement> & {
@@ -91,6 +92,26 @@ function NativeSelect({ label, error, className, children, ...props }: SelectPro
   );
 }
 
+// ── Dropdown positioning ────────────────────────────────────────────────
+
+const DROPDOWN_MAX_H = 224; // max-h-56 = 14rem = 224px
+
+function applyPosition(buttonEl: HTMLElement | null, dropdownEl: HTMLElement | null) {
+  const rect = buttonEl?.getBoundingClientRect();
+  if (!rect || !dropdownEl) return;
+  const spaceBelow = window.innerHeight - rect.bottom;
+  const openUp = spaceBelow < DROPDOWN_MAX_H && rect.top > spaceBelow;
+  dropdownEl.style.left = `${rect.left}px`;
+  dropdownEl.style.width = `${rect.width}px`;
+  if (openUp) {
+    dropdownEl.style.top = '';
+    dropdownEl.style.bottom = `${window.innerHeight - rect.top + 4}px`;
+  } else {
+    dropdownEl.style.top = `${rect.bottom + 4}px`;
+    dropdownEl.style.bottom = '';
+  }
+}
+
 // ── Custom dropdown ─────────────────────────────────────────────────────
 
 function CustomSelect({
@@ -104,7 +125,8 @@ function CustomSelect({
   name,
 }: SelectProps) {
   const [open, setOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement | null>(null);
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
+  const dropdownRef = useRef<HTMLUListElement | null>(null);
   const items = parseChildren(children);
 
   const options = items.filter((it): it is Extract<ParsedItem, { kind: 'option' }> => it.kind === 'option');
@@ -112,17 +134,23 @@ function CustomSelect({
 
   useEffect(() => {
     if (!open) return;
+    const reposition = () => applyPosition(buttonRef.current, dropdownRef.current);
     function handleClick(e: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
+      const target = e.target as Node;
+      if (buttonRef.current?.contains(target)) return;
+      if (dropdownRef.current?.contains(target)) return;
+      setOpen(false);
     }
     function handleKey(e: KeyboardEvent) {
       if (e.key === 'Escape') setOpen(false);
     }
+    window.addEventListener('scroll', reposition, true);
+    window.addEventListener('resize', reposition);
     document.addEventListener('mousedown', handleClick);
     document.addEventListener('keydown', handleKey);
     return () => {
+      window.removeEventListener('scroll', reposition, true);
+      window.removeEventListener('resize', reposition);
       document.removeEventListener('mousedown', handleClick);
       document.removeEventListener('keydown', handleKey);
     };
@@ -140,13 +168,64 @@ function CustomSelect({
     [onChange, name]
   );
 
+  // Position the dropdown via ref callback (runs on mount)
+  const dropdownRefCallback = useCallback(
+    (el: HTMLUListElement | null) => {
+      dropdownRef.current = el;
+      if (el) applyPosition(buttonRef.current, el);
+    },
+    []
+  );
+
+  const dropdown = open
+    ? createPortal(
+        <ul
+          ref={dropdownRefCallback}
+          className="fixed z-[80] max-h-56 overflow-y-auto rounded-xl border border-[var(--border)] bg-[var(--surface)] p-1 shadow-lg"
+          role="listbox"
+        >
+          {items.map((item, idx) => {
+            if (item.kind === 'group') {
+              return (
+                <li
+                  key={`g-${idx}`}
+                  className="px-3 pt-3 pb-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]"
+                >
+                  {item.label}
+                </li>
+              );
+            }
+            return (
+              <li key={`o-${item.value}-${idx}`}>
+                <button
+                  type="button"
+                  className={cn(
+                    'flex w-full items-center rounded-lg px-3 py-2 text-left text-sm transition',
+                    'hover:bg-[var(--surface-hover)] focus:bg-[var(--surface-hover)] focus:outline-none',
+                    String(item.value) === String(value ?? '') ? 'bg-[var(--surface-hover)] font-semibold' : '',
+                    item.disabled ? 'cursor-not-allowed opacity-50' : ''
+                  )}
+                  onClick={() => !item.disabled && handleSelect(item.value)}
+                  disabled={item.disabled}
+                >
+                  {item.label}
+                </button>
+              </li>
+            );
+          })}
+        </ul>,
+        document.body
+      )
+    : null;
+
   return (
-    <div className="flex w-full flex-col gap-1" ref={containerRef}>
+    <div className="flex w-full flex-col gap-1">
       {label ? (
         <span className="text-sm font-medium text-[var(--text-secondary)]">{label}</span>
       ) : null}
       <div className="relative">
         <button
+          ref={buttonRef}
           type="button"
           className={cn(
             'flex w-full items-center justify-between rounded-xl border bg-[var(--surface)] px-4 py-3 text-left text-base text-[var(--text-primary)] transition-colors',
@@ -175,43 +254,7 @@ function CustomSelect({
             <path d="M6 9l6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </button>
-
-        {open ? (
-          <ul
-            className="absolute left-0 right-0 top-full z-50 mt-1 max-h-56 overflow-y-auto rounded-xl border border-[var(--border)] bg-[var(--surface)] p-1 shadow-lg"
-            role="listbox"
-          >
-            {items.map((item, idx) => {
-              if (item.kind === 'group') {
-                return (
-                  <li
-                    key={`g-${idx}`}
-                    className="px-3 pt-3 pb-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]"
-                  >
-                    {item.label}
-                  </li>
-                );
-              }
-              return (
-                <li key={`o-${item.value}-${idx}`}>
-                  <button
-                    type="button"
-                    className={cn(
-                      'flex w-full items-center rounded-lg px-3 py-2 text-left text-sm transition',
-                      'hover:bg-[var(--surface-hover)] focus:bg-[var(--surface-hover)] focus:outline-none',
-                      String(item.value) === String(value ?? '') ? 'bg-[var(--surface-hover)] font-semibold' : '',
-                      item.disabled ? 'cursor-not-allowed opacity-50' : ''
-                    )}
-                    onClick={() => !item.disabled && handleSelect(item.value)}
-                    disabled={item.disabled}
-                  >
-                    {item.label}
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        ) : null}
+        {dropdown}
       </div>
       {error ? <span className="text-xs text-[var(--danger)]">{error}</span> : null}
     </div>

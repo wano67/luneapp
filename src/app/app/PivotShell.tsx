@@ -45,7 +45,7 @@ export default function PivotShell({ children }: { children: ReactNode }) {
     (async () => {
       const [me, biz] = await Promise.all([
         fetchJson<{ user?: { name?: string } }>('/api/auth/me', {}, ctrl.signal),
-        fetchJson<{ items?: Array<{ business?: { id?: bigint | string; name?: string } }> }>(
+        fetchJson<{ items?: Array<{ business?: { id?: bigint | string; name?: string; activityType?: string | null }; role?: string }> }>(
           '/api/pro/businesses',
           {},
           ctrl.signal
@@ -59,8 +59,8 @@ export default function PivotShell({ children }: { children: ReactNode }) {
             .map((i) => ({
               id: String(i.business?.id ?? ''),
               name: i.business?.name ?? '',
-              role: (i as Record<string, unknown>).role as string | undefined,
-              activityType: (i.business as Record<string, unknown> | undefined)?.activityType as string | null | undefined,
+              role: i.role,
+              activityType: i.business?.activityType,
             }))
             .filter((b) => b.id && b.id !== '0')
         );

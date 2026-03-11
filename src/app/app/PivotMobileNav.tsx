@@ -16,7 +16,6 @@ import { Menu } from 'lucide-react';
 import { proNavSections, hasMinRole } from '@/config/proNav';
 import { personalNavSections } from '@/config/personalNav';
 import { pivotIconMap } from '@/config/pivotNavIcons';
-import { useActiveBusiness } from './pro/ActiveBusinessProvider';
 import type { Space, BusinessItem } from './PivotShell';
 
 type Props = {
@@ -107,8 +106,7 @@ function isExactActive(pathname: string, href: string): boolean {
 
 /* ═══ Mobile Nav ═══ */
 
-export default function PivotMobileNav({ space, pathname, businessId, businesses: _businesses, userName: _userName }: Props) {
-  const activeCtx = useActiveBusiness({ optional: true });
+export default function PivotMobileNav({ space, pathname, businessId, businesses, userName: _userName }: Props) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [closing, setClosing] = useState(false);
   useBodyScrollLock(menuOpen);
@@ -136,7 +134,8 @@ export default function PivotMobileNav({ space, pathname, businessId, businesses
   } else if (effectiveSpace === 'perso') {
     menuSections = getPersoSections();
   } else if (effectiveSpace === 'pro' && businessId) {
-    menuSections = getProSections(businessId, activeCtx?.activeBusiness?.role, activeCtx?.activeBusiness?.activityType);
+    const currentBiz = businesses.find((b) => b.id === businessId);
+    menuSections = getProSections(businessId, currentBiz?.role, currentBiz?.activityType);
   } else if (effectiveSpace === 'pro') {
     menuSections = [{ title: 'Pro', items: [{ icon: <IconEntreprise size={22} color="currentColor" />, label: 'Mes entreprises', href: '/app/pro' }] }];
   } else if (effectiveSpace === 'focus') {
