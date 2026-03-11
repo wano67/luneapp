@@ -288,7 +288,7 @@ export function useBillingHandlers({
         return;
       }
       onBillingInfo('Devis créé.');
-      toast.success('Devis créé.');
+      toast.celebrate({ title: 'Devis créé !' });
       await Promise.all([loadQuotes(), loadInvoices(), loadProject()]);
     } catch (err) {
       onBillingError(getErrorMessage(err));
@@ -412,7 +412,7 @@ export function useBillingHandlers({
         return;
       }
       onBillingInfo('Facture créée.');
-      toast.success('Facture créée.');
+      toast.celebrate({ title: 'Facture créée !' });
       await Promise.all([loadInvoices(), loadProject()]);
     } catch (err) {
       onBillingError(getErrorMessage(err));
@@ -436,7 +436,7 @@ export function useBillingHandlers({
         return;
       }
       onBillingInfo('Facture mensuelle créée.');
-      toast.success('Facture mensuelle créée.');
+      toast.celebrate({ title: 'Facture mensuelle créée !' });
       await Promise.all([loadInvoices(), loadProject()]);
     } catch (err) {
       onBillingError(getErrorMessage(err));
@@ -517,7 +517,7 @@ export function useBillingHandlers({
         return;
       }
       onBillingInfo('Facture créée.');
-      toast.success('Facture créée.');
+      toast.celebrate({ title: 'Facture créée !' });
       closeStagedInvoiceModal();
       await Promise.all([loadInvoices(), loadProject()]);
     } catch (err) {

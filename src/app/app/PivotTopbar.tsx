@@ -3,7 +3,7 @@
 import type { ReactNode } from 'react';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
-import { ChevronDown, Search, CheckSquare, Calendar, MessageSquare, AlertTriangle, UserPlus, X, Loader2 } from 'lucide-react';
+import { ChevronDown, Search, CheckSquare, Calendar, MessageSquare, AlertTriangle, AlertOctagon, UserPlus, Users, UserSearch, X, Loader2 } from 'lucide-react';
 import {
   IconAlert,
   IconMessage,
@@ -297,6 +297,9 @@ type NotifItem = {
   taskId: string | null;
   projectId: string | null;
   conversationId: string | null;
+  clientId: string | null;
+  prospectId: string | null;
+  calendarEventId: string | null;
   isRead: boolean;
   createdAt: string;
 };
@@ -367,14 +370,18 @@ function NotificationsDropdown({ onToggleMessaging }: { onToggleMessaging?: () =
     } catch { /* silent */ }
   }, []);
 
-  const NOTIF_ICONS: Record<string, 'task' | 'interaction' | 'message' | 'project' | 'invite'> = {
+  const NOTIF_ICONS: Record<string, 'task' | 'blocked' | 'message' | 'project' | 'invite' | 'calendar' | 'client' | 'prospect'> = {
     TASK_ASSIGNED: 'task',
     TASK_STATUS_CHANGED: 'task',
     TASK_DUE_SOON: 'task',
-    TASK_BLOCKED: 'interaction',
+    TASK_BLOCKED: 'blocked',
+    TASK_OVERDUE: 'task',
     MESSAGE_RECEIVED: 'message',
     PROJECT_OVERDUE: 'project',
     BUSINESS_INVITE: 'invite',
+    CALENDAR_REMINDER: 'calendar',
+    CLIENT_FOLLOWUP: 'client',
+    PROSPECT_FOLLOWUP: 'prospect',
   };
 
   return (
@@ -439,11 +446,17 @@ function NotificationsDropdown({ onToggleMessaging }: { onToggleMessaging?: () =
                   const iconType = NOTIF_ICONS[notif.type] ?? 'task';
                   const href = notif.type === 'BUSINESS_INVITE'
                     ? '/app'
-                    : notif.projectId && notif.businessId
-                      ? `/app/pro/${notif.businessId}/projects/${notif.projectId}`
-                      : notif.taskId && notif.businessId
-                        ? `/app/pro/${notif.businessId}/tasks`
-                        : null;
+                    : notif.clientId && notif.businessId
+                      ? `/app/pro/${notif.businessId}/clients/${notif.clientId}`
+                      : notif.prospectId && notif.businessId
+                        ? `/app/pro/${notif.businessId}/prospects/${notif.prospectId}`
+                        : notif.calendarEventId && notif.businessId
+                          ? `/app/pro/${notif.businessId}/calendar`
+                          : notif.projectId && notif.businessId
+                            ? `/app/pro/${notif.businessId}/projects/${notif.projectId}`
+                            : notif.taskId && notif.businessId
+                              ? `/app/pro/${notif.businessId}/tasks`
+                              : null;
 
                   const inner = (
                     <div className="flex items-start gap-3">
@@ -460,21 +473,29 @@ function NotificationsDropdown({ onToggleMessaging }: { onToggleMessaging?: () =
                           width: 28,
                           height: 28,
                           background:
-                            iconType === 'task' || iconType === 'message' || iconType === 'invite'
-                              ? 'var(--shell-accent)'
-                              : 'var(--danger-bg)',
+                            iconType === 'project' || iconType === 'blocked'
+                              ? 'var(--danger-bg)'
+                              : 'var(--shell-accent)',
                         }}
                       >
                         {iconType === 'task' ? (
                           <CheckSquare size={14} style={{ color: 'white' }} />
+                        ) : iconType === 'blocked' ? (
+                          <AlertOctagon size={14} style={{ color: 'var(--danger)' }} />
                         ) : iconType === 'message' ? (
                           <MessageSquare size={14} style={{ color: 'white' }} />
                         ) : iconType === 'invite' ? (
                           <UserPlus size={14} style={{ color: 'white' }} />
                         ) : iconType === 'project' ? (
                           <AlertTriangle size={14} style={{ color: 'var(--danger)' }} />
+                        ) : iconType === 'calendar' ? (
+                          <Calendar size={14} style={{ color: 'white' }} />
+                        ) : iconType === 'client' ? (
+                          <Users size={14} style={{ color: 'white' }} />
+                        ) : iconType === 'prospect' ? (
+                          <UserSearch size={14} style={{ color: 'white' }} />
                         ) : (
-                          <Calendar size={14} style={{ color: 'var(--danger)' }} />
+                          <CheckSquare size={14} style={{ color: 'white' }} />
                         )}
                       </div>
                       <div className="flex-1 min-w-0">
@@ -592,7 +613,7 @@ function BusinessSwitcher({ businesses, currentId }: { businesses: BusinessItem[
             {/* Actions */}
             <div className="py-1">
               <Link
-                href="/app/pro/new"
+                href="/app/pro?create=1"
                 className="flex items-center gap-2.5 px-4 py-2.5 text-sm transition-colors hover:bg-[var(--surface-hover)]"
                 style={{ color: 'var(--text)' }}
                 onClick={() => setOpen(false)}

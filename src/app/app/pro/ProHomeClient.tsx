@@ -18,6 +18,7 @@ import { LogoAvatar } from '@/components/pro/LogoAvatar';
 import { CreateBusinessWizard, defaultDraft, type CreateBusinessDraft } from './components/CreateBusinessWizard';
 import { Modal } from '@/components/ui/modal';
 import SwitchBusinessModal from './SwitchBusinessModal';
+import { useToast } from '@/components/ui/toast';
 
 /* ===================== TYPES ===================== */
 
@@ -85,6 +86,7 @@ type OverviewResponse = {
 export default function ProHomeClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const toast = useToast();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -114,6 +116,7 @@ export default function ProHomeClient() {
     const issues: string[] = [];
     if (!draft.name.trim()) issues.push("Le nom de l'entreprise est obligatoire.");
     if (!draft.countryCode.trim()) issues.push('Pays requis.');
+    if (!draft.legalForm) issues.push('Forme juridique requise.');
     return { ok: issues.length === 0, issues };
   }, [draft]);
 
@@ -276,6 +279,8 @@ export default function ProHomeClient() {
     try {
       setCreating(true);
 
+      const capitalCents = draft.capital ? Math.round(parseFloat(draft.capital) * 100) : undefined;
+
       const res = await fetchJson<BusinessInviteAcceptResponse>(
         '/api/pro/businesses',
         {
@@ -283,27 +288,26 @@ export default function ProHomeClient() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             name: draft.name.trim(),
-            websiteUrl: draft.websiteUrl.trim() || undefined,
+            legalForm: draft.legalForm,
             activityType: draft.activityType,
             countryCode: draft.countryCode || 'FR',
             currency: draft.currency || 'EUR',
-            sector: draft.sector,
-            size: draft.size,
-            goal: draft.goal,
+            taxRegime: draft.taxRegime || undefined,
             vatEnabled: draft.vatEnabled,
             vatRatePercent: Number(draft.vatRate) || 20,
             invoicePrefix: draft.invoicePrefix,
             quotePrefix: draft.quotePrefix,
-            legalName: draft.legalName,
-            legalForm: draft.legalForm,
-            nafCode: draft.nafCode,
-            nafLabel: draft.nafLabel,
-            siret: draft.siret,
-            vatNumber: draft.vatNumber,
-            addressLine1: draft.addressLine1,
-            addressLine2: draft.addressLine2,
-            postalCode: draft.postalCode,
-            city: draft.city,
+            websiteUrl: draft.websiteUrl.trim() || undefined,
+            legalName: draft.legalName.trim() || undefined,
+            nafCode: draft.nafCode.trim() || undefined,
+            nafLabel: draft.nafLabel.trim() || undefined,
+            siret: draft.siret.trim() || undefined,
+            vatNumber: draft.vatNumber.trim() || undefined,
+            addressLine1: draft.addressLine1.trim() || undefined,
+            addressLine2: draft.addressLine2.trim() || undefined,
+            postalCode: draft.postalCode.trim() || undefined,
+            city: draft.city.trim() || undefined,
+            capital: capitalCents && capitalCents > 0 ? capitalCents : undefined,
           }),
         }
       );
@@ -317,6 +321,7 @@ export default function ProHomeClient() {
 
       await refreshBusinesses();
 
+      toast.celebrate({ title: 'Entreprise créée !', subtitle: draft.name.trim() });
       setCreateOpen(false);
       setDraft(defaultDraft);
       rememberAndGo(res.data.business.id, `/app/pro/${res.data.business.id}`);

@@ -10,8 +10,12 @@ const NOTIFICATION_TYPES: { key: string; label: string; description: string }[] 
   { key: 'TASK_STATUS_CHANGED', label: 'Statut de tâche', description: 'Quand le statut d\'une tâche change.' },
   { key: 'TASK_DUE_SOON', label: 'Échéance proche', description: 'Quand une tâche arrive à échéance sous 24h.' },
   { key: 'TASK_BLOCKED', label: 'Tâche bloquée', description: 'Quand une tâche est marquée bloquée.' },
+  { key: 'TASK_OVERDUE', label: 'Tâche en retard', description: 'Quand une tâche dépasse sa date d\'échéance.' },
   { key: 'MESSAGE_RECEIVED', label: 'Nouveau message', description: 'Quand un message est reçu dans une conversation.' },
   { key: 'PROJECT_OVERDUE', label: 'Projet en retard', description: 'Quand un projet dépasse sa date de fin.' },
+  { key: 'CALENDAR_REMINDER', label: 'Rappel calendrier', description: 'Rappel avant un événement de votre calendrier business.' },
+  { key: 'CLIENT_FOLLOWUP', label: 'Relance client', description: 'Quand un client actif n\'a pas eu d\'interaction depuis 21 jours.' },
+  { key: 'PROSPECT_FOLLOWUP', label: 'Relance prospect', description: 'Quand un prospect actif n\'a pas été suivi depuis 24h.' },
   { key: 'BUSINESS_INVITE', label: 'Invitation business', description: 'Quand vous êtes invité à rejoindre un business.' },
 ];
 

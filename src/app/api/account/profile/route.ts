@@ -13,6 +13,8 @@ type Body = {
   firstName?: unknown;
   lastName?: unknown;
   email?: unknown;
+  onboardingPersonalDone?: unknown;
+  onboardingProDone?: unknown;
 };
 
 function buildName(firstName?: string | null, lastName?: string | null) {
@@ -38,6 +40,19 @@ export async function PATCH(req: NextRequest) {
   if (limited) return limited;
 
   const body: Body = await req.json().catch(() => ({}));
+
+  // Onboarding-only update (no email required)
+  const isOnboardingOnly = (body.onboardingPersonalDone === true || body.onboardingProDone === true)
+    && !body.email && !body.firstName && !body.lastName;
+
+  if (isOnboardingOnly) {
+    const data: Record<string, boolean> = {};
+    if (body.onboardingPersonalDone === true) data.onboardingPersonalDone = true;
+    if (body.onboardingProDone === true) data.onboardingProDone = true;
+    await prisma.user.update({ where: { id: BigInt(userId) }, data });
+    return withRequestId(jsonNoStore({ ok: true }), requestId);
+  }
+
   const emailRaw = typeof body.email === 'string' ? body.email.trim() : '';
   if (!emailRaw) return withRequestId(badRequest('Email requis.'), requestId);
 
@@ -48,12 +63,17 @@ export async function PATCH(req: NextRequest) {
 
   const email = normalizeEmail(emailRaw);
   try {
+    const data: Record<string, unknown> = {
+      email,
+      name: buildName(firstName, lastName),
+    };
+    // One-way: can only set to true
+    if (body.onboardingPersonalDone === true) data.onboardingPersonalDone = true;
+    if (body.onboardingProDone === true) data.onboardingProDone = true;
+
     const updated = await prisma.user.update({
       where: { id: BigInt(userId) },
-      data: {
-        email,
-        name: buildName(firstName, lastName),
-      },
+      data,
     });
 
     return withRequestId(

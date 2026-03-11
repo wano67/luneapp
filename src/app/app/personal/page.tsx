@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { ChevronRight, ChartNoAxesColumnIncreasing, ChartNoAxesColumnDecreasing, Landmark, ArrowRight } from 'lucide-react';
+import { ChevronRight, ChartNoAxesColumnIncreasing, ChartNoAxesColumnDecreasing, Landmark, ArrowRight, Wallet, BarChart3, PiggyBank } from 'lucide-react';
 import { fetchJson } from '@/lib/apiClient';
 import { useUserPreferences } from '@/lib/hooks/useUserPreferences';
 import { onWalletRefresh } from '@/lib/personalEvents';
@@ -12,6 +12,7 @@ import { BANK_MAP } from '@/config/banks';
 import { FaviconAvatar } from '@/app/app/components/FaviconAvatar';
 import { PageContainer } from '@/components/layouts/PageContainer';
 import { Alert } from '@/components/ui/alert';
+import { OnboardingModal } from '@/components/ui/OnboardingModal';
 
 /* ═══ Types ═══ */
 
@@ -84,6 +85,7 @@ export default function WalletHomePage() {
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [periodOverride, setPeriodOverride] = useState<number | null>(null);
+  const [showOnboarding, setShowOnboarding] = useState(true);
   const periodDays = periodOverride ?? prefs.dashboardPeriodDays;
 
   const load = useCallback(async (days: number) => {
@@ -186,6 +188,35 @@ export default function WalletHomePage() {
 
   return (
     <PageContainer className="gap-3 md:gap-4 md:h-full md:overflow-hidden">
+      {showOnboarding && (
+        <OnboardingModal
+          storageKey="lune:onboarding:personal"
+          apiField="onboardingPersonalDone"
+          onComplete={() => setShowOnboarding(false)}
+          steps={[
+            {
+              icon: <Wallet size={28} style={{ color: 'white' }} />,
+              title: 'Bienvenue sur votre Wallet',
+              description: 'Votre espace finances personnelles. Suivez vos comptes, transactions et budgets en un coup d\'oeil.',
+            },
+            {
+              icon: <Landmark size={28} style={{ color: 'white' }} />,
+              title: 'Comptes & Transactions',
+              description: 'Ajoutez vos comptes bancaires et importez vos transactions pour avoir une vue complète de vos finances.',
+            },
+            {
+              icon: <BarChart3 size={28} style={{ color: 'white' }} />,
+              title: 'Budgets & Suivi',
+              description: 'Créez des budgets par catégorie, suivez vos dépenses et visualisez vos tendances mois par mois.',
+            },
+            {
+              icon: <PiggyBank size={28} style={{ color: 'white' }} />,
+              title: 'Épargne & Objectifs',
+              description: 'Définissez des objectifs d\'épargne, planifiez des versements et suivez votre progression.',
+            },
+          ]}
+        />
+      )}
       {error ? <Alert variant="danger" title={error} /> : null}
 
       {/* ─── Title + Period filters ─── */}

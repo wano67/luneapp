@@ -93,6 +93,8 @@ export function toPublicUser(user: User): PublicUser {
     defaultSubscriptionFrequency: user.defaultSubscriptionFrequency,
     dashboardPeriodDays: user.dashboardPeriodDays,
     itemsPerPage: user.itemsPerPage,
+    onboardingPersonalDone: user.onboardingPersonalDone,
+    onboardingProDone: user.onboardingProDone,
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
   };

@@ -146,6 +146,9 @@ model User {
   language     String   @default("fr")
   theme        String   @default("system")
 
+  onboardingPersonalDone Boolean @default(false)
+  onboardingProDone      Boolean @default(false)
+
   // Finances personnelles — préférences
   defaultCurrency              String  @default("EUR")
   defaultTransactionType       String  @default("EXPENSE")
@@ -239,6 +242,8 @@ model Business {
   nafLabel         String?
   leaderTitle      String?
   socialRegime     SocialRegime?
+  capital          Int?       // Capital social en cents
+  profileComplete  Boolean    @default(false)
 
   ownerId BigInt
   owner   User   @relation("BusinessOwner", fields: [ownerId], references: [id])
@@ -397,6 +402,8 @@ model Prospect {
   pipelineStatus ProspectPipelineStatus @default(NEW)
   status          ProspectStatus        @default(NEW)
 
+  notifications Notification[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -529,6 +536,7 @@ model Client {
   documents BusinessDocument[]
   subscriptions Subscription[]
   calendarEvents CalendarEvent[] @relation("CalendarEventClient")
+  notifications  Notification[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1852,6 +1860,10 @@ enum NotificationType {
   MESSAGE_RECEIVED
   PROJECT_OVERDUE
   BUSINESS_INVITE
+  CALENDAR_REMINDER
+  TASK_OVERDUE
+  CLIENT_FOLLOWUP
+  PROSPECT_FOLLOWUP
 }
 
 // ────────── Business Regulation Enums ──────────
@@ -1890,24 +1902,33 @@ model Notification {
   type       NotificationType
   title      String
   body       String?
-  taskId         BigInt?
-  projectId      BigInt?
-  conversationId BigInt?
+  taskId          BigInt?
+  projectId       BigInt?
+  conversationId  BigInt?
+  clientId        BigInt?
+  prospectId      BigInt?
+  calendarEventId BigInt?
   isRead     Boolean          @default(false)
   readAt     DateTime?
   createdAt  DateTime         @default(now())
 
-  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  business     Business      @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  task         Task?         @relation(fields: [taskId], references: [id], onDelete: SetNull)
-  project      Project?      @relation(fields: [projectId], references: [id], onDelete: SetNull)
-  conversation Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  business      Business       @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  task          Task?          @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  project       Project?       @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  conversation  Conversation?  @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  client        Client?        @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  prospect      Prospect?      @relation(fields: [prospectId], references: [id], onDelete: SetNull)
+  calendarEvent CalendarEvent? @relation(fields: [calendarEventId], references: [id], onDelete: SetNull)
 
   @@index([userId, isRead, createdAt])
   @@index([businessId, userId])
   @@index([taskId])
   @@index([projectId])
   @@index([conversationId])
+  @@index([clientId])
+  @@index([prospectId])
+  @@index([calendarEventId])
 }
 
 model NotificationPreference {
@@ -1946,8 +1967,9 @@ model CalendarEvent {
 
   business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
   user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  client   Client?  @relation("CalendarEventClient", fields: [clientId], references: [id], onDelete: SetNull)
-  project  Project? @relation("CalendarEventProject", fields: [projectId], references: [id], onDelete: SetNull)
+  client        Client?        @relation("CalendarEventClient", fields: [clientId], references: [id], onDelete: SetNull)
+  project       Project?       @relation("CalendarEventProject", fields: [projectId], references: [id], onDelete: SetNull)
+  notifications Notification[]
 
   @@index([businessId, startAt])
   @@index([userId, startAt])

@@ -38,6 +38,11 @@ type MenuItem = {
   href: string;
 };
 
+type MenuSection = {
+  title: string;
+  items: MenuItem[];
+};
+
 /* ═══ Menu items per section ═══ */
 
 function getPersoItems(): MenuItem[] {
@@ -52,23 +57,26 @@ function getPersoItems(): MenuItem[] {
   ];
 }
 
-function getProItems(businessId: string, role?: string | null, activityType?: string | null): MenuItem[] {
-  return proNavSections.flatMap((section) =>
-    section.items
-      .filter((item) => {
-        if (item.minRole && !hasMinRole(role, item.minRole)) return false;
-        if (item.activityTypes && activityType && !item.activityTypes.includes(activityType as never)) return false;
-        return true;
-      })
-      .map((item) => {
-        const iconFn = pivotIconMap[item.id];
-        return {
-          icon: iconFn ? iconFn('currentColor') : <IconEntreprise size={22} color="currentColor" />,
-          label: item.label,
-          href: item.href(businessId),
-        };
-      })
-  );
+function getProSections(businessId: string, role?: string | null, activityType?: string | null): MenuSection[] {
+  return proNavSections
+    .map((section) => {
+      const items = section.items
+        .filter((item) => {
+          if (item.minRole && !hasMinRole(role, item.minRole)) return false;
+          if (item.activityTypes && activityType && !item.activityTypes.includes(activityType as never)) return false;
+          return true;
+        })
+        .map((item) => {
+          const iconFn = pivotIconMap[item.id];
+          return {
+            icon: iconFn ? iconFn('currentColor') : <IconEntreprise size={22} color="currentColor" />,
+            label: item.label,
+            href: item.href(businessId),
+          };
+        });
+      return { title: section.title, items };
+    })
+    .filter((s) => s.items.length > 0);
 }
 
 function getFocusItems(): MenuItem[] {
@@ -122,22 +130,29 @@ export default function PivotMobileNav({ space, pathname, businessId, businesses
     }, 250);
   }
 
-  // Get menu items for the current section
-  let menuItems: MenuItem[] = [];
+  // Get menu sections for the current space
+  let menuSections: MenuSection[] = [];
   if (effectiveSpace === 'home' || effectiveSpace === null) {
-    menuItems = [
+    menuSections = [{ title: 'Menu', items: [
       { icon: <IconPerso size={22} color="currentColor" />, label: 'Wallet', href: '/app/personal' },
       { icon: <IconEntreprise size={22} color="currentColor" />, label: 'Entreprises', href: '/app/pro' },
       { icon: <BarChart3 size={22} />, label: 'Performance', href: '/app/focus' },
       { icon: <IconSettings size={22} color="currentColor" />, label: 'Mon compte', href: '/app/account' },
-    ];
-  } else if (effectiveSpace === 'perso') menuItems = getPersoItems();
-  else if (effectiveSpace === 'pro' && businessId) menuItems = getProItems(businessId, activeCtx?.activeBusiness?.role, activeCtx?.activeBusiness?.activityType);
-  else if (effectiveSpace === 'pro') menuItems = [{ icon: <IconEntreprise size={22} color="currentColor" />, label: 'Mes entreprises', href: '/app/pro' }];
-  else if (effectiveSpace === 'focus') menuItems = getFocusItems();
+    ] }];
+  } else if (effectiveSpace === 'perso') {
+    menuSections = [{ title: 'Wallet', items: getPersoItems() }];
+  } else if (effectiveSpace === 'pro' && businessId) {
+    menuSections = getProSections(businessId, activeCtx?.activeBusiness?.role, activeCtx?.activeBusiness?.activityType);
+  } else if (effectiveSpace === 'pro') {
+    menuSections = [{ title: 'Pro', items: [{ icon: <IconEntreprise size={22} color="currentColor" />, label: 'Mes entreprises', href: '/app/pro' }] }];
+  } else if (effectiveSpace === 'focus') {
+    menuSections = [{ title: 'Performance', items: getFocusItems() }];
+  }
 
   const sectionTitle = getSectionTitle(effectiveSpace, inBusiness);
-  const hasMenu = menuItems.length > 0;
+  const totalItems = menuSections.reduce((n, s) => n + s.items.length, 0);
+  const hasMenu = totalItems > 0;
+  const compact = totalItems > 8;
 
   return (
     <>
@@ -217,23 +232,46 @@ export default function PivotMobileNav({ space, pathname, businessId, businesses
             </p>
           </div>
 
-          {/* Nav items — centered, large text */}
-          <div className="flex-1 flex flex-col justify-center gap-1 px-6">
-            {menuItems.map((item) => {
-              const active = item.href === '/app/personal'
-                ? isExactActive(pathname, item.href)
-                : isItemActive(pathname, item.href);
-              return (
-                <BubbleMenuItem
-                  key={item.href}
-                  icon={item.icon}
-                  label={item.label}
-                  href={item.href}
-                  active={active}
-                  onClick={close}
-                />
-              );
-            })}
+          {/* Nav items — scrollable, with section headers */}
+          <div className="flex-1 overflow-y-auto flex flex-col gap-4 px-6 py-4">
+            {menuSections.map((section) => (
+              <div key={section.title}>
+                {menuSections.length > 1 && (
+                  <p
+                    className="px-4 pb-1 select-none"
+                    style={{
+                      color: 'var(--shell-sidebar-text)',
+                      opacity: 0.5,
+                      fontSize: 11,
+                      fontFamily: 'var(--font-barlow), sans-serif',
+                      fontWeight: 300,
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.12em',
+                    }}
+                  >
+                    {section.title}
+                  </p>
+                )}
+                <div className="flex flex-col gap-0.5">
+                  {section.items.map((item) => {
+                    const active = item.href === '/app/personal'
+                      ? isExactActive(pathname, item.href)
+                      : isItemActive(pathname, item.href);
+                    return (
+                      <BubbleMenuItem
+                        key={item.href}
+                        icon={item.icon}
+                        label={item.label}
+                        href={item.href}
+                        active={active}
+                        onClick={close}
+                        compact={compact}
+                      />
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       )}
@@ -268,18 +306,20 @@ function BubbleMenuItem({
   href,
   active,
   onClick,
+  compact,
 }: {
   icon: ReactNode;
   label: string;
   href: string;
   active: boolean;
   onClick: () => void;
+  compact?: boolean;
 }) {
   return (
     <Link
       href={href}
       onClick={onClick}
-      className="flex items-center gap-4 rounded-2xl px-4 py-4 transition-colors"
+      className={`flex items-center gap-4 rounded-2xl px-4 transition-colors ${compact ? 'py-2.5' : 'py-4'}`}
       style={{
         background: active ? 'var(--shell-sidebar-active-bg)' : 'transparent',
         color: active ? 'var(--shell-sidebar-active-text)' : 'var(--shell-sidebar-text)',
@@ -288,7 +328,7 @@ function BubbleMenuItem({
       <span className="shrink-0">{icon}</span>
       <span
         style={{
-          fontSize: 22,
+          fontSize: compact ? 18 : 22,
           fontFamily: 'var(--font-barlow), sans-serif',
           fontWeight: 600,
         }}

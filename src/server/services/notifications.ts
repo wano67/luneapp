@@ -10,6 +10,9 @@ type NotifyParams = {
   taskId?: bigint | null;
   projectId?: bigint | null;
   conversationId?: bigint | null;
+  clientId?: bigint | null;
+  prospectId?: bigint | null;
+  calendarEventId?: bigint | null;
 };
 
 /**
@@ -49,6 +52,9 @@ export async function notify(
         taskId: params.taskId ?? null,
         projectId: params.projectId ?? null,
         conversationId: params.conversationId ?? null,
+        clientId: params.clientId ?? null,
+        prospectId: params.prospectId ?? null,
+        calendarEventId: params.calendarEventId ?? null,
       })),
     });
   } catch {
@@ -265,5 +271,115 @@ export async function notifyTaskDueSoon(
     body: 'Échéance dans moins de 24 heures.',
     taskId,
     projectId,
+  });
+}
+
+/** Notify the event owner before a calendar event starts. */
+export async function notifyCalendarReminder(
+  calendarEventId: bigint,
+  businessId: bigint,
+  userId: bigint,
+  eventTitle: string,
+  startAt: Date,
+) {
+  const SYSTEM_USER = 0n;
+  const minutesUntil = Math.round((startAt.getTime() - Date.now()) / 60_000);
+  const body = minutesUntil <= 60
+    ? `Dans ${minutesUntil} min`
+    : `Aujourd'hui a ${startAt.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`;
+
+  await notify([userId], SYSTEM_USER, {
+    businessId,
+    type: 'CALENDAR_REMINDER',
+    title: `Rappel : ${eventTitle}`,
+    body,
+    calendarEventId,
+  });
+}
+
+/** Notify task assignees when a task is past its dueDate. */
+export async function notifyTaskOverdue(
+  taskId: bigint,
+  businessId: bigint,
+  taskTitle: string,
+  projectId: bigint | null,
+) {
+  const task = await prisma.task.findUnique({
+    where: { id: taskId },
+    select: {
+      assigneeUserId: true,
+      organizationUnitId: true,
+      assignees: { select: { userId: true } },
+    },
+  });
+  if (!task) return;
+
+  const userIds = new Set<bigint>();
+  if (task.assigneeUserId) userIds.add(task.assigneeUserId);
+  for (const a of task.assignees) userIds.add(a.userId);
+
+  if (task.organizationUnitId) {
+    const members = await prisma.businessMembership.findMany({
+      where: { businessId, organizationUnitId: task.organizationUnitId },
+      select: { userId: true },
+    });
+    for (const m of members) userIds.add(m.userId);
+  }
+
+  const SYSTEM_USER = 0n;
+  await notify(Array.from(userIds), SYSTEM_USER, {
+    businessId,
+    type: 'TASK_OVERDUE',
+    title: `Tâche en retard : ${taskTitle}`,
+    body: 'La date d\'échéance est dépassée.',
+    taskId,
+    projectId,
+  });
+}
+
+/** Notify business members when an active client has had no interaction for X days. */
+export async function notifyClientFollowup(
+  clientId: bigint,
+  businessId: bigint,
+  clientName: string,
+  daysSinceLastContact: number,
+) {
+  const members = await prisma.businessMembership.findMany({
+    where: { businessId },
+    select: { userId: true },
+  });
+  const userIds = members.map((m) => m.userId);
+  if (userIds.length === 0) return;
+
+  const SYSTEM_USER = 0n;
+  await notify(userIds, SYSTEM_USER, {
+    businessId,
+    type: 'CLIENT_FOLLOWUP',
+    title: `Relance client : ${clientName}`,
+    body: `Aucune interaction depuis ${daysSinceLastContact} jours.`,
+    clientId,
+  });
+}
+
+/** Notify business members when a prospect has not been followed up in 24h. */
+export async function notifyProspectFollowup(
+  prospectId: bigint,
+  businessId: bigint,
+  prospectName: string,
+) {
+  const members = await prisma.businessMembership.findMany({
+    where: { businessId },
+    select: { userId: true },
+  });
+  const userIds = members.map((m) => m.userId);
+  if (userIds.length === 0) return;
+
+  const SYSTEM_USER = 0n;
+  await notify(userIds, SYSTEM_USER, {
+    businessId,
+    type: 'PROSPECT_FOLLOWUP',
+    title: `Prospect à relancer : ${prospectName}`,
+    body: 'Aucun suivi depuis plus de 24h.',
+    prospectId,
   });
 }

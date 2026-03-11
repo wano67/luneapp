@@ -86,16 +86,16 @@ export default function PivotSidebar({ space, pathname, businessId, businesses: 
         )}
 
         {/* Business nav (when inside a business) */}
-        {inBusiness && (
-          <Section title="Navigation" collapsed={collapsed}>
-            {proNavSections.flatMap((section) =>
-              section.items
-              .filter((item) => {
-                if (item.minRole && !hasMinRole(activeCtx?.activeBusiness?.role, item.minRole)) return false;
-                if (item.activityTypes && activeCtx?.activeBusiness?.activityType && !item.activityTypes.includes(activeCtx.activeBusiness.activityType as never)) return false;
-                return true;
-              })
-              .map((item) => {
+        {inBusiness && proNavSections.map((section) => {
+          const visibleItems = section.items.filter((item) => {
+            if (item.minRole && !hasMinRole(activeCtx?.activeBusiness?.role, item.minRole)) return false;
+            if (item.activityTypes && activeCtx?.activeBusiness?.activityType && !item.activityTypes.includes(activeCtx.activeBusiness.activityType as never)) return false;
+            return true;
+          });
+          if (visibleItems.length === 0) return null;
+          return (
+            <Section key={section.id} title={section.title} collapsed={collapsed}>
+              {visibleItems.map((item) => {
                 const href = item.href(businessId!);
                 const patterns = item.activePatterns?.(businessId!);
                 const active = isActive(pathname, href, patterns);
@@ -110,10 +110,10 @@ export default function PivotSidebar({ space, pathname, businessId, businesses: 
                     collapsed={collapsed}
                   />
                 );
-              })
-            )}
-          </Section>
-        )}
+              })}
+            </Section>
+          );
+        })}
 
         {/* Wallet nav */}
         {space === 'perso' && (

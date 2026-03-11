@@ -45,6 +45,7 @@ import { ChargesTab } from '@/components/pro/projects/tabs/ChargesTab';
 import { Modal } from '@/components/ui/modal';
 import { Input } from '@/components/ui/input';
 import { Copy, Check } from 'lucide-react';
+import { useToast } from '@/components/ui/toast';
 
 type ProjectDetail = {
   id: string;
@@ -132,6 +133,7 @@ const OVERVIEW_MEMBERS_COUNT = 6;
 export function ProjectWorkspace({ businessId, projectId }: { businessId: string; projectId: string }) {
   const searchParams = useSearchParams();
   const activeCtx = useActiveBusiness({ optional: true });
+  const toast = useToast();
   const isAdmin = activeCtx?.isAdmin ?? false;
   const [billingError, setBillingError] = useState<string | null>(null);
   const [billingInfo, setBillingInfo] = useState<string | null>(null);
@@ -321,6 +323,7 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
     try {
       const res = await patchProject({ status: 'COMPLETED' });
       if (!res.ok) { setActionError(res.error ?? 'Impossible de marquer le projet terminé.'); return; }
+      toast.celebrate({ title: 'Projet terminé !', subtitle: project.name ?? undefined });
       await refetchAll();
     } catch (err) {
       setActionError(getErrorMessage(err));

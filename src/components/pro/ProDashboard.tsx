@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { ChevronLeft, ChevronRight, Banknote, Briefcase, ListChecks, BookUser, Receipt } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Banknote, Briefcase, ListChecks, BookUser, Receipt, AlertCircle, Users, FileText, FolderKanban } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -10,6 +10,7 @@ import { PageContainer } from '@/components/layouts/PageContainer';
 import { fmtKpi } from '@/lib/format';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import { useActiveBusiness } from '@/app/app/pro/ActiveBusinessProvider';
+import { OnboardingModal } from '@/components/ui/OnboardingModal';
 
 const TreasuryCashflowChart = dynamic(() => import('./charts/TreasuryCashflowChart'), { ssr: false });
 
@@ -200,6 +201,9 @@ export default function ProDashboard({ businessId }: { businessId: string }) {
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [profileComplete, setProfileComplete] = useState(true);
+  const [bannerDismissed, setBannerDismissed] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
@@ -207,9 +211,10 @@ export default function ProDashboard({ businessId }: { businessId: string }) {
       setLoading(true);
       setError(null);
       try {
-        const [dashRes, tasksRes] = await Promise.all([
+        const [dashRes, tasksRes, bizRes] = await Promise.all([
           fetchJson<DashboardPayload>(`/api/pro/businesses/${businessId}/dashboard?days=${periodDays}`, { cache: 'no-store' }),
           fetchJson<{ items: TaskItem[] }>(`/api/pro/businesses/${businessId}/tasks`, { cache: 'no-store' }),
+          fetchJson<{ profileComplete?: boolean }>(`/api/pro/businesses/${businessId}`, { cache: 'no-store' }),
         ]);
 
         if (cancelled) return;
@@ -219,6 +224,9 @@ export default function ProDashboard({ businessId }: { businessId: string }) {
 
         setDashboard(dashRes.data ?? null);
         setTasks(tasksRes.data?.items ?? []);
+        if (bizRes.ok && bizRes.data) {
+          setProfileComplete(bizRes.data.profileComplete !== false);
+        }
       } catch (err) {
         if (cancelled) return;
         setError(getErrorMessage(err));
@@ -266,6 +274,35 @@ export default function ProDashboard({ businessId }: { businessId: string }) {
 
   return (
     <PageContainer className="gap-5">
+      {showOnboarding && (
+        <OnboardingModal
+          storageKey="lune:onboarding:pro"
+          apiField="onboardingProDone"
+          onComplete={() => setShowOnboarding(false)}
+          steps={[
+            {
+              icon: <Briefcase size={28} style={{ color: 'white' }} />,
+              title: 'Votre espace professionnel',
+              description: 'Gérez vos projets, clients et facturation depuis un seul tableau de bord. Tout est centralisé ici.',
+            },
+            {
+              icon: <Users size={28} style={{ color: 'white' }} />,
+              title: 'Clients & Prospects',
+              description: 'Suivez votre pipeline commercial, gérez vos fiches clients et convertissez vos prospects en clients.',
+            },
+            {
+              icon: <FolderKanban size={28} style={{ color: 'white' }} />,
+              title: 'Projets & Tâches',
+              description: 'Planifiez vos projets, assignez des tâches à votre équipe et suivez l\'avancement en temps réel.',
+            },
+            {
+              icon: <FileText size={28} style={{ color: 'white' }} />,
+              title: 'Devis & Factures',
+              description: 'Générez des devis et factures conformes en un clic, suivez les paiements et relancez automatiquement.',
+            },
+          ]}
+        />
+      )}
       {/* Top row */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Button asChild variant="outline" size="sm">
@@ -276,6 +313,30 @@ export default function ProDashboard({ businessId }: { businessId: string }) {
         </Button>
         <PeriodPills value={periodDays} onChange={setPeriodDays} />
       </div>
+
+      {!profileComplete && !bannerDismissed && isAdminOrOwner && (
+        <div className="flex items-center gap-3 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 animate-fade-in-up">
+          <AlertCircle size={18} className="shrink-0 text-amber-600" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-[var(--text-primary)]">Profil entreprise incomplet</p>
+            <p className="text-xs text-[var(--text-secondary)]">
+              Completez vos informations (raison sociale, SIRET, adresse) pour generer des documents conformes.
+            </p>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <Button asChild size="sm">
+              <Link href={`/app/pro/${businessId}/settings?section=identite`}>Completer</Link>
+            </Button>
+            <button
+              type="button"
+              onClick={() => setBannerDismissed(true)}
+              className="text-xs text-[var(--text-faint)] hover:text-[var(--text-secondary)] transition-colors"
+            >
+              Plus tard
+            </button>
+          </div>
+        </div>
+      )}
 
       {loading ? (
         <Card className="p-5">

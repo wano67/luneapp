@@ -30,6 +30,7 @@ type BusinessResponse = {
   nafLabel?: string | null;
   leaderTitle?: string | null;
   socialRegime?: string | null;
+  capital?: number | null;
 };
 
 export function IdentiteSection({ businessId }: { businessId: string }) {
@@ -58,6 +59,7 @@ export function IdentiteSection({ businessId }: { businessId: string }) {
   const [nafLabel, setNafLabel] = useState('');
   const [leaderTitle, setLeaderTitle] = useState('');
   const [socialRegime, setSocialRegime] = useState('');
+  const [capital, setCapital] = useState('');
 
   useEffect(() => {
     void (async () => {
@@ -81,6 +83,7 @@ export function IdentiteSection({ businessId }: { businessId: string }) {
       setNafLabel(res.data.nafLabel ?? '');
       setLeaderTitle(res.data.leaderTitle ?? '');
       setSocialRegime(res.data.socialRegime ?? '');
+      setCapital(res.data.capital ? String(res.data.capital / 100) : '');
     })();
   }, [businessId]);
 
@@ -111,6 +114,7 @@ export function IdentiteSection({ businessId }: { businessId: string }) {
         nafLabel: nafLabel.trim() || null,
         leaderTitle: leaderTitle.trim() || null,
         socialRegime: socialRegime || null,
+        capital: capital ? Math.round(parseFloat(capital) * 100) : null,
       }),
     });
 
@@ -124,7 +128,8 @@ export function IdentiteSection({ businessId }: { businessId: string }) {
     setLegalForm(d.legalForm ?? ''); setActivityType(d.activityType ?? '');
     setNafCode(d.nafCode ?? ''); setNafLabel(d.nafLabel ?? '');
     setLeaderTitle(d.leaderTitle ?? ''); setSocialRegime(d.socialRegime ?? '');
-    toast.success('Identite mise a jour.');
+    setCapital(d.capital ? String(d.capital / 100) : '');
+    toast.celebrate({ title: 'Identité mise à jour !' });
   }
 
   const formConfig = legalForm ? getLegalFormConfig(legalForm) : undefined;
@@ -177,6 +182,16 @@ export function IdentiteSection({ businessId }: { businessId: string }) {
           <Input label="Site web" value={websiteUrl} onChange={(e) => setWebsiteUrl(e.target.value)} placeholder="https://exemple.com" disabled={disabled} />
           <Input label="SIRET" value={siret} onChange={(e) => setSiret(e.target.value)} disabled={disabled} />
           <Input label="Numero TVA" value={vatNumber} onChange={(e) => setVatNumber(e.target.value)} disabled={disabled} />
+          {formConfig?.requiresCapital && (
+            <Input
+              label={`Capital social (\u20ac)${formConfig.capitalMinimumCents > 0 ? ` — min ${(formConfig.capitalMinimumCents / 100).toLocaleString('fr-FR')} \u20ac` : ''}`}
+              type="number"
+              value={capital}
+              onChange={(e) => setCapital(e.target.value)}
+              placeholder="Ex: 1000"
+              disabled={disabled}
+            />
+          )}
         </div>
 
         {formConfig && (

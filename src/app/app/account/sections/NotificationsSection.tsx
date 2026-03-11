@@ -7,6 +7,7 @@ import { Card } from '@/components/ui/card';
 import { fetchJson } from '@/lib/apiClient';
 
 type BusinessItem = { id: string; name: string };
+type MembershipItem = { business: { id: string; name: string }; role: string };
 
 export function NotificationsSection() {
   const [businesses, setBusinesses] = useState<BusinessItem[]>([]);
@@ -14,9 +15,13 @@ export function NotificationsSection() {
   useEffect(() => {
     const ctrl = new AbortController();
     void (async () => {
-      const res = await fetchJson<{ items: BusinessItem[] }>('/api/pro/businesses', {}, ctrl.signal);
+      const res = await fetchJson<{ items: MembershipItem[] }>('/api/pro/businesses', {}, ctrl.signal);
       if (ctrl.signal.aborted) return;
-      if (res.ok && res.data) setBusinesses(res.data.items ?? []);
+      if (res.ok && res.data) {
+        setBusinesses(
+          (res.data.items ?? []).map((m) => ({ id: String(m.business.id), name: m.business.name }))
+        );
+      }
     })();
     return () => ctrl.abort();
   }, []);
