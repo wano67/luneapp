@@ -6,6 +6,7 @@ import { badRequest, notFound } from '@/server/http/apiUtils';
 import { parseId } from '@/server/http/parsers';
 import { saveLocalFile } from '@/server/storage/local';
 import { DocumentKind, Prisma } from '@/generated/prisma';
+import { notifyDocumentUploaded } from '@/server/services/notifications';
 
 const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
 const ALLOWED_MIME = [
@@ -127,6 +128,8 @@ export const POST = withBusinessRoute<{ businessId: string; projectId: string }>
       res.headers.set('x-request-id', ctx.requestId);
       return res;
     }
+
+    void notifyDocumentUploaded(ctx.userId, ctx.businessId, projectId, title);
 
     return jsonbCreated({
       item: {

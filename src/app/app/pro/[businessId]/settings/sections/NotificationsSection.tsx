@@ -17,6 +17,10 @@ const NOTIFICATION_TYPES: { key: string; label: string; description: string }[] 
   { key: 'CLIENT_FOLLOWUP', label: 'Relance client', description: 'Quand un client actif n\'a pas eu d\'interaction depuis 21 jours.' },
   { key: 'PROSPECT_FOLLOWUP', label: 'Relance prospect', description: 'Quand un prospect actif n\'a pas été suivi depuis 24h.' },
   { key: 'BUSINESS_INVITE', label: 'Invitation business', description: 'Quand vous êtes invité à rejoindre un business.' },
+  { key: 'INTERACTION_ADDED', label: 'Nouvelle interaction', description: 'Quand une interaction est ajoutée avec un client ou prospect.' },
+  { key: 'DOCUMENT_UPLOADED', label: 'Document uploadé', description: 'Quand un document est ajouté à un projet.' },
+  { key: 'INVOICE_CREATED', label: 'Facture créée', description: 'Quand une facture est générée pour un projet.' },
+  { key: 'QUOTE_CREATED', label: 'Devis créé', description: 'Quand un devis est généré pour un projet.' },
 ];
 
 type PrefsMap = Record<string, boolean>;

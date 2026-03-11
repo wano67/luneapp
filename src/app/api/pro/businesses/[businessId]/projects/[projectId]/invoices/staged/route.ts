@@ -5,6 +5,7 @@ import { badRequest, readJson } from '@/server/http/apiUtils';
 import { parseId } from '@/server/http/parsers';
 import { computeProjectBillingSummary } from '@/server/billing/summary';
 import { InvoiceStatus } from '@/generated/prisma';
+import { notifyInvoiceCreated } from '@/server/services/notifications';
 
 function roundPercent(amount: bigint, percent: number) {
   return (amount * BigInt(Math.round(percent))) / BigInt(100);
@@ -121,6 +122,8 @@ export const POST = withBusinessRoute<{ businessId: string; projectId: string }>
       },
       include: { items: { orderBy: { id: 'asc' } } },
     });
+
+    void notifyInvoiceCreated(ctx.userId, ctx.businessId, projectId, label);
 
     const basePath = `/api/pro/businesses/${params.businessId}/invoices/${invoice.id}`;
 

@@ -383,3 +383,89 @@ export async function notifyProspectFollowup(
     prospectId,
   });
 }
+
+/** Notify business members when a new interaction is created. */
+export async function notifyInteractionAdded(
+  actorUserId: bigint,
+  businessId: bigint,
+  interactionType: string,
+  clientId: bigint | null,
+  prospectId: bigint | null,
+  projectId: bigint | null,
+) {
+  const members = await prisma.businessMembership.findMany({
+    where: { businessId },
+    select: { userId: true },
+  });
+  const typeLabel: Record<string, string> = {
+    CALL: 'Appel',
+    MEETING: 'RDV',
+    EMAIL: 'Email',
+    NOTE: 'Note',
+    MESSAGE: 'Message',
+  };
+  await notify(members.map((m) => m.userId), actorUserId, {
+    businessId,
+    type: 'INTERACTION_ADDED',
+    title: `Nouvelle interaction : ${typeLabel[interactionType] ?? interactionType}`,
+    clientId,
+    prospectId,
+    projectId,
+  });
+}
+
+/** Notify project members when a document is uploaded. */
+export async function notifyDocumentUploaded(
+  actorUserId: bigint,
+  businessId: bigint,
+  projectId: bigint,
+  documentTitle: string,
+) {
+  const projectMembers = await prisma.projectMember.findMany({
+    where: { projectId },
+    select: { membership: { select: { userId: true } } },
+  });
+  await notify(projectMembers.map((pm) => pm.membership.userId), actorUserId, {
+    businessId,
+    type: 'DOCUMENT_UPLOADED',
+    title: `Document ajouté : ${documentTitle}`,
+    projectId,
+  });
+}
+
+/** Notify project members when an invoice is created. */
+export async function notifyInvoiceCreated(
+  actorUserId: bigint,
+  businessId: bigint,
+  projectId: bigint,
+  invoiceLabel: string,
+) {
+  const projectMembers = await prisma.projectMember.findMany({
+    where: { projectId },
+    select: { membership: { select: { userId: true } } },
+  });
+  await notify(projectMembers.map((pm) => pm.membership.userId), actorUserId, {
+    businessId,
+    type: 'INVOICE_CREATED',
+    title: `Nouvelle facture : ${invoiceLabel}`,
+    projectId,
+  });
+}
+
+/** Notify project members when a quote is created. */
+export async function notifyQuoteCreated(
+  actorUserId: bigint,
+  businessId: bigint,
+  projectId: bigint,
+) {
+  const projectMembers = await prisma.projectMember.findMany({
+    where: { projectId },
+    select: { membership: { select: { userId: true } } },
+  });
+  await notify(projectMembers.map((pm) => pm.membership.userId), actorUserId, {
+    businessId,
+    type: 'QUOTE_CREATED',
+    title: 'Nouveau devis créé',
+    projectId,
+  });
+}

@@ -12,6 +12,7 @@ import {
   BookUser,
   Workflow,
   Megaphone,
+  KeyRound,
 } from 'lucide-react';
 
 export type BusinessRole = 'OWNER' | 'ADMIN' | 'MEMBER' | 'VIEWER';
@@ -127,6 +128,14 @@ export const proNavSections: ProNavSectionConfig[] = [
         minRole: 'MEMBER',
         activityTypes: ['COMMERCE', 'MIXTE'],
         activePatterns: (biz) => [startsWithRegex(`/app/pro/${biz}/stock`)],
+      },
+      {
+        id: 'vault',
+        label: 'Trousseau',
+        icon: KeyRound,
+        href: (biz) => `/app/pro/${biz}/vault`,
+        minRole: 'MEMBER',
+        activePatterns: (biz) => [startsWithRegex(`/app/pro/${biz}/vault`)],
       },
       {
         id: 'process',

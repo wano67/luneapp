@@ -196,6 +196,7 @@ model User {
   personalCalendarTokens PersonalCalendarToken[]
   powensConnection       PowensConnection?
   refreshTokens          RefreshToken[]
+  vaultItemsCreated      VaultItem[] @relation("VaultItemCreator")
 }
 
 /**
@@ -283,6 +284,7 @@ model Business {
   projectShareTokens ProjectShareToken[]
   associates BusinessAssociate[]
   goals      BusinessGoal[]
+  vaultItems VaultItem[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -587,6 +589,7 @@ model Project {
   notifications Notification[]
   calendarEvents CalendarEvent[] @relation("CalendarEventProject")
   shareTokens   ProjectShareToken[]
+  vaultItems    VaultItem[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1866,6 +1869,10 @@ enum NotificationType {
   TASK_OVERDUE
   CLIENT_FOLLOWUP
   PROSPECT_FOLLOWUP
+  INTERACTION_ADDED
+  DOCUMENT_UPLOADED
+  INVOICE_CREATED
+  QUOTE_CREATED
 }
 
 // ────────── Business Regulation Enums ──────────
@@ -2107,4 +2114,28 @@ model PowensConnection {
   lastSyncAt DateTime?
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
+}
+
+// ─── Vault (Password Manager) ─────────────────────────────────
+
+model VaultItem {
+  id              BigInt   @id @default(autoincrement())
+  businessId      BigInt
+  projectId       BigInt?
+  title           String
+  identifier      String?
+  email           String?
+  ciphertext      String
+  iv              String
+  tag             String
+  note            String?
+  createdByUserId BigInt
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  business  Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy User     @relation("VaultItemCreator", fields: [createdByUserId], references: [id])
+
+  @@index([businessId, projectId])
 }

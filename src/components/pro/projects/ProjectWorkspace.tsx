@@ -42,6 +42,7 @@ import { useMessaging } from '@/components/pro/projects/hooks/useMessaging';
 import { usePricingEngine } from '@/components/pro/projects/hooks/usePricingEngine';
 import { ProjectHeaderSection } from '@/components/pro/projects/ProjectHeaderSection';
 import { ChargesTab } from '@/components/pro/projects/tabs/ChargesTab';
+import { VaultTab } from '@/components/pro/projects/tabs/VaultTab';
 import { Modal } from '@/components/ui/modal';
 import { Input } from '@/components/ui/input';
 import { Copy, Check } from 'lucide-react';
@@ -122,6 +123,7 @@ const tabs = [
   { key: 'team', label: 'Équipe' },
   { key: 'billing', label: 'Facturation' },
   { key: 'charges', label: 'Charges' },
+  { key: 'vault', label: 'Trousseau' },
   { key: 'files', label: 'Documents' },
 ];
 
@@ -138,7 +140,7 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
   const [billingError, setBillingError] = useState<string | null>(null);
   const [billingInfo, setBillingInfo] = useState<string | null>(null);
 
-  const [activeTab, setActiveTab] = useState<'overview' | 'work' | 'team' | 'billing' | 'charges' | 'files'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'work' | 'team' | 'billing' | 'charges' | 'vault' | 'files'>('overview');
   const [pendingTaskId, setPendingTaskId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<'TODO' | 'DONE' | 'all'>('all');
   const [showAllServicesOverview, setShowAllServicesOverview] = useState(false);
@@ -365,7 +367,7 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
 
   useEffect(() => {
     const tabParam = searchParams?.get('tab');
-    if (tabParam && ['overview', 'work', 'team', 'billing', 'charges', 'files'].includes(tabParam)) {
+    if (tabParam && ['overview', 'work', 'team', 'billing', 'charges', 'vault', 'files'].includes(tabParam)) {
       setActiveTab(tabParam as typeof activeTab);
     }
   }, [searchParams]);
@@ -810,6 +812,10 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
 
       {activeTab === 'charges' ? (
         <ChargesTab businessId={businessId} projectId={projectId} isAdmin={isAdmin} />
+      ) : null}
+
+      {activeTab === 'vault' ? (
+        <VaultTab businessId={businessId} projectId={projectId} isAdmin={isAdmin} />
       ) : null}
 
       {activeTab === 'files' ? (

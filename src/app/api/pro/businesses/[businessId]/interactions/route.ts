@@ -3,6 +3,7 @@ import { withBusinessRoute } from '@/server/http/routeHandler';
 import { jsonb, jsonbCreated } from '@/server/http/json';
 import { badRequest, notFound, readJson, isRecord } from '@/server/http/apiUtils';
 import { InteractionType } from '@/generated/prisma';
+import { notifyInteractionAdded } from '@/server/services/notifications';
 
 function parseIdOpt(param: string | undefined | null): bigint | null {
   if (!param || !/^\d+$/.test(param)) return null;
@@ -115,6 +116,8 @@ export const POST = withBusinessRoute(
         createdByUserId: ctx.userId,
       },
     });
+
+    void notifyInteractionAdded(ctx.userId, ctx.businessId, type, clientId, null, projectId);
 
     return jsonbCreated({ item: created }, ctx.requestId);
   }

@@ -3,7 +3,7 @@
 import type { ReactNode } from 'react';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
-import { ChevronDown, Search, CheckSquare, Calendar, MessageSquare, AlertTriangle, AlertOctagon, UserPlus, Users, UserSearch, X, Loader2 } from 'lucide-react';
+import { ChevronDown, Search, CheckSquare, Calendar, MessageSquare, AlertTriangle, AlertOctagon, UserPlus, Users, UserSearch, X, Loader2, FileText, Receipt } from 'lucide-react';
 import {
   IconAlert,
   IconMessage,
@@ -75,6 +75,8 @@ const PRO_SUB_LABELS: Record<string, string> = {
   marketing: 'Marketing',
   invites: 'Invitations',
   calendar: 'Calendrier',
+  vault: 'Trousseau',
+  notifications: 'Notifications',
 };
 
 const PERSO_SUB_LABELS: Record<string, string> = {
@@ -146,7 +148,7 @@ export default function PivotTopbar({ space, pathname, businessId, businesses, o
 
         {/* Right: Actions */}
         <div className="flex items-center gap-2 justify-end">
-          <NotificationsDropdown onToggleMessaging={onToggleMessaging} />
+          <NotificationsDropdown onToggleMessaging={onToggleMessaging} businessId={businessId} />
           <NavIconBtn onClick={inBusiness ? onToggleMessaging : handleComingSoon}><IconMessage size={20} color="var(--shell-topbar-text)" /></NavIconBtn>
           <Link href={inBusiness ? `/app/pro/${businessId}/settings` : '/app/account'}>
             <NavIconBtn><IconSettings size={20} color="var(--shell-topbar-text)" /></NavIconBtn>
@@ -172,7 +174,7 @@ export default function PivotTopbar({ space, pathname, businessId, businesses, o
           </span>
         </div>
         <div className="flex items-center gap-1 shrink-0">
-          <NotificationsDropdown onToggleMessaging={onToggleMessaging} />
+          <NotificationsDropdown onToggleMessaging={onToggleMessaging} businessId={businessId} />
           {inBusiness && (
             <NavIconBtn onClick={onToggleMessaging}><IconMessage size={20} color="var(--shell-topbar-text)" /></NavIconBtn>
           )}
@@ -309,7 +311,7 @@ type NotifItem = {
   createdAt: string;
 };
 
-function NotificationsDropdown({ onToggleMessaging }: { onToggleMessaging?: () => void }) {
+function NotificationsDropdown({ onToggleMessaging, businessId }: { onToggleMessaging?: () => void; businessId?: string | null }) {
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<NotifItem[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -375,7 +377,7 @@ function NotificationsDropdown({ onToggleMessaging }: { onToggleMessaging?: () =
     } catch { /* silent */ }
   }, []);
 
-  const NOTIF_ICONS: Record<string, 'task' | 'blocked' | 'message' | 'project' | 'invite' | 'calendar' | 'client' | 'prospect'> = {
+  const NOTIF_ICONS: Record<string, 'task' | 'blocked' | 'message' | 'project' | 'invite' | 'calendar' | 'client' | 'prospect' | 'document' | 'billing'> = {
     TASK_ASSIGNED: 'task',
     TASK_STATUS_CHANGED: 'task',
     TASK_DUE_SOON: 'task',
@@ -387,6 +389,10 @@ function NotificationsDropdown({ onToggleMessaging }: { onToggleMessaging?: () =
     CALENDAR_REMINDER: 'calendar',
     CLIENT_FOLLOWUP: 'client',
     PROSPECT_FOLLOWUP: 'prospect',
+    INTERACTION_ADDED: 'client',
+    DOCUMENT_UPLOADED: 'document',
+    INVOICE_CREATED: 'billing',
+    QUOTE_CREATED: 'billing',
   };
 
   return (
@@ -449,21 +455,30 @@ function NotificationsDropdown({ onToggleMessaging }: { onToggleMessaging?: () =
               ) : (
                 items.map((notif) => {
                   const iconType = NOTIF_ICONS[notif.type] ?? 'task';
+                  const biz = notif.businessId;
                   const href = notif.type === 'BUSINESS_INVITE'
                     ? '/app/pro'
-                    : notif.conversationId && notif.businessId
-                      ? `/app/pro/${notif.businessId}/tasks`
-                      : notif.clientId && notif.businessId
-                        ? `/app/pro/${notif.businessId}/clients/${notif.clientId}`
-                        : notif.prospectId && notif.businessId
-                          ? `/app/pro/${notif.businessId}/prospects/${notif.prospectId}`
-                          : notif.calendarEventId && notif.businessId
-                            ? `/app/pro/${notif.businessId}/calendar`
-                            : notif.projectId && notif.businessId
-                              ? `/app/pro/${notif.businessId}/projects/${notif.projectId}`
-                              : notif.taskId && notif.businessId
-                                ? `/app/pro/${notif.businessId}/tasks`
-                                : null;
+                    : notif.type === 'DOCUMENT_UPLOADED' && notif.projectId && biz
+                      ? `/app/pro/${biz}/projects/${notif.projectId}?tab=files`
+                      : (notif.type === 'INVOICE_CREATED' || notif.type === 'QUOTE_CREATED') && notif.projectId && biz
+                        ? `/app/pro/${biz}/projects/${notif.projectId}?tab=billing`
+                        : notif.type === 'INTERACTION_ADDED' && notif.clientId && biz
+                          ? `/app/pro/${biz}/clients/${notif.clientId}`
+                          : notif.type === 'INTERACTION_ADDED' && notif.prospectId && biz
+                            ? `/app/pro/${biz}/prospects/${notif.prospectId}`
+                            : notif.conversationId && biz
+                              ? `/app/pro/${biz}/tasks`
+                              : notif.clientId && biz
+                                ? `/app/pro/${biz}/clients/${notif.clientId}`
+                                : notif.prospectId && biz
+                                  ? `/app/pro/${biz}/prospects/${notif.prospectId}`
+                                  : notif.calendarEventId && biz
+                                    ? `/app/pro/${biz}/calendar`
+                                    : notif.projectId && biz
+                                      ? `/app/pro/${biz}/projects/${notif.projectId}`
+                                      : notif.taskId && biz
+                                        ? `/app/pro/${biz}/tasks`
+                                        : null;
 
                   const inner = (
                     <div className="flex items-start gap-3">
@@ -501,6 +516,10 @@ function NotificationsDropdown({ onToggleMessaging }: { onToggleMessaging?: () =
                           <Users size={14} style={{ color: 'white' }} />
                         ) : iconType === 'prospect' ? (
                           <UserSearch size={14} style={{ color: 'white' }} />
+                        ) : iconType === 'document' ? (
+                          <FileText size={14} style={{ color: 'white' }} />
+                        ) : iconType === 'billing' ? (
+                          <Receipt size={14} style={{ color: 'white' }} />
                         ) : (
                           <CheckSquare size={14} style={{ color: 'white' }} />
                         )}
@@ -549,6 +568,18 @@ function NotificationsDropdown({ onToggleMessaging }: { onToggleMessaging?: () =
                 })
               )}
             </div>
+
+            {/* Voir tout */}
+            {businessId && (
+              <Link
+                href={`/app/pro/${businessId}/notifications`}
+                onClick={() => setOpen(false)}
+                className="flex items-center justify-center py-2.5 text-xs font-medium transition-colors hover:bg-[var(--surface-hover)]"
+                style={{ color: 'var(--accent)', borderTop: '1px solid var(--border)' }}
+              >
+                Voir toutes les notifications
+              </Link>
+            )}
           </div>
         </>
       )}

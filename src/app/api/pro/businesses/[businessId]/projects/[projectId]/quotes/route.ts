@@ -4,6 +4,7 @@ import { withBusinessRoute } from '@/server/http/routeHandler';
 import { jsonb, jsonbCreated } from '@/server/http/json';
 import { badRequest, notFound } from '@/server/http/apiUtils';
 import { computeProjectPricing } from '@/server/services/pricing';
+import { notifyQuoteCreated } from '@/server/services/notifications';
 
 // GET /api/pro/businesses/{businessId}/projects/{projectId}/quotes
 export const GET = withBusinessRoute<{ businessId: string; projectId: string }>(
@@ -93,6 +94,8 @@ export const POST = withBusinessRoute<{ businessId: string; projectId: string }>
       });
       return created;
     });
+
+    void notifyQuoteCreated(ctx.userId, ctx.businessId, projectIdBigInt);
 
     const basePath = `/api/pro/businesses/${businessIdBigInt}/quotes/${quote.id}`;
 

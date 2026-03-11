@@ -23,6 +23,7 @@ export type RevalidationScope =
   | 'pro:services'
   | 'pro:team'
   | 'pro:calendar'
+  | 'pro:vault'
   // Personal
   | 'personal:wallet'   // transactions + accounts + budgets + subscriptions
   | 'personal:savings'

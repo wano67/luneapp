@@ -1,4 +1,5 @@
 import { prisma } from '@/server/db/client';
+import { NotificationType } from '@/generated/prisma';
 import { withBusinessRoute } from '@/server/http/routeHandler';
 import { jsonb } from '@/server/http/json';
 import { serializeNotification } from '@/server/http/serializeNotification';
@@ -17,10 +18,17 @@ export const GET = withBusinessRoute(
     const limit = Math.min(Math.max(1, limitParam), 100);
     const cursor = url.searchParams.get('cursor');
 
+    const typeParam = url.searchParams.get('type');
+    const allTypes = Object.values(NotificationType) as string[];
+    const typeFilter = typeParam
+      ? typeParam.split(',').map((t) => t.trim()).filter((t) => allTypes.includes(t)) as NotificationType[]
+      : null;
+
     const where = {
       userId,
       businessId,
       ...(unreadOnly ? { isRead: false } : {}),
+      ...(typeFilter ? { type: { in: typeFilter } } : {}),
       ...(cursor ? { id: { lt: BigInt(cursor) } } : {}),
     };
 
@@ -35,6 +43,8 @@ export const GET = withBusinessRoute(
       }),
     ]);
 
-    return jsonb({ items: items.map(serializeNotification), unreadCount }, requestId);
+    const nextCursor = items.length === limit ? String(items[items.length - 1].id) : null;
+
+    return jsonb({ items: items.map(serializeNotification), unreadCount, nextCursor }, requestId);
   },
 );
