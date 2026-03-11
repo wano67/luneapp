@@ -23,6 +23,7 @@ import { Card } from '@/components/ui/card';
 import { PageContainer } from '@/components/layouts/PageContainer';
 import { fmtKpi, fmtDate } from '@/lib/format';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
+import { useRevalidationKey } from '@/lib/revalidate';
 import { useActiveBusiness } from '@/app/app/pro/ActiveBusinessProvider';
 import { OnboardingModal } from '@/components/ui/OnboardingModal';
 
@@ -260,6 +261,7 @@ export default function ProDashboard({ businessId }: { businessId: string }) {
   const [profileComplete, setProfileComplete] = useState(true);
   const [bannerDismissed, setBannerDismissed] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(true);
+  const rv = useRevalidationKey(['pro:tasks', 'pro:projects', 'pro:billing', 'pro:finances', 'pro:clients', 'pro:stock', 'pro:team']);
 
   useEffect(() => {
     let cancelled = false;
@@ -295,7 +297,7 @@ export default function ProDashboard({ businessId }: { businessId: string }) {
     return () => {
       cancelled = true;
     };
-  }, [businessId, periodDays]);
+  }, [businessId, periodDays, rv]);
 
   const tasksDone = useMemo(() => tasks.filter((t) => t.status === 'DONE').length, [tasks]);
   const tasksTotal = tasks.length;

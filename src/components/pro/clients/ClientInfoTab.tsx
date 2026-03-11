@@ -7,6 +7,7 @@ import { SearchSelect } from '@/components/ui/search-select';
 import { Badge } from '@/components/ui/badge';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import { useActiveBusiness } from '@/app/app/pro/ActiveBusinessProvider';
+import { revalidate } from '@/lib/revalidate';
 
 type ClientInfo = {
   id: string;
@@ -240,6 +241,7 @@ export function ClientInfoTab({ businessId, clientId, client, onUpdated }: Props
       }
       onUpdated(res.data.item);
       setEditing(false);
+      revalidate('pro:clients');
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {

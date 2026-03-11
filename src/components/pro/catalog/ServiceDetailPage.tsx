@@ -12,6 +12,7 @@ import { Modal } from '@/components/ui/modal';
 import { fetchJson } from '@/lib/apiClient';
 import { formatCurrencyEUR } from '@/lib/formatCurrency';
 import { formatCentsToEuroInput, parseEuroToCents, sanitizeEuroInput } from '@/lib/money';
+import { revalidate } from '@/lib/revalidate';
 
 type Template = {
   id: string;
@@ -188,6 +189,7 @@ export function ServiceDetailPage({ businessId, serviceId }: { businessId: strin
     }
     setEditOpen(false);
     void loadService();
+    revalidate('pro:services');
   };
 
   const openTemplateCreate = () => {
@@ -244,6 +246,7 @@ export function ServiceDetailPage({ businessId, serviceId }: { businessId: strin
     }
     setTemplateOpen(false);
     await loadTemplates();
+    revalidate('pro:services');
   };
 
   const deleteTemplate = async (id: string) => {
@@ -255,6 +258,7 @@ export function ServiceDetailPage({ businessId, serviceId }: { businessId: strin
     );
     if (!res.ok) return;
     await loadTemplates();
+    revalidate('pro:services');
   };
 
   const price = service?.defaultPriceCents

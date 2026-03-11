@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import { formatCentsToEuroInput, parseEuroToCents } from '@/lib/money';
+import { revalidate } from '@/lib/revalidate';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -142,6 +143,7 @@ export function useRecurringRule({ businessId, loadFinances }: UseRecurringRuleO
       }
       setRecurringModalOpen(false);
       await loadFinances();
+      revalidate('pro:finances');
     } catch (err) {
       setRecurringRuleError(getErrorMessage(err));
     } finally {
@@ -199,6 +201,7 @@ export function useRecurringRule({ businessId, loadFinances }: UseRecurringRuleO
       }
       setRecurringModalOpen(false);
       await loadFinances();
+      revalidate('pro:finances');
     } catch (err) {
       setRecurringRuleError(getErrorMessage(err));
     } finally {
@@ -247,6 +250,7 @@ export function useRecurringRule({ businessId, loadFinances }: UseRecurringRuleO
       }
       setRecurringRule(res.data.item);
       await loadFinances();
+      revalidate('pro:finances');
       await openRecurringRule(recurringRule.id);
     } catch (err) {
       setRecurringRuleError(getErrorMessage(err));

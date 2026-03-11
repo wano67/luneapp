@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import { Input } from '@/components/ui/input';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
+import { revalidate } from '@/lib/revalidate';
 
 type Interaction = {
   id: string;
@@ -116,6 +117,7 @@ export function ClientInteractionsTab({ businessId, clientId, initialItems, alre
         setItems(reload.data.items);
         onChange?.(reload.data.items);
       }
+      revalidate('pro:clients');
     } catch (err) {
       setFormError(getErrorMessage(err));
     } finally {

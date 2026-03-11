@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import { useToast } from '@/components/ui/toast';
+import { revalidate } from '@/lib/revalidate';
 
 interface UseTaskHandlersParams {
   businessId: string;
@@ -8,11 +9,12 @@ interface UseTaskHandlersParams {
   isAdmin: boolean;
   loadTasks: () => Promise<void>;
   loadActivity: () => Promise<void>;
+  loadProject: () => Promise<unknown>;
   onBillingError: (msg: string | null) => void;
 }
 
 export function useTaskHandlers(params: UseTaskHandlersParams) {
-  const { businessId, isAdmin, loadTasks, loadActivity, onBillingError } = params;
+  const { businessId, isAdmin, loadTasks, loadActivity, loadProject, onBillingError } = params;
   const _toast = useToast();
 
   const [taskGroupExpanded, setTaskGroupExpanded] = useState<Record<string, boolean>>({});
@@ -33,12 +35,13 @@ export function useTaskHandlers(params: UseTaskHandlersParams) {
           onBillingError(res.error ?? 'Impossible de mettre à jour la date.');
           return;
         }
-        await loadTasks();
+        await Promise.all([loadTasks(), loadProject()]);
+        revalidate('pro:tasks');
       } catch (err) {
         onBillingError(getErrorMessage(err));
       }
     },
-    [businessId, loadTasks, onBillingError]
+    [businessId, loadTasks, loadProject, onBillingError]
   );
 
   const updateTask = useCallback(
@@ -55,17 +58,18 @@ export function useTaskHandlers(params: UseTaskHandlersParams) {
           onBillingError(res.error ?? 'Impossible de mettre à jour la tâche.');
           return;
         }
-        await loadTasks();
+        await Promise.all([loadTasks(), loadProject()]);
         if (Object.prototype.hasOwnProperty.call(payload, 'status')) {
           await loadActivity();
         }
+        revalidate('pro:tasks');
       } catch (err) {
         onBillingError(getErrorMessage(err));
       } finally {
         setTaskUpdating((prev) => ({ ...prev, [taskId]: false }));
       }
     },
-    [businessId, loadTasks, loadActivity, onBillingError]
+    [businessId, loadTasks, loadProject, loadActivity, onBillingError]
   );
 
   const createTask = useCallback(
@@ -85,12 +89,13 @@ export function useTaskHandlers(params: UseTaskHandlersParams) {
           onBillingError(res.error ?? 'Impossible de créer la tâche.');
           return;
         }
-        await loadTasks();
+        await Promise.all([loadTasks(), loadProject()]);
+        revalidate('pro:tasks');
       } catch (err) {
         onBillingError(getErrorMessage(err));
       }
     },
-    [businessId, params.projectId, loadTasks, onBillingError]
+    [businessId, params.projectId, loadTasks, loadProject, onBillingError]
   );
 
   const deleteTask = useCallback(
@@ -108,12 +113,13 @@ export function useTaskHandlers(params: UseTaskHandlersParams) {
           onBillingError(res.error ?? 'Impossible de supprimer la tâche.');
           return;
         }
-        await loadTasks();
+        await Promise.all([loadTasks(), loadProject()]);
+        revalidate('pro:tasks');
       } catch (err) {
         onBillingError(getErrorMessage(err));
       }
     },
-    [isAdmin, businessId, loadTasks, onBillingError]
+    [isAdmin, businessId, loadTasks, loadProject, onBillingError]
   );
 
   const handleApplyServiceTemplates = useCallback(
@@ -150,14 +156,15 @@ export function useTaskHandlers(params: UseTaskHandlersParams) {
           onBillingError(res.error ?? 'Impossible de générer les tâches.');
           return;
         }
-        await loadTasks();
+        await Promise.all([loadTasks(), loadProject()]);
+        revalidate('pro:tasks');
       } catch (err) {
         onBillingError(getErrorMessage(err));
       } finally {
         setTemplatesApplying((prev) => ({ ...prev, [projectServiceId]: false }));
       }
     },
-    [isAdmin, businessId, params.projectId, loadTasks, onBillingError]
+    [isAdmin, businessId, params.projectId, loadTasks, loadProject, onBillingError]
   );
 
   return {

@@ -13,6 +13,7 @@ import { PageHeader } from '@/components/layouts/PageHeader';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import { formatCentsToEuroDisplay, formatCentsToEuroInput, parseEuroToCents, sanitizeEuroInput } from '@/lib/money';
 import { useActiveBusiness } from '../../../ActiveBusinessProvider';
+import { revalidate } from '@/lib/revalidate';
 
 type Product = {
   id: string;
@@ -174,6 +175,7 @@ export default function ProductDetailPage() {
       setSuccess('Mouvement créé.');
       setMovementDraft({ type: 'IN', quantity: 1, unitCostCents: '', reason: '', createFinanceEntry: false });
       await load();
+      revalidate('pro:stock');
     } catch (err) {
       console.error(err);
       setActionError(getErrorMessage(err));
@@ -225,6 +227,7 @@ export default function ProductDetailPage() {
       }
       setProduct(res.data.item);
       setSuccess('Produit mis à jour.');
+      revalidate('pro:stock');
     } catch (err) {
       console.error(err);
       setActionError(getErrorMessage(err));

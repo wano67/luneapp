@@ -12,7 +12,7 @@ import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import { absCents, formatCents, formatCentsToEuroInput, parseEuroToCents } from '@/lib/money';
 import { fmtDate } from '@/lib/format';
 import { dayKey } from '@/lib/date';
-import { emitWalletRefresh } from '@/lib/personalEvents';
+import { revalidate, useRevalidationKey } from '@/lib/revalidate';
 import { useUserPreferences } from '@/lib/hooks/useUserPreferences';
 import { TransactionFormModal } from './TransactionFormModal';
 import { TransactionAnalytics, type Analytics } from './TransactionAnalytics';
@@ -172,6 +172,8 @@ export default function PersoTransactionsPage() {
   const eAmountRef = useRef<HTMLInputElement | null>(null);
   const [editAttemptedSubmit, setEditAttemptedSubmit] = useState(false);
 
+  const walletRv = useRevalidationKey(['personal:wallet']);
+
   // ─── Derived ────────────────────────────────────────────────────────────────
 
   function handle401() {
@@ -322,14 +324,14 @@ export default function PersoTransactionsPage() {
   // ─── Effects ────────────────────────────────────────────────────────────────
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { fetchAccounts(); fetchCategories(); fetchUncatGroups(); }, []);
+  useEffect(() => { fetchAccounts(); fetchCategories(); fetchUncatGroups(); }, [walletRv]);
 
   useEffect(() => {
     if (loadingAccounts) return;
     fetchTransactions({ reset: true });
     fetchAnalytics();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accountId, type, from, to, loadingAccounts]);
+  }, [accountId, type, from, to, loadingAccounts, walletRv]);
 
   useEffect(() => {
     if (loadingAccounts) return;
@@ -387,7 +389,7 @@ export default function PersoTransactionsPage() {
       if (!res.ok) { if (res.status === 401) return handle401(); setCreateError(res.error ?? 'Création impossible.'); return; }
       setOpenAdd(false);
       await Promise.all([fetchTransactions({ reset: true }), fetchAnalytics()]);
-      emitWalletRefresh();
+      revalidate('personal:wallet');
     } catch (e) {
       setCreateError(getErrorMessage(e));
     } finally {
@@ -428,7 +430,7 @@ export default function PersoTransactionsPage() {
       if (!res.ok) { if (res.status === 401) return handle401(); setEditError(res.error ?? 'Modification impossible.'); return; }
       setOpenEdit(false); setEditing(null);
       await Promise.all([fetchTransactions({ reset: true }), fetchAnalytics()]);
-      emitWalletRefresh();
+      revalidate('personal:wallet');
     } catch (e) {
       setEditError(getErrorMessage(e));
     } finally {
@@ -447,7 +449,7 @@ export default function PersoTransactionsPage() {
       if (!res.ok) { if (res.status === 401) return handle401(); throw new Error(res.error ?? 'Suppression impossible'); }
       clearSelection();
       await Promise.all([fetchTransactions({ reset: true }), fetchAnalytics()]);
-      emitWalletRefresh();
+      revalidate('personal:wallet');
     } catch (e) {
       setError(getErrorMessage(e));
     }

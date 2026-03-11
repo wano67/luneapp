@@ -20,6 +20,7 @@ import { FinanceFormModal } from '@/components/pro/finances/modals/FinanceFormMo
 import { RecurringRuleModal } from '@/components/pro/finances/modals/RecurringRuleModal';
 import { ReceiptScanModal } from '@/components/pro/finances/modals/ReceiptScanModal';
 import type { Finance, FinanceType } from '@/components/pro/finances/finance-types';
+import { revalidate } from '@/lib/revalidate';
 import { TYPE_OPTIONS, METHOD_OPTIONS, formatFinanceDate } from '@/components/pro/finances/finance-types';
 
 type FinanceListResponse = { items: Finance[] };
@@ -228,6 +229,7 @@ export function FinanceEntriesPanel({ businessId }: Props) {
     setSelectedId(null);
     setInfo(finance.type === 'EXPENSE' ? 'Charge supprimée.' : 'Écriture supprimée.');
     await loadFinances();
+    revalidate('pro:finances');
   }
 
   async function bulkDelete() {
@@ -242,6 +244,7 @@ export function FinanceEntriesPanel({ businessId }: Props) {
       clear();
       setInfo('Écritures supprimées.');
       await loadFinances();
+      revalidate('pro:finances');
     } catch (err) {
       setBulkError(getErrorMessage(err));
     } finally {
@@ -272,6 +275,7 @@ export function FinanceEntriesPanel({ businessId }: Props) {
     setInfo(`${res.data.updated} écriture(s) classée(s) automatiquement.`);
     clear();
     await loadFinances();
+    revalidate('pro:finances');
   }
 
   const uncategorizedCount = items.filter(i => !i.accountCode).length;

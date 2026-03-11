@@ -1,6 +1,6 @@
 'use client';
 
-import { X, Plus } from 'lucide-react';
+import { X, Plus, Pencil } from 'lucide-react';
 import { EVENT_COLORS, EVENT_TYPE_LABELS, type CalendarEvent } from '@/lib/calendar';
 import { formatCents } from '@/lib/money';
 
@@ -11,9 +11,10 @@ type DayDetailPanelProps = {
   onClose: () => void;
   businessId?: string;
   onCreateEvent?: () => void;
+  onEditEvent?: (event: CalendarEvent) => void;
 };
 
-export function DayDetailPanel({ date, events, open, onClose, businessId, onCreateEvent }: DayDetailPanelProps) {
+export function DayDetailPanel({ date, events, open, onClose, businessId, onCreateEvent, onEditEvent }: DayDetailPanelProps) {
   if (!open) return null;
 
   const formatted = (() => {
@@ -93,7 +94,7 @@ export function DayDetailPanel({ date, events, open, onClose, businessId, onCrea
                   {EVENT_TYPE_LABELS[type as keyof typeof EVENT_TYPE_LABELS] ?? type}
                 </p>
                 {items.map((ev) => (
-                  <EventCard key={ev.id} event={ev} businessId={businessId} />
+                  <EventCard key={ev.id} event={ev} businessId={businessId} onEdit={onEditEvent} />
                 ))}
               </div>
             ))
@@ -104,16 +105,23 @@ export function DayDetailPanel({ date, events, open, onClose, businessId, onCrea
   );
 }
 
-function EventCard({ event, businessId }: { event: CalendarEvent; businessId?: string }) {
+function EventCard({ event, businessId, onEdit }: { event: CalendarEvent; businessId?: string; onEdit?: (event: CalendarEvent) => void }) {
   const colors = EVENT_COLORS[event.type];
   const meta = event.meta ?? {};
 
-  // Build link if available
+  // CalendarEvent (type === 'event') are editable directly
+  const isEditable = event.type === 'event' && !!onEdit;
+
+  // Build link for non-editable event types
   const href = (() => {
+    if (isEditable) return null; // Editable events use onClick instead
     if (event.type === 'task' && businessId) {
       return meta.projectId
         ? `/app/pro/${businessId}/projects/${meta.projectId}`
         : `/app/pro/${businessId}/tasks`;
+    }
+    if (event.type === 'interaction' && businessId) {
+      return `/app/pro/${businessId}/agenda`;
     }
     if (event.type === 'subscription') return '/app/personal/subscriptions';
     if (event.type === 'savings') return '/app/personal/epargne';
@@ -163,8 +171,24 @@ function EventCard({ event, businessId }: { event: CalendarEvent; businessId?: s
           ) : null}
         </div>
       </div>
+      {isEditable && (
+        <Pencil size={14} className="shrink-0 mt-1" style={{ color: 'var(--text-faint)' }} />
+      )}
     </div>
   );
+
+  if (isEditable) {
+    return (
+      <button
+        type="button"
+        onClick={() => onEdit!(event)}
+        className="block w-full text-left rounded-lg px-2.5 py-2 transition-colors hover:bg-[var(--surface-hover)]"
+        style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
+      >
+        {content}
+      </button>
+    );
+  }
 
   if (href) {
     return (

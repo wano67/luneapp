@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { ChevronRight, ChartNoAxesColumnIncreasing, ChartNoAxesColumnDecreasing, Landmark, ArrowRight, Wallet, BarChart3, PiggyBank } from 'lucide-react';
 import { fetchJson } from '@/lib/apiClient';
 import { useUserPreferences } from '@/lib/hooks/useUserPreferences';
-import { onWalletRefresh } from '@/lib/personalEvents';
+import { useRevalidationKey } from '@/lib/revalidate';
 import { fmtKpi } from '@/lib/format';
 import { formatCentsToEuroDisplay } from '@/lib/money';
 import { BANK_MAP } from '@/config/banks';
@@ -88,6 +88,8 @@ export default function WalletHomePage() {
   const [showOnboarding, setShowOnboarding] = useState(true);
   const periodDays = periodOverride ?? prefs.dashboardPeriodDays;
 
+  const walletRv = useRevalidationKey(['personal:wallet', 'personal:savings']);
+
   const load = useCallback(async (days: number) => {
     setLoading(true);
     const [summaryRes, budgetRes] = await Promise.all([
@@ -109,8 +111,7 @@ export default function WalletHomePage() {
     setLoading(false);
   }, []);
 
-  useEffect(() => { void load(periodDays); }, [load, periodDays]);
-  useEffect(() => onWalletRefresh(() => { void load(periodDays); }), [load, periodDays]);
+  useEffect(() => { void load(periodDays); }, [load, periodDays, walletRv]);
   useEffect(() => {
     const id = window.setInterval(() => {
       if (document.visibilityState === 'visible') void load(periodDays);

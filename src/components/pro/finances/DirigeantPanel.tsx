@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { fetchJson } from '@/lib/apiClient';
 import { formatCents } from '@/lib/money';
 import { useToast } from '@/components/ui/toast';
+import { revalidate } from '@/lib/revalidate';
 import { Plus, Trash2, Target, Calculator, Users, TrendingUp } from 'lucide-react';
 import { AssociateFormModal } from './AssociateFormModal';
 import { GoalFormModal } from './GoalFormModal';
@@ -98,7 +99,7 @@ export function DirigeantPanel({ businessId }: { businessId: string }) {
     return () => { cancelled = true; };
   }, [businessId, fetchKey]);
 
-  const reload = useCallback(() => setFetchKey((k) => k + 1), []);
+  const reload = useCallback(() => { setFetchKey((k) => k + 1); revalidate('pro:finances'); }, []);
 
   // Debounced simulation
   useEffect(() => {

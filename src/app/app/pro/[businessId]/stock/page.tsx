@@ -16,6 +16,7 @@ import { useToast } from '@/components/ui/toast';
 import { Skeleton } from '@/components/ui/skeleton';
 import { parseEuroToCents, sanitizeEuroInput } from '@/lib/money';
 import { useActiveBusiness } from '../../ActiveBusinessProvider';
+import { revalidate, useRevalidationKey } from '@/lib/revalidate';
 import { useRowSelection } from '../../../components/selection/useRowSelection';
 import { BulkActionBar } from '../../../components/selection/BulkActionBar';
 
@@ -107,10 +108,11 @@ export default function StockListPage() {
     }
   }, [businessId]);
 
+  const stockRv = useRevalidationKey(['pro:stock']);
   useEffect(() => {
     void load();
     return () => controllerRef.current?.abort();
-  }, [load]);
+  }, [load, stockRv]);
 
   async function createProduct() {
     if (!businessId) return;
@@ -151,6 +153,7 @@ export default function StockListPage() {
       setDraft({ sku: '', name: '', unit: 'PIECE', salePriceCents: '', purchasePriceCents: '' });
       toast.success('Produit créé.');
       await load();
+      revalidate('pro:stock');
     } catch (err) {
       console.error(err);
       setActionError(getErrorMessage(err));
@@ -181,6 +184,7 @@ export default function StockListPage() {
     setBulkLoading(false);
     clear();
     await load();
+    revalidate('pro:stock');
     if (failed) {
       setBulkError((prev) => prev ?? 'Certaines suppressions ont échoué.');
     } else {

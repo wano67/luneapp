@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { fetchJson } from '@/lib/apiClient';
 import { formatCurrencyEUR } from '@/lib/formatCurrency';
 import { formatCentsToEuroInput, parseEuroToCents, sanitizeEuroInput } from '@/lib/money';
+import { revalidate } from '@/lib/revalidate';
 import { KpiCirclesBlock } from '@/components/pro/KpiCirclesBlock';
 import { TabsPills } from '@/components/pro/TabsPills';
 
@@ -141,6 +142,7 @@ export function ProductDetailPage({ businessId, productId }: { businessId: strin
       return;
     }
     void loadProduct();
+    revalidate('pro:stock');
   };
 
   const price = product?.salePriceCents ? Number(product.salePriceCents) : null;

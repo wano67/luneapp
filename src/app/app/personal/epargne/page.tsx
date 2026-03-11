@@ -13,6 +13,7 @@ import { PageContainer } from '@/components/layouts/PageContainer';
 import { PageHeader } from '@/components/layouts/PageHeader';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import { formatCentsToEuroDisplay, parseEuroToCents, sanitizeEuroInput } from '@/lib/money';
+import { revalidate, useRevalidationKey } from '@/lib/revalidate';
 import {
   Landmark, TrendingUp, Target, Clock, ArrowRight,
   Wallet, PiggyBank, ChevronRight, ChevronUp, ChevronDown,
@@ -146,9 +147,10 @@ export default function EpargnePage() {
     setLoading(false);
   }, []);
 
+  const savingsRv = useRevalidationKey(['personal:savings', 'personal:wallet']);
   useEffect(() => {
     void load();
-  }, [load]);
+  }, [load, savingsRv]);
 
   /* ═══ CRUD handlers ═══ */
 
@@ -212,6 +214,7 @@ export default function EpargnePage() {
       }
       setModalOpen(false);
       await load();
+      revalidate('personal:savings');
     } catch (e) {
       setSaveError(getErrorMessage(e));
     } finally {
@@ -221,7 +224,7 @@ export default function EpargnePage() {
 
   async function handleDelete(id: string) {
     const res = await fetchJson(`/api/personal/savings/${id}`, { method: 'DELETE' });
-    if (res.ok) await load();
+    if (res.ok) { await load(); revalidate('personal:savings'); }
   }
 
   async function movePriority(goalId: string, direction: 'up' | 'down') {

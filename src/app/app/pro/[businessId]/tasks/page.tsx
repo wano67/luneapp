@@ -16,6 +16,7 @@ import { fetchJson } from '@/lib/apiClient';
 import { useActiveBusiness } from '../../ActiveBusinessProvider';
 import { fmtDate } from '@/lib/format';
 import { dayKey, startOfWeek, addDays } from '@/lib/date';
+import { revalidate, useRevalidationKey } from '@/lib/revalidate';
 
 // ─── Types ──────────────────────────────────────────────────────────
 type MyTask = {
@@ -339,6 +340,7 @@ export default function MyTasksPage() {
   const [loading, setLoading] = useState(true);
   const [updatingIds, setUpdatingIds] = useState<Record<string, boolean>>({});
   const [fetchVersion, setFetchVersion] = useState(0);
+  const tasksRv = useRevalidationKey(['pro:tasks']);
   const [selectedMemberId, setSelectedMemberId] = useState('');
   const [weeklyStats, setWeeklyStats] = useState<WeeklyStats | null>(null);
   const [weeklyLoading, setWeeklyLoading] = useState(true);
@@ -399,7 +401,7 @@ export default function MyTasksPage() {
       setLoading(false);
     });
     return () => controller.abort();
-  }, [businessId, selectedMemberId, fetchVersion]);
+  }, [businessId, selectedMemberId, fetchVersion, tasksRv]);
 
   // Load weekly stats
   useEffect(() => {
@@ -415,7 +417,7 @@ export default function MyTasksPage() {
       setWeeklyLoading(false);
     });
     return () => controller.abort();
-  }, [businessId, selectedMemberId, fetchVersion]);
+  }, [businessId, selectedMemberId, fetchVersion, tasksRv]);
 
   const summary = data?.summary ?? EMPTY_SUMMARY;
   const groups = useMemo(() => groupByUrgency(data?.items ?? []), [data]);
@@ -428,7 +430,10 @@ export default function MyTasksPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus }),
       });
-      if (res.ok) setFetchVersion(v => v + 1);
+      if (res.ok) {
+        setFetchVersion(v => v + 1);
+        revalidate('pro:tasks');
+      }
     } finally {
       setUpdatingIds((prev) => ({ ...prev, [taskId]: false }));
     }
@@ -455,6 +460,7 @@ export default function MyTasksPage() {
       setCreateProjectId('');
       setCreateAssigneeId('');
       setFetchVersion(v => v + 1);
+      revalidate('pro:tasks');
     }
   }, [businessId, createTitle, createDueDate, createProjectId, createAssigneeId, isAdmin]);
 

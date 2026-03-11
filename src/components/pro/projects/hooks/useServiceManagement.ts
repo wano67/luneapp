@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type DragEvent } from 'react';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import { parseEuroToCents } from '@/lib/money';
+import { revalidate } from '@/lib/revalidate';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -309,6 +310,7 @@ export function useServiceManagement({
       }
       onBillingInfo('Service mis à jour.');
       await refetchAll();
+      revalidate('pro:services');
     } catch (err) {
       setLineErrors((prev) => ({ ...prev, [serviceId]: getErrorMessage(err) }));
     } finally {
@@ -340,6 +342,7 @@ export function useServiceManagement({
         return;
       }
       onBillingInfo('Service supprimé.');
+      revalidate('pro:services');
       setServiceDrafts((prev) => {
         const next = { ...prev };
         delete next[serviceId];

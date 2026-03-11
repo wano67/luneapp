@@ -17,7 +17,7 @@ import { AccountEditModal } from './AccountEditModal';
 
 const CsvImportModal = dynamic(() => import('@/components/CsvImportModal'), { ssr: false });
 import { useFileDropHandler } from '@/components/file-drop/FileDropProvider';
-import { emitWalletRefresh } from '@/lib/personalEvents';
+import { revalidate, useRevalidation } from '@/lib/revalidate';
 import { useToast } from '@/components/ui/toast';
 import { Building2, PenLine, Upload, Plus } from 'lucide-react';
 
@@ -101,6 +101,8 @@ export default function ComptesPage() {
   const [, setPowensSyncing] = useState(false);
   const [powensConnected, setPowensConnected] = useState(false);
 
+  useRevalidation(['personal:wallet'], () => void load());
+
   async function load() {
     setLoading(true);
     try {
@@ -144,7 +146,7 @@ export default function ComptesPage() {
           });
           if (res.ok) {
             await load();
-            emitWalletRefresh();
+            revalidate('personal:wallet');
           }
         } catch {
           // silent — l'utilisateur voit les données du dernier sync
@@ -176,7 +178,7 @@ export default function ComptesPage() {
           toast.success(`${data.accountsSynced || 0} comptes synchronisés, ${data.transactionsAdded || 0} transactions importées`);
           setPowensConnected(true);
           await load();
-          emitWalletRefresh();
+          revalidate('personal:wallet');
         } else {
           toast.error('Erreur lors de la synchronisation bancaire');
         }
@@ -395,7 +397,7 @@ export default function ComptesPage() {
       setWizardError(null);
       setSuccessMessage('Compte créé avec succès.');
       await load();
-      emitWalletRefresh();
+      revalidate('personal:wallet');
     } catch {
       setWizardError('Création impossible.');
     } finally {
@@ -577,7 +579,7 @@ export default function ComptesPage() {
         }}
         onSaved={async () => {
           await load();
-          emitWalletRefresh();
+          revalidate('personal:wallet');
         }}
       />
 
@@ -593,7 +595,7 @@ export default function ComptesPage() {
         defaultAccountId={items[0]?.id}
         onConfirmImport={async () => {
           await load();
-          emitWalletRefresh();
+          revalidate('personal:wallet');
           if (importFile) setLastImportedFileName(importFile.name);
           setImportFile(null);
           setImportError(null);

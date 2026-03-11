@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useParams } from 'next/navigation';
-import { Plus, CalendarPlus, Bell, ListChecks, RefreshCw } from 'lucide-react';
+import { Plus, CalendarPlus, Bell, ListChecks, RefreshCw, Trash2 } from 'lucide-react';
 import { ProPageShell } from '@/components/pro/ProPageShell';
 import { CalendarGrid } from '@/components/ui/calendar/CalendarGrid';
 import { DayDetailPanel } from '@/components/ui/calendar/DayDetailPanel';
@@ -11,9 +11,11 @@ import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { Modal } from '@/components/ui/modal';
 import { CalendarSyncPanel } from '@/components/ui/calendar/CalendarSyncPanel';
+import { useToast } from '@/components/ui/toast';
 import { fetchJson } from '@/lib/apiClient';
 import { dayKey, startOfMonth, addMonths, addDays } from '@/lib/date';
 import { EVENT_TYPE_LABELS, type CalendarEvent, type CalendarEventType } from '@/lib/calendar';
+import { revalidate, useRevalidationKey } from '@/lib/revalidate';
 
 type CreateKind = 'APPOINTMENT' | 'REMINDER' | 'TASK' | null;
 type ProjectOption = { id: string; name: string };
@@ -27,9 +29,74 @@ const FILTER_OPTIONS: { value: CalendarEventType | 'all'; label: string }[] = [
   { value: 'finance', label: EVENT_TYPE_LABELS.finance },
 ];
 
+// ─── Shared event form ──────────────────────────────────────────────────────
+
+type EventFormProps = {
+  kind: 'APPOINTMENT' | 'REMINDER';
+  title: string; onTitleChange: (v: string) => void;
+  date: string; onDateChange: (v: string) => void;
+  timeStart: string; onTimeStartChange: (v: string) => void;
+  timeEnd: string; onTimeEndChange: (v: string) => void;
+  location: string; onLocationChange: (v: string) => void;
+  description: string; onDescriptionChange: (v: string) => void;
+  projectId: string; onProjectIdChange: (v: string) => void;
+  clientId: string; onClientIdChange: (v: string) => void;
+  projects: ProjectOption[];
+  clients: ClientOption[];
+};
+
+function EventForm({ kind, title, onTitleChange, date, onDateChange, timeStart, onTimeStartChange, timeEnd, onTimeEndChange, location, onLocationChange, description, onDescriptionChange, projectId, onProjectIdChange, clientId, onClientIdChange, projects, clients }: EventFormProps) {
+  return (
+    <>
+      <Input
+        label="Titre"
+        value={title}
+        onChange={(e) => onTitleChange(e.target.value)}
+        maxLength={200}
+        autoFocus
+        placeholder={kind === 'APPOINTMENT' ? 'Ex : RDV client…' : 'Ex : Rappeler fournisseur…'}
+      />
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Input label="Date" type="date" value={date} onChange={(e) => onDateChange(e.target.value)} />
+        <Input label="Heure début" type="time" value={timeStart} onChange={(e) => onTimeStartChange(e.target.value)} />
+      </div>
+
+      {kind === 'APPOINTMENT' && (
+        <>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Input label="Heure fin" type="time" value={timeEnd} onChange={(e) => onTimeEndChange(e.target.value)} />
+            <Input label="Lieu" value={location} onChange={(e) => onLocationChange(e.target.value)} placeholder="Adresse ou lien visio" />
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Select label="Client" value={clientId} onChange={(e) => onClientIdChange(e.target.value)}>
+              <option value="">Aucun client</option>
+              {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </Select>
+            <Select label="Projet" value={projectId} onChange={(e) => onProjectIdChange(e.target.value)}>
+              <option value="">Aucun projet</option>
+              {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </Select>
+          </div>
+        </>
+      )}
+
+      <Input
+        label="Description"
+        value={description}
+        onChange={(e) => onDescriptionChange(e.target.value)}
+        placeholder="Notes supplémentaires…"
+      />
+    </>
+  );
+}
+
+// ─── Main page ──────────────────────────────────────────────────────────────
+
 export default function ProCalendarPage() {
   const params = useParams<{ businessId: string }>();
   const businessId = params?.businessId ?? '';
+  const toast = useToast();
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
@@ -50,11 +117,27 @@ export default function ProCalendarPage() {
   const [creating, setCreating] = useState(false);
   const [syncOpen, setSyncOpen] = useState(false);
 
+  // Edit modal
+  const [editEvent, setEditEvent] = useState<CalendarEvent | null>(null);
+  const [editKind, setEditKind] = useState<'APPOINTMENT' | 'REMINDER'>('APPOINTMENT');
+  const [editTitle, setEditTitle] = useState('');
+  const [editDate, setEditDate] = useState('');
+  const [editTimeStart, setEditTimeStart] = useState('');
+  const [editTimeEnd, setEditTimeEnd] = useState('');
+  const [editLocation, setEditLocation] = useState('');
+  const [editDescription, setEditDescription] = useState('');
+  const [editProjectId, setEditProjectId] = useState('');
+  const [editClientId, setEditClientId] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
   // Dropdown data
   const [projects, setProjects] = useState<ProjectOption[]>([]);
   const [clients, setClients] = useState<ClientOption[]>([]);
 
   const [fetchVersion, setFetchVersion] = useState(0);
+  const calendarRv = useRevalidationKey(['pro:calendar', 'pro:tasks']);
 
   useEffect(() => {
     if (!businessId) return;
@@ -71,7 +154,7 @@ export default function ProCalendarPage() {
       setLoading(false);
     });
     return () => controller.abort();
-  }, [businessId, currentMonth, fetchVersion]);
+  }, [businessId, currentMonth, fetchVersion, calendarRv]);
 
   // Load projects + clients for modal
   useEffect(() => {
@@ -104,7 +187,8 @@ export default function ProCalendarPage() {
     [selectedDay, filteredEvents],
   );
 
-  // Create modal logic
+  // ─── Create ─────────────────────────────────────────────────────────────────
+
   const openCreate = useCallback((prefillDate?: string) => {
     setCreateKind(null);
     setCreateTitle('');
@@ -124,7 +208,6 @@ export default function ProCalendarPage() {
     setCreating(true);
 
     if (createKind === 'TASK') {
-      // Create as task
       const payload: Record<string, unknown> = {
         title,
         assignToSelf: true,
@@ -137,7 +220,6 @@ export default function ProCalendarPage() {
         body: JSON.stringify(payload),
       });
     } else {
-      // Create as CalendarEvent (APPOINTMENT or REMINDER)
       const startAt = new Date(createDate + (createTimeStart ? `T${createTimeStart}` : 'T00:00:00')).toISOString();
       const payload: Record<string, unknown> = {
         kind: createKind,
@@ -162,7 +244,93 @@ export default function ProCalendarPage() {
     setCreating(false);
     setCreateOpen(false);
     setFetchVersion(v => v + 1);
-  }, [businessId, createKind, createTitle, createDate, createTimeStart, createTimeEnd, createLocation, createDescription, createProjectId, createClientId]);
+    revalidate('pro:calendar');
+    if (createKind === 'TASK') revalidate('pro:tasks');
+    toast.success('Événement créé');
+  }, [businessId, createKind, createTitle, createDate, createTimeStart, createTimeEnd, createLocation, createDescription, createProjectId, createClientId, toast]);
+
+  // ─── Edit ───────────────────────────────────────────────────────────────────
+
+  const openEdit = useCallback((event: CalendarEvent) => {
+    const m = event.meta ?? {};
+    setEditEvent(event);
+    setEditKind((m.kind as 'APPOINTMENT' | 'REMINDER') || 'APPOINTMENT');
+    setEditTitle(event.title);
+    setEditDate(event.date);
+    setEditTimeStart(m.startTime ? String(m.startTime) : '');
+    setEditTimeEnd(m.endTime ? String(m.endTime) : '');
+    setEditLocation(m.location ? String(m.location) : '');
+    setEditDescription(m.description ? String(m.description) : '');
+    setEditProjectId(m.projectId ? String(m.projectId) : '');
+    setEditClientId(m.clientId ? String(m.clientId) : '');
+    setConfirmDelete(false);
+  }, []);
+
+  const handleUpdate = useCallback(async () => {
+    if (!editEvent) return;
+    const eventId = editEvent.meta?.eventId;
+    if (!eventId) return;
+
+    const title = editTitle.trim();
+    if (!title || !editDate) return;
+    setSaving(true);
+
+    const startAt = new Date(editDate + (editTimeStart ? `T${editTimeStart}` : 'T00:00:00')).toISOString();
+    const payload: Record<string, unknown> = {
+      kind: editKind,
+      title,
+      startAt,
+      allDay: !editTimeStart,
+    };
+    if (editTimeEnd) {
+      payload.endAt = new Date(editDate + `T${editTimeEnd}`).toISOString();
+    } else {
+      payload.endAt = null;
+    }
+    payload.location = editLocation || null;
+    payload.description = editDescription || null;
+    payload.projectId = editProjectId || null;
+    payload.clientId = editClientId || null;
+
+    const res = await fetchJson(`/api/pro/businesses/${businessId}/calendar/events/${eventId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    setSaving(false);
+    if (res.ok) {
+      setEditEvent(null);
+      setFetchVersion(v => v + 1);
+      revalidate('pro:calendar');
+      toast.success('Événement modifié');
+    } else {
+      toast.error('Erreur lors de la modification');
+    }
+  }, [businessId, editEvent, editKind, editTitle, editDate, editTimeStart, editTimeEnd, editLocation, editDescription, editProjectId, editClientId, toast]);
+
+  const handleDelete = useCallback(async () => {
+    if (!editEvent) return;
+    const eventId = editEvent.meta?.eventId;
+    if (!eventId) return;
+
+    setDeleting(true);
+    const res = await fetchJson(`/api/pro/businesses/${businessId}/calendar/events/${eventId}`, {
+      method: 'DELETE',
+    });
+    setDeleting(false);
+
+    if (res.ok) {
+      setEditEvent(null);
+      setFetchVersion(v => v + 1);
+      revalidate('pro:calendar');
+      toast.success('Événement supprimé');
+    } else {
+      toast.error('Erreur lors de la suppression');
+    }
+  }, [businessId, editEvent, toast]);
+
+  // ─── Filters ────────────────────────────────────────────────────────────────
 
   const filters = (
     <div className="flex items-center gap-1.5 flex-wrap">
@@ -220,16 +388,17 @@ export default function ProCalendarPage() {
             onClose={() => setSelectedDay(null)}
             businessId={businessId}
             onCreateEvent={() => openCreate(selectedDay)}
+            onEditEvent={openEdit}
           />
         )}
       </div>
 
-      {/* Create modal */}
+      {/* ── Create modal ─────────────────────────────────────────────────────── */}
       <Modal
         open={createOpen}
         onCloseAction={() => { if (!creating) setCreateOpen(false); }}
         title={createKind ? (createKind === 'APPOINTMENT' ? 'Nouveau rendez-vous' : createKind === 'REMINDER' ? 'Nouveau rappel' : 'Nouvelle tâche') : 'Ajouter au calendrier'}
-        description={createKind ? undefined : 'Choisissez le type d’événement à créer.'}
+        description={createKind ? undefined : 'Choisissez le type d\u2019événement à créer.'}
       >
         {!createKind ? (
           <div className="grid grid-cols-3 gap-3">
@@ -258,7 +427,7 @@ export default function ProCalendarPage() {
               <span className="text-sm font-medium" style={{ color: 'var(--text)' }}>Tâche</span>
             </button>
           </div>
-        ) : (
+        ) : createKind === 'TASK' ? (
           <form onSubmit={(e) => { e.preventDefault(); void handleCreate(); }} className="space-y-3">
             <Input
               label="Titre"
@@ -266,108 +435,152 @@ export default function ProCalendarPage() {
               onChange={(e) => setCreateTitle(e.target.value)}
               maxLength={200}
               autoFocus
-              placeholder={createKind === 'APPOINTMENT' ? 'Ex : RDV client…' : createKind === 'REMINDER' ? 'Ex : Rappeler fournisseur…' : 'Ex : Préparer la présentation…'}
+              placeholder="Ex : Préparer la présentation…"
             />
-
             <div className="grid gap-3 sm:grid-cols-2">
-              <Input
-                label="Date"
-                type="date"
-                value={createDate}
-                onChange={(e) => setCreateDate(e.target.value)}
-              />
-              <Input
-                label="Heure début"
-                type="time"
-                value={createTimeStart}
-                onChange={(e) => setCreateTimeStart(e.target.value)}
-              />
+              <Input label="Date" type="date" value={createDate} onChange={(e) => setCreateDate(e.target.value)} />
+              <Input label="Heure début" type="time" value={createTimeStart} onChange={(e) => setCreateTimeStart(e.target.value)} />
             </div>
-
-            {createKind === 'APPOINTMENT' ? (
-              <>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <Input
-                    label="Heure fin"
-                    type="time"
-                    value={createTimeEnd}
-                    onChange={(e) => setCreateTimeEnd(e.target.value)}
-                  />
-                  <Input
-                    label="Lieu"
-                    value={createLocation}
-                    onChange={(e) => setCreateLocation(e.target.value)}
-                    placeholder="Adresse ou lien visio"
-                  />
-                </div>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <Select
-                    label="Client"
-                    value={createClientId}
-                    onChange={(e) => setCreateClientId(e.target.value)}
-                  >
-                    <option value="">Aucun client</option>
-                    {clients.map((c) => (
-                      <option key={c.id} value={c.id}>{c.name}</option>
-                    ))}
-                  </Select>
-                  <Select
-                    label="Projet"
-                    value={createProjectId}
-                    onChange={(e) => setCreateProjectId(e.target.value)}
-                  >
-                    <option value="">Aucun projet</option>
-                    {projects.map((p) => (
-                      <option key={p.id} value={p.id}>{p.name}</option>
-                    ))}
-                  </Select>
-                </div>
-              </>
-            ) : createKind === 'TASK' ? (
-              <Select
-                label="Projet"
-                value={createProjectId}
-                onChange={(e) => setCreateProjectId(e.target.value)}
-              >
-                <option value="">Aucun projet</option>
-                {projects.map((p) => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </Select>
-            ) : null}
-
-            {createKind !== 'TASK' ? (
-              <Input
-                label="Description"
-                value={createDescription}
-                onChange={(e) => setCreateDescription(e.target.value)}
-                placeholder="Notes supplémentaires…"
-              />
-            ) : null}
-
+            <Select label="Projet" value={createProjectId} onChange={(e) => setCreateProjectId(e.target.value)}>
+              <option value="">Aucun projet</option>
+              {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </Select>
             <div className="flex items-center justify-between pt-1">
-              <button
-                type="button"
-                onClick={() => setCreateKind(null)}
-                className="text-xs font-medium hover:underline"
-                style={{ color: 'var(--text-secondary)' }}
-              >
+              <button type="button" onClick={() => setCreateKind(null)} className="text-xs font-medium hover:underline" style={{ color: 'var(--text-secondary)' }}>
                 ← Changer le type
               </button>
               <div className="flex gap-2">
-                <Button variant="outline" type="button" onClick={() => setCreateOpen(false)} disabled={creating}>
-                  Annuler
-                </Button>
-                <Button type="submit" disabled={creating || !createTitle.trim() || !createDate}>
-                  {creating ? 'Création…' : 'Créer'}
-                </Button>
+                <Button variant="outline" type="button" onClick={() => setCreateOpen(false)} disabled={creating}>Annuler</Button>
+                <Button type="submit" disabled={creating || !createTitle.trim() || !createDate}>{creating ? 'Création…' : 'Créer'}</Button>
+              </div>
+            </div>
+          </form>
+        ) : (
+          <form onSubmit={(e) => { e.preventDefault(); void handleCreate(); }} className="space-y-3">
+            <EventForm
+              kind={createKind}
+              title={createTitle} onTitleChange={setCreateTitle}
+              date={createDate} onDateChange={setCreateDate}
+              timeStart={createTimeStart} onTimeStartChange={setCreateTimeStart}
+              timeEnd={createTimeEnd} onTimeEndChange={setCreateTimeEnd}
+              location={createLocation} onLocationChange={setCreateLocation}
+              description={createDescription} onDescriptionChange={setCreateDescription}
+              projectId={createProjectId} onProjectIdChange={setCreateProjectId}
+              clientId={createClientId} onClientIdChange={setCreateClientId}
+              projects={projects}
+              clients={clients}
+            />
+            <div className="flex items-center justify-between pt-1">
+              <button type="button" onClick={() => setCreateKind(null)} className="text-xs font-medium hover:underline" style={{ color: 'var(--text-secondary)' }}>
+                ← Changer le type
+              </button>
+              <div className="flex gap-2">
+                <Button variant="outline" type="button" onClick={() => setCreateOpen(false)} disabled={creating}>Annuler</Button>
+                <Button type="submit" disabled={creating || !createTitle.trim() || !createDate}>{creating ? 'Création…' : 'Créer'}</Button>
               </div>
             </div>
           </form>
         )}
       </Modal>
 
-      {/* Sync modal */}
+      {/* ── Edit modal ───────────────────────────────────────────────────────── */}
+      <Modal
+        open={!!editEvent}
+        onCloseAction={() => { if (!saving && !deleting) setEditEvent(null); }}
+        title={editKind === 'APPOINTMENT' ? 'Modifier le rendez-vous' : 'Modifier le rappel'}
+      >
+        {editEvent && (
+          <form onSubmit={(e) => { e.preventDefault(); void handleUpdate(); }} className="space-y-3">
+            {/* Kind toggle */}
+            <div className="flex rounded-lg overflow-hidden" style={{ border: '1px solid var(--border)' }}>
+              <button
+                type="button"
+                onClick={() => setEditKind('APPOINTMENT')}
+                className="flex-1 text-sm font-medium py-2 transition-colors"
+                style={{
+                  background: editKind === 'APPOINTMENT' ? 'var(--shell-accent)' : 'var(--surface)',
+                  color: editKind === 'APPOINTMENT' ? 'white' : 'var(--text-secondary)',
+                }}
+              >
+                RDV
+              </button>
+              <button
+                type="button"
+                onClick={() => setEditKind('REMINDER')}
+                className="flex-1 text-sm font-medium py-2 transition-colors"
+                style={{
+                  background: editKind === 'REMINDER' ? 'var(--shell-accent)' : 'var(--surface)',
+                  color: editKind === 'REMINDER' ? 'white' : 'var(--text-secondary)',
+                }}
+              >
+                Rappel
+              </button>
+            </div>
+
+            <EventForm
+              kind={editKind}
+              title={editTitle} onTitleChange={setEditTitle}
+              date={editDate} onDateChange={setEditDate}
+              timeStart={editTimeStart} onTimeStartChange={setEditTimeStart}
+              timeEnd={editTimeEnd} onTimeEndChange={setEditTimeEnd}
+              location={editLocation} onLocationChange={setEditLocation}
+              description={editDescription} onDescriptionChange={setEditDescription}
+              projectId={editProjectId} onProjectIdChange={setEditProjectId}
+              clientId={editClientId} onClientIdChange={setEditClientId}
+              projects={projects}
+              clients={clients}
+            />
+
+            {/* Delete section */}
+            <div className="pt-2" style={{ borderTop: '1px solid var(--border)' }}>
+              {!confirmDelete ? (
+                <button
+                  type="button"
+                  onClick={() => setConfirmDelete(true)}
+                  className="flex items-center gap-1.5 text-xs font-medium hover:underline"
+                  style={{ color: 'var(--danger)' }}
+                >
+                  <Trash2 size={13} />
+                  Supprimer cet événement
+                </button>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs" style={{ color: 'var(--danger)' }}>Confirmer la suppression ?</span>
+                  <Button
+                    variant="outline"
+                    type="button"
+                    onClick={() => setConfirmDelete(false)}
+                    disabled={deleting}
+                  >
+                    Non
+                  </Button>
+                  <button
+                    type="button"
+                    onClick={() => void handleDelete()}
+                    disabled={deleting}
+                    className="text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors"
+                    style={{ background: 'var(--danger)', color: 'white' }}
+                  >
+                    {deleting ? 'Suppression…' : 'Oui, supprimer'}
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Actions */}
+            <div className="flex justify-end gap-2 pt-1">
+              <Button variant="outline" type="button" onClick={() => setEditEvent(null)} disabled={saving || deleting}>
+                Annuler
+              </Button>
+              <Button type="submit" disabled={saving || deleting || !editTitle.trim() || !editDate}>
+                {saving ? 'Enregistrement…' : 'Enregistrer'}
+              </Button>
+            </div>
+          </form>
+        )}
+      </Modal>
+
+      {/* ── Sync modal ───────────────────────────────────────────────────────── */}
       <Modal
         open={syncOpen}
         onCloseAction={() => setSyncOpen(false)}

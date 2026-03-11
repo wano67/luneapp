@@ -180,7 +180,7 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
     taskUpdating, templatesApplying,
     updateTaskDueDate, updateTask, createTask, deleteTask,
     handleApplyServiceTemplates: applyServiceTemplatesRaw,
-  } = useTaskHandlers({ businessId, projectId, isAdmin, loadTasks, loadActivity, onBillingError: setBillingError });
+  } = useTaskHandlers({ businessId, projectId, isAdmin, loadTasks, loadActivity, loadProject, onBillingError: setBillingError });
 
   // ─── Documents ──────────────────────────────────────────────────────────────
 

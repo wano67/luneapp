@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import { formatCentsToEuroInput, parseEuroToCents } from '@/lib/money';
+import { revalidate } from '@/lib/revalidate';
 import type { PaymentFormState } from '@/components/pro/projects/modals/PaymentModal';
 
 // ─── Local types ──────────────────────────────────────────────────────────────
@@ -223,6 +224,7 @@ export function usePaymentModal({
       setPaymentNotice(message);
       setPaymentForm((prev) => ({ ...prev, amount: '', reference: '', note: '' }));
       await Promise.all([loadInvoices(), loadPayments(invoice.id)]);
+      revalidate('pro:billing');
     } catch (err) {
       setPaymentError(getErrorMessage(err));
     } finally {
@@ -253,6 +255,7 @@ export function usePaymentModal({
         onBillingInfo('Paiement supprimé');
         setPaymentNotice('Paiement supprimé');
         await Promise.all([loadInvoices(), loadPayments(paymentModal.invoice.id)]);
+        revalidate('pro:billing');
       } catch (err) {
         setPaymentError(getErrorMessage(err));
       } finally {

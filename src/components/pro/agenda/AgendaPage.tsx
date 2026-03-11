@@ -13,6 +13,7 @@ import { ContactCard } from '@/components/pro/crm/ContactCard';
 import { ProPageShell } from '@/components/pro/ProPageShell';
 import { useActiveBusiness } from '@/app/app/pro/ActiveBusinessProvider';
 import { isProjectActive } from '@/lib/projectStatus';
+import { revalidate } from '@/lib/revalidate';
 
 type Props = { businessId: string };
 
@@ -334,6 +335,7 @@ export default function AgendaPage({ businessId }: Props) {
       setForm({ name: '', email: '', company: '', type: form.type, websiteUrl: '' });
       setCreateOpen(false);
       setRefreshKey((v) => v + 1);
+      revalidate('pro:clients');
     } catch (err) {
       setCreateError((err as Error)?.message ?? 'Création impossible');
     } finally {
@@ -364,6 +366,7 @@ export default function AgendaPage({ businessId }: Props) {
           return;
         }
         setActionResult({ projectId: res.data.item.id });
+        revalidate('pro:clients');
       } else {
         const payload = actionName.trim() ? { projectName: actionName.trim() } : {};
         const res = await fetchJson<ConvertResponse>(
@@ -380,6 +383,7 @@ export default function AgendaPage({ businessId }: Props) {
           return;
         }
         setActionResult({ projectId: res.data.projectId, clientId: res.data.clientId });
+        revalidate('pro:clients');
       }
       setRefreshKey((v) => v + 1);
     } catch (err) {

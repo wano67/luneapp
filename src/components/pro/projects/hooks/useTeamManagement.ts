@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { fetchJson } from '@/lib/apiClient';
+import { revalidate } from '@/lib/revalidate';
 import type { OrganizationUnitItem } from '@/components/pro/projects/hooks/useProjectDataLoaders';
 
 // ─── Hook types ───────────────────────────────────────────────────────────────
@@ -82,6 +83,7 @@ export function useTeamManagement({
       return;
     }
     await loadProjectMembers();
+    revalidate('pro:team');
     setAccessInfo('Accès mis à jour.');
   }
 
@@ -100,6 +102,7 @@ export function useTeamManagement({
       return;
     }
     await loadProjectMembers();
+    revalidate('pro:team');
     setAccessInfo('Accès mis à jour.');
   }
 
@@ -134,6 +137,7 @@ export function useTeamManagement({
     setUnitDraftName('');
     setUnitDraftOrder('0');
     await loadOrganizationUnits();
+    revalidate('pro:team');
     setTeamInfo('Pôle créé.');
   }
 
@@ -168,6 +172,7 @@ export function useTeamManagement({
       return;
     }
     await loadOrganizationUnits();
+    revalidate('pro:team');
     setTeamInfo('Pôle mis à jour.');
   }
 
@@ -186,6 +191,7 @@ export function useTeamManagement({
       return;
     }
     await loadOrganizationUnits();
+    revalidate('pro:team');
     setTeamInfo('Pôle supprimé.');
   }
 
@@ -209,6 +215,7 @@ export function useTeamManagement({
     }
     await loadMembers();
     await loadProjectMembers();
+    revalidate('pro:team');
     setTeamInfo('Membre mis à jour.');
   }
 

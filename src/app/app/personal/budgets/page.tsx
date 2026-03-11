@@ -15,6 +15,7 @@ import { FaviconAvatar } from '@/app/app/components/FaviconAvatar';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import { formatCentsToEuroDisplay, parseEuroToCents, sanitizeEuroInput } from '@/lib/money';
 import { useUserPreferences } from '@/lib/hooks/useUserPreferences';
+import { revalidate, useRevalidationKey } from '@/lib/revalidate';
 import { SUBSCRIPTION_PROVIDERS, groupProvidersByCategory, type SubscriptionProvider, type SubscriptionPlan } from '@/config/commonSubscriptions';
 import { Plus, Search, ChevronLeft, Zap, PiggyBank, Pencil, Check, X } from 'lucide-react';
 import Link from 'next/link';
@@ -195,10 +196,11 @@ export default function BudgetsPage() {
     setRecurringLoading(false);
   }, []);
 
+  const walletRv = useRevalidationKey(['personal:wallet']);
   useEffect(() => {
     void load();
     void loadRecurring();
-  }, [load, loadRecurring]);
+  }, [load, loadRecurring, walletRv]);
 
   /* ═══ Budget CRUD ═══ */
 
@@ -257,6 +259,7 @@ export default function BudgetsPage() {
       }
       setBudgetModalOpen(false);
       await load();
+      revalidate('personal:wallet');
     } catch (e) {
       setBudgetSaveError(getErrorMessage(e));
     } finally {
@@ -266,7 +269,7 @@ export default function BudgetsPage() {
 
   async function handleBudgetDelete(id: string) {
     const res = await fetchJson(`/api/personal/budgets/${id}`, { method: 'DELETE' });
-    if (res.ok) await load();
+    if (res.ok) { await load(); revalidate('personal:wallet'); }
   }
 
   /* ═══ Subscription CRUD ═══ */
@@ -369,6 +372,7 @@ export default function BudgetsPage() {
       }
       setSubModalOpen(false);
       await load();
+      revalidate('personal:wallet');
       void loadRecurring();
     } catch (e) {
       setSubSaveError(getErrorMessage(e));
@@ -384,11 +388,12 @@ export default function BudgetsPage() {
       body: JSON.stringify({ isActive: !s.isActive }),
     });
     await load();
+    revalidate('personal:wallet');
   }
 
   async function handleSubDelete(id: string) {
     const res = await fetchJson(`/api/personal/subscriptions/${id}`, { method: 'DELETE' });
-    if (res.ok) await load();
+    if (res.ok) { await load(); revalidate('personal:wallet'); }
   }
 
   /* ═══ Add recurring as subscription ═══ */
@@ -429,6 +434,7 @@ export default function BudgetsPage() {
       });
       setEditingSavingsId(null);
       await load();
+      revalidate('personal:savings');
     } finally {
       setSavingSavingsGoal(false);
     }

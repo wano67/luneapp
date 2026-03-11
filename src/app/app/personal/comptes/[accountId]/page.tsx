@@ -14,7 +14,7 @@ import { formatCentsToEuroDisplay } from '@/lib/money';
 import { fmtKpi, fmtDate } from '@/lib/format';
 import { loanMonthlyPaymentCents, loanTotalInterestCents, annualYieldCents, formatRateBps } from '@/lib/finance';
 import { PRODUCT_MAP } from '@/config/bankingProducts';
-import { emitWalletRefresh } from '@/lib/personalEvents';
+import { revalidate, useRevalidationKey } from '@/lib/revalidate';
 
 const InlineTransactionModal = dynamic(() => import('./InlineTransactionModal'), { ssr: false });
 
@@ -100,9 +100,11 @@ export default function AccountDetailPage() {
     }
   }, [accountId]);
 
+  const walletRv = useRevalidationKey(['personal:wallet']);
+
   useEffect(() => {
     void load();
-  }, [load]);
+  }, [load, walletRv]);
 
   const title = useMemo(() => account?.name ?? 'Compte', [account]);
 
@@ -138,7 +140,7 @@ export default function AccountDetailPage() {
       if (!res.ok) return;
       setDetailTxn(null);
       void load();
-      emitWalletRefresh();
+      revalidate('personal:wallet');
     } catch {
       // Silent
     } finally {
@@ -340,7 +342,7 @@ export default function AccountDetailPage() {
         <InlineTransactionModal
           open={txnModalOpen}
           onClose={() => { setTxnModalOpen(false); setEditingTxn(null); }}
-          onSuccess={() => { void load(); emitWalletRefresh(); }}
+          onSuccess={() => { void load(); revalidate('personal:wallet'); }}
           accountId={accountId}
           accountName={account.name}
           accountCurrency={account.currency}

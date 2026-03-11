@@ -12,6 +12,7 @@ import { PageHeader } from '@/components/layouts/PageHeader';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import { getInvoiceStatusLabelFR, getPaymentStatusLabelFR } from '@/lib/billingStatus';
 import { useActiveBusiness } from '../../../../ActiveBusinessProvider';
+import { revalidate } from '@/lib/revalidate';
 
 type InvoiceStatus = 'DRAFT' | 'SENT' | 'PAID' | 'CANCELLED';
 
@@ -188,6 +189,7 @@ export default function InvoiceDetailPage() {
     setInvoice(res.data.item);
     setInfo(`Statut mis à jour (${getInvoiceStatusLabelFR(nextStatus)}).`);
     setUpdating(false);
+    revalidate('pro:billing');
     router.refresh();
   }
 
@@ -215,6 +217,7 @@ export default function InvoiceDetailPage() {
     await load();
     setInfo('Facture soldée.');
     setUpdating(false);
+    revalidate('pro:billing');
     router.refresh();
   }
 

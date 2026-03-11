@@ -12,6 +12,7 @@ import { Table, TableBody, TableCell, TableEmpty, TableHead, TableHeader, TableR
 import { fetchJson } from '@/lib/apiClient';
 import { fmtKpi } from '@/lib/format';
 import { parseEuroToCents, sanitizeEuroInput } from '@/lib/money';
+import { revalidate } from '@/lib/revalidate';
 
 /* ═══ Types ═══ */
 
@@ -145,6 +146,7 @@ export function ChargesTab({ businessId, projectId, isAdmin }: Props) {
       setModalOpen(false);
       setForm({ amount: '', category: 'Autre', vendor: '', date: '', note: '', method: 'WIRE' });
       void loadCharges();
+      revalidate('pro:finances');
     } else {
       setFormError(res.error ?? 'Erreur lors de la création.');
     }
@@ -160,6 +162,7 @@ export function ChargesTab({ businessId, projectId, isAdmin }: Props) {
     if (res.ok) {
       setDeleteTarget(null);
       void loadCharges();
+      revalidate('pro:finances');
     }
     setDeleting(false);
   };
