@@ -3,7 +3,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,7 +12,7 @@ import { Modal } from '@/components/ui/modal';
 import { fetchJson } from '@/lib/apiClient';
 import { useActiveBusiness } from '../../../ActiveBusinessProvider';
 import { ProPageShell } from '@/components/pro/ProPageShell';
-import { Check, Trash2, Plus, X, Calendar, User, FolderOpen, HelpCircle, AlertTriangle, Users, Paperclip, FileText, Upload } from 'lucide-react';
+import { Check, Trash2, Plus, X, Calendar, User, FolderOpen, HelpCircle, AlertTriangle, Users, Paperclip, FileText, Upload, Download, StickyNote } from 'lucide-react';
 import { TASK_STATUS_OPTIONS, getTaskStatusBadgeClasses } from '@/lib/taskStatusUi';
 import { fmtDate } from '@/lib/format';
 
@@ -70,8 +70,10 @@ type ProjectMember = {
 export default function TaskDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const businessId = (params?.businessId ?? '') as string;
   const taskId = (params?.taskId ?? '') as string;
+  const backHref = searchParams?.get('from') || `/app/pro/${businessId}/tasks`;
   const activeCtx = useActiveBusiness({ optional: true });
   const role = activeCtx?.activeBusiness?.role;
   const isAdmin = role === 'ADMIN' || role === 'OWNER';
@@ -92,6 +94,10 @@ export default function TaskDetailPage() {
   // Checklist
   const [checklistTitle, setChecklistTitle] = useState('');
   const [checklistSaving, setChecklistSaving] = useState(false);
+
+  // Notes
+  const [editingNotes, setEditingNotes] = useState(false);
+  const [notesDraft, setNotesDraft] = useState('');
 
   // Delete
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -280,6 +286,22 @@ export default function TaskDetailPage() {
 
   async function handleUnblock() {
     await patchTask({ isBlocked: false, blockedReason: null });
+  }
+
+  function startEditNotes() {
+    if (!isAdmin || !task) return;
+    setNotesDraft(task.notes ?? '');
+    setEditingNotes(true);
+  }
+
+  async function saveNotes() {
+    const trimmed = notesDraft.trim();
+    if (trimmed === (task?.notes ?? '')) {
+      setEditingNotes(false);
+      return;
+    }
+    await patchTask({ notes: trimmed || null });
+    setEditingNotes(false);
   }
 
   // ─── Help request ──────────────────────────────────────────────────
@@ -475,7 +497,7 @@ export default function TaskDetailPage() {
   if (loading) {
     return (
       <ProPageShell
-        backHref={`/app/pro/${businessId}/tasks`}
+        backHref={backHref}
         backLabel="Taches"
         title="Chargement..."
       >
@@ -489,7 +511,7 @@ export default function TaskDetailPage() {
   if (!task) {
     return (
       <ProPageShell
-        backHref={`/app/pro/${businessId}/tasks`}
+        backHref={backHref}
         backLabel="Taches"
         title="Tache introuvable"
       >
@@ -512,7 +534,7 @@ export default function TaskDetailPage() {
 
   return (
     <ProPageShell
-      backHref={`/app/pro/${businessId}/tasks`}
+      backHref={backHref}
       backLabel="Taches"
       title="Detail de la tache"
     >
@@ -726,6 +748,60 @@ export default function TaskDetailPage() {
         </div>
       </Card>
 
+      {/* ── Notes / Description ── */}
+      <Card className="p-5 space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <StickyNote size={15} style={{ color: 'var(--text-faint)' }} />
+            <p className="text-sm font-semibold" style={{ color: 'var(--text)' }}>Notes</p>
+          </div>
+          {isAdmin && !editingNotes && (
+            <Button variant="outline" size="sm" onClick={startEditNotes}>
+              {task.notes ? 'Modifier' : 'Ajouter'}
+            </Button>
+          )}
+        </div>
+        {editingNotes ? (
+          <div className="space-y-2">
+            <textarea
+              value={notesDraft}
+              onChange={(e) => setNotesDraft(e.target.value)}
+              placeholder="Ajoutez des details, instructions ou contexte pour cette tache..."
+              className="w-full rounded-lg border px-3 py-2.5 text-sm resize-none"
+              style={{
+                borderColor: 'var(--border)',
+                background: 'var(--surface)',
+                color: 'var(--text)',
+                minHeight: 100,
+              }}
+              maxLength={5000}
+              autoFocus
+              disabled={saving}
+            />
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" size="sm" onClick={() => setEditingNotes(false)} disabled={saving}>
+                Annuler
+              </Button>
+              <Button size="sm" onClick={() => void saveNotes()} disabled={saving}>
+                {saving ? 'Enregistrement...' : 'Enregistrer'}
+              </Button>
+            </div>
+          </div>
+        ) : task.notes ? (
+          <div
+            className={`text-sm whitespace-pre-wrap ${isAdmin ? 'cursor-pointer hover:opacity-80' : ''}`}
+            style={{ color: 'var(--text-secondary)' }}
+            onClick={isAdmin ? startEditNotes : undefined}
+          >
+            {task.notes}
+          </div>
+        ) : (
+          <p className="text-xs py-1" style={{ color: 'var(--text-faint)' }}>
+            Aucune note pour cette tache.
+          </p>
+        )}
+      </Card>
+
       {/* ── Checklist ── */}
       <Card className="p-5 space-y-3">
         <div className="flex items-center justify-between">
@@ -868,6 +944,15 @@ export default function TaskDetailPage() {
                       {(doc.sizeBytes / 1024).toFixed(0)} Ko
                     </p>
                   </div>
+                  <a
+                    href={`/api/pro/businesses/${businessId}/documents/${doc.id}/download`}
+                    download
+                    className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 p-1 rounded hover:bg-[var(--surface-2)]"
+                    title="Telecharger"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <Download size={14} style={{ color: 'var(--text-faint)' }} />
+                  </a>
                   {isAdmin ? (
                     <button
                       type="button"

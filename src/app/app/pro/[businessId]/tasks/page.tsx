@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useMemo, useCallback, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import { ListChecks, ChevronRight, Plus, Check, ChevronDown, ChevronUp, AlertTriangle, Filter } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -108,7 +108,7 @@ function groupByUrgency(items: MyTask[], dateRange: DateRange, projectFilter: st
 
 // ─── Inline components ─────────────────────────────────────────────
 function UrgencySection({
-  title, color, tasks, businessId, onStatusChange, updatingIds, danger,
+  title, color, tasks, businessId, onStatusChange, updatingIds, danger, fromPath,
 }: {
   title: string;
   color: string;
@@ -117,6 +117,7 @@ function UrgencySection({
   onStatusChange: (taskId: string, newStatus: string) => void;
   updatingIds: Record<string, boolean>;
   danger?: boolean;
+  fromPath?: string;
 }) {
   if (tasks.length === 0) return null;
   return (
@@ -141,6 +142,7 @@ function UrgencySection({
             businessId={businessId}
             onStatusChange={onStatusChange}
             updating={!!updatingIds[task.id]}
+            fromPath={fromPath}
           />
         ))}
       </div>
@@ -149,12 +151,13 @@ function UrgencySection({
 }
 
 function TaskRow({
-  task, businessId, onStatusChange, updating,
+  task, businessId, onStatusChange, updating, fromPath,
 }: {
   task: MyTask;
   businessId: string;
   onStatusChange: (taskId: string, newStatus: string) => void;
   updating: boolean;
+  fromPath?: string;
 }) {
   const hasChecklist = typeof task.checklistCount === 'number' && task.checklistCount > 0;
   const isDone = task.status === 'DONE';
@@ -181,7 +184,7 @@ function TaskRow({
       {/* Task info */}
       <div className="flex-1 min-w-0">
         <Link
-          href={`/app/pro/${businessId}/tasks/${task.id}`}
+          href={fromPath ? `/app/pro/${businessId}/tasks/${task.id}?from=${encodeURIComponent(fromPath)}` : `/app/pro/${businessId}/tasks/${task.id}`}
           className={`text-sm font-medium hover:underline truncate block ${isDone ? 'line-through' : ''}`}
           style={{ color: 'var(--text)' }}
         >
@@ -231,12 +234,13 @@ function TaskRow({
 }
 
 function DoneSection({
-  tasks, businessId, onStatusChange, updatingIds,
+  tasks, businessId, onStatusChange, updatingIds, fromPath,
 }: {
   tasks: MyTask[];
   businessId: string;
   onStatusChange: (taskId: string, newStatus: string) => void;
   updatingIds: Record<string, boolean>;
+  fromPath?: string;
 }) {
   const [expanded, setExpanded] = useState(false);
   if (tasks.length === 0) return null;
@@ -265,6 +269,7 @@ function DoneSection({
               businessId={businessId}
               onStatusChange={onStatusChange}
               updating={!!updatingIds[task.id]}
+              fromPath={fromPath}
             />
           ))}
         </div>
@@ -368,6 +373,7 @@ function WeeklyProgressCard({ stats, loading: isLoading }: { stats: WeeklyStats 
 // ─── Main page ──────────────────────────────────────────────────────
 export default function MyTasksPage() {
   const params = useParams<{ businessId: string }>();
+  const searchParams = useSearchParams();
   const businessId = params?.businessId ?? '';
   const activeCtx = useActiveBusiness({ optional: true });
   const actorRole = activeCtx?.activeBusiness?.role ?? null;
@@ -379,7 +385,7 @@ export default function MyTasksPage() {
   const [updatingIds, setUpdatingIds] = useState<Record<string, boolean>>({});
   const [fetchVersion, setFetchVersion] = useState(0);
   const tasksRv = useRevalidationKey(['pro:tasks']);
-  const [selectedMemberId, setSelectedMemberId] = useState('');
+  const [selectedMemberId, setSelectedMemberId] = useState(searchParams?.get('member') ?? '');
   const [weeklyStats, setWeeklyStats] = useState<WeeklyStats | null>(null);
   const [weeklyLoading, setWeeklyLoading] = useState(true);
   const [dateRange, setDateRange] = useState<DateRange>('all');
@@ -527,6 +533,11 @@ export default function MyTasksPage() {
     () => (myUserId ? members.filter((m) => m.userId !== myUserId) : members),
     [members, myUserId],
   );
+
+  // Build the current page path so task detail can return here (preserves selected member)
+  const currentFromPath = selectedMemberId
+    ? `/app/pro/${businessId}/tasks?member=${selectedMemberId}`
+    : `/app/pro/${businessId}/tasks`;
 
   const filteredCount = groups.overdue.length + groups.today.length + groups.thisWeek.length + groups.later.length + groups.noDate.length + groups.done.length;
   const hasNoTasks = !loading && (data?.items.length ?? 0) === 0;
@@ -683,30 +694,36 @@ export default function MyTasksPage() {
                   title="En retard" color="var(--danger)" danger
                   tasks={groups.overdue} businessId={businessId}
                   onStatusChange={handleStatusChange} updatingIds={updatingIds}
+                  fromPath={currentFromPath}
                 />
                 <UrgencySection
                   title="Aujourd'hui" color="var(--warning)"
                   tasks={groups.today} businessId={businessId}
                   onStatusChange={handleStatusChange} updatingIds={updatingIds}
+                  fromPath={currentFromPath}
                 />
                 <UrgencySection
                   title="Cette semaine" color="var(--info)"
                   tasks={groups.thisWeek} businessId={businessId}
                   onStatusChange={handleStatusChange} updatingIds={updatingIds}
+                  fromPath={currentFromPath}
                 />
                 <UrgencySection
                   title="Plus tard" color="var(--text-faint)"
                   tasks={groups.later} businessId={businessId}
                   onStatusChange={handleStatusChange} updatingIds={updatingIds}
+                  fromPath={currentFromPath}
                 />
                 <UrgencySection
                   title="Sans date" color="var(--text-faint)"
                   tasks={groups.noDate} businessId={businessId}
                   onStatusChange={handleStatusChange} updatingIds={updatingIds}
+                  fromPath={currentFromPath}
                 />
                 <DoneSection
                   tasks={groups.done} businessId={businessId}
                   onStatusChange={handleStatusChange} updatingIds={updatingIds}
+                  fromPath={currentFromPath}
                 />
               </>
             )}
