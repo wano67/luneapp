@@ -60,6 +60,10 @@ export const GET = withBusinessRoute(
       },
       orderBy: [{ happenedAt: 'desc' }],
       take: limit,
+      include: {
+        notes: { orderBy: { position: 'asc' } },
+        tasks: { select: { id: true, title: true, status: true, dueDate: true } },
+      },
     });
 
     return jsonb({ items: interactions }, ctx.requestId);
@@ -104,6 +108,9 @@ export const POST = withBusinessRoute(
       if (!project) return notFound('Projet introuvable.');
     }
 
+    const summary = typeof body.summary === 'string' ? body.summary.trim() || null : null;
+    const notesArr = Array.isArray(body.notes) ? body.notes.filter((n: unknown) => typeof n === 'string' && n.trim()) : [];
+
     const created = await prisma.interaction.create({
       data: {
         businessId: ctx.businessId,
@@ -111,9 +118,21 @@ export const POST = withBusinessRoute(
         projectId: projectId ?? undefined,
         type: type as 'CALL' | 'MEETING' | 'EMAIL' | 'NOTE' | 'MESSAGE',
         content,
+        summary,
         happenedAt,
         nextActionDate: nextActionDate ?? undefined,
         createdByUserId: ctx.userId,
+        ...(notesArr.length > 0 ? {
+          notes: {
+            createMany: {
+              data: notesArr.map((n: string, i: number) => ({ content: n.trim(), position: i })),
+            },
+          },
+        } : {}),
+      },
+      include: {
+        notes: { orderBy: { position: 'asc' } },
+        tasks: { select: { id: true, title: true, status: true, dueDate: true } },
       },
     });
 

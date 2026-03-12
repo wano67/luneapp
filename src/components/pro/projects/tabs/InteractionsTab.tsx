@@ -4,15 +4,15 @@ import { InteractionsList } from '@/components/pro/interactions/InteractionsList
 
 type Props = {
   businessId: string;
-  clientId: string;
-  isAdmin?: boolean;
+  projectId: string;
+  isAdmin: boolean;
 };
 
-export function ClientInteractionsTab({ businessId, clientId, isAdmin = false }: Props) {
+export function InteractionsTab({ businessId, projectId, isAdmin }: Props) {
   return (
     <InteractionsList
       businessId={businessId}
-      clientId={clientId}
+      projectId={projectId}
       isAdmin={isAdmin}
     />
   );

@@ -655,6 +655,7 @@ model Task {
   projectServiceStepId BigInt?
   parentTaskId BigInt?
   assigneeUserId BigInt?
+  interactionId  BigInt?
   organizationUnitId BigInt?
   statusUpdatedAt DateTime?
   statusUpdatedByUserId BigInt?
@@ -681,6 +682,7 @@ model Task {
   organizationUnit OrganizationUnit? @relation(fields: [organizationUnitId], references: [id], onDelete: SetNull)
   statusUpdatedByUser User? @relation("TaskStatusUpdatedBy", fields: [statusUpdatedByUserId], references: [id], onDelete: SetNull)
   categoryReference BusinessReference? @relation("TaskCategoryReference", fields: [categoryReferenceId], references: [id], onDelete: SetNull)
+  interaction Interaction? @relation("TaskFromInteraction", fields: [interactionId], references: [id], onDelete: SetNull)
   assignees  TaskAssignee[]
   tags       TaskTag[]
   checklistItems TaskChecklistItem[]
@@ -699,6 +701,7 @@ model Task {
   @@index([businessId, categoryReferenceId])
   @@index([projectId, statusUpdatedAt])
   @@index([parentTaskId])
+  @@index([interactionId])
   @@index([businessId, organizationUnitId])
 
   timeEntries TimeEntry[]
@@ -1216,6 +1219,7 @@ model Interaction {
   projectId BigInt?
   type      InteractionType
   content   String
+  summary   String?
   happenedAt DateTime
   nextActionDate DateTime?
   createdByUserId BigInt?
@@ -1225,9 +1229,24 @@ model Interaction {
   client   Client?  @relation(fields: [clientId], references: [id], onDelete: SetNull)
   project  Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
   createdBy User?   @relation("InteractionCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  notes    InteractionNote[]
+  tasks    Task[]   @relation("TaskFromInteraction")
 
   @@index([businessId, clientId])
   @@index([businessId, projectId])
+}
+
+model InteractionNote {
+  id            BigInt      @id @default(autoincrement())
+  interactionId BigInt
+  content       String
+  isCompleted   Boolean     @default(false)
+  position      Int         @default(0)
+  createdAt     DateTime    @default(now())
+
+  interaction   Interaction @relation(fields: [interactionId], references: [id], onDelete: Cascade)
+
+  @@index([interactionId, position])
 }
 
 model BusinessReference {

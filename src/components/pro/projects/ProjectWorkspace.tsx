@@ -26,6 +26,7 @@ import { PaymentModal } from '@/components/pro/projects/modals/PaymentModal';
 import { BillingModals } from '@/components/pro/projects/modals/BillingModals';
 import { FilesTab } from '@/components/pro/projects/tabs/FilesTab';
 import { WorkTab } from '@/components/pro/projects/tabs/WorkTab';
+import { InteractionsTab } from '@/components/pro/projects/tabs/InteractionsTab';
 import { TeamTab } from '@/components/pro/projects/tabs/TeamTab';
 import { SetupModals } from '@/components/pro/projects/modals/SetupModals';
 import { useQuoteWizard } from '@/components/pro/projects/hooks/useQuoteWizard';
@@ -124,6 +125,7 @@ const tabs = [
   { key: 'billing', label: 'Facturation' },
   { key: 'charges', label: 'Charges' },
   { key: 'vault', label: 'Trousseau' },
+  { key: 'interactions', label: 'Interactions' },
   { key: 'files', label: 'Documents' },
 ];
 
@@ -140,7 +142,7 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
   const [billingError, setBillingError] = useState<string | null>(null);
   const [billingInfo, setBillingInfo] = useState<string | null>(null);
 
-  const [activeTab, setActiveTab] = useState<'overview' | 'work' | 'team' | 'billing' | 'charges' | 'vault' | 'files'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'work' | 'team' | 'billing' | 'charges' | 'vault' | 'interactions' | 'files'>('overview');
   const [pendingTaskId, setPendingTaskId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<'TODO' | 'DONE' | 'all'>('all');
   const [showAllServicesOverview, setShowAllServicesOverview] = useState(false);
@@ -821,6 +823,10 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
 
       {activeTab === 'vault' ? (
         <VaultTab businessId={businessId} projectId={projectId} isAdmin={isAdmin} />
+      ) : null}
+
+      {activeTab === 'interactions' ? (
+        <InteractionsTab businessId={businessId} projectId={projectId} isAdmin={isAdmin} />
       ) : null}
 
       {activeTab === 'files' ? (

@@ -25,14 +25,17 @@ export const PATCH = withBusinessRoute<{ businessId: string; interactionId: stri
     const content = typeof body.content === 'string' ? body.content.trim() : undefined;
     const happenedAtStr = typeof body.happenedAt === 'string' ? body.happenedAt : null;
     const nextActionStr = typeof body.nextActionDate === 'string' ? body.nextActionDate : null;
+    const summaryVal = typeof body.summary === 'string' ? body.summary.trim() || null : undefined;
 
     if (content !== undefined && !content) return badRequest('Contenu requis.');
     const data: {
       type?: 'CALL' | 'MEETING' | 'EMAIL' | 'NOTE' | 'MESSAGE';
       content?: string;
+      summary?: string | null;
       happenedAt?: Date;
       nextActionDate?: Date | null;
     } = {};
+    if (summaryVal !== undefined) data.summary = summaryVal;
     if (type) {
       const allowed = ['CALL', 'MEETING', 'EMAIL', 'NOTE', 'MESSAGE'];
       if (!allowed.includes(type)) return badRequest('Type invalide.');

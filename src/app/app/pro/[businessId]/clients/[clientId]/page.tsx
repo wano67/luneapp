@@ -114,7 +114,6 @@ export default function ClientDetailPage() {
   const [accountingData, setAccountingData] = useState<SummaryResponse | null>(null);
   const [accountingLoaded, setAccountingLoaded] = useState(false);
   const [interactions, setInteractions] = useState<Interaction[]>([]);
-  const [interactionsLoaded, setInteractionsLoaded] = useState(false);
   const [kpis, setKpis] = useState<Array<{ label: string; value: string | number }>>([
     { label: 'Projets', value: '—' },
     { label: 'Actifs', value: '—' },
@@ -137,10 +136,15 @@ export default function ClientDetailPage() {
       try {
         setLoading(true);
         setError(null);
-        const [clientRes, projectsRes] = await Promise.all([
+        const [clientRes, projectsRes, interactionsRes] = await Promise.all([
           fetchJson<ClientResponse>(`/api/pro/businesses/${businessId}/clients/${clientId}`, {}, controller.signal),
           fetchJson<ProjectsResponse>(
             `/api/pro/businesses/${businessId}/projects?clientId=${clientId}&scope=ALL`,
+            {},
+            controller.signal,
+          ),
+          fetchJson<{ items?: Interaction[] }>(
+            `/api/pro/businesses/${businessId}/interactions?clientId=${clientId}&limit=50`,
             {},
             controller.signal,
           ),
@@ -155,6 +159,9 @@ export default function ClientDetailPage() {
         const clientData: Client = (rawClient as ClientResponse).item ?? (rawClient as Client);
         setClient(clientData);
         setProjects(projectsRes.data?.items ?? []);
+        if (interactionsRes.ok && interactionsRes.data?.items) {
+          setInteractions(interactionsRes.data.items);
+        }
         setForm({
           name: clientData.name ?? '',
           email: clientData.email ?? '',
@@ -310,16 +317,6 @@ export default function ClientDetailPage() {
     [activeTab, buildAccountingKpis],
   );
 
-  const handleInteractionsChange = useCallback(
-    (items: Interaction[]) => {
-      setInteractions(items);
-      setInteractionsLoaded(true);
-      if (activeTab === 'interactions') {
-        setKpis(buildInteractionKpis(items));
-      }
-    },
-    [activeTab, buildInteractionKpis],
-  );
 
   if (loading) {
     return (
@@ -516,9 +513,6 @@ export default function ClientDetailPage() {
         <ClientInteractionsTab
           businessId={businessId}
           clientId={clientId}
-          initialItems={interactions}
-          alreadyLoaded={interactionsLoaded}
-          onChange={handleInteractionsChange}
         />
       ) : null}
 
