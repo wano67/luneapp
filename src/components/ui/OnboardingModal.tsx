@@ -1,10 +1,15 @@
 'use client';
 
-import { useState, useEffect, useCallback, type ReactNode } from 'react';
+import { useState, useEffect, useCallback, useSyncExternalStore, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronLeft, ChevronRight, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { fetchJson } from '@/lib/apiClient';
+
+const emptySubscribe = () => () => {};
+function useIsMounted() {
+  return useSyncExternalStore(emptySubscribe, () => true, () => false);
+}
 
 type OnboardingStep = {
   icon: ReactNode;
@@ -20,6 +25,7 @@ type OnboardingModalProps = {
 };
 
 export function OnboardingModal({ steps, storageKey, apiField, onComplete }: OnboardingModalProps) {
+  const mounted = useIsMounted();
   const [current, setCurrent] = useState(0);
   const [visible, setVisible] = useState(
     () => !(typeof window !== 'undefined' && localStorage.getItem(storageKey)),
@@ -67,7 +73,7 @@ export function OnboardingModal({ steps, storageKey, apiField, onComplete }: Onb
     onComplete();
   }, [storageKey, apiField, onComplete]);
 
-  if (!visible) return null;
+  if (!visible || !mounted) return null;
 
   const step = steps[current];
   const isLast = current === steps.length - 1;
