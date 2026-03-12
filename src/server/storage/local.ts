@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'crypto';
 import { mkdir, readFile, writeFile, rm } from 'fs/promises';
 import path from 'path';
 
-const ROOT = path.join(process.cwd(), 'uploads');
+const ROOT = process.env.STORAGE_PATH || path.join(process.cwd(), 'uploads');
 
 function sanitizeFilename(name: string) {
   const cleaned = name.replace(/[/\\?%*:|"<>]/g, '').replace(/\s+/g, ' ').trim();
