@@ -240,6 +240,7 @@ export function WorkTab({
         isAdmin={isAdmin}
         currentUserId={currentUserId}
         businessId={businessId}
+        projectId={projectId}
         onUpdate={onUpdateTask}
         onDelete={onDeleteTask}
         services={services}

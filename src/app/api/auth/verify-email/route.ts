@@ -30,28 +30,34 @@ export async function GET(request: NextRequest) {
 
   const tokenHash = crypto.createHash('sha256').update(rawToken).digest('base64url');
 
+  // Find user by token (no expiry check yet — handle idempotent re-clicks)
   const user = await prisma.user.findFirst({
-    where: {
-      emailVerificationToken: tokenHash,
-      emailVerificationExpiry: { gt: new Date() },
-    },
+    where: { emailVerificationToken: tokenHash },
   });
 
   if (!user) {
-    // Check if token exists but expired
-    const expiredUser = await prisma.user.findFirst({
-      where: { emailVerificationToken: tokenHash },
-    });
-    const errorParam = expiredUser ? 'expired' : 'invalid';
-    return NextResponse.redirect(new URL(`/verify-email?error=${errorParam}`, buildBaseUrl(request)));
+    return NextResponse.redirect(new URL('/verify-email?error=invalid', buildBaseUrl(request)));
+  }
+
+  // Already verified (email client prefetch, double-click, etc.) — idempotent success
+  if (user.emailVerified) {
+    const sessionToken = await createSessionToken(user);
+    const response = NextResponse.redirect(new URL('/verify-email?verified=true', buildBaseUrl(request)));
+    response.cookies.set({ name: AUTH_COOKIE_NAME, value: sessionToken, ...authCookieOptions });
+    return response;
+  }
+
+  // Token expired before user verified
+  if (user.emailVerificationExpiry && user.emailVerificationExpiry <= new Date()) {
+    return NextResponse.redirect(new URL('/verify-email?error=expired', buildBaseUrl(request)));
   }
 
   await prisma.user.update({
     where: { id: user.id },
     data: {
       emailVerified: true,
-      emailVerificationToken: null,
       emailVerificationExpiry: null,
+      // Keep emailVerificationToken for idempotent re-clicks
       pendingInviteToken: null,
     },
   });
@@ -132,10 +138,7 @@ export async function POST(request: NextRequest) {
   const tokenHash = crypto.createHash('sha256').update(rawToken).digest('base64url');
 
   const user = await prisma.user.findFirst({
-    where: {
-      emailVerificationToken: tokenHash,
-      emailVerificationExpiry: { gt: new Date() },
-    },
+    where: { emailVerificationToken: tokenHash },
   });
 
   if (!user) {
@@ -144,11 +147,29 @@ export async function POST(request: NextRequest) {
     return withRequestId(res, requestId);
   }
 
+  // Already verified — return success idempotently
+  if (user.emailVerified) {
+    const sessionToken = await createSessionToken(user);
+    const response = NextResponse.json(
+      { user: toPublicUser(user), verified: true, acceptedBusinessId: null },
+      { status: 200 }
+    );
+    response.cookies.set({ name: AUTH_COOKIE_NAME, value: sessionToken, ...authCookieOptions });
+    response.headers.set('Cache-Control', 'no-store');
+    return withRequestId(response, requestId);
+  }
+
+  // Token expired before user verified
+  if (user.emailVerificationExpiry && user.emailVerificationExpiry <= new Date()) {
+    const res = NextResponse.json({ error: 'Ce lien a expiré. Demandez un nouvel email.' }, { status: 400 });
+    res.headers.set('Cache-Control', 'no-store');
+    return withRequestId(res, requestId);
+  }
+
   await prisma.user.update({
     where: { id: user.id },
     data: {
       emailVerified: true,
-      emailVerificationToken: null,
       emailVerificationExpiry: null,
       pendingInviteToken: null,
     },

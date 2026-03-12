@@ -686,6 +686,7 @@ model Task {
   checklistItems TaskChecklistItem[]
   notifications Notification[]
   messages Message[]
+  documents BusinessDocument[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1614,6 +1615,7 @@ model BusinessDocument {
   businessId     BigInt
   clientId       BigInt?
   projectId      BigInt?
+  taskId         BigInt?
   folderId       BigInt?
   title          String
   filename       String
@@ -1628,12 +1630,14 @@ model BusinessDocument {
   business  Business        @relation(fields: [businessId], references: [id], onDelete: Cascade)
   client    Client?         @relation(fields: [clientId], references: [id], onDelete: SetNull)
   project   Project?        @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  task      Task?           @relation(fields: [taskId], references: [id], onDelete: SetNull)
   folder    DocumentFolder? @relation(fields: [folderId], references: [id], onDelete: SetNull)
   createdBy User            @relation("DocumentCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
 
   @@index([businessId, clientId, createdAt])
   @@index([businessId, projectId, createdAt])
   @@index([businessId, projectId, folderId])
+  @@index([businessId, taskId])
   @@index([businessId, createdAt])
 }
 

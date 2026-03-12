@@ -21,7 +21,7 @@ export default function VerifyEmailPage() {
     errorParam === 'expired'
       ? 'Ce lien a expiré. Demandez un nouvel email de vérification.'
       : errorParam === 'invalid'
-        ? 'Lien invalide.'
+        ? 'Ce lien est invalide ou a déjà été utilisé. Si vous avez déjà vérifié votre email, connectez-vous directement.'
         : null
   );
 
@@ -86,7 +86,7 @@ export default function VerifyEmailPage() {
                 <Mail size={48} style={{ color: errorParam ? 'var(--danger)' : 'var(--accent-strong)' }} />
               </div>
               <h1 className="text-xl font-semibold" style={{ color: 'var(--text)' }}>
-                {errorParam ? 'Lien invalide' : 'Vérifiez votre email'}
+                {errorParam ? 'Vérification impossible' : 'Vérifiez votre email'}
               </h1>
               {!errorParam && (
                 <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Trash2, ChevronDown, ChevronUp, Play, Square, Clock, DollarSign } from 'lucide-react';
+import { X, Trash2, ChevronDown, ChevronUp, Play, Square, Clock, DollarSign, Paperclip, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import Select from '@/components/ui/select';
@@ -38,6 +38,8 @@ type TimeEntryItem = {
   billable: boolean;
 };
 
+type TaskDocItem = { id: string; title: string; filename: string; mimeType: string; sizeBytes: number; createdAt: string };
+
 type TaskSidePanelProps = {
   task: TaskItem | null;
   open: boolean;
@@ -46,6 +48,7 @@ type TaskSidePanelProps = {
   isAdmin: boolean;
   currentUserId?: string | null;
   businessId: string;
+  projectId?: string | null;
   onUpdate: (taskId: string, payload: Record<string, unknown>) => Promise<void>;
   onDelete: (taskId: string) => Promise<void>;
   services?: ServiceOption[];
@@ -60,6 +63,7 @@ export function TaskSidePanel({
   isAdmin,
   currentUserId,
   businessId,
+  projectId,
   onUpdate,
   onDelete,
   services,
@@ -68,6 +72,11 @@ export function TaskSidePanel({
   const [title, setTitle] = useState('');
   const [deleting, setDeleting] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
+
+  // Documents state
+  const [taskDocs, setTaskDocs] = useState<TaskDocItem[]>([]);
+  const [docUploading, setDocUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Time tracking state
   const [timeEntries, setTimeEntries] = useState<TimeEntryItem[]>([]);
@@ -188,6 +197,44 @@ export function TaskSidePanel({
   }, [task, businessId, runningEntry]);
 
   const totalTrackedMin = timeEntries.reduce((sum, e) => sum + (e.durationMin ?? 0), 0);
+
+  // ─── Task documents ────────────────────────────────────────────────────────
+  const loadTaskDocs = useCallback(async () => {
+    if (!task || !projectId) return;
+    const url = `/api/pro/businesses/${businessId}/projects/${projectId}/documents?taskId=${task.id}`;
+    const res = await fetchJson<{ items: TaskDocItem[] }>(url);
+    if (res.ok && res.data) setTaskDocs(res.data.items);
+  }, [task?.id, businessId, projectId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (task && open && projectId) void loadTaskDocs();
+    else setTaskDocs([]);
+  }, [task?.id, open, projectId, loadTaskDocs]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleDocUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !task || !projectId) return;
+    setDocUploading(true);
+    try {
+      const form = new FormData();
+      form.append('file', file);
+      form.append('taskId', task.id);
+      const res = await fetch(`/api/pro/businesses/${businessId}/projects/${projectId}/documents`, {
+        method: 'POST',
+        body: form,
+      });
+      if (res.ok) await loadTaskDocs();
+    } finally {
+      setDocUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  }, [task, businessId, projectId, loadTaskDocs]);
+
+  const handleDocDelete = useCallback(async (docId: string) => {
+    if (!projectId) return;
+    const res = await fetchJson(`/api/pro/businesses/${businessId}/projects/${projectId}/documents/${docId}`, { method: 'DELETE' });
+    if (res.ok) setTaskDocs((prev) => prev.filter((d) => d.id !== docId));
+  }, [businessId, projectId]);
 
   const patchField = useCallback(
     (field: string, value: unknown) => {
@@ -475,6 +522,61 @@ export function TaskSidePanel({
               </div>
             ) : null}
           </div>
+
+          {/* ═══ Documents ═══ */}
+          {projectId ? (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-medium text-[var(--text-secondary)]">Documents</label>
+                {canEdit ? (
+                  <>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      className="hidden"
+                      onChange={(e) => void handleDocUpload(e)}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={docUploading}
+                      className="flex items-center gap-1 text-xs text-[var(--accent)] hover:underline disabled:opacity-50"
+                    >
+                      <Paperclip size={12} />
+                      {docUploading ? 'Upload...' : 'Ajouter'}
+                    </button>
+                  </>
+                ) : null}
+              </div>
+              {taskDocs.length > 0 ? (
+                <div className="max-h-32 space-y-1 overflow-y-auto">
+                  {taskDocs.map((doc) => (
+                    <div
+                      key={doc.id}
+                      className="flex items-center gap-2 rounded-lg border border-[var(--border)]/50 bg-[var(--surface)] px-2.5 py-1.5 text-xs"
+                    >
+                      <FileText size={14} className="shrink-0 text-[var(--text-secondary)]" />
+                      <span className="min-w-0 flex-1 truncate text-[var(--text-primary)]">{doc.title}</span>
+                      <span className="shrink-0 text-[var(--text-faint)]">
+                        {doc.sizeBytes < 1024 ? `${doc.sizeBytes} o` : `${Math.round(doc.sizeBytes / 1024)} Ko`}
+                      </span>
+                      {canEdit ? (
+                        <button
+                          type="button"
+                          onClick={() => void handleDocDelete(doc.id)}
+                          className="text-[var(--text-faint)] hover:text-[var(--danger)]"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-[var(--text-faint)]">Aucun document attaché.</p>
+              )}
+            </div>
+          ) : null}
 
           {/* ═══ Details (collapsible) ═══ */}
           <button

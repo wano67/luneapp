@@ -39,9 +39,13 @@ export const GET = withBusinessRoute<{ businessId: string; projectId: string }>(
 
     const url = new URL(req.url);
     const folderIdParam = url.searchParams.get('folderId');
+    const taskIdParam = url.searchParams.get('taskId');
     const where: Record<string, unknown> = { businessId: ctx.businessId, projectId };
     if (folderIdParam !== null) {
       where.folderId = folderIdParam === 'null' ? null : BigInt(folderIdParam);
+    }
+    if (taskIdParam) {
+      where.taskId = BigInt(taskIdParam);
     }
 
     let items: Awaited<ReturnType<typeof prisma.businessDocument.findMany>> = [];
@@ -117,6 +121,13 @@ export const POST = withBusinessRoute<{ businessId: string; projectId: string }>
       if (!folder) return badRequest('Dossier introuvable.');
     }
 
+    // Optional taskId from FormData
+    const taskIdRaw = form.get('taskId');
+    let taskId: bigint | null = null;
+    if (typeof taskIdRaw === 'string' && taskIdRaw.trim()) {
+      taskId = parseId(taskIdRaw.trim());
+    }
+
     const buffer = Buffer.from(await file.arrayBuffer());
     const { storageKey, filename, sha } = await saveLocalFile({
       buffer,
@@ -129,6 +140,7 @@ export const POST = withBusinessRoute<{ businessId: string; projectId: string }>
       data: {
         businessId: ctx.businessId,
         projectId,
+        taskId,
         folderId,
         title,
         filename,

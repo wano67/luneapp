@@ -16,45 +16,48 @@ type NotifyParams = {
 };
 
 /**
- * Create notifications for a list of users (excluding the actor).
+ * Create notifications for a list of users.
+ * By default the actor is excluded; pass `includeSelf: true` to keep them.
  * Fire-and-forget safe — never throws.
  */
 export async function notify(
   userIds: bigint[],
   actorUserId: bigint,
-  params: NotifyParams,
+  params: NotifyParams & { includeSelf?: boolean },
 ) {
-  const recipients = userIds.filter((id) => id !== actorUserId);
-  if (recipients.length === 0) return;
+  const { includeSelf, ...notifParams } = params;
+  const recipients = includeSelf ? [...userIds] : userIds.filter((id) => id !== actorUserId);
+  const unique = [...new Set(recipients)];
+  if (unique.length === 0) return;
 
   try {
     // Filter out users who disabled this notification type
     const disabledPrefs = await prisma.notificationPreference.findMany({
       where: {
-        userId: { in: recipients },
-        businessId: params.businessId,
-        type: params.type,
+        userId: { in: unique },
+        businessId: notifParams.businessId,
+        type: notifParams.type,
         enabled: false,
       },
       select: { userId: true },
     });
     const disabledSet = new Set(disabledPrefs.map((p) => p.userId));
-    const finalRecipients = recipients.filter((id) => !disabledSet.has(id));
+    const finalRecipients = unique.filter((id) => !disabledSet.has(id));
     if (finalRecipients.length === 0) return;
 
     await prisma.notification.createMany({
       data: finalRecipients.map((userId) => ({
         userId,
-        businessId: params.businessId,
-        type: params.type,
-        title: params.title,
-        body: params.body ?? null,
-        taskId: params.taskId ?? null,
-        projectId: params.projectId ?? null,
-        conversationId: params.conversationId ?? null,
-        clientId: params.clientId ?? null,
-        prospectId: params.prospectId ?? null,
-        calendarEventId: params.calendarEventId ?? null,
+        businessId: notifParams.businessId,
+        type: notifParams.type,
+        title: notifParams.title,
+        body: notifParams.body ?? null,
+        taskId: notifParams.taskId ?? null,
+        projectId: notifParams.projectId ?? null,
+        conversationId: notifParams.conversationId ?? null,
+        clientId: notifParams.clientId ?? null,
+        prospectId: notifParams.prospectId ?? null,
+        calendarEventId: notifParams.calendarEventId ?? null,
       })),
     });
   } catch {
@@ -63,6 +66,27 @@ export async function notify(
       console.warn('[notifications] failed to create notifications');
     }
   }
+}
+
+/**
+ * Collect all users that should be notified for a project event:
+ * project members + business OWNER/ADMIN (who see everything).
+ */
+async function projectRecipients(businessId: bigint, projectId: bigint): Promise<bigint[]> {
+  const [projectMembers, admins] = await Promise.all([
+    prisma.projectMember.findMany({
+      where: { projectId },
+      select: { membership: { select: { userId: true } } },
+    }),
+    prisma.businessMembership.findMany({
+      where: { businessId, role: { in: ['OWNER', 'ADMIN'] } },
+      select: { userId: true },
+    }),
+  ]);
+  const ids = new Set<bigint>();
+  for (const pm of projectMembers) ids.add(pm.membership.userId);
+  for (const a of admins) ids.add(a.userId);
+  return [...ids];
 }
 
 /** Notify when task is assigned to specific users. */
@@ -106,7 +130,7 @@ export async function notifyPoleAssigned(
   });
 }
 
-/** Notify task assignees on status change. */
+/** Notify task assignees + admins on status change. */
 export async function notifyTaskStatusChanged(
   taskId: bigint,
   actorUserId: bigint,
@@ -115,7 +139,6 @@ export async function notifyTaskStatusChanged(
   newStatus: string,
   projectId: bigint | null,
 ) {
-  // Gather all people linked to this task
   const task = await prisma.task.findUnique({
     where: { id: taskId },
     select: {
@@ -130,7 +153,6 @@ export async function notifyTaskStatusChanged(
   if (task.assigneeUserId) userIds.add(task.assigneeUserId);
   for (const a of task.assignees) userIds.add(a.userId);
 
-  // If assigned to a pôle, include pôle members
   if (task.organizationUnitId) {
     const members = await prisma.businessMembership.findMany({
       where: { businessId, organizationUnitId: task.organizationUnitId },
@@ -139,12 +161,20 @@ export async function notifyTaskStatusChanged(
     for (const m of members) userIds.add(m.userId);
   }
 
+  // Also include business admins/owners
+  const admins = await prisma.businessMembership.findMany({
+    where: { businessId, role: { in: ['OWNER', 'ADMIN'] } },
+    select: { userId: true },
+  });
+  for (const a of admins) userIds.add(a.userId);
+
   await notify(Array.from(userIds), actorUserId, {
     businessId,
     type: 'TASK_STATUS_CHANGED',
     title: `${taskTitle} → ${formatTaskStatus(newStatus)}`,
     taskId,
     projectId,
+    includeSelf: true,
   });
 }
 
@@ -211,17 +241,13 @@ export async function notifyMessageReceived(
   });
 }
 
-/** Notify project members when a project is past its endDate. */
+/** Notify project members + admins when a project is past its endDate. */
 export async function notifyProjectOverdue(
   projectId: bigint,
   businessId: bigint,
   projectName: string,
 ) {
-  const projectMembers = await prisma.projectMember.findMany({
-    where: { projectId },
-    select: { membership: { select: { userId: true } } },
-  });
-  const userIds = projectMembers.map((pm) => pm.membership.userId);
+  const userIds = await projectRecipients(businessId, projectId);
   if (userIds.length === 0) return;
 
   const SYSTEM_USER = 0n;
@@ -231,6 +257,7 @@ export async function notifyProjectOverdue(
     title: `Projet en retard : ${projectName}`,
     body: 'La date de fin prévue est dépassée.',
     projectId,
+    includeSelf: true,
   });
 }
 
@@ -414,58 +441,52 @@ export async function notifyInteractionAdded(
   });
 }
 
-/** Notify project members when a document is uploaded. */
+/** Notify project members + admins when a document is uploaded. */
 export async function notifyDocumentUploaded(
   actorUserId: bigint,
   businessId: bigint,
   projectId: bigint,
   documentTitle: string,
 ) {
-  const projectMembers = await prisma.projectMember.findMany({
-    where: { projectId },
-    select: { membership: { select: { userId: true } } },
-  });
-  await notify(projectMembers.map((pm) => pm.membership.userId), actorUserId, {
+  const userIds = await projectRecipients(businessId, projectId);
+  await notify(userIds, actorUserId, {
     businessId,
     type: 'DOCUMENT_UPLOADED',
     title: `Document ajouté : ${documentTitle}`,
     projectId,
+    includeSelf: true,
   });
 }
 
-/** Notify project members when an invoice is created. */
+/** Notify project members + admins when an invoice is created. */
 export async function notifyInvoiceCreated(
   actorUserId: bigint,
   businessId: bigint,
   projectId: bigint,
   invoiceLabel: string,
 ) {
-  const projectMembers = await prisma.projectMember.findMany({
-    where: { projectId },
-    select: { membership: { select: { userId: true } } },
-  });
-  await notify(projectMembers.map((pm) => pm.membership.userId), actorUserId, {
+  const userIds = await projectRecipients(businessId, projectId);
+  await notify(userIds, actorUserId, {
     businessId,
     type: 'INVOICE_CREATED',
     title: `Nouvelle facture : ${invoiceLabel}`,
     projectId,
+    includeSelf: true,
   });
 }
 
-/** Notify project members when a quote is created. */
+/** Notify project members + admins when a quote is created. */
 export async function notifyQuoteCreated(
   actorUserId: bigint,
   businessId: bigint,
   projectId: bigint,
 ) {
-  const projectMembers = await prisma.projectMember.findMany({
-    where: { projectId },
-    select: { membership: { select: { userId: true } } },
-  });
-  await notify(projectMembers.map((pm) => pm.membership.userId), actorUserId, {
+  const userIds = await projectRecipients(businessId, projectId);
+  await notify(userIds, actorUserId, {
     businessId,
     type: 'QUOTE_CREATED',
     title: 'Nouveau devis créé',
     projectId,
+    includeSelf: true,
   });
 }
