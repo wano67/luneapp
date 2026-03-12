@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
+import { X, Trash2, ChevronDown, ChevronUp, Play, Square, Clock, DollarSign } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import Select from '@/components/ui/select';
@@ -10,6 +10,7 @@ import { SearchSelect } from '@/components/ui/search-select';
 import { cn } from '@/lib/cn';
 import { InitialsAvatar, getStatusBadgeClasses, formatTaskStatus } from '@/components/pro/projects/workspace-ui';
 import { TASK_STATUS_OPTIONS } from '@/lib/taskStatusUi';
+import { fetchJson } from '@/lib/apiClient';
 import type { TaskItem, MemberItem, OrganizationUnitItem } from '@/components/pro/projects/hooks/useProjectDataLoaders';
 
 const PHASE_OPTIONS = [
@@ -25,6 +26,18 @@ const PHASE_OPTIONS = [
 
 type ServiceOption = { id: string; name: string };
 
+type TimeEntryItem = {
+  id: string;
+  userId: string;
+  userName: string | null;
+  userEmail: string;
+  startedAt: string;
+  stoppedAt: string | null;
+  durationMin: number | null;
+  description: string | null;
+  billable: boolean;
+};
+
 type TaskSidePanelProps = {
   task: TaskItem | null;
   open: boolean;
@@ -32,6 +45,7 @@ type TaskSidePanelProps = {
   members: MemberItem[];
   isAdmin: boolean;
   currentUserId?: string | null;
+  businessId: string;
   onUpdate: (taskId: string, payload: Record<string, unknown>) => Promise<void>;
   onDelete: (taskId: string) => Promise<void>;
   services?: ServiceOption[];
@@ -45,6 +59,7 @@ export function TaskSidePanel({
   members,
   isAdmin,
   currentUserId,
+  businessId,
   onUpdate,
   onDelete,
   services,
@@ -53,6 +68,13 @@ export function TaskSidePanel({
   const [title, setTitle] = useState('');
   const [deleting, setDeleting] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
+
+  // Time tracking state
+  const [timeEntries, setTimeEntries] = useState<TimeEntryItem[]>([]);
+  const [runningEntry, setRunningEntry] = useState<TimeEntryItem | null>(null);
+  const [elapsed, setElapsed] = useState(0);
+  const [showTimeEntries, setShowTimeEntries] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const isAssignedToMe = Boolean(
     task && currentUserId && (
@@ -76,6 +98,96 @@ export function TaskSidePanel({
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [open, onClose]);
+
+  // Load time entries when task changes
+  useEffect(() => {
+    if (!task || !open) {
+      setTimeEntries([]);
+      setRunningEntry(null);
+      return;
+    }
+    const url = `/api/pro/businesses/${businessId}/tasks/${task.id}/time-entries`;
+    void fetchJson<{ items: TimeEntryItem[] }>(url).then((res) => {
+      if (res.ok && res.data) {
+        setTimeEntries(res.data.items);
+        const running = res.data.items.find((e) => !e.stoppedAt);
+        setRunningEntry(running ?? null);
+      }
+    });
+  }, [task?.id, open, businessId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Live timer
+  useEffect(() => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    if (!runningEntry) {
+      setElapsed(0);
+      return;
+    }
+    const updateElapsed = () => {
+      const diff = Math.floor((Date.now() - new Date(runningEntry.startedAt).getTime()) / 1000);
+      setElapsed(Math.max(0, diff));
+    };
+    updateElapsed();
+    timerRef.current = setInterval(updateElapsed, 1000);
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  }, [runningEntry]);
+
+  const startTimer = useCallback(async () => {
+    if (!task) return;
+    const url = `/api/pro/businesses/${businessId}/tasks/${task.id}/time-entries`;
+    const res = await fetchJson<{ item: TimeEntryItem }>(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    if (res.ok && res.data) {
+      setRunningEntry(res.data.item);
+      setTimeEntries((prev) => [res.data!.item, ...prev]);
+    }
+  }, [task, businessId]);
+
+  const stopTimer = useCallback(async () => {
+    if (!task || !runningEntry) return;
+    const url = `/api/pro/businesses/${businessId}/tasks/${task.id}/time-entries/${runningEntry.id}`;
+    const res = await fetchJson<{ item: TimeEntryItem }>(url, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'stop' }),
+    });
+    if (res.ok && res.data) {
+      setRunningEntry(null);
+      setTimeEntries((prev) =>
+        prev.map((e) => (e.id === res.data!.item.id ? res.data!.item : e))
+      );
+    }
+  }, [task, businessId, runningEntry]);
+
+  const toggleBillable = useCallback(async (entryId: string, billable: boolean) => {
+    if (!task) return;
+    const url = `/api/pro/businesses/${businessId}/tasks/${task.id}/time-entries/${entryId}`;
+    const res = await fetchJson<{ item: TimeEntryItem }>(url, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ billable }),
+    });
+    if (res.ok && res.data) {
+      setTimeEntries((prev) =>
+        prev.map((e) => (e.id === res.data!.item.id ? res.data!.item : e))
+      );
+    }
+  }, [task, businessId]);
+
+  const deleteTimeEntry = useCallback(async (entryId: string) => {
+    if (!task) return;
+    const url = `/api/pro/businesses/${businessId}/tasks/${task.id}/time-entries/${entryId}`;
+    const res = await fetchJson(url, { method: 'DELETE' });
+    if (res.ok) {
+      if (runningEntry?.id === entryId) setRunningEntry(null);
+      setTimeEntries((prev) => prev.filter((e) => e.id !== entryId));
+    }
+  }, [task, businessId, runningEntry]);
+
+  const totalTrackedMin = timeEntries.reduce((sum, e) => sum + (e.durationMin ?? 0), 0);
 
   const patchField = useCallback(
     (field: string, value: unknown) => {
@@ -275,6 +387,95 @@ export function TaskSidePanel({
             />
           </div>
 
+          {/* ═══ Time Tracking ═══ */}
+          <div className="space-y-2">
+            <label className="text-xs font-medium text-[var(--text-secondary)]">Suivi du temps</label>
+            <div className="flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-2)]/60 px-3 py-2">
+              <Clock size={16} className="shrink-0 text-[var(--text-secondary)]" />
+              {runningEntry ? (
+                <>
+                  <span className="flex-1 font-mono text-sm font-semibold text-[var(--accent)]">
+                    {formatElapsed(elapsed)}
+                  </span>
+                  <Button size="sm" variant="danger" onClick={() => void stopTimer()} className="gap-1.5">
+                    <Square size={12} />
+                    Stop
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <span className="flex-1 text-sm text-[var(--text-secondary)]">
+                    {totalTrackedMin > 0 ? formatDurationMin(totalTrackedMin) : 'Aucun temps suivi'}
+                  </span>
+                  {canEdit ? (
+                    <Button size="sm" onClick={() => void startTimer()} className="gap-1.5">
+                      <Play size={12} />
+                      Démarrer
+                    </Button>
+                  ) : null}
+                </>
+              )}
+            </div>
+            {/* Total + toggle entries */}
+            {timeEntries.length > 0 ? (
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-[var(--text-secondary)]">
+                  {totalTrackedMin > 0 ? `Total : ${formatDurationMin(totalTrackedMin)}` : ''}
+                  {task?.estimatedMinutes ? ` / ${formatDurationMin(task.estimatedMinutes)} estimé` : ''}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowTimeEntries(!showTimeEntries)}
+                  className="text-xs text-[var(--accent)] hover:underline"
+                >
+                  {showTimeEntries ? 'Masquer' : `${timeEntries.length} entrée${timeEntries.length > 1 ? 's' : ''}`}
+                </button>
+              </div>
+            ) : null}
+            {/* Entries list */}
+            {showTimeEntries ? (
+              <div className="max-h-48 space-y-1 overflow-y-auto">
+                {timeEntries.map((entry) => (
+                  <div
+                    key={entry.id}
+                    className="flex items-center gap-2 rounded-lg border border-[var(--border)]/50 bg-[var(--surface)] px-2.5 py-1.5 text-xs"
+                  >
+                    <span className="min-w-0 flex-1 truncate text-[var(--text-primary)]">
+                      {entry.userName ?? entry.userEmail}
+                    </span>
+                    <span className="font-mono text-[var(--text-secondary)]">
+                      {entry.stoppedAt
+                        ? formatDurationMin(entry.durationMin ?? 0)
+                        : formatElapsed(elapsed)}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => void toggleBillable(entry.id, !entry.billable)}
+                      title={entry.billable ? 'Facturable' : 'Non facturable'}
+                      className={cn(
+                        'rounded p-0.5 transition',
+                        entry.billable
+                          ? 'text-[var(--success)] hover:text-[var(--success)]'
+                          : 'text-[var(--text-faint)] hover:text-[var(--text-secondary)]',
+                      )}
+                    >
+                      <DollarSign size={12} />
+                    </button>
+                    {(isAdmin || entry.userId === currentUserId) ? (
+                      <button
+                        type="button"
+                        onClick={() => void deleteTimeEntry(entry.id)}
+                        className="text-[var(--text-faint)] hover:text-[var(--danger)]"
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </div>
+
           {/* ═══ Details (collapsible) ═══ */}
           <button
             type="button"
@@ -394,4 +595,20 @@ export function TaskSidePanel({
 
   if (typeof document === 'undefined') return panel;
   return createPortal(panel, document.body);
+}
+
+function formatElapsed(seconds: number): string {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = seconds % 60;
+  const mm = String(m).padStart(2, '0');
+  const ss = String(s).padStart(2, '0');
+  return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
+}
+
+function formatDurationMin(minutes: number): string {
+  if (minutes < 60) return `${minutes}min`;
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return m > 0 ? `${h}h${String(m).padStart(2, '0')}` : `${h}h`;
 }

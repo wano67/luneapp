@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from 'next/dynamic';
 import { useMemo } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { ProPageShell } from '@/components/pro/ProPageShell';
@@ -14,6 +15,10 @@ import { DashboardPanel } from '@/components/pro/finances/DashboardPanel';
 import { ReportsPanel } from '@/components/pro/finances/ReportsPanel';
 import { DirigeantPanel } from '@/components/pro/finances/DirigeantPanel';
 
+const ReconciliationPanel = dynamic(() => import('@/app/app/pro/[businessId]/reconciliation/page'), { ssr: false });
+const PaymentLinksPanel = dynamic(() => import('@/app/app/pro/[businessId]/payment-links/page'), { ssr: false });
+const EInvoicesPanel = dynamic(() => import('@/app/app/pro/[businessId]/e-invoices/page'), { ssr: false });
+
 type Props = { businessId: string };
 
 const TABS = [
@@ -27,6 +32,9 @@ const TABS = [
   { key: 'ledger', label: 'Grand livre' },
   { key: 'reports', label: 'Rapports' },
   { key: 'dirigeant', label: 'Dirigeant & Associes' },
+  { key: 'reconciliation', label: 'Rapprochement' },
+  { key: 'payment-links', label: 'Liens de paiement' },
+  { key: 'e-invoices', label: 'E-factures' },
 ] as const;
 
 type TabKey = (typeof TABS)[number]['key'];
@@ -69,6 +77,12 @@ export default function AccountingPage({ businessId }: Props) {
         return <ReportsPanel businessId={businessId} />;
       case 'dirigeant':
         return <DirigeantPanel businessId={businessId} />;
+      case 'reconciliation':
+        return <ReconciliationPanel />;
+      case 'payment-links':
+        return <PaymentLinksPanel />;
+      case 'e-invoices':
+        return <EInvoicesPanel />;
       default:
         return <DashboardPanel businessId={businessId} />;
     }

@@ -80,7 +80,6 @@ type ShareData = {
   invoices: InvoiceData[];
   payments: PaymentData[];
   documents: DocumentData[];
-  vaultItems: VaultItemData[];
 };
 
 type ActiveTab = 'project' | 'billing' | 'documents' | 'vault';
@@ -193,7 +192,7 @@ export default function ShareProjectPage() {
     );
   }
 
-  const { business, project, services, quotes, invoices, payments, documents, allowClientUpload, allowVaultAccess, vaultItems } = data;
+  const { business, project, services, quotes, invoices, payments, documents, allowClientUpload, allowVaultAccess } = data;
   const pct = project.progressPct;
   const previewDoc = previewDocId ? documents.find((d) => d.id === previewDocId) ?? null : null;
   const isCompleted = project.status === 'COMPLETED';
@@ -333,7 +332,7 @@ export default function ShareProjectPage() {
           />
         )}
         {activeTab === 'vault' && showVaultTab && (
-          <TrousseauTab vaultItems={vaultItems} isCompleted={isCompleted} />
+          <TrousseauTab token={token} isCompleted={isCompleted} />
         )}
       </div>
     </div>
@@ -839,9 +838,28 @@ function UploadZone({ token, onSuccess }: { token: string; onSuccess: () => void
 
 /* ═══ Trousseau Tab ═══ */
 
-function TrousseauTab({ vaultItems, isCompleted }: { vaultItems: VaultItemData[]; isCompleted: boolean }) {
+function TrousseauTab({ token, isCompleted }: { token: string; isCompleted: boolean }) {
+  const [vaultItems, setVaultItems] = useState<VaultItemData[]>([]);
+  const [vaultLoading, setVaultLoading] = useState(true);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [revealedIds, setRevealedIds] = useState<Set<string>>(new Set());
+  const fetchedRef = useRef<true | null>(null);
+
+  useEffect(() => {
+    if (fetchedRef.current == null) {
+      fetchedRef.current = true;
+    } else {
+      return;
+    }
+    fetch(`/api/share/${token}/vault`, { method: 'POST' })
+      .then(async (res) => {
+        if (!res.ok) return;
+        const json = await res.json();
+        if (json.items) setVaultItems(json.items);
+      })
+      .catch(() => {})
+      .finally(() => setVaultLoading(false));
+  }, [token]);
 
   async function handleCopy(password: string, id: string) {
     try {
@@ -871,6 +889,18 @@ function TrousseauTab({ vaultItems, isCompleted }: { vaultItems: VaultItemData[]
           <p className="mt-1 text-xs" style={{ color: 'var(--text-secondary)' }}>
             Vos identifiants et mots de passe seront accessibles une fois le projet terminé.
           </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (vaultLoading) {
+    return (
+      <div className="rounded-xl border p-8 animate-pulse" style={{ borderColor: 'var(--border)', background: 'var(--surface)' }}>
+        <div className="h-4 w-32 rounded bg-[var(--surface-hover)] mb-4" />
+        <div className="flex flex-col gap-2">
+          <div className="h-16 rounded-lg bg-[var(--surface-hover)]" />
+          <div className="h-16 rounded-lg bg-[var(--surface-hover)]" />
         </div>
       </div>
     );

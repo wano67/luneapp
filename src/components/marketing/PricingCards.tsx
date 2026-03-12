@@ -24,7 +24,7 @@ const tiers: Tier[] = [
     description: 'Pour tester Pivot avec un workspace personnel et un premier business.',
     cta: "S'inscrire",
     ctaHref: '/register',
-    features: ['Accès Perso', '1 entreprise PRO', 'Invitations équipe limitées', 'Support mail'],
+    features: ['Finances personnelles + sync bancaire', '1 entreprise PRO', 'Devis, factures et comptabilité', 'Support mail'],
   },
   {
     name: 'Pro',
@@ -36,9 +36,9 @@ const tiers: Tier[] = [
     highlight: true,
     features: [
       'Entreprises illimitées',
-      'Prospects/Clients/Projets',
-      'Finances PRO + exports',
-      'Switch multi-entreprise',
+      'Prospects, clients et projets',
+      'Comptabilité et export FEC',
+      'Jusqu\'à 5 membres par entreprise',
       'Support prioritaire',
     ],
   },
@@ -49,7 +49,7 @@ const tiers: Tier[] = [
     description: 'Pour les équipes avec besoins avancés et intégrations personnalisées.',
     cta: 'Nous contacter',
     ctaHref: '/contact',
-    features: ['Permissions avancées', 'SLA et support dédié', 'Intégrations custom', 'Onboarding assisté'],
+    features: ['Membres illimités', 'Permissions avancées', 'Support dédié et onboarding', 'SLA personnalisé'],
   },
 ];
 

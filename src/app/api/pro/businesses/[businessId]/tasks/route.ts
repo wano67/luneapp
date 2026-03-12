@@ -48,6 +48,12 @@ export const GET = withBusinessRoute<{ businessId: string }>(
       return badRequest('tagReferenceId invalide.');
     }
 
+    // Pagination
+    const limitParam = searchParams.get('limit');
+    const limit = Math.min(500, Math.max(1, parseInt(limitParam ?? '200', 10) || 200));
+    const cursorParam = searchParams.get('cursor');
+    const cursorId = cursorParam && /^\d+$/.test(cursorParam) ? BigInt(cursorParam) : null;
+
     const tasks = await prisma.task.findMany({
       where: {
         businessId: businessIdBigInt,
@@ -59,6 +65,8 @@ export const GET = withBusinessRoute<{ businessId: string }>(
         ...(tagReferenceId ? { tags: { some: { referenceId: tagReferenceId } } } : {}),
       },
       orderBy: [{ dueDate: 'asc' }, { createdAt: 'desc' }],
+      take: limit + 1,
+      ...(cursorId ? { cursor: { id: cursorId }, skip: 1 } : {}),
       include: {
         project: { select: { name: true } },
         projectService: { select: { id: true, service: { select: { name: true } } } },
@@ -75,7 +83,11 @@ export const GET = withBusinessRoute<{ businessId: string }>(
       },
     });
 
-    return jsonb({ items: tasks.map(serializeTask) }, requestId);
+    const hasMore = tasks.length > limit;
+    if (hasMore) tasks.pop();
+    const nextCursor = hasMore && tasks.length > 0 ? tasks[tasks.length - 1].id.toString() : null;
+
+    return jsonb({ items: tasks.map(serializeTask), nextCursor, hasMore }, requestId);
   }
 );
 

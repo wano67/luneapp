@@ -28,12 +28,9 @@ export const POST = withPersonalRoute(async (ctx, req) => {
 
   try {
     // 1. Créer un utilisateur Powens
-    console.debug('[powens:connect] Step 1: Creating Powens user…');
     const powensUser = await powensInitUser();
-    console.debug('[powens:connect] Step 1 OK: powensUserId=', powensUser.id_user);
 
     // 2. Chiffrer et stocker le token
-    console.debug('[powens:connect] Step 2: Encrypting & storing…');
     const encrypted = encrypt(powensUser.auth_token);
     await prisma.powensConnection.create({
       data: {
@@ -44,12 +41,9 @@ export const POST = withPersonalRoute(async (ctx, req) => {
         authTokenTag: encrypted.tag,
       },
     });
-    console.debug('[powens:connect] Step 2 OK');
 
     // 3. Obtenir un code temporaire pour la webview
-    console.debug('[powens:connect] Step 3: Getting temp code…');
     const code = await powensGetTempCode(powensUser.auth_token);
-    console.debug('[powens:connect] Step 3 OK');
 
     // 4. Construire l'URL de la webview
     const baseUrl = buildBaseUrl(req);

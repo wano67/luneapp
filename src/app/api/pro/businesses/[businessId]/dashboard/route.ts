@@ -53,6 +53,8 @@ export const GET = withBusinessRoute({ minRole: 'VIEWER' }, async (ctx, req) => 
     overdueTasksCount,
     overdueInvoicesCount,
     latestInvoices,
+    totalTasksCount,
+    doneTasksCount,
   ] = await Promise.all([
     prisma.client.count({ where: { businessId: ctx.businessId } }),
     getProjectCounts({ businessId: ctx.businessId.toString() }),
@@ -120,9 +122,17 @@ export const GET = withBusinessRoute({ minRole: 'VIEWER' }, async (ctx, req) => 
     prisma.prospect.count({ where: { businessId: ctx.businessId, status: 'WON' } }),
     // Team size
     prisma.businessMembership.count({ where: { businessId: ctx.businessId } }),
-    // Overdue tasks
+    // Overdue tasks (user-scoped — matches /my-tasks page the link goes to)
     prisma.task.count({
-      where: { businessId: ctx.businessId, status: { not: TaskStatus.DONE }, dueDate: { lt: now } },
+      where: {
+        businessId: ctx.businessId,
+        status: { not: TaskStatus.DONE },
+        dueDate: { lt: now },
+        OR: [
+          { assigneeUserId: ctx.userId },
+          { assignees: { some: { userId: ctx.userId } } },
+        ],
+      },
     }),
     // Overdue invoices
     prisma.invoice.count({
@@ -135,18 +145,23 @@ export const GET = withBusinessRoute({ minRole: 'VIEWER' }, async (ctx, req) => 
       take: 5,
       select: { id: true, number: true, status: true, totalCents: true, dueAt: true, clientId: true },
     }),
+    // Task totals (avoids separate /tasks fetch on frontend)
+    prisma.task.count({ where: { businessId: ctx.businessId } }),
+    prisma.task.count({ where: { businessId: ctx.businessId, status: TaskStatus.DONE } }),
   ]);
 
-  // Opening balance: all finances BEFORE seriesStart
-  const priorRows = await prisma.finance.findMany({
-    where: { businessId: ctx.businessId, deletedAt: null, date: { lt: seriesStart } },
-    select: { type: true, amountCents: true },
-  });
-  let openingBalanceCents = BigInt(0);
-  for (const row of priorRows) {
-    if (row.type === FinanceType.INCOME) openingBalanceCents += row.amountCents;
-    else openingBalanceCents -= row.amountCents;
-  }
+  // Opening balance: aggregate finances BEFORE seriesStart (avoids unbounded fetch)
+  const [priorIncome, priorExpense] = await Promise.all([
+    prisma.finance.aggregate({
+      where: { businessId: ctx.businessId, deletedAt: null, type: FinanceType.INCOME, date: { lt: seriesStart } },
+      _sum: { amountCents: true },
+    }),
+    prisma.finance.aggregate({
+      where: { businessId: ctx.businessId, deletedAt: null, type: FinanceType.EXPENSE, date: { lt: seriesStart } },
+      _sum: { amountCents: true },
+    }),
+  ]);
+  const openingBalanceCents = (priorIncome._sum.amountCents ?? BigInt(0)) - (priorExpense._sum.amountCents ?? BigInt(0));
 
   let mtdIncome = BigInt(0);
   let mtdExpense = BigInt(0);
@@ -264,6 +279,8 @@ export const GET = withBusinessRoute({ minRole: 'VIEWER' }, async (ctx, req) => 
     prospectsActiveCount,
     prospectsWonCount,
     teamCount,
+    totalTasksCount,
+    doneTasksCount,
     overdueTasksCount,
     overdueInvoicesCount,
     latestInvoices: latestInvoices.map((inv) => ({

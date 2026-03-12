@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/server/db/client';
 import { rateLimit, makeIpKey } from '@/server/security/rateLimit';
-import { decrypt } from '@/server/crypto/encryption';
 import crypto from 'crypto';
 
 function hashToken(raw: string): string {
@@ -150,21 +149,6 @@ export async function GET(
     return NextResponse.json({ error: 'Projet introuvable.' }, { status: 404 });
   }
 
-  // Vault items — only when allowVaultAccess is true AND project is COMPLETED
-  let vaultItems: { id: bigint; title: string; identifier: string | null; email: string | null; password: string; note: string | null; createdAt: Date }[] = [];
-  if (shareToken.allowVaultAccess && project.status === 'COMPLETED') {
-    const rawItems = await prisma.vaultItem.findMany({
-      where: { projectId: shareToken.projectId, businessId: shareToken.businessId },
-      select: { id: true, title: true, identifier: true, email: true, ciphertext: true, iv: true, tag: true, note: true, createdAt: true },
-      orderBy: { createdAt: 'desc' },
-    });
-    vaultItems = rawItems.map((v) => {
-      let password = '';
-      try { password = decrypt(v.ciphertext, v.iv, v.tag); } catch { /* empty */ }
-      return { id: v.id, title: v.title, identifier: v.identifier, email: v.email, password, note: v.note, createdAt: v.createdAt };
-    });
-  }
-
   // Compute progress
   const tasksSummary = (() => {
     if (!taskRows.length) return { total: 0, open: 0, done: 0, progressPct: 0 };
@@ -240,7 +224,6 @@ export async function GET(
     invoices: serialize(invoices),
     payments: serialize(payments),
     documents: serialize(documents),
-    vaultItems: serialize(vaultItems),
   };
 
   return NextResponse.json(response, {

@@ -95,6 +95,9 @@ export function toPublicUser(user: User): PublicUser {
     itemsPerPage: user.itemsPerPage,
     onboardingPersonalDone: user.onboardingPersonalDone,
     onboardingProDone: user.onboardingProDone,
+    acceptedTermsAt: user.acceptedTermsAt,
+    acceptedPrivacyAt: user.acceptedPrivacyAt,
+    marketingConsentAt: user.marketingConsentAt,
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
   };

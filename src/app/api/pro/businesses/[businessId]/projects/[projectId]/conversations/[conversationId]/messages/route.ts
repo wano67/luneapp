@@ -25,6 +25,8 @@ function serializeMessage(m: {
   id: bigint;
   conversationId: bigint;
   senderUserId: bigint;
+  parentMessageId: bigint | null;
+  replyCount: number;
   content: string | null;
   taskId: bigint | null;
   taskGroupIds: string | null;
@@ -45,6 +47,8 @@ function serializeMessage(m: {
     conversationId: m.conversationId,
     senderUserId: m.senderUserId,
     senderName: m.sender.name || m.sender.email,
+    parentMessageId: m.parentMessageId,
+    replyCount: m.replyCount,
     content: m.content,
     taskId: m.taskId,
     taskGroupIds: m.taskGroupIds ? m.taskGroupIds.split(',') : [],
@@ -76,10 +80,19 @@ export const GET = withBusinessRoute<{ businessId: string; projectId: string; co
     const cursorStr = url.searchParams.get('cursor');
     const cursor = cursorStr ? parseId(cursorStr) : undefined;
     const limit = Math.min(Number(url.searchParams.get('limit')) || 50, 100);
+    const threadOfStr = url.searchParams.get('threadOf');
+    const threadOf = threadOfStr ? parseId(threadOfStr) : undefined;
+
+    const where: Record<string, unknown> = { conversationId };
+    if (threadOf) {
+      where.parentMessageId = threadOf;
+    } else {
+      where.parentMessageId = null;
+    }
 
     const messages = await prisma.message.findMany({
-      where: { conversationId },
-      orderBy: { createdAt: 'desc' },
+      where,
+      orderBy: { createdAt: threadOf ? ('asc' as const) : ('desc' as const) },
       take: limit + 1,
       ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
       include: {
@@ -124,6 +137,7 @@ export const POST = withBusinessRoute<{ businessId: string; projectId: string; c
     let content: string | null = null;
     let taskId: bigint | null = null;
     let taskGroupIds: string | null = null;
+    let parentMessageId: bigint | null = null;
     let files: File[] = [];
 
     const contentType = req.headers.get('content-type') ?? '';
@@ -133,6 +147,7 @@ export const POST = withBusinessRoute<{ businessId: string; projectId: string; c
 
       content = parseStr(form.get('content') as string | null, 5000);
       taskId = parseIdOpt(form.get('taskId') as string | null);
+      parentMessageId = parseIdOpt(form.get('parentMessageId') as string | null);
       const taskGroupIdsRaw = form.get('taskGroupIds') as string | null;
       taskGroupIds = taskGroupIdsRaw ? taskGroupIdsRaw.split(',').map((s) => s.trim()).filter(Boolean).join(',') : null;
 
@@ -160,6 +175,7 @@ export const POST = withBusinessRoute<{ businessId: string; projectId: string; c
 
       content = parseStr(body.content, 5000);
       taskId = parseIdOpt(body.taskId);
+      parentMessageId = parseIdOpt((body as Record<string, unknown>).parentMessageId as string | null);
       taskGroupIds = Array.isArray(body.taskGroupIds)
         ? body.taskGroupIds.map(String).join(',')
         : null;
@@ -169,6 +185,15 @@ export const POST = withBusinessRoute<{ businessId: string; projectId: string; c
       }
     }
 
+    // Validate parent message belongs to this conversation
+    if (parentMessageId) {
+      const parent = await prisma.message.findFirst({
+        where: { id: parentMessageId, conversationId },
+        select: { id: true },
+      });
+      if (!parent) return badRequest('Message parent introuvable.');
+    }
+
     const message = await prisma.message.create({
       data: {
         conversationId,
@@ -176,12 +201,21 @@ export const POST = withBusinessRoute<{ businessId: string; projectId: string; c
         content,
         taskId,
         taskGroupIds: taskGroupIds || null,
+        parentMessageId,
       },
       include: {
         sender: { select: { id: true, name: true, email: true } },
         attachments: true,
       },
     });
+
+    // Increment parent replyCount
+    if (parentMessageId) {
+      await prisma.message.update({
+        where: { id: parentMessageId },
+        data: { replyCount: { increment: 1 } },
+      });
+    }
 
     // Save file attachments
     if (files.length > 0) {

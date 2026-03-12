@@ -786,6 +786,24 @@ export const PATCH = withBusinessRoute<{ businessId: string; invoiceId: string }
     }
 
     await ensureLegacyPaymentForPaidInvoice(prisma, updated as InvoiceWithItems);
+
+    // Auto-create e-invoice when invoice is sent (PDP - Portail de Facturation)
+    if (
+      updated.status === InvoiceStatus.SENT &&
+      existing.status === InvoiceStatus.DRAFT
+    ) {
+      await prisma.eInvoice.upsert({
+        where: { invoiceId: invoiceIdBigInt },
+        create: {
+          businessId: businessIdBigInt,
+          invoiceId: invoiceIdBigInt,
+          format: 'FACTUR_X',
+          status: 'DRAFT',
+        },
+        update: {},
+      });
+    }
+
     const paymentSummary = await computeInvoicePaymentSummary(prisma, updated as InvoiceWithItems);
     const ledgerIds = await loadInvoiceLedgerIds(businessIdBigInt, invoiceIdBigInt);
 

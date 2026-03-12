@@ -8,6 +8,7 @@ import { ensureDelegate } from '@/server/http/delegates';
 import { parseIdOpt } from '@/server/http/parsers';
 import { serializeTask } from '@/server/http/serializeTask';
 import { notifyTaskAssigned, notifyPoleAssigned, notifyTaskStatusChanged, notifyTaskBlocked } from '@/server/services/notifications';
+import { executeAutomations } from '@/server/services/automations';
 
 function isValidStatus(status: unknown): status is TaskStatus {
   return status === 'TODO' || status === 'IN_PROGRESS' || status === 'DONE';
@@ -455,12 +456,33 @@ export const PATCH = withBusinessRoute<{ businessId: string; taskId: string }>(
     // Fire-and-forget notifications
     if ('status' in data && data.status !== existing.status) {
       void notifyTaskStatusChanged(taskIdBigInt, userId, businessIdBigInt, existing.title, data.status as string, existing.projectId);
+      // Automations
+      const newStatus = data.status as string;
+      const autoCtx = {
+        businessId: businessIdBigInt,
+        actorUserId: userId,
+        projectId: existing.projectId,
+        taskId: taskIdBigInt,
+        taskTitle: existing.title,
+        taskStatus: newStatus,
+      };
+      if (newStatus === 'DONE') {
+        void executeAutomations('TASK_COMPLETED', autoCtx);
+      }
+      void executeAutomations('TASK_STATUS_CHANGED', autoCtx);
     }
     if (newAssigneeUserIds && newAssigneeUserIds.length > 0) {
       const existingIds = new Set(existing.assignees.map((a) => a.userId));
       const newlyAdded = newAssigneeUserIds.filter((id) => !existingIds.has(id));
       if (newlyAdded.length > 0) {
         void notifyTaskAssigned(newlyAdded, userId, businessIdBigInt, existing.title, taskIdBigInt, existing.projectId);
+        void executeAutomations('TASK_ASSIGNED', {
+          businessId: businessIdBigInt,
+          actorUserId: userId,
+          projectId: existing.projectId,
+          taskId: taskIdBigInt,
+          taskTitle: existing.title,
+        });
       }
     }
     if ('organizationUnitId' in data && data.organizationUnitId && data.organizationUnitId !== existing.organizationUnitId) {

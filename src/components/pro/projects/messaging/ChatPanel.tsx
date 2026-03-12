@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useEffect, useState, type FormEvent } from 'react';
-import { Send, Loader2, ArrowUp, ListTodo, Paperclip, X, Download } from 'lucide-react';
+import { Send, Loader2, ArrowUp, ListTodo, Paperclip, X, Download, MessageCircle, ArrowLeft } from 'lucide-react';
 import type { MessageItem } from '@/components/pro/projects/hooks/useMessaging';
 
 type ChatPanelProps = {
@@ -15,6 +15,12 @@ type ChatPanelProps = {
   onSend: (content: string, taskId?: string, taskGroupIds?: string[], files?: File[]) => void;
   onLoadOlder: () => void;
   onOpenTaskPicker?: () => void;
+  // Thread support
+  threadParentId?: string | null;
+  threadReplies?: MessageItem[];
+  loadingThread?: boolean;
+  onOpenThread?: (parentMessageId: string) => void;
+  onCloseThread?: () => void;
 };
 
 function formatMessageTime(dateStr: string): string {
@@ -71,6 +77,11 @@ export function ChatPanel({
   onSend,
   onLoadOlder,
   onOpenTaskPicker,
+  threadParentId,
+  threadReplies,
+  loadingThread,
+  onOpenThread,
+  onCloseThread,
 }: ChatPanelProps) {
   const [input, setInput] = useState('');
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
@@ -92,11 +103,19 @@ export function ChatPanel({
     bottomRef.current?.scrollIntoView();
   }, []);
 
+  const isInThread = Boolean(threadParentId);
+  const displayMessages = isInThread ? (threadReplies ?? []) : messages;
+  const parentMessage = isInThread
+    ? messages.find((m) => String(m.id) === threadParentId)
+    : null;
+
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
     const trimmed = input.trim();
     if ((!trimmed && pendingFiles.length === 0) || sending) return;
-    onSend(trimmed, undefined, undefined, pendingFiles.length > 0 ? pendingFiles : undefined);
+    // Type-safe cast: onSend accepts optional 5th param for parentMessageId
+    const sendFn = onSend as (content: string, taskId?: string, taskGroupIds?: string[], files?: File[], parentMessageId?: string) => void;
+    sendFn(trimmed, undefined, undefined, pendingFiles.length > 0 ? pendingFiles : undefined, threadParentId ?? undefined);
     setInput('');
     setPendingFiles([]);
   };
@@ -112,7 +131,27 @@ export function ChatPanel({
     <div className="flex h-full flex-col">
       {/* Header */}
       <div className="border-b border-[var(--border)] px-4 py-3">
-        <h4 className="text-sm font-semibold text-[var(--text-primary)]">{conversationName}</h4>
+        {isInThread ? (
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onCloseThread}
+              className="rounded-lg p-1 text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
+            >
+              <ArrowLeft size={16} />
+            </button>
+            <div>
+              <h4 className="text-sm font-semibold text-[var(--text-primary)]">Thread</h4>
+              {parentMessage ? (
+                <p className="max-w-[200px] truncate text-xs text-[var(--text-secondary)]">
+                  {parentMessage.senderName} : {parentMessage.content || 'Message'}
+                </p>
+              ) : null}
+            </div>
+          </div>
+        ) : (
+          <h4 className="text-sm font-semibold text-[var(--text-primary)]">{conversationName}</h4>
+        )}
       </div>
 
       {/* Messages area */}
@@ -129,15 +168,30 @@ export function ChatPanel({
           </button>
         )}
 
-        {messages.length === 0 && !loading && (
+        {/* Thread parent message preview */}
+        {isInThread && parentMessage ? (
+          <div className="mb-3 rounded-xl border border-[var(--border)] bg-[var(--surface-hover)] px-3 py-2">
+            <p className="text-xs font-medium text-[var(--text-secondary)]">{parentMessage.senderName}</p>
+            <p className="mt-0.5 text-sm text-[var(--text-primary)]">{parentMessage.content}</p>
+            <p className="mt-1 text-[10px] text-[var(--text-secondary)]">{formatMessageTime(parentMessage.createdAt)}</p>
+          </div>
+        ) : null}
+
+        {loadingThread ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 size={20} className="animate-spin text-[var(--text-secondary)]" />
+          </div>
+        ) : null}
+
+        {displayMessages.length === 0 && !loading && !loadingThread && (
           <div className="py-12 text-center text-sm text-[var(--text-secondary)]">
-            Aucun message. Envoyez le premier !
+            {isInThread ? 'Aucune réponse. Répondez dans le thread !' : 'Aucun message. Envoyez le premier !'}
           </div>
         )}
 
-        {messages.map((msg, idx) => {
+        {displayMessages.map((msg, idx) => {
           const isOwn = String(msg.senderUserId) === currentUserId;
-          const showDate = shouldShowDateSeparator(messages, idx);
+          const showDate = shouldShowDateSeparator(displayMessages, idx);
           const initials = getInitials(msg.senderName);
 
           return (
@@ -211,10 +265,28 @@ export function ChatPanel({
                     </div>
                   )}
 
-                  {/* Time */}
-                  <p className={`mt-0.5 text-[10px] text-[var(--text-secondary)] ${isOwn ? 'text-right' : ''}`}>
-                    {formatMessageTime(msg.createdAt)}
-                  </p>
+                  {/* Time + thread reply button */}
+                  <div className={`mt-0.5 flex items-center gap-2 ${isOwn ? 'justify-end' : ''}`}>
+                    <p className="text-[10px] text-[var(--text-secondary)]">
+                      {formatMessageTime(msg.createdAt)}
+                    </p>
+                    {!isInThread && onOpenThread ? (
+                      <button
+                        type="button"
+                        onClick={() => onOpenThread(String(msg.id))}
+                        className="inline-flex items-center gap-0.5 rounded px-1 py-0.5 text-[10px] text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--accent)]"
+                      >
+                        <MessageCircle size={10} />
+                        {msg.replyCount > 0 ? (
+                          <span className="font-medium text-[var(--accent)]">
+                            {msg.replyCount} réponse{msg.replyCount > 1 ? 's' : ''}
+                          </span>
+                        ) : (
+                          <span>Répondre</span>
+                        )}
+                      </button>
+                    ) : null}
+                  </div>
                 </div>
               </div>
             </div>

@@ -1,5 +1,4 @@
 import type { Metadata } from 'next';
-import { FeatureGrid } from '@/components/marketing/FeatureGrid';
 import { ScrollReveal } from '@/components/marketing/ScrollReveal';
 import { StaggerChildren } from '@/components/marketing/StaggerChildren';
 import { SectionHeader } from '@/components/ui/section-header';
@@ -9,140 +8,149 @@ import Link from 'next/link';
 
 export const metadata: Metadata = {
   title: 'Fonctionnalités • Pivot',
-  description: "Découvrez les modules PRO et personnels de Pivot, prêts à l'usage.",
+  description: 'Découvrez les outils PRO et personnels de Pivot pour gérer votre activité et vos finances.',
 };
 
 const proFeatures = [
   {
-    title: 'Hub multi-entreprises',
-    category: 'PRO' as const,
-    description: 'Liste des entreprises, rôles, switch instantané, invites par token.',
+    title: 'Prospects et pipeline',
+    description: 'Pipeline visuel, suivi des étapes, probabilités et budgets estimés.',
   },
   {
-    title: 'Pipeline prospects',
-    category: 'PRO' as const,
-    description: 'Statuts, probabilités, budgets estimés, actions rapides, notes.',
+    title: 'Clients et projets',
+    description: 'Fiches client, projets avec services, suivi d\'avancement et échéances.',
   },
   {
-    title: 'Clients & projets',
-    category: 'PRO' as const,
-    description: 'Listes mobiles + pages détail stables pour pilotage et finances.',
+    title: 'Devis et factures',
+    description: 'Création rapide, export PDF, suivi des paiements et numérotation automatique.',
   },
   {
-    title: 'Finances PRO',
-    category: 'PRO' as const,
-    description: 'Invoices/expenses existants + pages treasury/VAT/payments prêtes.',
+    title: 'Comptabilité',
+    description: 'Grand livre, bilan, TVA et export FEC pour votre comptable.',
   },
   {
-    title: 'Process & services',
-    category: 'PRO' as const,
-    description: 'Squelettes process/services/tasks pour structurer vos SOP.',
+    title: 'Trésorerie et prévisions',
+    description: 'Suivi des flux, projections de trésorerie et scan de justificatifs.',
   },
   {
-    title: 'Invitations & rôles',
-    category: 'PRO' as const,
-    description: 'Invites admin, affichage du rôle, redirections legacy /dash-* sécurisées.',
+    title: 'Tâches et organisation',
+    description: 'Tâches, sous-tâches, checklists, assignations et suivi hebdomadaire.',
+  },
+  {
+    title: 'Stock et catalogue',
+    description: 'Produits, services, gestion des quantités et mouvements de stock.',
+  },
+  {
+    title: 'Documents et trousseau',
+    description: 'Stockez vos documents par projet et vos identifiants en toute sécurité.',
+  },
+  {
+    title: 'Équipe et rôles',
+    description: 'Invitez des membres, assignez des rôles et des pôles d\'organisation.',
+  },
+  {
+    title: 'Portail client',
+    description: 'Partagez un lien projet avec votre client : avancement, documents et factures.',
+  },
+  {
+    title: 'Calendrier et sync',
+    description: 'Événements, rappels et synchronisation iCal / CalDAV avec vos outils.',
+  },
+  {
+    title: 'Notifications',
+    description: 'Alertes automatiques : tâches en retard, échéances, relances client.',
   },
 ];
 
-const personalFeatures = [
+const persoFeatures = [
   {
-    title: 'Comptes & transactions',
-    category: 'PERSO' as const,
-    description: 'Comptes personnels, transactions, catégories, imports CSV.',
+    title: 'Comptes bancaires',
+    description: 'Comptes courants, épargne, investissements. Synchronisation bancaire automatique.',
   },
   {
-    title: 'Budgets & objectifs',
-    category: 'PERSO' as const,
-    description: 'Budgets, revenus, épargne, vue dashboard finances perso.',
+    title: 'Transactions',
+    description: 'Saisie manuelle, import CSV ou sync bancaire. Catégorisation et filtres.',
   },
   {
-    title: 'Performance croisée',
-    category: 'PERFORMANCE' as const,
-    description: 'Alignement PRO/PERSO, runway, vision globale.',
+    title: 'Budgets',
+    description: 'Budgets mensuels par catégorie, suivi des dépenses et alertes de dépassement.',
   },
   {
-    title: 'Sécurité',
-    category: 'SECURITE' as const,
-    description: 'Auth unifiée, CSRF sur mutations, rate-limit, no-store sur endpoints sensibles.',
+    title: 'Épargne et objectifs',
+    description: 'Fixez des objectifs d\'épargne et suivez votre progression au fil du temps.',
   },
   {
-    title: 'Mobile-first',
-    category: 'PERFORMANCE' as const,
-    description: 'App Router optimisé mobile, modals et navigation testées en petit écran.',
+    title: 'Abonnements',
+    description: 'Suivez vos abonnements récurrents et gardez le contrôle sur vos charges fixes.',
   },
   {
-    title: 'Design system',
-    category: 'PERFORMANCE' as const,
-    description: 'Tokens dark/light, composants UI cohérents pour toutes les futures features.',
+    title: 'Calendrier personnel',
+    description: 'Événements, rappels de paiement et jalons d\'épargne.',
   },
 ];
 
 export default function FeaturesPage() {
   return (
-    <div className="space-y-12">
+    <div className="space-y-16">
       <ScrollReveal>
-        <SectionHeader variant="marketing"
-          title="Fonctionnalités clés"
-          description="Un produit unique pour couvrir vos besoins pro et perso, avec un design calme et sécurisé."
+        <SectionHeader
+          variant="marketing"
+          title="Tout ce dont vous avez besoin"
+          description="Des outils simples pour gérer votre activité professionnelle et vos finances personnelles."
         />
       </ScrollReveal>
 
-      <FeatureGrid
-        title="Espace PRO"
-        description="Pour les agences, freelances et équipes qui pilotent prospects, clients, projets et finances."
-        items={proFeatures}
-      />
+      {/* Pro features */}
+      <section className="space-y-6">
+        <ScrollReveal>
+          <h2 className="text-xl font-semibold text-[var(--text)]">Espace Pro</h2>
+          <p className="mt-1 text-sm text-[var(--text-secondary)]">
+            Pour les indépendants, agences et petites équipes.
+          </p>
+        </ScrollReveal>
+        <StaggerChildren className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {proFeatures.map((item) => (
+            <Card key={item.title} className="feature-card-lift border-[var(--border)] bg-[var(--surface)] p-5">
+              <div className="text-base font-semibold text-[var(--text)]">{item.title}</div>
+              <p className="mt-2 text-sm leading-relaxed text-[var(--text-secondary)]">{item.description}</p>
+            </Card>
+          ))}
+        </StaggerChildren>
+      </section>
 
-      <FeatureGrid
-        title="Espace personnel"
-        description="Pour suivre vos finances personnelles sans bruit et garder le contrôle."
-        items={personalFeatures}
-      />
+      {/* Perso features */}
+      <section className="space-y-6">
+        <ScrollReveal>
+          <h2 className="text-xl font-semibold text-[var(--text)]">Espace Personnel</h2>
+          <p className="mt-1 text-sm text-[var(--text-secondary)]">
+            Pour suivre vos finances personnelles sans bruit.
+          </p>
+        </ScrollReveal>
+        <StaggerChildren className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {persoFeatures.map((item) => (
+            <Card key={item.title} className="feature-card-lift border-[var(--border)] bg-[var(--surface)] p-5">
+              <div className="text-base font-semibold text-[var(--text)]">{item.title}</div>
+              <p className="mt-2 text-sm leading-relaxed text-[var(--text-secondary)]">{item.description}</p>
+            </Card>
+          ))}
+        </StaggerChildren>
+      </section>
 
+      {/* CTA */}
       <ScrollReveal>
-        <SectionHeader variant="marketing"
-          title="Productivité au quotidien"
-          description="Cockpits, hubs et modals pensés pour éviter les frictions et les boucles de fetch."
-        />
-      </ScrollReveal>
-      <StaggerChildren className="grid gap-4 md:grid-cols-3">
-        {[
-          {
-            title: 'Cockpit entreprise',
-            desc: 'Vue synthétique prospects, clients, projets, finances, actions rapides.',
-          },
-          {
-            title: 'Hub /app/pro',
-            desc: "Switch d'entreprise, invites, création et reprise rapide.",
-          },
-          {
-            title: 'Stabilité technique',
-            desc: 'AbortController, request-id surfacés, no-store, CSRF, rate-limit.',
-          },
-        ].map((item) => (
-          <Card key={item.title} className="feature-card-lift border-[var(--border)] bg-[var(--surface)] p-5">
-            <div className="text-base font-semibold text-[var(--text)]">{item.title}</div>
-            <p className="mt-2 text-sm text-[var(--text-secondary)] leading-relaxed">{item.desc}</p>
-          </Card>
-        ))}
-      </StaggerChildren>
-
-      <ScrollReveal>
-        <div className="flex flex-wrap gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-6">
-          <div className="flex-1 space-y-2">
-            <div className="text-lg font-semibold text-[var(--text)]">Prêt à essayer Pivot ?</div>
-            <p className="text-sm text-[var(--text-secondary)]">
-              Créez un compte en quelques secondes. Vous pourrez ensuite inviter votre équipe et
-              configurer vos entreprises.
+        <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-6">
+          <div>
+            <div className="text-lg font-semibold text-[var(--text)]">Prêt à essayer ?</div>
+            <p className="mt-1 text-sm text-[var(--text-secondary)]">
+              Créez un compte gratuit et configurez votre espace en quelques minutes.
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex gap-2">
             <Button asChild>
               <Link href="/register">Créer un compte</Link>
             </Button>
             <Button asChild variant="outline">
-              <Link href="/login">Se connecter</Link>
+              <Link href="/pricing">Voir les tarifs</Link>
             </Button>
           </div>
         </div>

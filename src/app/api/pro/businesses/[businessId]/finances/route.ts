@@ -277,9 +277,17 @@ export const GET = withBusinessRoute({ minRole: 'VIEWER' }, async (ctx, request)
     return jsonb({ incomeCents: income.toString(), expenseCents: expense.toString(), netCents: (income - expense).toString() }, requestId);
   }
 
+  // Pagination
+  const limitParam = searchParams.get('limit');
+  const limit = Math.min(500, Math.max(1, parseInt(limitParam ?? '200', 10) || 200));
+  const cursorParam = searchParams.get('cursor');
+  const cursorId = cursorParam && /^\d+$/.test(cursorParam) ? BigInt(cursorParam) : null;
+
   const finances = await prisma.finance.findMany({
     where,
     orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
+    take: limit + 1,
+    ...(cursorId ? { cursor: { id: cursorId }, skip: 1 } : {}),
     include: {
       project: { select: { name: true } },
       categoryReference: { select: { id: true, name: true } },
@@ -287,7 +295,11 @@ export const GET = withBusinessRoute({ minRole: 'VIEWER' }, async (ctx, request)
     },
   });
 
-  return jsonb({ items: finances.map(enrichFinance) }, requestId);
+  const hasMore = finances.length > limit;
+  if (hasMore) finances.pop();
+  const nextCursor = hasMore && finances.length > 0 ? finances[finances.length - 1].id.toString() : null;
+
+  return jsonb({ items: finances.map(enrichFinance), nextCursor, hasMore }, requestId);
 });
 
 // POST /api/pro/businesses/{businessId}/finances

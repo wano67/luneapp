@@ -11,6 +11,8 @@ import { requireAuthBase } from '@/server/auth/requireAuthBase';
 import { assertSameOrigin } from '@/server/security/csrf';
 import { rateLimit, makeIpKey } from '@/server/security/rateLimit';
 import { getRequestId, withRequestId, unauthorized, badRequest } from '@/server/http/apiUtils';
+import { decrypt } from '@/server/crypto/encryption';
+import { powensDeleteUser } from '@/server/services/powens';
 
 /**
  * DELETE /api/auth/account — Suppression définitive du compte utilisateur.
@@ -93,6 +95,19 @@ export async function DELETE(request: NextRequest) {
     );
     res.headers.set('Cache-Control', 'no-store');
     return withRequestId(res, requestId);
+  }
+
+  // Delete Powens user if connected (best-effort, before transaction)
+  try {
+    const powensConn = await prisma.powensConnection.findUnique({
+      where: { userId },
+    });
+    if (powensConn) {
+      const authToken = decrypt(powensConn.authTokenCipher, powensConn.authTokenIv, powensConn.authTokenTag);
+      await powensDeleteUser(authToken).catch(() => {});
+    }
+  } catch {
+    // Non-blocking: Powens cleanup is best-effort
   }
 
   // Delete account in a transaction

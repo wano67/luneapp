@@ -77,6 +77,14 @@ const PRO_SUB_LABELS: Record<string, string> = {
   calendar: 'Calendrier',
   vault: 'Trousseau',
   notifications: 'Notifications',
+  store: 'Boutique',
+  'e-invoices': 'E-factures',
+  'payment-links': 'Liens de paiement',
+  reconciliation: 'Rapprochement',
+  'email-sequences': 'Séquences email',
+  'leave-expenses': 'Congés & Frais',
+  payslips: 'Fiches de paie',
+  accountant: 'Expert-comptable',
 };
 
 const PERSO_SUB_LABELS: Record<string, string> = {
@@ -85,6 +93,7 @@ const PERSO_SUB_LABELS: Record<string, string> = {
   budgets: 'Budgets',
   subscriptions: 'Abonnements',
   epargne: 'Épargne',
+  patrimoine: 'Patrimoine',
   calendar: 'Calendrier',
 };
 
@@ -730,66 +739,106 @@ function SearchBar({ businessId, onComingSoon }: { businessId: string | null; on
       abortRef.current = controller;
 
       setLoading(true);
-      const base = `/api/pro/businesses/${businessId}`;
       const encoded = encodeURIComponent(q.trim());
 
       try {
-        const [projectsRes, clientsRes, prospectsRes] = await Promise.all([
-          fetchJson<{ items?: Array<{ id: string | bigint; name: string; clientName?: string | null }> }>(
-            `${base}/projects?q=${encoded}&scope=ALL`,
-            {},
-            controller.signal
-          ),
-          fetchJson<{ items?: Array<{ id: string | bigint; name: string; company?: string | null }> }>(
-            `${base}/clients?q=${encoded}`,
-            {},
-            controller.signal
-          ),
-          fetchJson<{ items?: Array<{ id: string | bigint; name: string; contactName?: string | null }> }>(
-            `${base}/prospects?q=${encoded}`,
-            {},
-            controller.signal
-          ),
-        ]);
+        type SearchData = {
+          projects?: Array<{ id: string; name: string; status: string }>;
+          clients?: Array<{ id: string; name: string; company: string | null }>;
+          prospects?: Array<{ id: string; name: string; contactName: string | null }>;
+          tasks?: Array<{ id: string; title: string; status: string; projectName: string | null }>;
+          messages?: Array<{ id: string; content: string; conversationId: string; conversationName: string | null; senderName: string; projectId: string | null }>;
+          documents?: Array<{ id: string; title: string; filename: string; projectId: string | null; projectName: string | null }>;
+        };
+
+        const res = await fetchJson<SearchData>(
+          `/api/pro/businesses/${businessId}/search?q=${encoded}`,
+          {},
+          controller.signal
+        );
 
         if (controller.signal.aborted) return;
 
         const groups: SearchResultGroup[] = [];
 
-        if (projectsRes.ok && projectsRes.data?.items?.length) {
-          groups.push({
-            label: 'Projets',
-            items: projectsRes.data.items.slice(0, 5).map((p) => ({
-              id: String(p.id),
-              name: p.name || 'Sans nom',
-              subtitle: p.clientName ?? null,
-              href: `/app/pro/${businessId}/projects/${p.id}`,
-            })),
-          });
-        }
+        if (res.ok && res.data) {
+          const d = res.data;
 
-        if (clientsRes.ok && clientsRes.data?.items?.length) {
-          groups.push({
-            label: 'Clients',
-            items: clientsRes.data.items.slice(0, 5).map((c) => ({
-              id: String(c.id),
-              name: c.name || 'Sans nom',
-              subtitle: c.company ?? null,
-              href: `/app/pro/${businessId}/clients/${c.id}`,
-            })),
-          });
-        }
+          if (d.projects?.length) {
+            groups.push({
+              label: 'Projets',
+              items: d.projects.map((p) => ({
+                id: p.id,
+                name: p.name,
+                subtitle: null,
+                href: `/app/pro/${businessId}/projects/${p.id}`,
+              })),
+            });
+          }
 
-        if (prospectsRes.ok && prospectsRes.data?.items?.length) {
-          groups.push({
-            label: 'Prospects',
-            items: prospectsRes.data.items.slice(0, 5).map((p) => ({
-              id: String(p.id),
-              name: p.name || 'Sans nom',
-              subtitle: p.contactName ?? null,
-              href: `/app/pro/${businessId}/prospects/${p.id}`,
-            })),
-          });
+          if (d.clients?.length) {
+            groups.push({
+              label: 'Clients',
+              items: d.clients.map((c) => ({
+                id: c.id,
+                name: c.name,
+                subtitle: c.company ?? null,
+                href: `/app/pro/${businessId}/clients/${c.id}`,
+              })),
+            });
+          }
+
+          if (d.prospects?.length) {
+            groups.push({
+              label: 'Prospects',
+              items: d.prospects.map((p) => ({
+                id: p.id,
+                name: p.name,
+                subtitle: p.contactName ?? null,
+                href: `/app/pro/${businessId}/prospects/${p.id}`,
+              })),
+            });
+          }
+
+          if (d.tasks?.length) {
+            groups.push({
+              label: 'Tâches',
+              items: d.tasks.map((t) => ({
+                id: t.id,
+                name: t.title,
+                subtitle: t.projectName ?? null,
+                href: `/app/pro/${businessId}/tasks?taskId=${t.id}`,
+              })),
+            });
+          }
+
+          if (d.messages?.length) {
+            groups.push({
+              label: 'Messages',
+              items: d.messages.map((m) => ({
+                id: m.id,
+                name: m.content.slice(0, 80) + (m.content.length > 80 ? '…' : ''),
+                subtitle: m.senderName + (m.conversationName ? ` · ${m.conversationName}` : ''),
+                href: m.projectId
+                  ? `/app/pro/${businessId}/projects/${m.projectId}?tab=team`
+                  : `/app/pro/${businessId}/notifications`,
+              })),
+            });
+          }
+
+          if (d.documents?.length) {
+            groups.push({
+              label: 'Documents',
+              items: d.documents.map((doc) => ({
+                id: doc.id,
+                name: doc.title || doc.filename,
+                subtitle: doc.projectName ?? null,
+                href: doc.projectId
+                  ? `/app/pro/${businessId}/projects/${doc.projectId}?tab=documents`
+                  : `/app/pro/${businessId}/notifications`,
+              })),
+            });
+          }
         }
 
         setResults(groups);

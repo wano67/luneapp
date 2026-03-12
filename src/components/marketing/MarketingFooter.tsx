@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { PivotLogo, PivotWordmark } from '@/components/pivot-icons';
 
-const primaryLinks = [
+const productLinks = [
   { href: '/features', label: 'Fonctionnalités' },
   { href: '/pricing', label: 'Tarifs' },
   { href: '/security', label: 'Sécurité' },
@@ -28,14 +28,13 @@ export function MarketingFooter() {
             className="max-w-md text-sm"
             style={{ color: 'var(--shell-sidebar-text)', opacity: 0.6 }}
           >
-            Pivot structure vos finances personnelles et votre activité
-            professionnelle, en toute sécurité.
+            Gérez votre activité professionnelle et vos finances personnelles en un seul endroit.
           </p>
           <div className="text-xs" style={{ color: 'var(--shell-sidebar-text)', opacity: 0.3 }}>
             © {new Date().getFullYear()} Pivot
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-6 text-sm sm:grid-cols-3">
+        <div className="grid grid-cols-2 gap-6 text-sm">
           <div className="space-y-3">
             <div
               className="font-semibold"
@@ -44,7 +43,7 @@ export function MarketingFooter() {
               Produit
             </div>
             <div className="space-y-2">
-              {primaryLinks.map((link) => (
+              {productLinks.map((link) => (
                 <Link
                   key={link.href}
                   href={link.href}
@@ -72,32 +71,7 @@ export function MarketingFooter() {
                   {link.label}
                 </Link>
               ))}
-            </div>
-          </div>
-          <div className="space-y-3">
-            <div
-              className="font-semibold"
-              style={{ color: 'var(--shell-sidebar-text)' }}
-            >
-              Ressources
-            </div>
-            <div className="space-y-2">
-              <span
-                className="block"
-                style={{ color: 'rgba(238,237,227,0.3)' }}
-              >
-                Statut (bientôt)
-              </span>
-              <span
-                className="block"
-                style={{ color: 'rgba(238,237,227,0.3)' }}
-              >
-                Blog (bientôt)
-              </span>
-              <Link
-                href="/login"
-                className="footer-link block"
-              >
+              <Link href="/login" className="footer-link block">
                 Accès app
               </Link>
             </div>

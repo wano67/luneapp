@@ -719,6 +719,11 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
           onSendMessage={messaging.sendMessage}
           onLoadOlderMessages={messaging.loadOlderMessages}
           onCreateConversation={messaging.createConversation}
+          threadParentId={messaging.threadParentId}
+          threadReplies={messaging.threadReplies}
+          loadingThread={messaging.loadingThread}
+          onOpenThread={messaging.openThread}
+          onCloseThread={messaging.closeThread}
         />
       ) : null}
 

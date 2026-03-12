@@ -1,15 +1,17 @@
 "use client";
 
+import dynamic from 'next/dynamic';
 import { useMemo } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { ProPageShell } from '@/components/pro/ProPageShell';
 import { Card } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+
+const EmailSequencesPanel = dynamic(() => import('@/app/app/pro/[businessId]/email-sequences/page'), { ssr: false });
 
 type Props = { businessId: string };
 
 const TABS = [
-  { key: 'campaigns', label: 'Campagnes' },
+  { key: 'sequences', label: 'Séquences email' },
   { key: 'social', label: 'Réseaux sociaux' },
   { key: 'interactions', label: 'Interactions' },
 ] as const;
@@ -34,13 +36,8 @@ export default function MarketingPage({ businessId }: Props) {
 
   const content = useMemo(() => {
     switch (currentTab) {
-      case 'campaigns':
-        return (
-          <PlaceholderCard
-            title="Campagnes"
-            description="Créez et suivez les campagnes email ou SMS dès que la connexion aux outils sera active."
-          />
-        );
+      case 'sequences':
+        return <EmailSequencesPanel />;
       case 'social':
         return (
           <PlaceholderCard
@@ -65,12 +62,7 @@ export default function MarketingPage({ businessId }: Props) {
       backHref={`/app/pro/${businessId}`}
       backLabel="Dashboard"
       title="Marketing"
-      subtitle="Campagnes, réseaux sociaux et interactions clients."
-      actions={
-        <Button disabled className="cursor-not-allowed opacity-70">
-          Créer une campagne (bientôt)
-        </Button>
-      }
+      subtitle="Séquences email, réseaux sociaux et interactions clients."
       tabs={TABS}
       activeTab={currentTab}
       onTabChange={handleTabChange}

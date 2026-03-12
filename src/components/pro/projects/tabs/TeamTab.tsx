@@ -44,9 +44,15 @@ export type TeamTabProps = {
   tasks: TaskItem[];
   members: TeamMember[];
   onOpenConversation: (id: string) => void;
-  onSendMessage: (content: string, taskId?: string, taskGroupIds?: string[], files?: File[]) => void;
+  onSendMessage: (content: string, taskId?: string, taskGroupIds?: string[], files?: File[], parentMessageId?: string) => void;
   onLoadOlderMessages: () => void;
   onCreateConversation: (type: 'PRIVATE' | 'GROUP', memberUserIds: string[], name?: string) => Promise<string | null>;
+  // Thread support
+  threadParentId?: string | null;
+  threadReplies?: MessageItem[];
+  loadingThread?: boolean;
+  onOpenThread?: (parentMessageId: string) => void;
+  onCloseThread?: () => void;
 };
 
 type SubTab = 'members' | 'messages';
@@ -80,6 +86,11 @@ export function TeamTab({
   onSendMessage,
   onLoadOlderMessages,
   onCreateConversation,
+  threadParentId,
+  threadReplies,
+  loadingThread,
+  onOpenThread,
+  onCloseThread,
 }: TeamTabProps) {
   const [subTab, setSubTab] = useState<SubTab>('members');
   const [showNewConv, setShowNewConv] = useState(false);
@@ -231,6 +242,11 @@ export function TeamTab({
                       onSend={onSendMessage}
                       onLoadOlder={onLoadOlderMessages}
                       onOpenTaskPicker={() => setShowTaskPicker(true)}
+                      threadParentId={threadParentId}
+                      threadReplies={threadReplies}
+                      loadingThread={loadingThread}
+                      onOpenThread={onOpenThread}
+                      onCloseThread={onCloseThread}
                     />
                   </div>
                 </div>

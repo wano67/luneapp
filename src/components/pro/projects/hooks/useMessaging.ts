@@ -33,6 +33,8 @@ export type MessageItem = {
   conversationId: string;
   senderUserId: string;
   senderName: string;
+  parentMessageId: string | null;
+  replyCount: number;
   content: string | null;
   taskId: string | null;
   taskGroupIds: string[];
@@ -70,6 +72,9 @@ export function useMessaging({ businessId, projectId, enabled, onError }: UseMes
   const [sending, setSending] = useState(false);
   const [hasMoreMessages, setHasMoreMessages] = useState(false);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [threadParentId, setThreadParentId] = useState<string | null>(null);
+  const [threadReplies, setThreadReplies] = useState<MessageItem[]>([]);
+  const [loadingThread, setLoadingThread] = useState(false);
 
   const eventSourceRef = useRef<EventSource | null>(null);
   const basePath = `/api/pro/businesses/${businessId}/projects/${projectId}/conversations`;
@@ -136,9 +141,37 @@ export function useMessaging({ businessId, projectId, enabled, onError }: UseMes
     }
   }, [activeConversationId, nextCursor, hasMoreMessages, loadMessages]);
 
+  // ------- Open thread -------
+  const openThread = useCallback(
+    async (parentMessageId: string) => {
+      if (!activeConversationId) return;
+      setThreadParentId(parentMessageId);
+      setLoadingThread(true);
+      try {
+        const res = await fetchJson<{ items: MessageItem[] }>(
+          `${basePath}/${activeConversationId}/messages?threadOf=${parentMessageId}&limit=100`
+        );
+        if (res.ok && res.data?.items) {
+          // Thread replies come in ascending order from API
+          setThreadReplies(res.data.items);
+        }
+      } catch (err) {
+        onError(getErrorMessage(err));
+      } finally {
+        setLoadingThread(false);
+      }
+    },
+    [activeConversationId, basePath, onError]
+  );
+
+  const closeThread = useCallback(() => {
+    setThreadParentId(null);
+    setThreadReplies([]);
+  }, []);
+
   // ------- Send message -------
   const sendMessage = useCallback(
-    async (content: string, taskId?: string, taskGroupIds?: string[], files?: File[]) => {
+    async (content: string, taskId?: string, taskGroupIds?: string[], files?: File[], parentMessageId?: string) => {
       if (!activeConversationId) return;
       setSending(true);
       onError(null);
@@ -150,6 +183,7 @@ export function useMessaging({ businessId, projectId, enabled, onError }: UseMes
           const form = new FormData();
           if (content) form.append('content', content);
           if (taskId) form.append('taskId', taskId);
+          if (parentMessageId) form.append('parentMessageId', parentMessageId);
           if (taskGroupIds?.length) {
             taskGroupIds.forEach((id) => form.append('taskGroupIds', id));
           }
@@ -175,6 +209,7 @@ export function useMessaging({ businessId, projectId, enabled, onError }: UseMes
               content: content || null,
               taskId: taskId || null,
               taskGroupIds: taskGroupIds?.length ? taskGroupIds : undefined,
+              parentMessageId: parentMessageId || null,
             }),
           });
           if (!res.ok) {
@@ -185,7 +220,19 @@ export function useMessaging({ businessId, projectId, enabled, onError }: UseMes
         }
 
         if (item) {
-          setMessages((prev) => [...prev, item!]);
+          if (parentMessageId) {
+            // Thread reply — add to thread replies and increment parent's replyCount
+            setThreadReplies((prev) => [...prev, item!]);
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === parentMessageId
+                  ? { ...m, replyCount: m.replyCount + 1 }
+                  : m
+              )
+            );
+          } else {
+            setMessages((prev) => [...prev, item!]);
+          }
         }
         // Refresh conversations list to update lastMessage preview
         loadConversations();
@@ -300,11 +347,16 @@ export function useMessaging({ businessId, projectId, enabled, onError }: UseMes
     loadingMessages,
     sending,
     hasMoreMessages,
+    threadParentId,
+    threadReplies,
+    loadingThread,
     loadConversations,
     openConversation,
     loadOlderMessages,
     sendMessage,
     createConversation,
     setActiveConversationId,
+    openThread,
+    closeThread,
   };
 }

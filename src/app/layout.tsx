@@ -3,6 +3,7 @@ import { Inter, JetBrains_Mono, Barlow_Condensed, Roboto_Mono } from 'next/font/
 import './globals.css';
 import { cookies } from 'next/headers';
 import { ThemeProvider } from '@/components/ThemeProvider';
+import { CookieConsent } from '@/components/CookieConsent';
 import { getThemePrefFromCookieHeader, type ThemePref } from '@/lib/theme';
 
 const inter = Inter({
@@ -53,7 +54,10 @@ export default async function RootLayout({
       <body
         className={`${inter.variable} ${jetBrainsMono.variable} ${barlowCondensed.variable} ${robotoMono.variable} antialiased overflow-x-hidden`}
       >
-        <ThemeProvider initialPref={pref}>{children}</ThemeProvider>
+        <ThemeProvider initialPref={pref}>
+          {children}
+          <CookieConsent />
+        </ThemeProvider>
       </body>
     </html>
   );

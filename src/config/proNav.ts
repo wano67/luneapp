@@ -13,6 +13,7 @@ import {
   Workflow,
   Megaphone,
   KeyRound,
+  ShoppingBag,
 } from 'lucide-react';
 
 export type BusinessRole = 'OWNER' | 'ADMIN' | 'MEMBER' | 'VIEWER';
@@ -152,6 +153,15 @@ export const proNavSections: ProNavSectionConfig[] = [
         href: (biz) => `/app/pro/${biz}/marketing`,
         minRole: 'MEMBER',
         activePatterns: (biz) => [startsWithRegex(`/app/pro/${biz}/marketing`)],
+      },
+      {
+        id: 'store',
+        label: 'Boutique',
+        icon: ShoppingBag,
+        href: (biz) => `/app/pro/${biz}/store`,
+        minRole: 'MEMBER',
+        activityTypes: ['COMMERCE', 'MIXTE'],
+        activePatterns: (biz) => [startsWithRegex(`/app/pro/${biz}/store`)],
       },
       {
         id: 'team',

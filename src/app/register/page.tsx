@@ -28,6 +28,9 @@ export default function RegisterPage() {
   const [confirm, setConfirm] = useState('');
   const [language, setLanguage] = useState<Prefs['language']>('fr');
   const [theme, setTheme] = useState<Prefs['theme']>('system');
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [acceptedPrivacy, setAcceptedPrivacy] = useState(false);
+  const [marketingConsent, setMarketingConsent] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [requestId, setRequestId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -64,6 +67,9 @@ export default function RegisterPage() {
           email,
           password,
           name: `${firstName} ${lastName}`.trim() || undefined,
+          acceptedTerms,
+          acceptedPrivacy,
+          marketingConsent,
           ...(inviteToken ? { inviteToken } : {}),
         }),
       });
@@ -273,7 +279,53 @@ export default function RegisterPage() {
                 </div>
               </div>
 
-              <Button type="submit" className="w-full" disabled={submitting}>
+              <div className="space-y-2">
+                <label className="flex items-start gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={acceptedTerms}
+                    onChange={(e) => setAcceptedTerms(e.target.checked)}
+                    required
+                    className="mt-0.5 h-4 w-4 shrink-0 rounded border-[var(--border)] accent-[var(--shell-accent)]"
+                  />
+                  <span className="text-xs text-[var(--text-secondary)]">
+                    J&apos;accepte les{' '}
+                    <Link href="/legal/terms" target="_blank" className="text-[var(--accent-strong)] hover:underline">
+                      conditions g\u00e9n\u00e9rales de vente
+                    </Link>
+                    {' '}*
+                  </span>
+                </label>
+                <label className="flex items-start gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={acceptedPrivacy}
+                    onChange={(e) => setAcceptedPrivacy(e.target.checked)}
+                    required
+                    className="mt-0.5 h-4 w-4 shrink-0 rounded border-[var(--border)] accent-[var(--shell-accent)]"
+                  />
+                  <span className="text-xs text-[var(--text-secondary)]">
+                    J&apos;accepte la{' '}
+                    <Link href="/legal/privacy" target="_blank" className="text-[var(--accent-strong)] hover:underline">
+                      politique de confidentialit\u00e9
+                    </Link>
+                    {' '}*
+                  </span>
+                </label>
+                <label className="flex items-start gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={marketingConsent}
+                    onChange={(e) => setMarketingConsent(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 shrink-0 rounded border-[var(--border)] accent-[var(--shell-accent)]"
+                  />
+                  <span className="text-xs text-[var(--text-secondary)]">
+                    J&apos;accepte de recevoir des communications commerciales (optionnel)
+                  </span>
+                </label>
+              </div>
+
+              <Button type="submit" className="w-full" disabled={submitting || !acceptedTerms || !acceptedPrivacy}>
                 {submitting ? 'Création en cours...' : 'Créer un compte'}
               </Button>
 

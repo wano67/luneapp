@@ -1,7 +1,11 @@
 'use client';
 
+import dynamic from 'next/dynamic';
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { Search, Users, Plus, Pencil, Trash2, ChevronDown, ChevronRight } from 'lucide-react';
+
+const LeaveExpensesPanel = dynamic(() => import('./leave-expenses/page'), { ssr: false });
+const PayslipsPanel = dynamic(() => import('../payslips/page'), { ssr: false });
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -34,6 +38,8 @@ const TABS = [
   { key: 'invitations', label: 'Invitations' },
   { key: 'poles', label: 'Pôles' },
   { key: 'organigramme', label: 'Organigramme' },
+  { key: 'conges-frais', label: 'Congés & Frais' },
+  { key: 'fiches-paie', label: 'Fiches de paie' },
 ] as const;
 
 const ROLE_FILTERS: { value: BusinessRole | 'ALL'; label: string }[] = [
@@ -569,6 +575,12 @@ export default function TeamPage({ businessId }: Props) {
           loading={teamData.loading || orgUnits.loading}
         />
       )}
+
+      {/* ─── Onglet Congés & Frais ─── */}
+      {activeTab === 'conges-frais' && <LeaveExpensesPanel />}
+
+      {/* ─── Onglet Fiches de paie ─── */}
+      {activeTab === 'fiches-paie' && <PayslipsPanel />}
 
       {/* Modals */}
       <RoleChangeModal

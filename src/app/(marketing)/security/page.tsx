@@ -3,72 +3,60 @@ import { ScrollReveal } from '@/components/marketing/ScrollReveal';
 import { StaggerChildren } from '@/components/marketing/StaggerChildren';
 import { SectionHeader } from '@/components/ui/section-header';
 import { Card } from '@/components/ui/card';
-import { Alert } from '@/components/ui/alert';
 
 export const metadata: Metadata = {
   title: 'Sécurité • Pivot',
-  description: 'Auth unifiée, CSRF, rate-limit, request-id, no-store : la sécurité est native.',
+  description: 'Vos données sont protégées par défaut. Découvrez comment Pivot sécurise votre espace.',
 };
 
-const controls = [
+const protections = [
   {
-    title: 'Auth & middleware',
-    desc: 'Auth unifiée avec cookies HttpOnly, middleware qui protège toutes les routes sensibles.',
+    title: 'Connexion sécurisée',
+    desc: 'Votre session est protégée par des cookies sécurisés. Personne ne peut usurper votre identité.',
   },
   {
-    title: 'CSRF & mutateurs',
-    desc: 'CSRF enforced sur les mutations, vérification des origines autorisées.',
+    title: 'Données isolées',
+    desc: 'Chaque entreprise et chaque espace personnel sont cloisonnés. Vos données ne sont visibles que par vous et vos collaborateurs.',
   },
   {
-    title: 'Rate limiting',
-    desc: "Limitation des appels pour éviter l'abus et protéger les endpoints sensibles.",
+    title: 'Protection contre les abus',
+    desc: 'Les actions sensibles sont limitées en fréquence pour prévenir tout usage abusif.',
   },
   {
-    title: 'Request-id sur erreurs',
-    desc: 'Toutes les erreurs surfacent un x-request-id pour diagnostiquer côté client.',
-  },
-  {
-    title: 'No-store',
-    desc: 'Réponses sensibles marquées no-store pour éviter la mise en cache non voulue.',
-  },
-  {
-    title: 'Prisma & BigInt',
-    desc: 'Sérialisation sécurisée (BigInt → string) pour éviter les corruptions côté client.',
+    title: 'Pas de suivi publicitaire',
+    desc: 'Aucun cookie de tracking, aucune publicité. Vos données ne sont ni vendues ni partagées.',
   },
 ];
 
 export default function SecurityPage() {
   return (
-    <div className="space-y-10">
+    <div className="space-y-12">
       <ScrollReveal>
-        <SectionHeader variant="marketing"
-          title="Sécurité native"
-          description="Les garde-fous de l'app interne sont pensés dès le départ."
-        />
-      </ScrollReveal>
-
-      <ScrollReveal delay={100}>
-        <Alert
-          variant="info"
-          title="Pas d'effet vitrine"
-          description="Le site marketing décrit exactement les protections déjà présentes dans l'app : CSRF, auth, rate-limit, request-id, no-store."
+        <SectionHeader
+          variant="marketing"
+          title="Vos données, protégées par défaut"
+          description="La sécurité n'est pas une option chez Pivot. Elle est intégrée dès la conception."
         />
       </ScrollReveal>
 
       <StaggerChildren className="grid gap-4 md:grid-cols-2">
-        {controls.map((control) => (
-          <Card key={control.title} className="feature-card-lift border-[var(--border)] bg-[var(--surface)] p-5">
-            <div className="text-base font-semibold text-[var(--text)]">{control.title}</div>
-            <p className="mt-2 text-sm leading-relaxed text-[var(--text-secondary)]">{control.desc}</p>
+        {protections.map((item) => (
+          <Card key={item.title} className="feature-card-lift border-[var(--border)] bg-[var(--surface)] p-5">
+            <div className="text-base font-semibold text-[var(--text)]">{item.title}</div>
+            <p className="mt-2 text-sm leading-relaxed text-[var(--text-secondary)]">{item.desc}</p>
           </Card>
         ))}
       </StaggerChildren>
 
       <ScrollReveal>
-        <SectionHeader variant="marketing"
-          title="Transparence"
-          description="Les appels côté client affichent le request-id en cas d'erreur. Les mutations sont protégées par CSRF. Les endpoints critiques sont no-store et rate-limited."
-        />
+        <Card className="border-[var(--border)] bg-[var(--surface-2)] p-6">
+          <div className="text-base font-semibold text-[var(--text)]">Notre engagement</div>
+          <p className="mt-2 text-sm leading-relaxed text-[var(--text-secondary)]">
+            Nous ne vendons pas vos données. Nous n&apos;affichons pas de publicités.
+            Pivot est financé par ses abonnements, pas par vos informations personnelles.
+            Vous pouvez exporter ou supprimer vos données à tout moment.
+          </p>
+        </Card>
       </ScrollReveal>
     </div>
   );

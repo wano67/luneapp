@@ -74,12 +74,24 @@ export const GET = withBusinessRoute({ minRole: 'VIEWER' }, async (ctx, request)
     where.nextActionDate = { lte: nextActionBefore };
   }
 
+  // Pagination
+  const limitParam = searchParams.get('limit');
+  const limit = Math.min(200, Math.max(1, parseInt(limitParam ?? '100', 10) || 100));
+  const cursorParam = searchParams.get('cursor');
+  const cursorId = cursorParam && /^\d+$/.test(cursorParam) ? BigInt(cursorParam) : null;
+
   const prospects = await prisma.prospect.findMany({
     where,
     orderBy: { createdAt: 'desc' },
+    take: limit + 1,
+    ...(cursorId ? { cursor: { id: cursorId }, skip: 1 } : {}),
   });
 
-  return jsonb({ items: prospects }, requestId);
+  const hasMore = prospects.length > limit;
+  if (hasMore) prospects.pop();
+  const nextCursor = hasMore && prospects.length > 0 ? prospects[prospects.length - 1].id.toString() : null;
+
+  return jsonb({ items: prospects, nextCursor, hasMore }, requestId);
 });
 
 // POST /api/pro/businesses/{businessId}/prospects

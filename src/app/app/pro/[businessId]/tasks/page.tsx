@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useCallback, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { ListChecks, ChevronRight, Plus, Check, ChevronDown, ChevronUp } from 'lucide-react';
+import { ListChecks, ChevronRight, Plus, Check, ChevronDown, ChevronUp, AlertTriangle, Filter } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -55,30 +55,60 @@ type WeeklyStats = {
 // ─── Helpers ────────────────────────────────────────────────────────
 const EMPTY_SUMMARY: Summary = { overdue: 0, today: 0, thisWeek: 0, blocked: 0, total: 0 };
 
+type DateRange = 'all' | '1d' | '7d' | '1m';
+const DATE_RANGE_LABELS: { value: DateRange; label: string }[] = [
+  { value: '1d', label: '1 jour' },
+  { value: '7d', label: '7 jours' },
+  { value: '1m', label: '1 mois' },
+  { value: 'all', label: 'Tout' },
+];
+
 type GroupedTasks = { overdue: MyTask[]; today: MyTask[]; thisWeek: MyTask[]; later: MyTask[]; noDate: MyTask[]; done: MyTask[] };
 
-function groupByUrgency(items: MyTask[]): GroupedTasks {
+function groupByUrgency(items: MyTask[], dateRange: DateRange, projectFilter: string): GroupedTasks {
   const now = new Date();
   const todayStr = dayKey(now);
   const monday = startOfWeek(now);
   const sundayStr = dayKey(addDays(monday, 6));
 
+  // Compute horizon based on date range
+  let horizonStr: string | null = null;
+  if (dateRange === '1d') horizonStr = todayStr;
+  else if (dateRange === '7d') horizonStr = dayKey(addDays(now, 7));
+  else if (dateRange === '1m') horizonStr = dayKey(addDays(now, 30));
+
   const groups: GroupedTasks = { overdue: [], today: [], thisWeek: [], later: [], noDate: [], done: [] };
   for (const t of items) {
+    // Project filter
+    if (projectFilter && t.projectId !== projectFilter) continue;
+
     if (t.status === 'DONE') { groups.done.push(t); continue; }
-    if (!t.dueDate) { groups.noDate.push(t); continue; }
+    if (!t.dueDate) {
+      // Show undated tasks only for 'all' or '1m'
+      if (dateRange === 'all' || dateRange === '1m') groups.noDate.push(t);
+      continue;
+    }
     const dk = t.dueDate.slice(0, 10);
-    if (dk < todayStr) groups.overdue.push(t);
-    else if (dk === todayStr) groups.today.push(t);
-    else if (dk <= sundayStr) groups.thisWeek.push(t);
-    else groups.later.push(t);
+    if (dk < todayStr) {
+      // Overdue tasks always shown regardless of date range
+      groups.overdue.push(t);
+    } else if (horizonStr && dk > horizonStr) {
+      // Beyond horizon — skip
+      continue;
+    } else if (dk === todayStr) {
+      groups.today.push(t);
+    } else if (dk <= sundayStr) {
+      groups.thisWeek.push(t);
+    } else {
+      groups.later.push(t);
+    }
   }
   return groups;
 }
 
 // ─── Inline components ─────────────────────────────────────────────
 function UrgencySection({
-  title, color, tasks, businessId, onStatusChange, updatingIds,
+  title, color, tasks, businessId, onStatusChange, updatingIds, danger,
 }: {
   title: string;
   color: string;
@@ -86,14 +116,22 @@ function UrgencySection({
   businessId: string;
   onStatusChange: (taskId: string, newStatus: string) => void;
   updatingIds: Record<string, boolean>;
+  danger?: boolean;
 }) {
   if (tasks.length === 0) return null;
   return (
-    <Card className="overflow-hidden">
-      <div className="flex items-center gap-2.5 px-4 py-3" style={{ borderBottom: '1px solid var(--border)' }}>
+    <Card className="overflow-hidden" style={danger ? { borderColor: 'var(--danger)' } : undefined}>
+      <div
+        className="flex items-center gap-2.5 px-4 py-3"
+        style={{
+          borderBottom: '1px solid var(--border)',
+          ...(danger ? { background: 'var(--danger-bg)' } : {}),
+        }}
+      >
+        {danger ? <AlertTriangle size={14} style={{ color: 'var(--danger)' }} className="shrink-0" /> : null}
         <div className="h-2 w-2 rounded-full shrink-0" style={{ background: color }} />
-        <span className="text-sm font-semibold" style={{ color: 'var(--text)' }}>{title}</span>
-        <span className="text-xs font-medium" style={{ color: 'var(--text-faint)' }}>{tasks.length}</span>
+        <span className="text-sm font-semibold" style={{ color: danger ? 'var(--danger)' : 'var(--text)' }}>{title}</span>
+        <span className="text-xs font-medium" style={{ color: danger ? 'var(--danger)' : 'var(--text-faint)' }}>{tasks.length}</span>
       </div>
       <div className="divide-y divide-[var(--border)]">
         {tasks.map((task) => (
@@ -344,6 +382,8 @@ export default function MyTasksPage() {
   const [selectedMemberId, setSelectedMemberId] = useState('');
   const [weeklyStats, setWeeklyStats] = useState<WeeklyStats | null>(null);
   const [weeklyLoading, setWeeklyLoading] = useState(true);
+  const [dateRange, setDateRange] = useState<DateRange>('all');
+  const [projectFilter, setProjectFilter] = useState('');
 
   // Create modal state
   const [createOpen, setCreateOpen] = useState(false);
@@ -420,7 +460,7 @@ export default function MyTasksPage() {
   }, [businessId, selectedMemberId, fetchVersion, tasksRv]);
 
   const summary = data?.summary ?? EMPTY_SUMMARY;
-  const groups = useMemo(() => groupByUrgency(data?.items ?? []), [data]);
+  const groups = useMemo(() => groupByUrgency(data?.items ?? [], dateRange, projectFilter), [data, dateRange, projectFilter]);
 
   const handleStatusChange = useCallback(async (taskId: string, newStatus: string) => {
     setUpdatingIds((prev) => ({ ...prev, [taskId]: true }));
@@ -488,7 +528,9 @@ export default function MyTasksPage() {
     [members, myUserId],
   );
 
+  const filteredCount = groups.overdue.length + groups.today.length + groups.thisWeek.length + groups.later.length + groups.noDate.length + groups.done.length;
   const hasNoTasks = !loading && (data?.items.length ?? 0) === 0;
+  const hasNoFilteredTasks = !loading && !hasNoTasks && filteredCount === 0;
 
   return (
     <ProPageShell
@@ -549,6 +591,54 @@ export default function MyTasksPage() {
       {/* Weekly progress */}
       <WeeklyProgressCard stats={weeklyStats} loading={weeklyLoading} />
 
+      {/* Filters: date range + project */}
+      {!loading && (data?.items.length ?? 0) > 0 ? (
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-1 rounded-lg p-1" style={{ background: 'var(--surface-2)' }}>
+            {DATE_RANGE_LABELS.map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => setDateRange(opt.value)}
+                className="rounded-md px-3 py-1.5 text-xs font-medium transition-all"
+                style={{
+                  background: dateRange === opt.value ? 'var(--surface)' : 'transparent',
+                  color: dateRange === opt.value ? 'var(--text)' : 'var(--text-faint)',
+                  boxShadow: dateRange === opt.value ? '0 1px 3px rgba(0,0,0,.08)' : 'none',
+                }}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          {(data?.activeProjects ?? []).length > 0 ? (
+            <Select
+              className="w-40 text-xs"
+              value={projectFilter}
+              onChange={(e) => setProjectFilter(e.target.value)}
+            >
+              <option value="">Tous les projets</option>
+              {(data?.activeProjects ?? []).map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </Select>
+          ) : null}
+        </div>
+      ) : null}
+
+      {/* Overdue alert banner */}
+      {!loading && groups.overdue.length > 0 ? (
+        <div
+          className="flex items-center gap-3 rounded-xl px-4 py-3 animate-fade-in-up"
+          style={{ background: 'var(--danger-bg)', border: '1px solid var(--danger)' }}
+        >
+          <AlertTriangle size={18} style={{ color: 'var(--danger)' }} className="shrink-0" />
+          <span className="text-sm font-semibold" style={{ color: 'var(--danger)' }}>
+            {groups.overdue.length} tâche{groups.overdue.length > 1 ? 's' : ''} en retard
+          </span>
+        </div>
+      ) : null}
+
       {/* Empty state */}
       {hasNoTasks ? (
         <div className="flex flex-col items-center justify-center py-20 text-center">
@@ -562,8 +652,21 @@ export default function MyTasksPage() {
         </div>
       ) : null}
 
+      {/* Filtered empty state */}
+      {hasNoFilteredTasks ? (
+        <div className="flex flex-col items-center justify-center py-12 text-center">
+          <Filter size={32} style={{ color: 'var(--text-faint)' }} />
+          <p className="mt-3 text-sm font-medium" style={{ color: 'var(--text)' }}>
+            Aucune tâche pour cette période
+          </p>
+          <p className="mt-1 text-xs" style={{ color: 'var(--text-faint)' }}>
+            Essayez d&apos;élargir la plage de dates ou de changer le filtre projet.
+          </p>
+        </div>
+      ) : null}
+
       {/* Content grid */}
-      {!hasNoTasks ? (
+      {!hasNoTasks && !hasNoFilteredTasks ? (
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_280px]">
           {/* Main: urgency sections */}
           <div className="space-y-4">
@@ -577,7 +680,7 @@ export default function MyTasksPage() {
             ) : (
               <>
                 <UrgencySection
-                  title="En retard" color="var(--danger)"
+                  title="En retard" color="var(--danger)" danger
                   tasks={groups.overdue} businessId={businessId}
                   onStatusChange={handleStatusChange} updatingIds={updatingIds}
                 />

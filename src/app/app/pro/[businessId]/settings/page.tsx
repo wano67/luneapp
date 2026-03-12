@@ -48,6 +48,7 @@ const SECTION_GROUPS = [
     label: 'Administration',
     items: [
       { id: 'comptabilite', label: 'Comptabilité' },
+      { id: 'expert-comptable', label: 'Expert-comptable' },
       { id: 'integrations', label: 'Intégrations' },
     ],
   },
@@ -134,8 +135,22 @@ export default function BusinessSettingsPage() {
 
         {/* ── Administration ── */}
         <div className="space-y-6">
-          <GroupHeader title="Administration" subtitle="Comptabilité et intégrations externes" />
+          <GroupHeader title="Administration" subtitle="Comptabilité, expert-comptable et intégrations" />
           <section id="comptabilite"><ComptabiliteSection businessId={businessId} /></section>
+          <section id="expert-comptable">
+            <Card className="flex flex-wrap items-center justify-between gap-3 border-[var(--border)] bg-[var(--surface)]/70 p-5">
+              <div>
+                <p className="text-base font-semibold text-[var(--text-primary)]">Expert-comptable</p>
+                <p className="text-sm text-[var(--text-secondary)]">Accordez un accès sécurisé à votre expert-comptable pour consulter vos données financières.</p>
+              </div>
+              <Link
+                href={`/app/pro/${businessId}/accountant`}
+                className="inline-flex items-center rounded-lg bg-[var(--shell-accent-dark)] px-4 py-2 text-sm font-medium text-white transition hover:opacity-90"
+              >
+                Gérer les accès
+              </Link>
+            </Card>
+          </section>
           <section id="integrations"><IntegrationsSection businessId={businessId} /></section>
         </div>
       </div>

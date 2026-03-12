@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/server/db/client';
 import icalGenerator from 'ical-generator';
 import { CalendarEventKind } from '@/generated/prisma';
+import { rateLimit, makeIpKey } from '@/server/security/rateLimit';
 
 type TokenInfo = {
   userId: bigint;
@@ -43,6 +44,13 @@ async function handler(
   req: NextRequest,
   { params }: { params: Promise<{ token: string; path: string[] }> },
 ) {
+  const limited = rateLimit(req, {
+    key: makeIpKey(req, 'caldav'),
+    limit: 300,
+    windowMs: 60 * 60 * 1000,
+  });
+  if (limited) return limited;
+
   const { token, path } = await params;
   const info = await resolveToken(token);
   if (!info) return new NextResponse('Token invalide.', { status: 401 });

@@ -66,6 +66,8 @@ type DashboardPayload = {
   prospectsActiveCount?: number;
   prospectsWonCount?: number;
   teamCount?: number;
+  totalTasksCount?: number;
+  doneTasksCount?: number;
   overdueTasksCount?: number;
   overdueInvoicesCount?: number;
   latestInvoices?: Array<{
@@ -96,14 +98,6 @@ type DashboardPayload = {
   granularity?: 'daily' | 'weekly' | 'monthly';
   timeSeries?: Array<{ label: string; incomeCents: string | number; expenseCents: string | number }>;
   monthlySeries?: Array<{ month: string; incomeCents: string | number; expenseCents: string | number }>;
-};
-
-type TaskItem = {
-  id: string;
-  title: string;
-  status: string;
-  dueDate: string | null;
-  createdAt?: string | null;
 };
 
 /* ═══ Business Score ═══ */
@@ -255,7 +249,6 @@ export default function ProDashboard({ businessId }: { businessId: string }) {
   const isMemberOrAbove = isAdminOrOwner || role === 'MEMBER';
   const [periodDays, setPeriodDays] = useState(0);
   const [dashboard, setDashboard] = useState<DashboardPayload | null>(null);
-  const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [profileComplete, setProfileComplete] = useState(true);
@@ -269,19 +262,16 @@ export default function ProDashboard({ businessId }: { businessId: string }) {
       setLoading(true);
       setError(null);
       try {
-        const [dashRes, tasksRes, bizRes] = await Promise.all([
+        const [dashRes, bizRes] = await Promise.all([
           fetchJson<DashboardPayload>(`/api/pro/businesses/${businessId}/dashboard?days=${periodDays}`, { cache: 'no-store' }),
-          fetchJson<{ items: TaskItem[] }>(`/api/pro/businesses/${businessId}/tasks`, { cache: 'no-store' }),
           fetchJson<{ profileComplete?: boolean }>(`/api/pro/businesses/${businessId}`, { cache: 'no-store' }),
         ]);
 
         if (cancelled) return;
 
         if (!dashRes.ok) throw new Error(dashRes.error || 'Dashboard indisponible');
-        if (!tasksRes.ok) throw new Error(tasksRes.error || 'Taches indisponibles');
 
         setDashboard(dashRes.data ?? null);
-        setTasks(tasksRes.data?.items ?? []);
         if (bizRes.ok && bizRes.data) {
           setProfileComplete(bizRes.data.profileComplete !== false);
         }
@@ -299,8 +289,8 @@ export default function ProDashboard({ businessId }: { businessId: string }) {
     };
   }, [businessId, periodDays, rv]);
 
-  const tasksDone = useMemo(() => tasks.filter((t) => t.status === 'DONE').length, [tasks]);
-  const tasksTotal = tasks.length;
+  const tasksDone = dashboard?.doneTasksCount ?? 0;
+  const tasksTotal = dashboard?.totalTasksCount ?? 0;
   const taskCompletionPct = tasksTotal > 0 ? Math.round((tasksDone / tasksTotal) * 100) : 0;
 
   const businessScore = useMemo(

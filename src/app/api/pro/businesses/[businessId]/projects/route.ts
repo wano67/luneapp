@@ -101,7 +101,8 @@ export const GET = withBusinessRoute({ minRole: 'VIEWER' }, async (ctx, request)
     .map((p) => p.billingQuoteId)
     .filter((id): id is bigint => Boolean(id));
 
-  const [billingQuotes, signedQuotes] = await Promise.all([
+  // Parallelize all enrichment queries (quotes, services, tasks)
+  const [billingQuotes, signedQuotes, serviceRows, taskRows] = await Promise.all([
     billingQuoteIds.length
       ? prisma.quote.findMany({
           where: { id: { in: billingQuoteIds }, businessId: businessIdBigInt, status: 'SIGNED' },
@@ -115,6 +116,25 @@ export const GET = withBusinessRoute({ minRole: 'VIEWER' }, async (ctx, request)
           select: { id: true, projectId: true, totalCents: true, issuedAt: true },
         })
       : Promise.resolve([]),
+    projectIds.length
+      ? prisma.projectService.findMany({
+          where: { projectId: { in: projectIds } },
+          select: {
+            projectId: true,
+            quantity: true,
+            priceCents: true,
+            discountType: true,
+            discountValue: true,
+            service: { select: { defaultPriceCents: true, tjmCents: true } },
+          },
+        })
+      : Promise.resolve([]),
+    projectIds.length
+      ? prisma.task.findMany({
+          where: { projectId: { in: projectIds } },
+          select: { projectId: true, status: true, progress: true },
+        })
+      : Promise.resolve([]),
   ]);
 
   const billingQuoteById = new Map<bigint, { totalCents: bigint }>();
@@ -126,19 +146,6 @@ export const GET = withBusinessRoute({ minRole: 'VIEWER' }, async (ctx, request)
       latestSignedByProject.set(quote.projectId, { totalCents: quote.totalCents });
     }
   }
-  const serviceRows = projectIds.length
-    ? await prisma.projectService.findMany({
-        where: { projectId: { in: projectIds } },
-        select: {
-          projectId: true,
-          quantity: true,
-          priceCents: true,
-          discountType: true,
-          discountValue: true,
-          service: { select: { defaultPriceCents: true, tjmCents: true } },
-        },
-      })
-    : [];
 
   const totalsByProject = new Map<bigint, { total: bigint; count: number }>();
   for (const row of serviceRows) {
@@ -165,29 +172,22 @@ export const GET = withBusinessRoute({ minRole: 'VIEWER' }, async (ctx, request)
     { total: number; done: number; open: number; progressPct: number }
   >();
 
-  if (projects.length) {
-    const taskRows = await prisma.task.findMany({
-      where: { projectId: { in: projects.map((p) => p.id) } },
-      select: { projectId: true, status: true, progress: true },
-    });
+  const grouped = new Map<bigint, { total: number; done: number; open: number; sum: number }>();
+  for (const t of taskRows) {
+    if (!t.projectId) continue;
+    const bucket = grouped.get(t.projectId) ?? { total: 0, done: 0, open: 0, sum: 0 };
+    bucket.total += 1;
+    const pct =
+      t.status === TaskStatus.DONE ? 100 : t.status === TaskStatus.IN_PROGRESS ? t.progress ?? 0 : 0;
+    bucket.sum += pct;
+    if (t.status === TaskStatus.DONE) bucket.done += 1;
+    else bucket.open += 1;
+    grouped.set(t.projectId, bucket);
+  }
 
-    const grouped = new Map<bigint, { total: number; done: number; open: number; sum: number }>();
-    for (const t of taskRows) {
-      if (!t.projectId) continue;
-      const bucket = grouped.get(t.projectId) ?? { total: 0, done: 0, open: 0, sum: 0 };
-      bucket.total += 1;
-      const pct =
-        t.status === TaskStatus.DONE ? 100 : t.status === TaskStatus.IN_PROGRESS ? t.progress ?? 0 : 0;
-      bucket.sum += pct;
-      if (t.status === TaskStatus.DONE) bucket.done += 1;
-      else bucket.open += 1;
-      grouped.set(t.projectId, bucket);
-    }
-
-    for (const [projectId, stats] of grouped.entries()) {
-      const progressPct = stats.total ? Math.round(stats.sum / stats.total) : 0;
-      progressByProject.set(projectId, { total: stats.total, done: stats.done, open: stats.open, progressPct });
-    }
+  for (const [projectId, stats] of grouped.entries()) {
+    const progressPct = stats.total ? Math.round(stats.sum / stats.total) : 0;
+    progressByProject.set(projectId, { total: stats.total, done: stats.done, open: stats.open, progressPct });
   }
 
   return jsonb({

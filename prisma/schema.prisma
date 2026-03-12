@@ -149,6 +149,11 @@ model User {
   onboardingPersonalDone Boolean @default(false)
   onboardingProDone      Boolean @default(false)
 
+  // RGPD — Consentements
+  acceptedTermsAt    DateTime?
+  acceptedPrivacyAt  DateTime?
+  marketingConsentAt DateTime?
+
   // Finances personnelles — préférences
   defaultCurrency              String  @default("EUR")
   defaultTransactionType       String  @default("EXPENSE")
@@ -194,10 +199,18 @@ model User {
   calendarTokens       CalendarToken[]
   personalCalendarEvents PersonalCalendarEvent[]
   personalCalendarTokens PersonalCalendarToken[]
+  timeEntries            TimeEntry[]
   powensConnection       PowensConnection?
   refreshTokens          RefreshToken[]
   vaultItemsCreated      VaultItem[] @relation("VaultItemCreator")
   foldersCreated         DocumentFolder[] @relation("FolderCreatedBy")
+  leaveRequests          LeaveRequest[] @relation("LeaveRequestUser")
+  leaveReviewed          LeaveRequest[] @relation("LeaveRequestReviewer")
+  expenseReports         ExpenseReport[] @relation("ExpenseReportUser")
+  expenseReviewed        ExpenseReport[] @relation("ExpenseReportReviewer")
+  assets                 Asset[]
+  payslips               Payslip[] @relation("PayslipEmployee")
+  accountantAccesses     AccountantAccess[] @relation("AccountantUser")
 }
 
 /**
@@ -287,6 +300,18 @@ model Business {
   goals      BusinessGoal[]
   vaultItems VaultItem[]
   documentFolders DocumentFolder[]
+  timeEntries TimeEntry[]
+  automations Automation[]
+  leaveRequests LeaveRequest[]
+  expenseReports ExpenseReport[]
+  emailSequences EmailSequence[]
+  emailSequenceSends EmailSequenceSend[]
+  paymentLinks PaymentLink[]
+  eInvoices EInvoice[]
+  storeProducts StoreProduct[]
+  storeOrders StoreOrder[]
+  payslips Payslip[]
+  accountantAccesses AccountantAccess[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -409,6 +434,7 @@ model Prospect {
   status          ProspectStatus        @default(NEW)
 
   notifications Notification[]
+  emailSequenceSends EmailSequenceSend[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -543,6 +569,8 @@ model Client {
   subscriptions Subscription[]
   calendarEvents CalendarEvent[] @relation("CalendarEventClient")
   notifications  Notification[]
+  emailSequenceSends EmailSequenceSend[]
+  paymentLinks PaymentLink[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -593,6 +621,8 @@ model Project {
   shareTokens   ProjectShareToken[]
   vaultItems    VaultItem[]
   documentFolders DocumentFolder[]
+  automations    Automation[]
+  expenseReports ExpenseReport[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -669,6 +699,31 @@ model Task {
   @@index([projectId, statusUpdatedAt])
   @@index([parentTaskId])
   @@index([businessId, organizationUnitId])
+
+  timeEntries TimeEntry[]
+}
+
+model TimeEntry {
+  id          BigInt    @id @default(autoincrement())
+  businessId  BigInt
+  taskId      BigInt
+  userId      BigInt
+  startedAt   DateTime  @default(now())
+  stoppedAt   DateTime?
+  durationMin Int?
+  description String?
+  billable    Boolean   @default(true)
+
+  business Business @relation(fields: [businessId], references: [id])
+  task     Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([businessId, taskId])
+  @@index([businessId, userId])
+  @@index([taskId])
 }
 
 model Process {
@@ -727,6 +782,9 @@ model Finance {
   vatCents    BigInt?
   pieceRef    String?
   deletedAt  DateTime?
+  reconciled  Boolean   @default(false)
+  reconciledAt DateTime?
+  reconciledPaymentId BigInt?
 
   business Business @relation(fields: [businessId], references: [id])
   project  Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
@@ -734,6 +792,7 @@ model Finance {
   recurringRule FinanceRecurringRule? @relation(fields: [recurringRuleId], references: [id], onDelete: SetNull)
   inventoryMovement  InventoryMovement? @relation("InventoryMovementFinance", fields: [inventoryMovementId], references: [id], onDelete: SetNull)
   inventoryProduct   Product?           @relation("ProductFinance", fields: [inventoryProductId], references: [id], onDelete: SetNull)
+  reconciledPayment  Payment?           @relation("FinanceReconciledPayment", fields: [reconciledPaymentId], references: [id], onDelete: SetNull)
   tags     FinanceTag[]
 
   createdAt DateTime @default(now())
@@ -744,6 +803,7 @@ model Finance {
   @@index([businessId, categoryReferenceId])
   @@index([businessId, inventoryProductId])
   @@index([businessId, deletedAt])
+  @@index([businessId, reconciled])
   @@index([recurringRuleId])
   @@unique([recurringRuleId, date])
 }
@@ -831,6 +891,7 @@ model Product {
   inventoryFinances  Finance[]    @relation("ProductFinance")
   reservationItems   InventoryReservationItem[]
   invoiceItems       InvoiceItem[]
+  storeProducts      StoreProduct[]
   createdAt          DateTime     @default(now())
   updatedAt          DateTime     @updatedAt
 
@@ -1424,6 +1485,8 @@ model Quote {
   invoice  Invoice? @relation("QuoteInvoice")
 
   @@unique([businessId, number])
+  @@index([businessId, status])
+  @@index([businessId, projectId])
 }
 
 model QuoteItem {
@@ -1480,8 +1543,13 @@ model Invoice {
   reservation InventoryReservation?
   payments Payment[]
   subscriptionPeriod SubscriptionPeriod?
+  paymentLinks PaymentLink[]
+  eInvoices    EInvoice[]
 
   @@unique([businessId, number])
+  @@index([businessId, status])
+  @@index([businessId, dueAt])
+  @@index([businessId, projectId])
 }
 
 model Payment {
@@ -1503,6 +1571,7 @@ model Payment {
   project  Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
   client   Client?  @relation(fields: [clientId], references: [id], onDelete: SetNull)
   createdBy User?   @relation("PaymentCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  reconciledFinances Finance[] @relation("FinanceReconciledPayment")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1633,22 +1702,27 @@ model ConversationMember {
 }
 
 model Message {
-  id             BigInt    @id @default(autoincrement())
-  conversationId BigInt
-  senderUserId   BigInt
-  content        String?
-  taskId         BigInt?
-  taskGroupIds   String?
-  createdAt      DateTime  @default(now())
-  editedAt       DateTime?
+  id              BigInt    @id @default(autoincrement())
+  conversationId  BigInt
+  senderUserId    BigInt
+  parentMessageId BigInt?
+  content         String?
+  taskId          BigInt?
+  taskGroupIds    String?
+  replyCount      Int       @default(0)
+  createdAt       DateTime  @default(now())
+  editedAt        DateTime?
 
-  conversation Conversation       @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  sender       User               @relation("MessageSender", fields: [senderUserId], references: [id])
-  task         Task?              @relation(fields: [taskId], references: [id], onDelete: SetNull)
-  attachments  MessageAttachment[]
+  conversation  Conversation       @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender        User               @relation("MessageSender", fields: [senderUserId], references: [id])
+  task          Task?              @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  parentMessage Message?           @relation("MessageThread", fields: [parentMessageId], references: [id], onDelete: SetNull)
+  replies       Message[]          @relation("MessageThread")
+  attachments   MessageAttachment[]
 
   @@index([conversationId, createdAt])
   @@index([senderUserId])
+  @@index([parentMessageId])
 }
 
 model MessageAttachment {
@@ -2166,4 +2240,433 @@ model VaultItem {
   createdBy User     @relation("VaultItemCreator", fields: [createdByUserId], references: [id])
 
   @@index([businessId, projectId])
+}
+
+// ─── Automations ─────────────────────────────────────────────
+
+enum AutomationTrigger {
+  TASK_COMPLETED
+  TASK_STATUS_CHANGED
+  TASK_ASSIGNED
+  INVOICE_CREATED
+  PROJECT_STATUS_CHANGED
+}
+
+enum AutomationAction {
+  NOTIFY_TEAM
+  NOTIFY_CLIENT
+  CREATE_TASK
+  CHANGE_PROJECT_STATUS
+}
+
+model Automation {
+  id         BigInt            @id @default(autoincrement())
+  businessId BigInt
+  projectId  BigInt?
+  name       String
+  trigger    AutomationTrigger
+  action     AutomationAction
+  config     Json              @default("{}")
+  enabled    Boolean           @default(true)
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  project  Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([businessId, enabled])
+  @@index([businessId, trigger])
+}
+
+// ─── Leave Requests (Congés) ─────────────────────────────────
+
+enum LeaveType {
+  VACATION
+  SICK
+  PERSONAL
+  MATERNITY
+  PATERNITY
+  OTHER
+}
+
+enum LeaveStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model LeaveRequest {
+  id         BigInt      @id @default(autoincrement())
+  businessId BigInt
+  userId     BigInt
+  type       LeaveType
+  status     LeaveStatus @default(PENDING)
+  startDate  DateTime
+  endDate    DateTime
+  days       Float
+  reason     String?
+  reviewedByUserId BigInt?
+  reviewedAt DateTime?
+
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  user       User     @relation("LeaveRequestUser", fields: [userId], references: [id], onDelete: Cascade)
+  reviewedBy User?    @relation("LeaveRequestReviewer", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([businessId, userId])
+  @@index([businessId, status])
+}
+
+// ─── Expense Reports (Notes de frais) ────────────────────────
+
+enum ExpenseStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  REJECTED
+  REIMBURSED
+}
+
+model ExpenseReport {
+  id           BigInt        @id @default(autoincrement())
+  businessId   BigInt
+  userId       BigInt
+  projectId    BigInt?
+  title        String
+  amountCents  Int
+  category     String?
+  description  String?
+  receiptUrl   String?
+  expenseDate  DateTime
+  status       ExpenseStatus @default(DRAFT)
+  reviewedByUserId BigInt?
+  reviewedAt   DateTime?
+
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  user       User     @relation("ExpenseReportUser", fields: [userId], references: [id], onDelete: Cascade)
+  project    Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  reviewedBy User?    @relation("ExpenseReportReviewer", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([businessId, userId])
+  @@index([businessId, status])
+}
+
+// ─── Email Sequences ─────────────────────────────────────────
+
+enum EmailSequenceStatus {
+  ACTIVE
+  PAUSED
+  ARCHIVED
+}
+
+model EmailSequence {
+  id         BigInt              @id @default(autoincrement())
+  businessId BigInt
+  name       String
+  subject    String
+  body       String
+  delayDays  Int                 @default(0)
+  position   Int                 @default(0)
+  status     EmailSequenceStatus @default(ACTIVE)
+
+  business Business        @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  sends    EmailSequenceSend[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([businessId, status])
+  @@index([businessId, position])
+}
+
+enum EmailSendStatus {
+  PENDING
+  SENT
+  FAILED
+  CANCELLED
+}
+
+model EmailSequenceSend {
+  id          BigInt          @id @default(autoincrement())
+  sequenceId  BigInt
+  businessId  BigInt
+  recipientEmail String
+  recipientName  String?
+  clientId    BigInt?
+  prospectId  BigInt?
+  status      EmailSendStatus @default(PENDING)
+  scheduledAt DateTime
+  sentAt      DateTime?
+  errorMessage String?
+
+  sequence EmailSequence @relation(fields: [sequenceId], references: [id], onDelete: Cascade)
+  business Business      @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  client   Client?       @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  prospect Prospect?     @relation(fields: [prospectId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@index([businessId, status, scheduledAt])
+  @@index([sequenceId])
+}
+
+// ─── Payment Links ───────────────────────────────────────────
+
+enum PaymentLinkStatus {
+  ACTIVE
+  PAID
+  EXPIRED
+  CANCELLED
+}
+
+model PaymentLink {
+  id          BigInt            @id @default(autoincrement())
+  businessId  BigInt
+  invoiceId   BigInt?
+  clientId    BigInt?
+  token       String            @unique @default(uuid())
+  amountCents Int
+  currency    String            @default("EUR")
+  description String?
+  status      PaymentLinkStatus @default(ACTIVE)
+  expiresAt   DateTime?
+  paidAt      DateTime?
+  stripeSessionId String?
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  invoice  Invoice? @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  client   Client?  @relation(fields: [clientId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([businessId])
+  @@index([token])
+  @@index([invoiceId])
+}
+
+// ─── E-Invoicing (Factur-X / PDP) ───────────────────────────
+
+enum EInvoiceStatus {
+  DRAFT
+  PENDING
+  TRANSMITTED
+  ACCEPTED
+  REJECTED
+  ERROR
+}
+
+enum EInvoiceFormat {
+  FACTUR_X
+  UBL
+  CII
+}
+
+model EInvoice {
+  id          BigInt         @id @default(autoincrement())
+  businessId  BigInt
+  invoiceId   BigInt
+  format      EInvoiceFormat @default(FACTUR_X)
+  status      EInvoiceStatus @default(DRAFT)
+  xmlPayload  String?
+  pdpTrackingId String?
+  transmittedAt DateTime?
+  acceptedAt    DateTime?
+  rejectedAt    DateTime?
+  rejectionReason String?
+  siren       String?
+  recipientSiren String?
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  invoice  Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([invoiceId])
+  @@index([businessId, status])
+}
+
+// ─── Multi-Asset Portfolio Tracking ──────────────────────────
+
+enum AssetType {
+  REAL_ESTATE
+  STOCK
+  CRYPTO
+  BOND
+  CASH
+  SCPI
+  LIFE_INSURANCE
+  OTHER
+}
+
+model Asset {
+  id            BigInt    @id @default(autoincrement())
+  userId        BigInt
+  type          AssetType
+  name          String
+  institution   String?
+  purchasePrice BigInt?
+  currentValue  BigInt?
+  quantity      Float?
+  currency      String    @default("EUR")
+  purchaseDate  DateTime?
+  notes         String?
+
+  user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  valuations AssetValuation[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, type])
+}
+
+model AssetValuation {
+  id       BigInt   @id @default(autoincrement())
+  assetId  BigInt
+  valueCents BigInt
+  date     DateTime
+
+  asset Asset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([assetId, date])
+}
+
+// ─── Online Store (E-Commerce) ───────────────────────────────
+
+enum StoreOrderStatus {
+  PENDING
+  CONFIRMED
+  SHIPPED
+  DELIVERED
+  CANCELLED
+  REFUNDED
+}
+
+model StoreProduct {
+  id           BigInt  @id @default(autoincrement())
+  businessId   BigInt
+  productId    BigInt?
+  name         String
+  slug         String
+  description  String?
+  priceCents   Int
+  currency     String  @default("EUR")
+  imageUrl     String?
+  isPublished  Boolean @default(false)
+  stockCount   Int     @default(0)
+
+  business  Business    @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  product   Product?    @relation(fields: [productId], references: [id], onDelete: SetNull)
+  orderItems StoreOrderItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([businessId, slug])
+  @@index([businessId, isPublished])
+}
+
+model StoreOrder {
+  id           BigInt           @id @default(autoincrement())
+  businessId   BigInt
+  orderNumber  String
+  customerName String
+  customerEmail String
+  customerPhone String?
+  shippingAddress String?
+  totalCents   Int
+  status       StoreOrderStatus @default(PENDING)
+  paidAt       DateTime?
+  shippedAt    DateTime?
+  trackingNumber String?
+  note         String?
+
+  business Business         @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  items    StoreOrderItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([businessId, orderNumber])
+  @@index([businessId, status])
+}
+
+model StoreOrderItem {
+  id            BigInt @id @default(autoincrement())
+  orderId       BigInt
+  storeProductId BigInt
+  quantity      Int
+  unitPriceCents Int
+
+  order        StoreOrder   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  storeProduct StoreProduct @relation(fields: [storeProductId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+}
+
+// ─── Payslips (Fiches de paie simplifiées) ───────────────────
+
+enum PayslipStatus {
+  DRAFT
+  VALIDATED
+  SENT
+}
+
+model Payslip {
+  id           BigInt        @id @default(autoincrement())
+  businessId   BigInt
+  userId       BigInt
+  period       String
+  grossCents   Int
+  netCents     Int
+  employerChargesCents Int
+  status       PayslipStatus @default(DRAFT)
+  details      Json          @default("{}")
+  sentAt       DateTime?
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  employee User     @relation("PayslipEmployee", fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([businessId, userId, period])
+  @@index([businessId, period])
+}
+
+// ─── Accountant Portal ───────────────────────────────────────
+
+enum AccountantAccessLevel {
+  READ_ONLY
+  READ_WRITE
+}
+
+model AccountantAccess {
+  id          BigInt               @id @default(autoincrement())
+  businessId  BigInt
+  accountantUserId BigInt
+  token       String               @unique @default(uuid())
+  accessLevel AccountantAccessLevel @default(READ_ONLY)
+  expiresAt   DateTime?
+  revokedAt   DateTime?
+  lastAccessAt DateTime?
+
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  accountant User     @relation("AccountantUser", fields: [accountantUserId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([businessId, accountantUserId])
+  @@index([token])
 }

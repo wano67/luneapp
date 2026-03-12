@@ -10,8 +10,6 @@ import { cn } from '@/lib/cn';
 const navItems = [
   { href: '/features', label: 'Fonctionnalités' },
   { href: '/pricing', label: 'Tarifs' },
-  { href: '/about', label: 'À propos' },
-  { href: '/security', label: 'Sécurité' },
   { href: '/contact', label: 'Contact' },
 ];
 

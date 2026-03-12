@@ -1,7 +1,6 @@
 import type { Metadata } from 'next';
 import { PricingCards } from '@/components/marketing/PricingCards';
 import { ScrollReveal } from '@/components/marketing/ScrollReveal';
-import { StaggerChildren } from '@/components/marketing/StaggerChildren';
 import { SectionHeader } from '@/components/ui/section-header';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -11,63 +10,55 @@ import Link from 'next/link';
 
 export const metadata: Metadata = {
   title: 'Tarifs • Pivot',
-  description: 'Des plans clairs pour démarrer ou passer en mode équipe.',
+  description: 'Des plans clairs pour démarrer gratuitement ou passer en mode équipe.',
 };
 
 type Row = { feature: string; essential: string | boolean; pro: string | boolean; team: string | boolean };
 
 const comparisonRows: Row[] = [
-  { feature: 'Espace personnel (Wallet)', essential: true, pro: true, team: true },
-  { feature: 'Comptes & transactions', essential: true, pro: true, team: true },
-  { feature: 'Budgets & épargne', essential: true, pro: true, team: true },
-  { feature: 'Espace pro (Studio)', essential: '1 entreprise', pro: 'Illimité', team: 'Illimité' },
-  { feature: 'Prospects & pipeline', essential: true, pro: true, team: true },
-  { feature: 'Clients & projets', essential: true, pro: true, team: true },
-  { feature: 'Devis & factures', essential: true, pro: true, team: true },
-  { feature: 'Stock & catalogue', essential: true, pro: true, team: true },
-  { feature: 'Focus (vue croisée)', essential: true, pro: true, team: true },
+  { feature: 'Espace personnel', essential: true, pro: true, team: true },
+  { feature: 'Comptes, transactions et sync bancaire', essential: true, pro: true, team: true },
+  { feature: 'Budgets, épargne et abonnements', essential: true, pro: true, team: true },
+  { feature: 'Espace pro', essential: '1 entreprise', pro: 'Illimité', team: 'Illimité' },
+  { feature: 'Prospects, clients et projets', essential: true, pro: true, team: true },
+  { feature: 'Devis, factures et comptabilité', essential: true, pro: true, team: true },
+  { feature: 'Stock, catalogue et documents', essential: true, pro: true, team: true },
+  { feature: 'Tâches et calendrier', essential: true, pro: true, team: true },
+  { feature: 'Portail client (lien de partage)', essential: true, pro: true, team: true },
+  { feature: 'Sync iCal / CalDAV', essential: true, pro: true, team: true },
   { feature: 'Membres d\'équipe', essential: '—', pro: 'Jusqu\'à 5', team: 'Illimité' },
-  { feature: 'Rôles & permissions', essential: '—', pro: true, team: true },
-  { feature: 'Intégrations avancées', essential: '—', pro: '—', team: true },
+  { feature: 'Rôles et permissions', essential: '—', pro: true, team: true },
   { feature: 'Support prioritaire', essential: '—', pro: true, team: true },
-  { feature: 'SLA & onboarding dédié', essential: '—', pro: '—', team: true },
 ];
 
 const pricingFaq = [
   {
-    question: 'Puis-je passer d\'un plan à l\'autre ?',
-    answer: 'Oui, à tout moment. La facturation est mensuelle et annulable sans engagement.',
+    question: 'Puis-je changer de plan à tout moment ?',
+    answer: 'Oui. La facturation est mensuelle et sans engagement.',
   },
   {
     question: 'Y a-t-il une période d\'essai ?',
-    answer: 'Le plan Essentiel est gratuit pour toujours. Le plan Pro propose un essai de 14 jours sans carte bancaire.',
+    answer: 'Le plan Essentiel est gratuit. Le plan Pro offre un essai de 14 jours sans carte bancaire.',
   },
   {
-    question: 'Mes données sont-elles sûres ?',
-    answer: 'Oui. Authentification sécurisée, cookies HttpOnly, CSRF sur toutes les mutations, rate-limit sur les endpoints sensibles.',
-  },
-  {
-    question: 'Le plan Equipe est-il adapté aux associations ?',
-    answer: 'Oui. Contactez-nous pour discuter de votre cas d\'usage et obtenir un devis adapté.',
+    question: 'Mes données sont-elles protégées ?',
+    answer: 'Oui. Authentification sécurisée, données chiffrées, accès contrôlé par rôles.',
   },
 ];
 
 function CellValue({ value }: { value: string | boolean }) {
-  if (value === true) {
-    return <span className="text-[var(--success)]">✓</span>;
-  }
-  if (value === false || value === '—') {
-    return <span className="text-[var(--text-faint)]">—</span>;
-  }
+  if (value === true) return <span className="text-[var(--success)]">✓</span>;
+  if (value === false || value === '—') return <span className="text-[var(--text-faint)]">—</span>;
   return <span className="text-sm text-[var(--text-secondary)]">{value}</span>;
 }
 
 export default function PricingPage() {
   return (
-    <div className="space-y-12">
-      <SectionHeader variant="marketing"
-        title="Des plans clairs et progressifs"
-        description="Commencez gratuitement, passez à Pro quand vos besoins augmentent, contactez-nous pour Equipe."
+    <div className="space-y-16">
+      <SectionHeader
+        variant="marketing"
+        title="Des tarifs simples et progressifs"
+        description="Commencez gratuitement, évoluez quand vos besoins grandissent."
       />
 
       <PricingCards />
@@ -86,7 +77,7 @@ export default function PricingPage() {
                     Pro
                     <Badge variant="pro" className="ml-2 align-middle text-xs">Populaire</Badge>
                   </th>
-                  <th className="px-4 py-3 text-center font-medium text-[var(--text-muted)]">Equipe</th>
+                  <th className="px-4 py-3 text-center font-medium text-[var(--text-muted)]">Équipe</th>
                 </tr>
               </thead>
               <tbody>
@@ -98,15 +89,9 @@ export default function PricingPage() {
                     }`}
                   >
                     <td className="px-4 py-3 text-[var(--text)]">{row.feature}</td>
-                    <td className="px-4 py-3 text-center">
-                      <CellValue value={row.essential} />
-                    </td>
-                    <td className="px-4 py-3 text-center font-medium">
-                      <CellValue value={row.pro} />
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <CellValue value={row.team} />
-                    </td>
+                    <td className="px-4 py-3 text-center"><CellValue value={row.essential} /></td>
+                    <td className="px-4 py-3 text-center font-medium"><CellValue value={row.pro} /></td>
+                    <td className="px-4 py-3 text-center"><CellValue value={row.team} /></td>
                   </tr>
                 ))}
               </tbody>
@@ -115,42 +100,15 @@ export default function PricingPage() {
         </section>
       </ScrollReveal>
 
-      {/* Benefits */}
-      <StaggerChildren className="grid gap-4 md:grid-cols-3">
-        {[
-          {
-            title: 'Facturation simple',
-            desc: 'Mensuelle, annulable. TVA adaptée. Pas de frais cachés.',
-          },
-          {
-            title: 'Sécurité incluse',
-            desc: 'Auth unifiée, CSRF, rate-limit, no-store sur les endpoints sensibles.',
-          },
-          {
-            title: 'Support prioritaire Pro',
-            desc: 'Aide produit, onboarding, et réponses rapides par mail.',
-          },
-        ].map((item) => (
-          <Card key={item.title} className="feature-card-lift border-[var(--border)] bg-[var(--surface)] p-5">
-            <div className="text-base font-semibold text-[var(--text)]">{item.title}</div>
-            <p className="mt-2 text-sm leading-relaxed text-[var(--text-secondary)]">{item.desc}</p>
-          </Card>
-        ))}
-      </StaggerChildren>
-
-      {/* FAQ pricing */}
-      <section className="space-y-4">
-        <SectionHeader variant="marketing" title="Questions fréquentes sur les tarifs" />
-        <Faq items={pricingFaq} />
-      </section>
+      <Faq items={pricingFaq} />
 
       {/* CTA */}
       <ScrollReveal>
         <Card className="flex flex-col gap-3 border-[var(--border)] bg-[var(--surface-2)] p-6 md:flex-row md:items-center md:justify-between">
           <div>
-            <div className="text-lg font-semibold text-[var(--text)]">Questions sur les tarifs ?</div>
+            <div className="text-lg font-semibold text-[var(--text)]">Une question sur les tarifs ?</div>
             <p className="text-sm text-[var(--text-secondary)]">
-              Parlons des besoins de votre équipe et des intégrations spécifiques.
+              Contactez-nous pour discuter de vos besoins.
             </p>
           </div>
           <div className="flex gap-2">

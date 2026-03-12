@@ -113,16 +113,10 @@ export default function WalletHomePage() {
 
   useEffect(() => { void load(periodDays); }, [load, periodDays, walletRv]);
   useEffect(() => {
-    const id = window.setInterval(() => {
-      if (document.visibilityState === 'visible') void load(periodDays);
-    }, 60_000);
-    return () => window.clearInterval(id);
-  }, [load, periodDays]);
-  useEffect(() => {
-    const fn = () => { if (document.visibilityState === 'visible') void load(periodDays); };
-    window.addEventListener('focus', fn);
-    document.addEventListener('visibilitychange', fn);
-    return () => { window.removeEventListener('focus', fn); document.removeEventListener('visibilitychange', fn); };
+    const refresh = () => { if (document.visibilityState === 'visible') void load(periodDays); };
+    const id = window.setInterval(refresh, 60_000);
+    document.addEventListener('visibilitychange', refresh);
+    return () => { window.clearInterval(id); document.removeEventListener('visibilitychange', refresh); };
   }, [load, periodDays]);
 
   /* ═══ Computed ═══ */

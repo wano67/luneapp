@@ -6,7 +6,7 @@ import {
   IconBudget,
   IconSavings,
 } from '@/components/pivot-icons';
-import { CalendarDays } from 'lucide-react';
+import { CalendarDays, TrendingUp } from 'lucide-react';
 
 export type PersonalNavItem = {
   id: string;
@@ -64,6 +64,12 @@ export const personalNavSections: PersonalNavSection[] = [
         label: 'Épargne',
         href: '/app/personal/epargne',
         icon: (c) => <IconSavings size={20} color={c} />,
+      },
+      {
+        id: 'patrimoine',
+        label: 'Patrimoine',
+        href: '/app/personal/patrimoine',
+        icon: (c) => <TrendingUp size={20} color={c} />,
       },
       {
         id: 'calendar',

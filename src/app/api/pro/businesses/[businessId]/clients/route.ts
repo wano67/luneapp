@@ -56,25 +56,39 @@ export const GET = withBusinessRoute({ minRole: 'VIEWER' }, async (ctx, req) => 
       : 'name';
   const sortDir = sortDirParam === 'desc' ? 'desc' : 'asc';
 
+  // Pagination
+  const limitParam = searchParams.get('limit');
+  const limit = Math.min(200, Math.max(1, parseInt(limitParam ?? '100', 10) || 100));
+  const cursorParam = searchParams.get('cursor');
+  const cursorId = cursorParam && /^\d+$/.test(cursorParam) ? BigInt(cursorParam) : null;
+
+  const where = {
+    businessId: ctx.businessId,
+    ...(showArchived ? {} : { archivedAt: null }),
+    ...(search ? { name: { contains: search, mode: 'insensitive' as const } } : {}),
+    ...(status && STATUS_VALUES.has(status) ? { status } : {}),
+    ...(sector ? { sector: { contains: sector, mode: 'insensitive' as const } } : {}),
+    ...(origin ? { leadSource: origin as LeadSource } : {}),
+    ...(categoryReferenceId ? { categoryReferenceId } : {}),
+    ...(tagReferenceId ? { tags: { some: { referenceId: tagReferenceId } } } : {}),
+  };
+
   const clients = await prisma.client.findMany({
-    where: {
-      businessId: ctx.businessId,
-      ...(showArchived ? {} : { archivedAt: null }),
-      ...(search ? { name: { contains: search, mode: 'insensitive' } } : {}),
-      ...(status && STATUS_VALUES.has(status) ? { status } : {}),
-      ...(sector ? { sector: { contains: sector, mode: 'insensitive' } } : {}),
-      ...(origin ? { leadSource: origin as LeadSource } : {}),
-      ...(categoryReferenceId ? { categoryReferenceId } : {}),
-      ...(tagReferenceId ? { tags: { some: { referenceId: tagReferenceId } } } : {}),
-    },
+    where,
     orderBy: { [sortBy]: sortDir },
+    take: limit + 1,
+    ...(cursorId ? { cursor: { id: cursorId }, skip: 1 } : {}),
     include: {
       categoryReference: { select: { id: true, name: true } },
       tags: { include: { reference: { select: { id: true, name: true } } } },
     },
   });
 
-  return jsonb({ items: clients.map(flattenClient) }, ctx.requestId);
+  const hasMore = clients.length > limit;
+  if (hasMore) clients.pop();
+  const nextCursor = hasMore && clients.length > 0 ? clients[clients.length - 1].id.toString() : null;
+
+  return jsonb({ items: clients.map(flattenClient), nextCursor, hasMore }, ctx.requestId);
 });
 
 // ---------------------------------------------------------------------------

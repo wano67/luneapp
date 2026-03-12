@@ -51,6 +51,15 @@ export async function POST(request: NextRequest) {
   const password = body.password.trim();
   const name = typeof body.name === 'string' ? body.name : undefined;
   const inviteToken = typeof body.inviteToken === 'string' ? body.inviteToken.trim() : null;
+  const acceptedTerms = body.acceptedTerms === true;
+  const acceptedPrivacy = body.acceptedPrivacy === true;
+  const marketingConsent = body.marketingConsent === true;
+
+  if (!acceptedTerms || !acceptedPrivacy) {
+    const res = withRequestId(badRequest('Vous devez accepter les CGV et la politique de confidentialité.'), requestId);
+    res.headers.set('Cache-Control', 'no-store');
+    return res;
+  }
 
   if (!isValidEmail(email)) {
     const res = withRequestId(badRequest('Email invalide.'), requestId);
@@ -83,11 +92,15 @@ export async function POST(request: NextRequest) {
     const verificationExpiry = new Date();
     verificationExpiry.setHours(verificationExpiry.getHours() + 24);
 
+    const now = new Date();
     await prisma.user.update({
       where: { id: user.id },
       data: {
         emailVerificationToken: verificationHash,
         emailVerificationExpiry: verificationExpiry,
+        acceptedTermsAt: now,
+        acceptedPrivacyAt: now,
+        ...(marketingConsent ? { marketingConsentAt: now } : {}),
         ...(inviteToken ? { pendingInviteToken: inviteToken } : {}),
       },
     });

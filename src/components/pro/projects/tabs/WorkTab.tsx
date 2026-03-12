@@ -18,6 +18,7 @@ import { TaskQuickAdd } from '@/components/pro/projects/work/TaskQuickAdd';
 import { TaskSidePanel } from '@/components/pro/projects/work/TaskSidePanel';
 import { RoadmapView } from '@/components/pro/projects/work/RoadmapView';
 import { GanttChart } from '@/components/pro/projects/work/GanttChart';
+import { KanbanView } from '@/components/pro/projects/work/KanbanView';
 import { useRowSelection } from '@/app/app/components/selection/useRowSelection';
 import type { TaskItem, MemberItem, OrganizationUnitItem } from '@/components/pro/projects/hooks/useProjectDataLoaders';
 
@@ -54,7 +55,7 @@ type TaskGroup = {
   tasks: WorkTabTask[];
 };
 
-type WorkView = 'list' | 'roadmap' | 'gantt';
+type WorkView = 'list' | 'kanban' | 'roadmap' | 'gantt';
 
 export type WorkTabProps = {
   tasksByAssignee: TaskGroup[];
@@ -168,6 +169,7 @@ export function WorkTab({
           <TabsPills
             items={[
               { key: 'list', label: 'Liste' },
+              { key: 'kanban', label: 'Kanban' },
               { key: 'roadmap', label: 'Roadmap' },
               { key: 'gantt', label: 'Gantt' },
             ]}
@@ -221,6 +223,8 @@ export function WorkTab({
           selection={selection}
           allTaskIds={allTaskIds}
         />
+      ) : workView === 'kanban' ? (
+        <KanbanView tasks={tasks} onTaskClick={openTask} onUpdateTask={onUpdateTask} services={services} />
       ) : workView === 'roadmap' ? (
         <RoadmapView tasks={tasks} onTaskClick={openTask} />
       ) : (
@@ -235,6 +239,7 @@ export function WorkTab({
         members={members}
         isAdmin={isAdmin}
         currentUserId={currentUserId}
+        businessId={businessId}
         onUpdate={onUpdateTask}
         onDelete={onDeleteTask}
         services={services}
