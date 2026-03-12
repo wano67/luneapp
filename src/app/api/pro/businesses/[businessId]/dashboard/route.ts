@@ -10,7 +10,8 @@ import { addMonths, addDays, startOfMonth, startOfWeek, monthKey, dayKey, weekKe
 export const GET = withBusinessRoute({ minRole: 'VIEWER' }, async (ctx, req) => {
   // Period filter: 30, 60, 90, 180, 365, or 0 = all-time
   const daysParam = req.nextUrl.searchParams.get('days');
-  const days = daysParam !== null ? Math.max(0, Math.min(3650, parseInt(daysParam, 10) || 30)) : 30;
+  const parsed = daysParam !== null ? parseInt(daysParam, 10) : Number.NaN;
+  const days = Number.isFinite(parsed) ? Math.max(0, Math.min(3650, parsed)) : 30;
 
   const now = new Date();
   const monthStart = startOfMonth(now);
