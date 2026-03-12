@@ -1,12 +1,13 @@
 "use client";
 
 import type { DragEvent } from 'react';
+import { useState } from 'react';
 import { GripVertical } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import Select from '@/components/ui/select';
-import { UI } from '@/components/pro/projects/workspace-ui';
+import { UI, KebabMenu } from '@/components/pro/projects/workspace-ui';
 import { TASK_STATUS_OPTIONS } from '@/lib/taskStatusUi';
 import { formatCurrencyEUR } from '@/lib/formatCurrency';
 import { sanitizeEuroInput } from '@/lib/money';
@@ -100,6 +101,9 @@ export function BillingServiceCard({
   onGenerateRecurring,
   onUpdateTask,
 }: BillingServiceCardProps) {
+  const [showAdvanced, setShowAdvanced] = useState(
+    () => draft.discountType !== 'NONE' || draft.billingUnit !== 'ONE_OFF'
+  );
   const durationLabel = durationHours != null ? `${durationHours} h` : null;
   const unitSuffix = line?.unitLabel ?? (line?.billingUnit === 'MONTHLY' ? '/mois' : null);
   const priceSourceLabel =
@@ -192,74 +196,77 @@ export function BillingServiceCard({
         />
       </div>
 
-      {/* Discount / billing unit / actions */}
-      <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-        <Select
-          label="Remise"
-          value={draft.discountType}
-          onChange={(e) => onDraftChange({ discountType: e.target.value })}
-          disabled={!isAdmin || isLineSaving}
-        >
-          <option value="NONE">Aucune</option>
-          <option value="PERCENT">%</option>
-          <option value="AMOUNT">€</option>
-        </Select>
-        <Input
-          label={draft.discountType === 'PERCENT' ? 'Valeur (%)' : 'Valeur (€)'}
-          type={draft.discountType === 'PERCENT' ? 'number' : 'text'}
-          inputMode={draft.discountType === 'PERCENT' ? 'numeric' : 'decimal'}
-          min={draft.discountType === 'PERCENT' ? 0 : undefined}
-          step={draft.discountType === 'PERCENT' ? '1' : undefined}
-          value={draft.discountValue}
-          onChange={(e) =>
-            onDraftChange({
-              discountValue:
-                draft.discountType === 'PERCENT' ? e.target.value : sanitizeEuroInput(e.target.value),
-            })
-          }
-          disabled={!isAdmin || isLineSaving || draft.discountType === 'NONE'}
+      {/* Actions row */}
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <Button size="sm" onClick={onSave} disabled={!isAdmin || isLineSaving}>
+          {isLineSaving ? 'Enregistrement…' : 'Enregistrer'}
+        </Button>
+        <Button size="sm" variant="outline" onClick={onToggleTasks}>
+          {tasksOpen ? 'Masquer tâches' : `Tâches (${serviceTasks.length})`}
+        </Button>
+        <KebabMenu
+          ariaLabel="Options du service"
+          items={[
+            { label: notesOpen ? 'Masquer description' : 'Description', onClick: onToggleNotes },
+            { label: showAdvanced ? 'Masquer options' : 'Remise / Rythme', onClick: () => setShowAdvanced((v) => !v) },
+            ...(draft.billingUnit === 'MONTHLY'
+              ? [{
+                  label: isRecurringGenerating ? 'Création…' : 'Générer facture mensuelle',
+                  onClick: onGenerateRecurring,
+                  disabled: !isAdmin || isRecurringGenerating,
+                }]
+              : []),
+            { label: 'Supprimer', onClick: onDelete, disabled: !isAdmin || isLineSaving, tone: 'danger' as const },
+          ]}
         />
-        <Select
-          label="Rythme"
-          value={draft.billingUnit}
-          onChange={(e) => onDraftChange({ billingUnit: e.target.value })}
-          disabled={!isAdmin || isLineSaving}
-        >
-          <option value="ONE_OFF">Ponctuel</option>
-          <option value="MONTHLY">Mensuel</option>
-        </Select>
-        <Input
-          label="Unité"
-          value={draft.unitLabel}
-          onChange={(e) => onDraftChange({ unitLabel: e.target.value })}
-          placeholder="/mois"
-          disabled={!isAdmin || isLineSaving || draft.billingUnit !== 'MONTHLY'}
-        />
-        <div className="flex flex-wrap gap-2">
-          {draft.billingUnit === 'MONTHLY' ? (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={onGenerateRecurring}
-              disabled={!isAdmin || isRecurringGenerating}
-            >
-              {isRecurringGenerating ? 'Création…' : 'Générer facture mois prochain'}
-            </Button>
-          ) : null}
-          <Button size="sm" variant="outline" onClick={onToggleNotes}>
-            Description
-          </Button>
-          <Button size="sm" variant="outline" onClick={onToggleTasks}>
-            {tasksOpen ? 'Masquer tâches' : `Tâches (${serviceTasks.length})`}
-          </Button>
-          <Button size="sm" variant="danger" onClick={onDelete} disabled={!isAdmin || isLineSaving}>
-            Supprimer
-          </Button>
-          <Button size="sm" onClick={onSave} disabled={!isAdmin || isLineSaving}>
-            {isLineSaving ? 'Enregistrement…' : 'Enregistrer'}
-          </Button>
-        </div>
       </div>
+
+      {/* Discount / billing unit (collapsed by default) */}
+      {showAdvanced && (
+        <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <Select
+            label="Remise"
+            value={draft.discountType}
+            onChange={(e) => onDraftChange({ discountType: e.target.value })}
+            disabled={!isAdmin || isLineSaving}
+          >
+            <option value="NONE">Aucune</option>
+            <option value="PERCENT">%</option>
+            <option value="AMOUNT">€</option>
+          </Select>
+          <Input
+            label={draft.discountType === 'PERCENT' ? 'Valeur (%)' : 'Valeur (€)'}
+            type={draft.discountType === 'PERCENT' ? 'number' : 'text'}
+            inputMode={draft.discountType === 'PERCENT' ? 'numeric' : 'decimal'}
+            min={draft.discountType === 'PERCENT' ? 0 : undefined}
+            step={draft.discountType === 'PERCENT' ? '1' : undefined}
+            value={draft.discountValue}
+            onChange={(e) =>
+              onDraftChange({
+                discountValue:
+                  draft.discountType === 'PERCENT' ? e.target.value : sanitizeEuroInput(e.target.value),
+              })
+            }
+            disabled={!isAdmin || isLineSaving || draft.discountType === 'NONE'}
+          />
+          <Select
+            label="Rythme"
+            value={draft.billingUnit}
+            onChange={(e) => onDraftChange({ billingUnit: e.target.value })}
+            disabled={!isAdmin || isLineSaving}
+          >
+            <option value="ONE_OFF">Ponctuel</option>
+            <option value="MONTHLY">Mensuel</option>
+          </Select>
+          <Input
+            label="Unité"
+            value={draft.unitLabel}
+            onChange={(e) => onDraftChange({ unitLabel: e.target.value })}
+            placeholder="/mois"
+            disabled={!isAdmin || isLineSaving || draft.billingUnit !== 'MONTHLY'}
+          />
+        </div>
+      )}
 
       {/* Description panel */}
       {notesOpen ? (

@@ -205,7 +205,39 @@ export const POST = withBusinessRoute<{ businessId: string; projectId: string }>
     let generatedStepsCount = 0;
     let generatedTasksCount = 0;
 
-    if (generateTasks) {
+    // Explicit tasks from wizard
+    const explicitTasks = Array.isArray(body.tasks) ? body.tasks : null;
+
+    if (explicitTasks && explicitTasks.length > 0) {
+      const validTasks = explicitTasks
+        .filter((t: unknown): t is Record<string, unknown> => !!t && typeof t === 'object')
+        .slice(0, 50);
+
+      const now = new Date();
+      for (const t of validTasks) {
+        const title = typeof t.title === 'string' ? t.title.trim() : '';
+        if (!title || title.length > 200) continue;
+        const estMin = typeof t.estimatedMinutes === 'number' && Number.isFinite(t.estimatedMinutes)
+          ? Math.max(0, Math.min(99999, Math.trunc(t.estimatedMinutes)))
+          : null;
+        const dueDate = taskDueOffsetDays != null
+          ? new Date(now.getTime() + taskDueOffsetDays * 86400000)
+          : null;
+
+        await prisma.task.create({
+          data: {
+            businessId: businessIdBigInt,
+            projectId: projectIdBigInt,
+            projectServiceId: created.id,
+            title,
+            estimatedMinutes: estMin,
+            assigneeUserId: taskAssigneeUserId ?? undefined,
+            dueDate: dueDate ?? undefined,
+          },
+        });
+        generatedTasksCount++;
+      }
+    } else if (generateTasks) {
       const generated = await applyServiceProcessTemplateToProjectService({
         businessId: businessIdBigInt,
         projectId: projectIdBigInt,

@@ -229,6 +229,8 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
     wizardLineValidation, wizardCanContinue,
     openQuoteWizard, closeQuoteWizard,
     addCatalogLine, addCustomLine, updateWizardLine, removeWizardLine,
+    addTaskToLine, updateTaskOnLine, removeTaskFromLine,
+    taskSuggestions, loadTaskSuggestions,
     handleWizardGenerateQuote,
   } = useQuoteWizard({
     businessId, projectId, isAdmin, serviceTemplates, templatesLoading,
@@ -913,10 +915,13 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
         lineValidation={wizardLineValidation}
         canContinue={wizardCanContinue}
         catalogResults={catalogSearchResults}
-        serviceTemplates={serviceTemplates}
-        templatesLoading={templatesLoading}
         members={members}
         isAdmin={isAdmin}
+        taskSuggestions={taskSuggestions}
+        onLoadTaskSuggestions={loadTaskSuggestions}
+        onAddTaskToLine={addTaskToLine}
+        onUpdateTaskOnLine={updateTaskOnLine}
+        onRemoveTaskFromLine={removeTaskFromLine}
         onAddCatalogLine={addCatalogLine}
         onAddCustomLine={addCustomLine}
         onRemoveLine={removeWizardLine}

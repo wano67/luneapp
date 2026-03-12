@@ -6,6 +6,12 @@ import { formatCentsToEuroInput, parseEuroToCents } from '@/lib/money';
 
 type WizardLineSource = 'catalog' | 'custom';
 
+export type WizardLineTask = {
+  _key: string;
+  title: string;
+  estimatedMinutes: string;
+};
+
 export type WizardLine = {
   id: string;
   source: WizardLineSource;
@@ -16,6 +22,13 @@ export type WizardLine = {
   quantity: number;
   unitPrice: string;
   catalogPriceCents: number | null;
+  tasks: WizardLineTask[];
+};
+
+export type TaskSuggestion = {
+  title: string;
+  estimatedMinutes: number | null;
+  phase: string | null;
 };
 
 export type CatalogService = {
@@ -49,6 +62,11 @@ function createWizardLineId(): string {
     return crypto.randomUUID();
   }
   return `wiz-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
+let _taskKeyCounter = 0;
+function createTaskKey(): string {
+  return `wt-${++_taskKeyCounter}`;
 }
 
 function buildCustomServiceCode(): string {
@@ -174,6 +192,15 @@ export function useQuoteWizard({
         const defaultCents = service.defaultPriceCents ?? service.tjmCents;
         const unitPrice = defaultCents != null ? formatCentsToEuroInput(defaultCents) : '';
         const catalogPriceCents = defaultCents != null ? Number(defaultCents) : null;
+
+        // Pre-fill tasks from service templates
+        const tpls = serviceTemplates[service.id] ?? [];
+        const tasks: WizardLineTask[] = tpls.map((t) => ({
+          _key: createTaskKey(),
+          title: t.title,
+          estimatedMinutes: t.estimatedMinutes != null ? String(t.estimatedMinutes) : '',
+        }));
+
         return [
           ...prev,
           {
@@ -186,14 +213,15 @@ export function useQuoteWizard({
             quantity: 1,
             unitPrice,
             catalogPriceCents,
+            tasks,
           },
         ];
       });
-      if (quoteWizardGenerateTasks && !serviceTemplates[service.id] && !templatesLoading[service.id]) {
+      if (!serviceTemplates[service.id] && !templatesLoading[service.id]) {
         void loadServiceTemplates(service.id);
       }
     },
-    [quoteWizardGenerateTasks, serviceTemplates, templatesLoading, loadServiceTemplates]
+    [serviceTemplates, templatesLoading, loadServiceTemplates]
   );
 
   const addCustomLine = useCallback(() => {
@@ -207,6 +235,7 @@ export function useQuoteWizard({
         quantity: 1,
         unitPrice: '',
         catalogPriceCents: null,
+        tasks: [],
       },
     ]);
   }, []);
@@ -218,6 +247,49 @@ export function useQuoteWizard({
   const removeWizardLine = useCallback((id: string) => {
     setQuoteWizardLines((prev) => prev.filter((line) => line.id !== id));
   }, []);
+
+  const addTaskToLine = useCallback((lineId: string) => {
+    setQuoteWizardLines((prev) =>
+      prev.map((line) =>
+        line.id === lineId
+          ? { ...line, tasks: [...line.tasks, { _key: createTaskKey(), title: '', estimatedMinutes: '' }] }
+          : line
+      )
+    );
+  }, []);
+
+  const updateTaskOnLine = useCallback((lineId: string, taskKey: string, patch: Partial<WizardLineTask>) => {
+    setQuoteWizardLines((prev) =>
+      prev.map((line) =>
+        line.id === lineId
+          ? { ...line, tasks: line.tasks.map((t) => (t._key === taskKey ? { ...t, ...patch } : t)) }
+          : line
+      )
+    );
+  }, []);
+
+  const removeTaskFromLine = useCallback((lineId: string, taskKey: string) => {
+    setQuoteWizardLines((prev) =>
+      prev.map((line) =>
+        line.id === lineId
+          ? { ...line, tasks: line.tasks.filter((t) => t._key !== taskKey) }
+          : line
+      )
+    );
+  }, []);
+
+  // Task suggestions
+  const [taskSuggestions, setTaskSuggestions] = useState<TaskSuggestion[]>([]);
+
+  const loadTaskSuggestions = useCallback(async (q: string) => {
+    if (q.trim().length < 2) { setTaskSuggestions([]); return; }
+    const res = await fetchJson<{ suggestions: TaskSuggestion[] }>(
+      `/api/pro/businesses/${businessId}/tasks/suggestions?q=${encodeURIComponent(q.trim())}`
+    );
+    if (res.ok && res.data) {
+      setTaskSuggestions(res.data.suggestions);
+    }
+  }, [businessId]);
 
   const handleWizardGenerateQuote = useCallback(async () => {
     if (!isAdmin) {
@@ -277,7 +349,20 @@ export function useQuoteWizard({
         if (unitPriceCents != null) {
           payload.priceCents = Math.max(0, Math.trunc(unitPriceCents));
         }
-        if (createTasks) {
+        // Send explicit tasks from wizard
+        const lineTasks = line.tasks
+          .filter((t) => t.title.trim())
+          .map((t) => ({
+            title: t.title.trim(),
+            estimatedMinutes: t.estimatedMinutes.trim() ? Number(t.estimatedMinutes) : null,
+          }));
+
+        if (lineTasks.length > 0) {
+          payload.tasks = lineTasks;
+          payload.generateTasks = false;
+          if (quoteWizardAssigneeId) payload.taskAssigneeUserId = quoteWizardAssigneeId;
+          if (hasDueOffset) payload.taskDueOffsetDays = Math.trunc(dueOffset as number);
+        } else if (createTasks) {
           payload.generateTasks = true;
           if (quoteWizardAssigneeId) payload.taskAssigneeUserId = quoteWizardAssigneeId;
           if (hasDueOffset) payload.taskDueOffsetDays = Math.trunc(dueOffset as number);
@@ -362,6 +447,11 @@ export function useQuoteWizard({
     addCustomLine,
     updateWizardLine,
     removeWizardLine,
+    addTaskToLine,
+    updateTaskOnLine,
+    removeTaskFromLine,
+    taskSuggestions,
+    loadTaskSuggestions,
     handleWizardGenerateQuote,
   };
 }

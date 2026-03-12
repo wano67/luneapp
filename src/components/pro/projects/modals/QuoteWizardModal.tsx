@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
+import { Plus, X, ChevronDown, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { formatCurrencyEUR } from '@/lib/formatCurrency';
 import { parseEuroToCents, sanitizeEuroInput } from '@/lib/money';
@@ -9,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { SearchSelect } from '@/components/ui/search-select';
 import { Modal, ModalFooterSticky } from '@/components/ui/modal';
+import type { WizardLineTask, TaskSuggestion } from '../hooks/useQuoteWizard';
 
 // ─── Local types (subset of ProjectWorkspace types used by this modal) ─────────
 
@@ -24,6 +26,7 @@ export type WizardLine = {
   quantity: number;
   unitPrice: string;
   catalogPriceCents: number | null;
+  tasks: WizardLineTask[];
 };
 
 export type CatalogService = {
@@ -36,15 +39,6 @@ export type CatalogService = {
   durationHours: number | null;
 };
 
-export type ServiceTemplate = {
-  id: string;
-  title: string;
-  phase: string | null;
-  defaultAssigneeRole: string | null;
-  defaultDueOffsetDays: number | null;
-  estimatedMinutes: number | null;
-};
-
 export type WizardMember = {
   userId: string;
   email: string;
@@ -52,7 +46,7 @@ export type WizardMember = {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const WIZARD_STEPS = ['Prestations', 'Tâches', 'Résumé'] as const;
+const WIZARD_STEPS = ['Prestations', 'Résumé'] as const;
 
 const UI = {
   sectionSoft: 'rounded-2xl border border-[var(--border)]/60 bg-[var(--surface-2)]/60 p-3',
@@ -73,6 +67,83 @@ function computeTotal(lines: WizardLine[]): number | null {
     total += cents * line.quantity;
   }
   return total;
+}
+
+function formatMinutes(totalMin: number): string {
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  return h > 0 ? `${h}h${m > 0 ? ` ${m}min` : ''}` : `${m}min`;
+}
+
+// ─── TaskTitleInput with auto-suggest ─────────────────────────────────────────
+
+function TaskTitleInput({
+  value,
+  onChange,
+  suggestions,
+  onLoadSuggestions,
+  onSelectSuggestion,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  suggestions: TaskSuggestion[];
+  onLoadSuggestions: (q: string) => void;
+  onSelectSuggestion: (s: TaskSuggestion) => void;
+}) {
+  const [showDropdown, setShowDropdown] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+
+  const handleChange = useCallback(
+    (val: string) => {
+      onChange(val);
+      clearTimeout(debounceRef.current);
+      if (val.trim().length >= 2) {
+        debounceRef.current = setTimeout(() => {
+          onLoadSuggestions(val);
+          setShowDropdown(true);
+        }, 300);
+      } else {
+        setShowDropdown(false);
+      }
+    },
+    [onChange, onLoadSuggestions]
+  );
+
+  return (
+    <div ref={wrapperRef} className="relative flex-1">
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => handleChange(e.target.value)}
+        onFocus={() => { if (value.trim().length >= 2 && suggestions.length > 0) setShowDropdown(true); }}
+        onBlur={() => { setTimeout(() => setShowDropdown(false), 150); }}
+        placeholder="Titre de la tâche"
+        className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
+      />
+      {showDropdown && suggestions.length > 0 ? (
+        <div className="absolute left-0 top-full z-50 mt-1 w-full max-h-40 overflow-auto rounded-xl border border-[var(--border)] bg-[var(--surface)] shadow-lg">
+          {suggestions.map((s, i) => (
+            <button
+              key={`${s.title}-${i}`}
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => {
+                onSelectSuggestion(s);
+                setShowDropdown(false);
+              }}
+              className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-[var(--surface-2)] transition-colors cursor-pointer"
+            >
+              <span className="truncate text-[var(--text-primary)]">{s.title}</span>
+              {s.estimatedMinutes ? (
+                <span className="shrink-0 text-xs text-[var(--text-faint)]">{s.estimatedMinutes} min</span>
+              ) : null}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 // ─── Props ────────────────────────────────────────────────────────────────────
@@ -101,10 +172,14 @@ export type QuoteWizardModalProps = {
   canContinue: boolean;
   // Data
   catalogResults: CatalogService[];
-  serviceTemplates: Record<string, ServiceTemplate[]>;
-  templatesLoading: Record<string, boolean>;
   members: WizardMember[];
   isAdmin: boolean;
+  // Task handlers
+  taskSuggestions: TaskSuggestion[];
+  onLoadTaskSuggestions: (q: string) => void;
+  onAddTaskToLine: (lineId: string) => void;
+  onUpdateTaskOnLine: (lineId: string, taskKey: string, patch: Partial<WizardLineTask>) => void;
+  onRemoveTaskFromLine: (lineId: string, taskKey: string) => void;
   // Handlers
   onAddCatalogLine: (service: CatalogService) => void;
   onAddCustomLine: () => void;
@@ -140,10 +215,13 @@ export function QuoteWizardModal({
   lineValidation,
   canContinue,
   catalogResults,
-  serviceTemplates,
-  templatesLoading,
   members,
   isAdmin,
+  taskSuggestions,
+  onLoadTaskSuggestions,
+  onAddTaskToLine,
+  onUpdateTaskOnLine,
+  onRemoveTaskFromLine,
   onAddCatalogLine,
   onAddCustomLine,
   onRemoveLine,
@@ -154,10 +232,22 @@ export function QuoteWizardModal({
   onOpenDepositInvoice,
 }: QuoteWizardModalProps) {
   const totalCents = computeTotal(lines);
+  const [expandedTasks, setExpandedTasks] = useState<Record<string, boolean>>({});
+
+  const toggleTasks = useCallback((lineId: string) => {
+    setExpandedTasks((prev) => ({ ...prev, [lineId]: !prev[lineId] }));
+  }, []);
 
   const memberItems = useMemo(
     () => [{ code: '', label: 'Non assigné' }, ...members.map((m) => ({ code: m.userId, label: m.email }))],
     [members]
+  );
+
+  // Count total tasks + total estimated time
+  const totalTasks = lines.reduce((sum, l) => sum + l.tasks.filter((t) => t.title.trim()).length, 0);
+  const totalEstMin = lines.reduce(
+    (sum, l) => sum + l.tasks.reduce((s, t) => s + (Number(t.estimatedMinutes) || 0), 0),
+    0
   );
 
   return (
@@ -165,16 +255,14 @@ export function QuoteWizardModal({
       open={open}
       onCloseAction={onClose}
       title="Créer un devis"
-      description="Ajoutez vos prestations, générez les tâches, puis créez le devis."
+      description="Ajoutez vos prestations et les tâches associées, puis créez le devis."
       size="lg"
     >
       {result ? (
         <div className="space-y-4">
           <Alert variant="success" title="Devis généré" />
           <div className="rounded-2xl border border-[var(--border)]/70 bg-[var(--surface-2)]/60 p-4 text-sm text-[var(--text-secondary)]">
-            {generateTasks
-              ? 'Les prestations et les tâches recommandées ont été ajoutées au projet.'
-              : 'Les prestations ont été ajoutées au projet. Les tâches peuvent être créées plus tard.'}
+            Les prestations et les tâches ont été ajoutées au projet.
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Button asChild size="sm">
@@ -247,7 +335,7 @@ export function QuoteWizardModal({
             ))}
           </div>
 
-          {/* Step 0 — Prestations */}
+          {/* Step 0 — Prestations + Tâches inline */}
           {step === 0 ? (
             <div className="space-y-4">
               {/* Catalog search */}
@@ -309,12 +397,15 @@ export function QuoteWizardModal({
                 </Button>
               </div>
 
-              {/* Line items */}
+              {/* Line items with inline tasks */}
               {lines.length ? (
                 <div className="space-y-3">
                   {lines.map((line) => {
                     const errors = lineValidation.find((entry) => entry.id === line.id)?.errors ?? [];
                     const lineCents = line.unitPrice.trim() ? parseEuroInputCents(line.unitPrice) : null;
+                    const tasksExpanded = expandedTasks[line.id] ?? (line.tasks.length > 0);
+                    const lineTaskMin = line.tasks.reduce((s, t) => s + (Number(t.estimatedMinutes) || 0), 0);
+
                     return (
                       <div
                         key={line.id}
@@ -335,13 +426,13 @@ export function QuoteWizardModal({
                           <button
                             type="button"
                             onClick={() => onRemoveLine(line.id)}
-                            className="text-xs text-[var(--danger)] hover:underline"
+                            className="text-xs text-[var(--danger)] hover:underline cursor-pointer"
                           >
                             Supprimer
                           </button>
                         </div>
 
-                        {/* Row 2: title + qty + price on one row */}
+                        {/* Row 2: title + qty + price */}
                         <div className="grid gap-3 grid-cols-1 sm:grid-cols-[1fr_100px_140px]">
                           <Input
                             label="Titre"
@@ -377,7 +468,7 @@ export function QuoteWizardModal({
                           </div>
                         </div>
 
-                        {/* Line total: qty × price = total */}
+                        {/* Line total */}
                         {lineCents != null && line.quantity > 0 ? (
                           <p className="mt-2 text-xs text-[var(--text-secondary)] text-right">
                             {line.quantity} × {formatCurrencyEUR(lineCents, { minimumFractionDigits: 0 })}
@@ -388,13 +479,77 @@ export function QuoteWizardModal({
                           </p>
                         ) : null}
 
-                        {/* Row 3: description (compact) */}
+                        {/* Description */}
                         <textarea
                           className="mt-3 min-h-[56px] w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)]"
                           value={line.description}
                           onChange={(e) => onUpdateLine(line.id, { description: e.target.value })}
                           placeholder="Description (optionnel)"
                         />
+
+                        {/* Inline tasks section */}
+                        <div className="mt-3 border-t border-[var(--border)]/40 pt-3">
+                          <button
+                            type="button"
+                            onClick={() => toggleTasks(line.id)}
+                            className="flex items-center gap-1.5 text-xs font-semibold text-[var(--text-primary)] cursor-pointer hover:text-[var(--accent)] transition-colors"
+                          >
+                            {tasksExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                            Tâches ({line.tasks.length})
+                            {lineTaskMin > 0 ? (
+                              <span className="font-normal text-[var(--text-faint)] ml-1">
+                                — {formatMinutes(lineTaskMin)}
+                              </span>
+                            ) : null}
+                          </button>
+                          {tasksExpanded ? (
+                            <div className="mt-2 space-y-2">
+                              {line.tasks.map((task) => (
+                                <div key={task._key} className="flex items-center gap-2">
+                                  <TaskTitleInput
+                                    value={task.title}
+                                    onChange={(val) => onUpdateTaskOnLine(line.id, task._key, { title: val })}
+                                    suggestions={taskSuggestions}
+                                    onLoadSuggestions={onLoadTaskSuggestions}
+                                    onSelectSuggestion={(s) =>
+                                      onUpdateTaskOnLine(line.id, task._key, {
+                                        title: s.title,
+                                        estimatedMinutes: s.estimatedMinutes != null ? String(s.estimatedMinutes) : '',
+                                      })
+                                    }
+                                  />
+                                  <input
+                                    type="number"
+                                    inputMode="numeric"
+                                    min={0}
+                                    value={task.estimatedMinutes}
+                                    onChange={(e) =>
+                                      onUpdateTaskOnLine(line.id, task._key, { estimatedMinutes: e.target.value })
+                                    }
+                                    placeholder="min"
+                                    className="w-20 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] text-right focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => onRemoveTaskFromLine(line.id, task._key)}
+                                    className="cursor-pointer shrink-0 rounded-lg p-1.5 text-[var(--text-faint)] hover:bg-[var(--surface-2)] hover:text-[var(--danger)] transition-colors"
+                                    aria-label="Supprimer la tâche"
+                                  >
+                                    <X size={14} />
+                                  </button>
+                                </div>
+                              ))}
+                              <button
+                                type="button"
+                                onClick={() => onAddTaskToLine(line.id)}
+                                className="cursor-pointer flex items-center gap-1.5 text-xs font-medium text-[var(--accent)] hover:underline"
+                              >
+                                <Plus size={12} />
+                                Ajouter une tâche
+                              </button>
+                            </div>
+                          ) : null}
+                        </div>
 
                         {errors.length ? (
                           <p className="mt-2 text-xs text-[var(--danger)]">{errors.join(' ')}</p>
@@ -408,24 +563,20 @@ export function QuoteWizardModal({
                   Aucune prestation sélectionnée. Cherchez dans le catalogue ou ajoutez une ligne personnalisée.
                 </div>
               )}
-            </div>
-          ) : null}
 
-          {/* Step 1 — Tâches */}
-          {step === 1 ? (
-            <div className="space-y-4">
-              <label className="flex items-center gap-2 text-sm text-[var(--text-primary)]">
-                <input
-                  type="checkbox"
-                  checked={generateTasks}
-                  onChange={(e) => onGenerateTasksChange(e.target.checked)}
-                  disabled={!isAdmin}
-                />
-                Créer les tâches recommandées
-              </label>
-
-              {generateTasks ? (
-                <div className="space-y-3">
+              {/* Options tâches */}
+              {lines.length > 0 ? (
+                <div className="space-y-3 rounded-2xl border border-[var(--border)]/40 bg-[var(--surface)] p-4">
+                  <p className="text-xs font-semibold text-[var(--text-faint)]">Options tâches</p>
+                  <label className="flex items-center gap-2 text-sm text-[var(--text-primary)]">
+                    <input
+                      type="checkbox"
+                      checked={generateTasks}
+                      onChange={(e) => onGenerateTasksChange(e.target.checked)}
+                      disabled={!isAdmin}
+                    />
+                    Créer les tâches des services sans tâches manuelles
+                  </label>
                   <div className="grid gap-3 sm:grid-cols-2">
                     <SearchSelect
                       label="Assigner à"
@@ -444,114 +595,13 @@ export function QuoteWizardModal({
                       disabled={!isAdmin}
                     />
                   </div>
-
-                  {/* Workload summary */}
-                  {(() => {
-                    const roleMap = new Map<string, number>();
-                    let totalMin = 0;
-                    for (const line of lines) {
-                      if (!line.serviceId) continue;
-                      const tpls = serviceTemplates[line.serviceId] ?? [];
-                      for (const tpl of tpls) {
-                        const mins = tpl.estimatedMinutes ?? 0;
-                        if (mins <= 0) continue;
-                        totalMin += mins;
-                        const role = tpl.defaultAssigneeRole || 'Non assigné';
-                        roleMap.set(role, (roleMap.get(role) ?? 0) + mins);
-                      }
-                    }
-                    if (totalMin <= 0) return null;
-                    const fmt = (min: number) => {
-                      const h = Math.floor(min / 60);
-                      const m = min % 60;
-                      return `${h > 0 ? `${h}h` : ''}${m > 0 ? `${m}min` : ''}`;
-                    };
-                    return (
-                      <div className="rounded-xl border border-[var(--border)]/60 bg-[var(--surface-2)]/60 p-3">
-                        <p className="text-xs font-semibold text-[var(--text-primary)] mb-2">Charge de travail estimée</p>
-                        <div className="space-y-1">
-                          {[...roleMap.entries()].map(([role, mins]) => (
-                            <div key={role} className="flex items-center justify-between text-[11px]">
-                              <span className="text-[var(--text-secondary)]">{role}</span>
-                              <span className="font-medium text-[var(--text-primary)]">{fmt(mins)}</span>
-                            </div>
-                          ))}
-                          <div className="flex items-center justify-between text-[11px] border-t border-[var(--border)]/40 pt-1 mt-1">
-                            <span className="font-semibold text-[var(--text-primary)]">Total</span>
-                            <span className="font-semibold text-[var(--text-primary)]">{fmt(totalMin)}</span>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })()}
-
-                  <div className="space-y-2">
-                    <p className="text-xs font-semibold text-[var(--text-primary)]">Aperçu des tâches</p>
-                    {lines.length === 0 ? (
-                      <p className="text-xs text-[var(--text-secondary)]">Ajoute des prestations d&apos;abord.</p>
-                    ) : (
-                      <div className="space-y-2">
-                        {lines.map((line) => {
-                          const templates = line.serviceId ? serviceTemplates[line.serviceId] ?? [] : [];
-                          const loading = line.serviceId ? templatesLoading[line.serviceId] : false;
-                          return (
-                            <div
-                              key={line.id}
-                              className="rounded-xl border border-[var(--border)]/60 bg-[var(--surface)] p-3"
-                            >
-                              <p className="text-xs font-semibold text-[var(--text-primary)]">
-                                {line.title.trim() || 'Prestation'}
-                              </p>
-                              {line.source === 'custom' ? (
-                                <p className="text-[11px] text-[var(--text-secondary)]">
-                                  Aucune tâche recommandée pour une ligne personnalisée.
-                                </p>
-                              ) : loading ? (
-                                <p className="text-[11px] text-[var(--text-secondary)]">Chargement des templates…</p>
-                              ) : templates.length ? (
-                                <>
-                                  <ul className="mt-1 space-y-1 text-[11px] text-[var(--text-secondary)]">
-                                    {templates.map((tpl) => (
-                                      <li key={tpl.id}>
-                                        • {tpl.title}
-                                        {tpl.estimatedMinutes ? (
-                                          <span className="ml-1 text-[var(--text-faint)]">({tpl.estimatedMinutes} min)</span>
-                                        ) : null}
-                                      </li>
-                                    ))}
-                                  </ul>
-                                  {(() => {
-                                    const total = templates.reduce((s, t) => s + (t.estimatedMinutes ?? 0), 0);
-                                    if (total <= 0) return null;
-                                    const h = Math.floor(total / 60);
-                                    const m = total % 60;
-                                    return (
-                                      <p className="mt-1 text-[11px] font-semibold text-[var(--text-secondary)]">
-                                        Durée estimée : {h > 0 ? `${h}h` : ''}{m > 0 ? `${m}min` : ''}
-                                      </p>
-                                    );
-                                  })()}
-                                </>
-                              ) : (
-                                <p className="text-[11px] text-[var(--text-secondary)]">Aucun template disponible.</p>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
                 </div>
-              ) : (
-                <p className="text-sm text-[var(--text-secondary)]">
-                  Vous pourrez créer les tâches plus tard depuis chaque prestation.
-                </p>
-              )}
+              ) : null}
             </div>
           ) : null}
 
-          {/* Step 2 — Résumé */}
-          {step === 2 ? (
+          {/* Step 1 — Résumé */}
+          {step === 1 ? (
             <div className="space-y-4">
               <div className="grid gap-3 sm:grid-cols-3">
                 <div className={cn(UI.sectionSoft, 'text-right')}>
@@ -560,7 +610,9 @@ export function QuoteWizardModal({
                 </div>
                 <div className={cn(UI.sectionSoft, 'text-right')}>
                   <p className={UI.label}>Tâches</p>
-                  <p className={UI.value}>{generateTasks ? 'Activées' : 'Non'}</p>
+                  <p className={UI.value}>
+                    {totalTasks > 0 ? totalTasks : generateTasks ? 'Auto' : 'Non'}
+                  </p>
                 </div>
                 <div className={cn(UI.sectionSoft, 'text-right')}>
                   <p className={UI.label}>Total HT</p>
@@ -571,6 +623,11 @@ export function QuoteWizardModal({
                   </p>
                 </div>
               </div>
+              {totalEstMin > 0 ? (
+                <p className="text-sm text-[var(--text-secondary)]">
+                  Temps total estimé : <span className="font-semibold">{formatMinutes(totalEstMin)}</span>
+                </p>
+              ) : null}
               <p className="text-sm text-[var(--text-secondary)]">
                 Le devis sera généré avec les prestations ci-dessus.
               </p>
@@ -593,10 +650,10 @@ export function QuoteWizardModal({
                 Retour
               </Button>
             ) : null}
-            {step < 2 ? (
+            {step < 1 ? (
               <Button
-                onClick={() => onStepChange(Math.min(2, step + 1))}
-                disabled={step === 0 && !canContinue}
+                onClick={() => onStepChange(1)}
+                disabled={!canContinue}
               >
                 Continuer
               </Button>

@@ -24,7 +24,7 @@ export function KpiCard({ label, value, delta, trend = 'neutral', hint, loading,
   return (
     <div
       className={cn(
-        'flex flex-col rounded-xl bg-[var(--surface)] outline outline-[0.5px] outline-[var(--border)] animate-fade-in-up',
+        'flex flex-col rounded-xl bg-[var(--surface)] outline outline-[0.5px] outline-[var(--border)] animate-fade-in-up overflow-hidden',
         isCompact ? 'gap-2 p-4' : 'min-h-[160px] sm:min-h-[200px] justify-between p-3',
         className
       )}
@@ -53,18 +53,18 @@ export function KpiCard({ label, value, delta, trend = 'neutral', hint, loading,
           </div>
         ) : null}
       </div>
-      <div>
+      <div className="min-w-0">
         {loading ? (
           <div className="h-10 w-32 rounded-lg bg-[var(--surface-2)] animate-skeleton-pulse" />
         ) : (
-          <span
+          <p
             className={cn(
-              'font-extrabold text-[var(--shell-accent)]',
+              'font-extrabold text-[var(--shell-accent)] truncate',
               isCompact ? 'text-[20px] leading-[24px]' : 'text-[28px] leading-[28px] sm:text-[40px] sm:leading-[40px]'
             )}
           >
             {value}
-          </span>
+          </p>
         )}
       </div>
       {hint && isCompact ? (

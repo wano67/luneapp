@@ -17,7 +17,6 @@ import { ServicesKpis } from '@/components/pro/services/ServicesKpis';
 import { ServicesTable } from '@/components/pro/services/ServicesTable';
 import { ServiceFormModal } from '@/components/pro/services/ServiceFormModal';
 import { ServiceImportModal } from '@/components/pro/services/ServiceImportModal';
-import { ServiceTemplatesModal } from '@/components/pro/services/ServiceTemplatesModal';
 import { ServiceDeleteConfirmModal } from '@/components/pro/services/ServiceDeleteConfirmModal';
 import type { ServiceItem } from '@/components/pro/services/service-types';
 
@@ -36,8 +35,6 @@ export default function ServicesPage() {
   const [editing, setEditing] = useState<ServiceItem | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ServiceItem | null>(null);
   const [importOpen, setImportOpen] = useState(false);
-  const [templatesService, setTemplatesService] = useState<ServiceItem | null>(null);
-  const [templatesModalOpen, setTemplatesModalOpen] = useState(false);
   const [readOnlyInfo, setReadOnlyInfo] = useState<string | null>(null);
 
   function openCreate() {
@@ -57,11 +54,6 @@ export default function ServicesPage() {
   function openImport() {
     if (!isAdmin) { setReadOnlyInfo(readOnlyMessage); return; }
     setImportOpen(true);
-  }
-
-  function openTemplates(service: ServiceItem) {
-    setTemplatesService(service);
-    setTemplatesModalOpen(true);
   }
 
   function openDelete(service: ServiceItem) {
@@ -108,21 +100,7 @@ export default function ServicesPage() {
                 <option key={t || 'empty'} value={t}>{t || '—'}</option>
               ))}
             </Select>
-            <Select label="Catégorie" value={data.categoryFilter} onChange={(e) => data.setCategoryFilter(e.target.value)}>
-              <option value="">Toutes</option>
-              {data.categoryOptions.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </Select>
           </div>
-          {data.tagOptions.length > 0 ? (
-            <Select label="Tag" value={data.tagFilter} onChange={(e) => data.setTagFilter(e.target.value)}>
-              <option value="">Tous</option>
-              {data.tagOptions.map((t) => (
-                <option key={t.id} value={t.id}>{t.name}</option>
-              ))}
-            </Select>
-          ) : null}
         </Card>
 
         {/* Table */}
@@ -135,10 +113,10 @@ export default function ServicesPage() {
         ) : (
           <ServicesTable
             services={data.filtered}
+            businessId={businessId}
             isAdmin={isAdmin}
             onEdit={openEdit}
             onDelete={openDelete}
-            onTemplates={openTemplates}
             onCreateFirst={openCreate}
           />
         )}
@@ -155,15 +133,6 @@ export default function ServicesPage() {
         isAdmin={isAdmin}
         onClose={() => setImportOpen(false)}
         onAfterImport={() => void data.loadServices()}
-      />
-
-      <ServiceTemplatesModal
-        open={templatesModalOpen}
-        service={templatesService}
-        businessId={businessId}
-        isAdmin={isAdmin}
-        onClose={() => { setTemplatesModalOpen(false); setTemplatesService(null); }}
-        onTemplateCountChange={data.updateTemplateCount}
       />
 
       <ServiceFormModal

@@ -247,9 +247,10 @@ export default function PivotMobileNav({ space, pathname, businessId, businesses
                 )}
                 <div className="flex flex-col gap-0.5">
                   {section.items.map((item) => {
-                    const active = item.href === '/app/personal'
-                      ? isExactActive(pathname, item.href)
-                      : isItemActive(pathname, item.href);
+                    const active =
+                      item.href === '/app/personal' || (businessId && item.href === `/app/pro/${businessId}`)
+                        ? isExactActive(pathname, item.href)
+                        : isItemActive(pathname, item.href);
                     return (
                       <BubbleMenuItem
                         key={item.href}

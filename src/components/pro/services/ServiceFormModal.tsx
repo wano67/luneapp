@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from 'react';
-import { useRouter } from 'next/navigation';
+import { Plus, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
@@ -9,9 +9,27 @@ import { Modal } from '@/components/ui/modal';
 import { fetchJson } from '@/lib/apiClient';
 import { useToast } from '@/components/ui/toast';
 import { formatCentsToEuroInput, parseEuroToCents, sanitizeEuroInput } from '@/lib/money';
-import { ReferencePicker } from '@/app/app/pro/[businessId]/references/ReferencePicker';
-import type { ServiceItem } from './service-types';
+import type { ServiceItem, ServiceTemplate } from './service-types';
 import { SERVICE_UNITS, SERVICE_UNIT_LABELS } from './service-types';
+
+// ─── Task template inline editor ─────────────────────────────────────────────
+
+type TemplateFormItem = {
+  _key: string;
+  title: string;
+  estimatedMinutes: string;
+};
+
+let _tplKey = 0;
+function nextTplKey() { return `tpl-${++_tplKey}`; }
+
+function formatTotalTime(templates: TemplateFormItem[]) {
+  const total = templates.reduce((sum, t) => sum + (Number(t.estimatedMinutes) || 0), 0);
+  if (total === 0) return null;
+  const h = Math.floor(total / 60);
+  const m = total % 60;
+  return h > 0 ? `${h}h${m > 0 ? ` ${m}min` : ''}` : `${m}min`;
+}
 
 // ─── Form state ──────────────────────────────────────────────────────────────
 
@@ -27,8 +45,6 @@ type ServiceFormState = {
   durationHours: string;
   vatRate: string;
   description: string;
-  categoryReferenceId: string;
-  tagReferenceIds: string[];
 };
 
 const emptyForm: ServiceFormState = {
@@ -43,8 +59,6 @@ const emptyForm: ServiceFormState = {
   durationHours: '',
   vatRate: '',
   description: '',
-  categoryReferenceId: '',
-  tagReferenceIds: [],
 };
 
 // ─── Props ───────────────────────────────────────────────────────────────────
@@ -61,10 +75,10 @@ type Props = {
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export function ServiceFormModal({ open, editing, businessId, isAdmin, onClose, onAfterSave }: Props) {
-  const router = useRouter();
   const toast = useToast();
 
   const [form, setForm] = useState<ServiceFormState>(emptyForm);
+  const [templates, setTemplates] = useState<TemplateFormItem[]>([]);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -83,16 +97,30 @@ export function ServiceFormModal({ open, editing, businessId, isAdmin, onClose, 
           cost: formatCentsToEuroInput(editing.costCents),
           durationHours: editing.durationHours != null ? String(editing.durationHours) : '',
           vatRate: editing.vatRate != null ? String(editing.vatRate) : '',
-          categoryReferenceId: editing.categoryReferenceId ?? '',
-          tagReferenceIds: editing.tagReferences?.map((t) => t.id) ?? [],
         }
       : emptyForm;
     queueMicrotask(() => {
       setForm(nextForm);
+      setTemplates([]);
       setFormError(null);
       setSaving(false);
     });
-  }, [open, editing]);
+    // Load existing templates when editing
+    if (editing) {
+      void fetchJson<{ item: { taskTemplates?: ServiceTemplate[] } }>(
+        `/api/pro/businesses/${businessId}/services/${editing.id}`
+      ).then((res) => {
+        if (!res.ok || !res.data?.item?.taskTemplates) return;
+        setTemplates(
+          res.data.item.taskTemplates.map((t) => ({
+            _key: nextTplKey(),
+            title: t.title,
+            estimatedMinutes: t.estimatedMinutes != null ? String(t.estimatedMinutes) : '',
+          }))
+        );
+      });
+    }
+  }, [open, editing, businessId]);
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -137,8 +165,15 @@ export function ServiceFormModal({ open, editing, businessId, isAdmin, onClose, 
     if (costNum != null) payload.costCents = costNum;
     if (durationNum != null) payload.durationHours = durationNum;
     if (vatNum != null) payload.vatRate = vatNum;
-    payload.categoryReferenceId = form.categoryReferenceId || null;
-    payload.tagReferenceIds = form.tagReferenceIds;
+
+    // Include task templates
+    const validTemplates = templates
+      .filter((t) => t.title.trim())
+      .map((t) => ({
+        title: t.title.trim(),
+        estimatedMinutes: t.estimatedMinutes.trim() ? Number(t.estimatedMinutes) : null,
+      }));
+    payload.taskTemplates = validTemplates;
 
     const isEdit = Boolean(editing);
     const endpoint = isEdit
@@ -163,10 +198,6 @@ export function ServiceFormModal({ open, editing, businessId, isAdmin, onClose, 
     onClose();
     toast.success(isEdit ? 'Service mis à jour.' : 'Service créé.');
     await onAfterSave(createdId, isEdit);
-
-    if (!isEdit && createdId) {
-      router.push(`/app/pro/${businessId}/services/${createdId}?tab=templates&openTemplate=1`);
-    }
   }
 
   return (
@@ -285,16 +316,65 @@ export function ServiceFormModal({ open, editing, businessId, isAdmin, onClose, 
           />
         </div>
 
-        {/* Références */}
-        <ReferencePicker
-          businessId={businessId}
-          categoryId={form.categoryReferenceId || null}
-          tagIds={form.tagReferenceIds}
-          onCategoryChange={(id) => setForm((prev) => ({ ...prev, categoryReferenceId: id || '' }))}
-          onTagsChange={(ids) => setForm((prev) => ({ ...prev, tagReferenceIds: ids }))}
-          disabled={!isAdmin}
-          title="Références (catégorie + tags)"
-        />
+        {/* Tâches associées */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold text-[var(--text-faint)]">
+              Tâches associées {templates.length > 0 ? `(${templates.length})` : ''}
+            </p>
+            {formatTotalTime(templates) ? (
+              <span className="text-xs text-[var(--text-faint)]">
+                Total : {formatTotalTime(templates)}
+              </span>
+            ) : null}
+          </div>
+          {templates.map((tpl) => (
+            <div key={tpl._key} className="flex items-center gap-2">
+              <input
+                type="text"
+                value={tpl.title}
+                onChange={(e) =>
+                  setTemplates((prev) =>
+                    prev.map((t) => (t._key === tpl._key ? { ...t, title: e.target.value } : t))
+                  )
+                }
+                placeholder="Titre de la tâche"
+                className="flex-1 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
+              />
+              <input
+                type="number"
+                inputMode="numeric"
+                min={0}
+                value={tpl.estimatedMinutes}
+                onChange={(e) =>
+                  setTemplates((prev) =>
+                    prev.map((t) =>
+                      t._key === tpl._key ? { ...t, estimatedMinutes: e.target.value } : t
+                    )
+                  )
+                }
+                placeholder="min"
+                className="w-20 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] text-right focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
+              />
+              <button
+                type="button"
+                onClick={() => setTemplates((prev) => prev.filter((t) => t._key !== tpl._key))}
+                className="cursor-pointer shrink-0 rounded-lg p-1.5 text-[var(--text-faint)] hover:bg-[var(--surface-2)] hover:text-[var(--danger)] transition-colors"
+                aria-label="Supprimer la tâche"
+              >
+                <X size={14} />
+              </button>
+            </div>
+          ))}
+          <button
+            type="button"
+            onClick={() => setTemplates((prev) => [...prev, { _key: nextTplKey(), title: '', estimatedMinutes: '' }])}
+            className="cursor-pointer flex items-center gap-1.5 text-sm font-medium text-[var(--accent)] hover:underline"
+          >
+            <Plus size={14} />
+            Ajouter une tâche
+          </button>
+        </div>
 
         {formError ? <p className="text-sm font-semibold text-[var(--danger)]">{formError}</p> : null}
         {!isAdmin ? (

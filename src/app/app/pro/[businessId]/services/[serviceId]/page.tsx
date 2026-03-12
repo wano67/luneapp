@@ -23,6 +23,7 @@ type TaskTemplate = {
   title: string;
   defaultAssigneeRole: string | null;
   defaultDueOffsetDays: number | null;
+  estimatedMinutes: number | null;
 };
 
 type ServiceDetail = {
@@ -449,6 +450,13 @@ export default function ServiceDetailPage() {
                     <p className="text-sm font-semibold text-[var(--text-primary)]">Templates de tâches</p>
                     <p className="text-xs text-[var(--text-faint)]">
                       Ces templates génèrent automatiquement les tâches quand le service est ajouté à un projet.
+                      {(() => {
+                        const totalMin = service.taskTemplates.reduce((s, t) => s + (t.estimatedMinutes ?? 0), 0);
+                        if (totalMin <= 0) return null;
+                        const h = Math.floor(totalMin / 60);
+                        const m = totalMin % 60;
+                        return ` · Temps total : ${h > 0 ? `${h}h` : ''}${m > 0 ? `${m}min` : ''}`;
+                      })()}
                     </p>
                   </div>
                   <Button
@@ -471,6 +479,7 @@ export default function ServiceDetailPage() {
                           <p className="text-sm font-semibold text-[var(--text-primary)]">{tpl.title}</p>
                           <p className="text-[11px] text-[var(--text-faint)]">
                             Phase: {tpl.phase || '—'} · Rôle: {tpl.defaultAssigneeRole || '—'} · J+{tpl.defaultDueOffsetDays ?? '—'}
+                            {tpl.estimatedMinutes ? ` · ${tpl.estimatedMinutes} min` : ''}
                           </p>
                         </div>
                         <Badge variant="neutral">{tpl.phase || 'Sans phase'}</Badge>

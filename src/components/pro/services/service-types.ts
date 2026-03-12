@@ -29,6 +29,7 @@ export type ServiceTemplate = {
   title: string;
   defaultAssigneeRole: string | null;
   defaultDueOffsetDays: number | null;
+  estimatedMinutes: number | null;
   createdAt: string;
 };
 

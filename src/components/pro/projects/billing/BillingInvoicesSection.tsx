@@ -1,8 +1,8 @@
 "use client";
 
-import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/cn';
-import { SectionCard, SectionHeader, KebabMenu, UI, formatDate } from '@/components/pro/projects/workspace-ui';
+import { SectionCard, SectionHeader, KebabMenu, UI, formatDate, StatusPill } from '@/components/pro/projects/workspace-ui';
+import { invoiceRowTone, paymentStatusTone } from '@/components/pro/projects/tabs/BillingTab';
 import { formatCurrencyEUR } from '@/lib/formatCurrency';
 import { getInvoiceStatusLabelFR, getPaymentStatusLabelFR } from '@/lib/billingStatus';
 
@@ -95,32 +95,26 @@ export function BillingInvoicesSection({
         subtitle="Générées à partir des devis envoyés/signés ou en facturation par étapes."
         actions={
           isBillingEmpty ? null : (
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => onOpenStagedInvoiceModal('DEPOSIT')}
-                disabled={!isAdmin || summaryTotalCents <= 0}
-              >
-                Facture d&apos;acompte
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => onOpenStagedInvoiceModal('MID')}
-                disabled={!isAdmin || summaryTotalCents <= 0}
-              >
-                Facture intermédiaire
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => onOpenStagedInvoiceModal('FINAL')}
-                disabled={!isAdmin || remainingToInvoiceCents <= 0}
-              >
-                Facture finale
-              </Button>
-            </div>
+            <KebabMenu
+              ariaLabel="Nouvelle facture"
+              items={[
+                {
+                  label: 'Facture d\'acompte',
+                  onClick: () => onOpenStagedInvoiceModal('DEPOSIT'),
+                  disabled: !isAdmin || summaryTotalCents <= 0,
+                },
+                {
+                  label: 'Facture intermédiaire',
+                  onClick: () => onOpenStagedInvoiceModal('MID'),
+                  disabled: !isAdmin || summaryTotalCents <= 0,
+                },
+                {
+                  label: 'Facture finale',
+                  onClick: () => onOpenStagedInvoiceModal('FINAL'),
+                  disabled: !isAdmin || remainingToInvoiceCents <= 0,
+                },
+              ]}
+            />
           )
         }
       />
@@ -161,11 +155,9 @@ export function BillingInvoicesSection({
                   </p>
                   <p className="text-xs text-[var(--text-secondary)]">{dateLabel}</p>
                 </div>
-                <div className="text-xs text-[var(--text-secondary)] md:text-sm">
-                  <span>{statusLabel}</span>
-                  <span className="mt-1 block text-[11px] text-[var(--text-secondary)]">
-                    {paymentStatusLabel}
-                  </span>
+                <div className="flex flex-wrap gap-1">
+                  <StatusPill label="" value={statusLabel} tone={invoiceRowTone(invoice.status)} />
+                  <StatusPill label="" value={paymentStatusLabel} tone={paymentStatusTone(getInvoicePaymentStatus(invoice))} />
                 </div>
                 <div className="text-right text-sm font-semibold text-[var(--text-primary)]">
                   {formatCurrencyEUR(Number(invoice.totalCents), { minimumFractionDigits: 0 })}

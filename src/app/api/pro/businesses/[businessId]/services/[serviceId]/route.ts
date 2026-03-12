@@ -25,6 +25,7 @@ type ServiceTemplateInput = {
   title: string;
   defaultAssigneeRole: string | null;
   defaultDueOffsetDays: number | null;
+  estimatedMinutes: number | null;
 };
 
 type ServiceBodyParsed =
@@ -97,6 +98,10 @@ function validateServiceBody(body: unknown): ServiceBodyParsed {
           defaultDueOffsetDays:
             typeof t.defaultDueOffsetDays === 'number' && Number.isFinite(t.defaultDueOffsetDays)
               ? Math.trunc(t.defaultDueOffsetDays)
+              : null,
+          estimatedMinutes:
+            typeof t.estimatedMinutes === 'number' && Number.isFinite(t.estimatedMinutes)
+              ? Math.trunc(t.estimatedMinutes)
               : null,
         };
       })
@@ -236,6 +241,7 @@ export const PATCH = withBusinessRoute<{ businessId: string; serviceId: string }
             title: tpl.title,
             defaultAssigneeRole: tpl.defaultAssigneeRole || undefined,
             defaultDueOffsetDays: tpl.defaultDueOffsetDays ?? undefined,
+            estimatedMinutes: tpl.estimatedMinutes ?? undefined,
           })),
         }
       : undefined,

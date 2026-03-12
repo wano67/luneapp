@@ -293,14 +293,6 @@ export default function ProspectDetailPage() {
 
   return (
     <PageContainer className="space-y-5">
-      <div className="flex justify-end">
-        <Link
-          href={`/app/pro/${businessId}/agenda?prospectId=${prospectId}`}
-          className="text-xs font-semibold text-[var(--text-secondary)] underline underline-offset-4 transition hover:text-[var(--text-primary)]"
-        >
-          Ouvrir dans le CRM
-        </Link>
-      </div>
       <PageHeader
         backHref={`/app/pro/${businessId}/prospects`}
         backLabel="Prospects"
@@ -314,7 +306,7 @@ export default function ProspectDetailPage() {
         }
         leading={<LogoAvatar name={prospect.name || 'Prospect'} websiteUrl={prospect.websiteUrl ?? undefined} size={48} />}
         actions={
-          <>
+          <div className="flex items-center gap-2">
             <Button
               size="sm"
               onClick={() => {
@@ -322,18 +314,18 @@ export default function ProspectDetailPage() {
                 setConvertResult(null);
                 setConvertOpen(true);
               }}
-              className="w-full sm:w-auto"
               disabled={!isAdmin}
             >
-              Convertir en client + projet
+              <span className="sm:hidden">Convertir</span>
+              <span className="hidden sm:inline">Convertir en client</span>
             </Button>
-            <MenuDots businessId={businessId} prospectId={prospectId} />
-          </>
+            <MenuDots businessId={businessId} prospectId={prospectId} onNavigate={setActiveTab} />
+          </div>
         }
       />
 
       <Card className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           <Metric label="Statut pipeline" value={prospect.pipelineStatus ?? 'Non défini'} />
           <Metric label="Probabilité" value={prospect.probability ? `${prospect.probability}%` : '0%'} />
           <Metric label="Prochaine action" value={formatDate(prospect.nextActionDate)} />
@@ -356,7 +348,7 @@ export default function ProspectDetailPage() {
               <p className="text-sm font-semibold text-[var(--text-primary)]">Informations prospect</p>
               <p className="text-xs text-[var(--text-secondary)]">Coordonnées et pipeline</p>
             </div>
-            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:justify-end">
+            <div className="flex items-center gap-2">
               {editing ? (
                 <>
                   <Button
@@ -379,7 +371,6 @@ export default function ProspectDetailPage() {
                       setSaveError(null);
                       setSaveInfo(null);
                     }}
-                    className="w-full sm:w-auto"
                     disabled={!isAdmin}
                   >
                     Annuler
@@ -387,7 +378,6 @@ export default function ProspectDetailPage() {
                   <Button
                     size="sm"
                     onClick={handleSave}
-                    className="w-full sm:w-auto"
                     disabled={!hasChanges || saving || !isAdmin}
                   >
                     {saving ? 'Enregistrement…' : 'Enregistrer'}
@@ -398,7 +388,6 @@ export default function ProspectDetailPage() {
                   variant="outline"
                   size="sm"
                   onClick={() => setEditing(true)}
-                  className="w-full sm:w-auto"
                   disabled={!isAdmin}
                 >
                   Modifier
@@ -411,7 +400,7 @@ export default function ProspectDetailPage() {
           {saveInfo ? <p className="text-sm text-[var(--success)]">{saveInfo}</p> : null}
           {!isAdmin ? <p className="text-xs text-[var(--text-secondary)]">{readOnlyMessage}</p> : null}
 
-          <div className="grid gap-4 lg:grid-cols-2">
+          <div className="grid gap-4 md:grid-cols-2">
             <Card className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
               <p className="text-xs uppercase tracking-wide text-[var(--text-secondary)]">Contact</p>
               {editing ? (
@@ -673,8 +662,13 @@ function StatusIndicatorProspect() {
   );
 }
 
-function MenuDots({ businessId, prospectId }: { businessId: string; prospectId: string }) {
+function MenuDots({ onNavigate }: { businessId: string; prospectId: string; onNavigate: (tab: 'infos' | 'interactions' | 'offers') => void }) {
   const [open, setOpen] = useState(false);
+  const items: Array<{ label: string; tab: 'infos' | 'interactions' | 'offers' }> = [
+    { label: 'Infos', tab: 'infos' },
+    { label: 'Interactions', tab: 'interactions' },
+    { label: 'Offres', tab: 'offers' },
+  ];
   return (
     <div className="relative">
       <button
@@ -687,18 +681,15 @@ function MenuDots({ businessId, prospectId }: { businessId: string; prospectId: 
       </button>
       {open ? (
         <div className="absolute right-0 z-10 mt-2 w-40 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-1 shadow-lg">
-          {[
-            { label: 'Interactions', href: `/app/pro/${businessId}/prospects/${prospectId}#interactions` },
-            { label: 'Offres', href: `/app/pro/${businessId}/prospects/${prospectId}#offers` },
-          ].map((item) => (
-            <Link
+          {items.map((item) => (
+            <button
               key={item.label}
-              href={item.href}
-              className="flex cursor-pointer items-center justify-between rounded-md px-3 py-2 text-sm text-[var(--text-primary)] transition hover:bg-[var(--surface-hover)]"
-              onClick={() => setOpen(false)}
+              type="button"
+              className="flex w-full cursor-pointer items-center justify-between rounded-md px-3 py-2 text-sm text-[var(--text-primary)] transition hover:bg-[var(--surface-hover)]"
+              onClick={() => { onNavigate(item.tab); setOpen(false); }}
             >
               {item.label}
-            </Link>
+            </button>
           ))}
         </div>
       ) : null}

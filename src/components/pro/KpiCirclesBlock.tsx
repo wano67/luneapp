@@ -8,20 +8,17 @@ type Props = {
   className?: string;
 };
 
-// Backward-compatible KPI block used across legacy pages.
-// Rendering is card-based for better readability on small screens.
+// Compact inline KPI row used on client/prospect pages.
 export function KpiCirclesBlock({ items, className }: Props) {
   return (
-    <div className={cn('grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3', className)} data-component="kpi-circles">
+    <div className={cn('flex flex-wrap gap-2', className)} data-component="kpi-circles">
       {items.map((item) => (
         <div
           key={item.label}
-          className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm"
+          className="flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2"
         >
-          <p className="text-sm font-medium text-[var(--text-secondary)]">{item.label}</p>
-          <div className="mt-2 break-words text-xl font-semibold leading-tight text-[var(--text-primary)] sm:text-2xl">
-            {item.value}
-          </div>
+          <span className="text-xs text-[var(--text-secondary)]">{item.label}</span>
+          <span className="text-sm font-semibold text-[var(--text-primary)]">{item.value}</span>
         </div>
       ))}
     </div>

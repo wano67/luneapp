@@ -4,8 +4,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import type { ServiceItem } from '../service-types';
 
-type ReferenceOption = { id: string; name: string };
-
 export function useServiceData(businessId: string) {
   const [services, setServices] = useState<ServiceItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -15,10 +13,6 @@ export function useServiceData(businessId: string) {
 
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('ALL');
-  const [categoryFilter, setCategoryFilter] = useState<string>('');
-  const [tagFilter, setTagFilter] = useState<string>('');
-  const [categoryOptions, setCategoryOptions] = useState<ReferenceOption[]>([]);
-  const [tagOptions, setTagOptions] = useState<ReferenceOption[]>([]);
 
   const fetchController = useRef<AbortController | null>(null);
 
@@ -53,8 +47,6 @@ export function useServiceData(businessId: string) {
       const params = new URLSearchParams();
       if (search.trim()) params.set('q', search.trim());
       if (typeFilter !== 'ALL') params.set('type', typeFilter);
-      if (categoryFilter) params.set('categoryReferenceId', categoryFilter);
-      if (tagFilter) params.set('tagReferenceId', tagFilter);
       const qs = params.toString();
       const res = await fetchJson<{ items: ServiceItem[] }>(
         `/api/pro/businesses/${businessId}/services${qs ? `?${qs}` : ''}`,
@@ -88,36 +80,11 @@ export function useServiceData(businessId: string) {
     }
   }
 
-  async function loadReferenceOptions(signal?: AbortSignal) {
-    try {
-      const [catRes, tagRes] = await Promise.all([
-        fetchJson<{ items: ReferenceOption[] }>(
-          `/api/pro/businesses/${businessId}/references?type=CATEGORY`, {}, signal
-        ),
-        fetchJson<{ items: ReferenceOption[] }>(
-          `/api/pro/businesses/${businessId}/references?type=TAG`, {}, signal
-        ),
-      ]);
-      if (signal?.aborted) return;
-      if (catRes.ok && catRes.data) setCategoryOptions(catRes.data.items);
-      if (tagRes.ok && tagRes.data) setTagOptions(tagRes.data.items);
-    } catch {
-      // silently fail for reference options
-    }
-  }
-
   useEffect(() => {
     void loadServices();
     return () => { fetchController.current?.abort(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [businessId, typeFilter, categoryFilter, tagFilter]);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    void loadReferenceOptions(controller.signal);
-    return () => controller.abort();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [businessId]);
+  }, [businessId, typeFilter]);
 
   function updateTemplateCount(serviceId: string, count: number) {
     setServices((prev) => prev.map((s) => s.id === serviceId ? { ...s, templateCount: count } : s));
@@ -135,12 +102,6 @@ export function useServiceData(businessId: string) {
     setSearch,
     typeFilter,
     setTypeFilter,
-    categoryFilter,
-    setCategoryFilter,
-    tagFilter,
-    setTagFilter,
-    categoryOptions,
-    tagOptions,
     typeOptions,
     loadServices,
     updateTemplateCount,

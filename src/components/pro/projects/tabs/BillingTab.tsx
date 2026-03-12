@@ -21,6 +21,7 @@ import { BillingQuotesSection } from '@/components/pro/projects/billing/BillingQ
 import { BillingInvoicesSection } from '@/components/pro/projects/billing/BillingInvoicesSection';
 import { BillingServiceCard } from '@/components/pro/projects/billing/BillingServiceCard';
 import type { ServiceDraft, PricingLine } from '@/components/pro/projects/billing/BillingServiceCard';
+import type { StatusPillTone } from '@/components/pro/projects/workspace-ui';
 import type { SummaryTotals } from '@/components/pro/projects/hooks/useBillingComputed';
 import type {
   ServiceItem,
@@ -149,6 +150,49 @@ export type BillingTabProps = {
   onDeleteInvoice: (invoiceId: string) => void;
 };
 
+// ─── Status tone helpers ──────────────────────────────────────────────────────
+
+function quoteStatusTone(status: string | null): StatusPillTone {
+  if (!status) return 'default';
+  const s = status.toUpperCase();
+  if (s === 'SIGNED' || s === 'ACCEPTED') return 'success';
+  if (s === 'SENT') return 'info';
+  if (s === 'CANCELLED' || s === 'EXPIRED') return 'danger';
+  return 'default';
+}
+
+function depositStatusTone(status: string | null): StatusPillTone {
+  if (!status) return 'default';
+  const s = status.toUpperCase();
+  if (s === 'PAID') return 'success';
+  if (s === 'PENDING') return 'info';
+  return 'default';
+}
+
+export function quoteRowTone(status: string): StatusPillTone {
+  const s = status.toUpperCase();
+  if (s === 'SIGNED') return 'success';
+  if (s === 'SENT') return 'info';
+  if (s === 'CANCELLED' || s === 'EXPIRED') return 'danger';
+  return 'default';
+}
+
+export function paymentStatusTone(status: string): StatusPillTone {
+  const s = status.toUpperCase();
+  if (s === 'PAID') return 'success';
+  if (s === 'PARTIAL' || s === 'PARTIALLY_PAID') return 'info';
+  if (s === 'UNPAID') return 'danger';
+  return 'default';
+}
+
+export function invoiceRowTone(status: string): StatusPillTone {
+  const s = status.toUpperCase();
+  if (s === 'PAID') return 'success';
+  if (s === 'SENT') return 'info';
+  if (s === 'CANCELLED') return 'danger';
+  return 'default';
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function BillingTab({
@@ -255,31 +299,18 @@ export function BillingTab({
         <SectionHeader
           title="Résumé & situation"
           subtitle={`Acompte de référence : ${depositPercentLabel} · Source : ${summaryTotals.sourceLabel}`}
-          actions={
-            isBillingEmpty ? null : (
-              <>
-                <Button
-                  size="sm"
-                  onClick={onCreateQuote}
-                  disabled={!services.length || pricingTotals.missingCount > 0 || creatingQuote || !isAdmin}
-                >
-                  {creatingQuote ? 'Création…' : 'Créer un devis'}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => onOpenStagedInvoiceModal('DEPOSIT')}
-                  disabled={!isAdmin || summaryTotals.totalCents <= 0}
-                >
-                  Facture d&apos;acompte
-                </Button>
-              </>
-            )
-          }
         />
         <div className="mt-4 flex flex-wrap gap-2">
-          <StatusPill label="Devis" value={getProjectQuoteStatusLabelFR(projectQuoteStatus ?? null)} />
-          <StatusPill label="Acompte" value={getProjectDepositStatusLabelFR(projectDepositStatus ?? null)} />
+          <StatusPill
+            label="Devis"
+            value={getProjectQuoteStatusLabelFR(projectQuoteStatus ?? null)}
+            tone={quoteStatusTone(projectQuoteStatus ?? null)}
+          />
+          <StatusPill
+            label="Acompte"
+            value={getProjectDepositStatusLabelFR(projectDepositStatus ?? null)}
+            tone={depositStatusTone(projectDepositStatus ?? null)}
+          />
         </div>
         <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-[var(--text-secondary)]">
           <span>Date acompte : {depositPaidLabel}</span>
@@ -360,36 +391,6 @@ export function BillingTab({
             </div>
           </>
         ) : null}
-      </SectionCard>
-
-      {/* ── Détail des prestations ─────────────────────────────────────────── */}
-      <SectionCard>
-        <SectionHeader
-          title="Détail des prestations"
-          subtitle="Texte narratif repris dans les devis (hors lignes tarifées)."
-        />
-        <div className="mt-4 space-y-3">
-          <textarea
-            className="min-h-[180px] w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3 py-3 text-sm text-[var(--text-primary)]"
-            placeholder="Décris le périmètre, les livrables, les phases…"
-            value={prestationsDraft}
-            onChange={(e) => onPrestationsDraftChange(e.target.value)}
-            disabled={!isAdmin || prestationsSaving}
-          />
-          {prestationsError ? <p className="text-xs text-[var(--danger)]">{prestationsError}</p> : null}
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              size="sm"
-              onClick={onSavePrestations}
-              disabled={!isAdmin || prestationsSaving || !prestationsDirty}
-            >
-              {prestationsSaving ? 'Enregistrement…' : 'Enregistrer'}
-            </Button>
-            {!isAdmin ? (
-              <span className="text-xs text-[var(--text-secondary)]">Réservé aux admins/owners.</span>
-            ) : null}
-          </div>
-        </div>
       </SectionCard>
 
       {/* ── Prestations facturables ────────────────────────────────────────── */}
@@ -502,6 +503,35 @@ export function BillingTab({
           </div>
         )}
       </SectionCard>
+
+      {/* ── Détail des prestations (narratif) ────────────────────────────── */}
+      {!isBillingEmpty && (
+        <SectionCard>
+          <SectionHeader
+            title="Détail des prestations"
+            subtitle="Texte narratif repris dans les devis (hors lignes tarifées)."
+          />
+          <div className="mt-4 space-y-3">
+            <textarea
+              className="min-h-[120px] w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3 py-3 text-sm text-[var(--text-primary)]"
+              placeholder="Décris le périmètre, les livrables, les phases…"
+              value={prestationsDraft}
+              onChange={(e) => onPrestationsDraftChange(e.target.value)}
+              disabled={!isAdmin || prestationsSaving}
+            />
+            {prestationsError ? <p className="text-xs text-[var(--danger)]">{prestationsError}</p> : null}
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                size="sm"
+                onClick={onSavePrestations}
+                disabled={!isAdmin || prestationsSaving || !prestationsDirty}
+              >
+                {prestationsSaving ? 'Enregistrement…' : 'Enregistrer'}
+              </Button>
+            </div>
+          </div>
+        </SectionCard>
+      )}
 
       {/* ── Devis ──────────────────────────────────────────────────────────── */}
       <BillingQuotesSection

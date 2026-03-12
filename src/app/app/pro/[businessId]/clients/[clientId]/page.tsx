@@ -396,14 +396,6 @@ export default function ClientDetailPage() {
 
   return (
     <PageContainer className="space-y-5">
-      <div className="flex justify-end">
-        <Link
-          href={`/app/pro/${businessId}/agenda?clientId=${clientId}`}
-          className="text-xs font-semibold text-[var(--text-secondary)] underline underline-offset-4 transition hover:text-[var(--text-primary)]"
-        >
-          Ouvrir dans le CRM
-        </Link>
-      </div>
       <PageHeader
         backHref={`/app/pro/${businessId}/clients`}
         backLabel="Clients"
@@ -421,25 +413,25 @@ export default function ClientDetailPage() {
         }
         leading={<LogoAvatar name={client.name} websiteUrl={client.websiteUrl ?? undefined} size={52} />}
         actions={
-          <>
+          <div className="flex items-center gap-2">
             <Button
               size="sm"
               onClick={() => router.push(`/app/pro/${businessId}/projects?clientId=${clientId}`)}
-              className="w-full sm:w-auto"
             >
               Nouveau projet
             </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleSave}
-              disabled={!hasChanges || saving}
-              className="w-full sm:w-auto"
-            >
-              {saving ? 'Enregistrement…' : 'Enregistrer'}
-            </Button>
-            <MenuDots businessId={businessId} clientId={clientId} />
-          </>
+            {activeTab === 'infos' && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleSave}
+                disabled={!hasChanges || saving}
+              >
+                {saving ? 'Enregistrement…' : 'Enregistrer'}
+              </Button>
+            )}
+            <MenuDots businessId={businessId} clientId={clientId} onNavigate={setActiveTab} />
+          </div>
         }
       />
 
@@ -553,8 +545,14 @@ function StatusIndicator({ active }: { active: boolean }) {
   );
 }
 
-function MenuDots({ businessId, clientId }: { businessId: string; clientId: string }) {
+function MenuDots({ businessId, clientId, onNavigate }: { businessId: string; clientId: string; onNavigate: (tab: TabKey) => void }) {
   const [open, setOpen] = useState(false);
+  const items: Array<{ label: string } & ({ href: string } | { tab: TabKey })> = [
+    { label: 'Projets', href: `/app/pro/${businessId}/projects?clientId=${clientId}` },
+    { label: 'Documents', tab: 'documents' as TabKey },
+    { label: 'Interactions', tab: 'interactions' as TabKey },
+    { label: 'Infos', tab: 'infos' as TabKey },
+  ];
   return (
     <div className="relative">
       <button
@@ -567,20 +565,27 @@ function MenuDots({ businessId, clientId }: { businessId: string; clientId: stri
       </button>
       {open ? (
         <div className="absolute right-0 z-10 mt-2 w-40 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-1 shadow-lg">
-          {[
-            { label: 'Projets', href: `/app/pro/${businessId}/projects?clientId=${clientId}` },
-            { label: 'Documents', href: `/app/pro/${businessId}/clients/${clientId}#documents` },
-            { label: 'Interactions', href: `/app/pro/${businessId}/clients/${clientId}#interactions` },
-          ].map((item) => (
-            <Link
-              key={item.label}
-              href={item.href}
-              className="flex cursor-pointer items-center justify-between rounded-md px-3 py-2 text-sm text-[var(--text-primary)] transition hover:bg-[var(--surface-hover)]"
-              onClick={() => setOpen(false)}
-            >
-              {item.label}
-            </Link>
-          ))}
+          {items.map((item) =>
+            'href' in item ? (
+              <Link
+                key={item.label}
+                href={item.href}
+                className="flex cursor-pointer items-center justify-between rounded-md px-3 py-2 text-sm text-[var(--text-primary)] transition hover:bg-[var(--surface-hover)]"
+                onClick={() => setOpen(false)}
+              >
+                {item.label}
+              </Link>
+            ) : (
+              <button
+                key={item.label}
+                type="button"
+                className="flex w-full cursor-pointer items-center justify-between rounded-md px-3 py-2 text-sm text-[var(--text-primary)] transition hover:bg-[var(--surface-hover)]"
+                onClick={() => { onNavigate(item.tab); setOpen(false); }}
+              >
+                {item.label}
+              </button>
+            )
+          )}
         </div>
       ) : null}
     </div>

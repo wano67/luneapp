@@ -2,7 +2,8 @@
 
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/cn';
-import { SectionCard, SectionHeader, KebabMenu, UI, formatDate } from '@/components/pro/projects/workspace-ui';
+import { SectionCard, SectionHeader, KebabMenu, UI, formatDate, StatusPill } from '@/components/pro/projects/workspace-ui';
+import { quoteRowTone } from '@/components/pro/projects/tabs/BillingTab';
 import { formatCurrencyEUR } from '@/lib/formatCurrency';
 import { getQuoteStatusLabelFR } from '@/lib/billingStatus';
 
@@ -134,7 +135,9 @@ export function BillingQuotesSection({
                     </span>
                   ) : null}
                 </div>
-                <div className="text-xs text-[var(--text-secondary)] md:text-sm">{statusLabel}</div>
+                <div>
+                  <StatusPill label="" value={statusLabel} tone={quoteRowTone(quote.status)} />
+                </div>
                 <div className="text-right text-sm font-semibold text-[var(--text-primary)]">
                   {formatCurrencyEUR(Number(quote.totalCents), { minimumFractionDigits: 0 })}
                 </div>

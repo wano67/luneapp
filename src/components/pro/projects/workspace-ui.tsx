@@ -119,11 +119,20 @@ export function StatCard({
   );
 }
 
-export function StatusPill({ label, value }: { label: string; value: string }) {
+export type StatusPillTone = 'default' | 'success' | 'danger' | 'info';
+
+const STATUS_PILL_STYLES: Record<StatusPillTone, string> = {
+  default: 'border-[var(--border)]/60 bg-[var(--surface-2)]/70 text-[var(--text-secondary)]',
+  success: 'border-[var(--success)]/30 bg-[var(--success-bg)] text-[var(--success)]',
+  danger: 'border-[var(--danger-border)] bg-[var(--danger-bg)] text-[var(--danger)]',
+  info: 'border-[var(--accent-strong)]/30 bg-[var(--surface-2)]/70 text-[var(--accent-strong)]',
+};
+
+export function StatusPill({ label, value, tone = 'default' }: { label: string; value: string; tone?: StatusPillTone }) {
   return (
-    <div className="flex items-center gap-2 rounded-full border border-[var(--border)]/60 bg-[var(--surface-2)]/70 px-3 py-1 text-xs text-[var(--text-secondary)]">
+    <div className={cn('flex items-center gap-2 rounded-full border px-3 py-1 text-xs', STATUS_PILL_STYLES[tone])}>
       <span className="font-semibold uppercase tracking-[0.14em]">{label}</span>
-      <span className="text-[var(--text-primary)]">{value}</span>
+      <span className={tone === 'default' ? 'text-[var(--text-primary)]' : ''}>{value}</span>
     </div>
   );
 }
