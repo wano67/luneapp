@@ -1,34 +1,52 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import Select from '@/components/ui/select';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 
+type ClientOption = { id: string; name: string };
 type Props = { businessId: string };
 
 export default function NewProjectForm({ businessId }: Props) {
-  const [formState, setFormState] = useState({ name: '', error: '' });
+  const [name, setName] = useState('');
+  const [clientId, setClientId] = useState('');
+  const [clients, setClients] = useState<ClientOption[]>([]);
+  const [loadingClients, setLoadingClients] = useState(true);
+  const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchJson<{ items: ClientOption[] }>(
+      `/api/pro/businesses/${businessId}/clients`,
+      {},
+      controller.signal,
+    )
+      .then((res) => {
+        if (res.ok && res.data?.items) setClients(res.data.items);
+      })
+      .finally(() => setLoadingClients(false));
+    return () => controller.abort();
+  }, [businessId]);
+
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
-    const name = formState.name.trim();
-    if (!name) {
-      setFormState((s) => ({ ...s, error: 'Le nom du projet est requis.' }));
-      return;
-    }
+    const trimmed = name.trim();
+    if (!trimmed) { setError('Le nom du projet est requis.'); return; }
+    if (!clientId) { setError('Sélectionne un client.'); return; }
     setLoading(true);
-    setFormState((s) => ({ ...s, error: '' }));
+    setError('');
     try {
       const res = await fetchJson<{ item: { id: string } }>(`/api/pro/businesses/${businessId}/projects`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name }),
+        body: JSON.stringify({ name: trimmed, clientId }),
       });
       if (!res.ok || !res.data?.item?.id) {
         throw new Error(res.error ?? 'Création du projet impossible.');
@@ -36,7 +54,7 @@ export default function NewProjectForm({ businessId }: Props) {
       router.replace(`/app/pro/${businessId}/projects/${res.data.item.id}?setup=1`);
       router.refresh();
     } catch (err) {
-      setFormState((s) => ({ ...s, error: getErrorMessage(err) || 'Erreur réseau.' }));
+      setError(getErrorMessage(err) || 'Erreur réseau.');
     } finally {
       setLoading(false);
     }
@@ -63,22 +81,34 @@ export default function NewProjectForm({ businessId }: Props) {
             <input
               id="name"
               name="name"
-              value={formState.name}
-              onChange={(e) => setFormState({ ...formState, name: e.target.value })}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
               className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none ring-0 focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/30"
               placeholder="Ex: Refonte site web client"
               autoFocus
             />
           </div>
 
-          {formState.error ? (
+          <Select
+            label="Client"
+            value={clientId}
+            onChange={(e) => setClientId(e.target.value)}
+            disabled={loadingClients}
+          >
+            <option value="">{loadingClients ? 'Chargement…' : 'Sélectionner un client'}</option>
+            {clients.map((c) => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+          </Select>
+
+          {error ? (
             <p className="text-sm text-[var(--danger)]" role="alert">
-              {formState.error}
+              {error}
             </p>
           ) : null}
 
           <div className="flex justify-end gap-2">
-            <Button type="submit" disabled={loading}>
+            <Button type="submit" disabled={loading || loadingClients}>
               {loading ? <Loader2 size={16} className="animate-spin" /> : null}
               Créer
             </Button>

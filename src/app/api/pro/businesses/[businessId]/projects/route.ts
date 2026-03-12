@@ -235,18 +235,16 @@ export const POST = withBusinessRoute(
   const name = body.name.trim();
   if (!name) return withIdNoStore(badRequest('Le nom du projet ne peut pas être vide.'), requestId);
 
-  let clientId: bigint | undefined;
-  if (body.clientId && typeof body.clientId === 'string') {
-    clientId = BigInt(body.clientId);
+  if (!body.clientId || typeof body.clientId !== 'string') {
+    return withIdNoStore(badRequest('Un client doit être associé au projet.'), requestId);
   }
-  if (clientId) {
-    const client = await prisma.client.findFirst({
-      where: { id: clientId, businessId: businessIdBigInt },
-      select: { id: true },
-    });
-    if (!client) {
-      return withIdNoStore(badRequest('clientId invalide pour ce business.'), requestId);
-    }
+  const clientId = BigInt(body.clientId);
+  const client = await prisma.client.findFirst({
+    where: { id: clientId, businessId: businessIdBigInt },
+    select: { id: true },
+  });
+  if (!client) {
+    return withIdNoStore(badRequest('clientId invalide pour ce business.'), requestId);
   }
 
   const categoryProvided = Object.prototype.hasOwnProperty.call(body, 'categoryReferenceId');
