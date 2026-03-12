@@ -20,13 +20,30 @@ export const GET = withBusinessRoute({ minRole: 'VIEWER' }, async (ctx, req) => 
   const granularity: 'daily' | 'weekly' | 'monthly' =
     days > 0 && days <= 60 ? 'daily' : days > 60 && days <= 180 ? 'weekly' : 'monthly';
 
-  const monthsBack = days === 0 ? 60 : Math.max(1, Math.ceil(days / 30));
+  // For "Global" (days=0): find the earliest finance record to cover all data
+  let monthsBack: number;
+  if (days === 0) {
+    const earliest = await prisma.finance.findFirst({
+      where: { businessId: ctx.businessId, deletedAt: null },
+      orderBy: { date: 'asc' },
+      select: { date: true },
+    });
+    if (earliest) {
+      const diffMs = monthStart.getTime() - startOfMonth(earliest.date).getTime();
+      monthsBack = Math.max(1, Math.ceil(diffMs / (30.44 * 24 * 60 * 60 * 1000)) + 1);
+    } else {
+      monthsBack = 1;
+    }
+  } else {
+    monthsBack = Math.max(1, Math.ceil(days / 30));
+  }
+
   const seriesStart =
     granularity === 'monthly'
       ? addMonths(monthStart, -(monthsBack - 1))
       : days > 0
         ? new Date(now.getTime() - days * 24 * 60 * 60 * 1000)
-        : addMonths(monthStart, -59);
+        : addMonths(monthStart, -(monthsBack - 1));
   seriesStart.setHours(0, 0, 0, 0);
 
   const periodStart = days > 0 ? new Date(now.getTime() - days * 24 * 60 * 60 * 1000) : null;
