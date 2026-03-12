@@ -369,7 +369,7 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
 
   useEffect(() => {
     const tabParam = searchParams?.get('tab');
-    if (tabParam && ['overview', 'work', 'team', 'billing', 'charges', 'vault', 'files'].includes(tabParam)) {
+    if (tabParam && ['overview', 'work', 'team', 'billing', 'charges', 'vault', 'interactions', 'files'].includes(tabParam)) {
       setActiveTab(tabParam as typeof activeTab);
     }
   }, [searchParams]);

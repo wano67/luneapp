@@ -20,16 +20,42 @@ export const GET = withBusinessRoute({ minRole: 'VIEWER' }, async (ctx, req) => 
   const granularity: 'daily' | 'weekly' | 'monthly' =
     days > 0 && days <= 60 ? 'daily' : days > 60 && days <= 180 ? 'weekly' : 'monthly';
 
-  // For "Global" (days=0): find the earliest finance record to cover all data
+  // For "Global" (days=0): find the earliest record across ALL tables
   let monthsBack: number;
   if (days === 0) {
-    const earliest = await prisma.finance.findFirst({
-      where: { businessId: ctx.businessId, deletedAt: null },
-      orderBy: { date: 'asc' },
-      select: { date: true },
-    });
-    if (earliest) {
-      const diffMs = monthStart.getTime() - startOfMonth(earliest.date).getTime();
+    const [earliestFinance, earliestInvoice, earliestQuote, earliestProject] = await Promise.all([
+      prisma.finance.findFirst({
+        where: { businessId: ctx.businessId, deletedAt: null },
+        orderBy: { date: 'asc' },
+        select: { date: true },
+      }),
+      prisma.invoice.findFirst({
+        where: { businessId: ctx.businessId },
+        orderBy: { createdAt: 'asc' },
+        select: { createdAt: true },
+      }),
+      prisma.quote.findFirst({
+        where: { businessId: ctx.businessId },
+        orderBy: { createdAt: 'asc' },
+        select: { createdAt: true },
+      }),
+      prisma.project.findFirst({
+        where: { businessId: ctx.businessId },
+        orderBy: { createdAt: 'asc' },
+        select: { createdAt: true, startDate: true },
+      }),
+    ]);
+    const candidates: Date[] = [];
+    if (earliestFinance) candidates.push(earliestFinance.date);
+    if (earliestInvoice) candidates.push(earliestInvoice.createdAt);
+    if (earliestQuote) candidates.push(earliestQuote.createdAt);
+    if (earliestProject) {
+      candidates.push(earliestProject.createdAt);
+      if (earliestProject.startDate) candidates.push(earliestProject.startDate);
+    }
+    if (candidates.length > 0) {
+      const earliest = new Date(Math.min(...candidates.map((d) => d.getTime())));
+      const diffMs = monthStart.getTime() - startOfMonth(earliest).getTime();
       monthsBack = Math.max(1, Math.ceil(diffMs / (30.44 * 24 * 60 * 60 * 1000)) + 1);
     } else {
       monthsBack = 1;
