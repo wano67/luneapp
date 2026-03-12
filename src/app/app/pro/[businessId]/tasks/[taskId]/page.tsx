@@ -12,7 +12,7 @@ import { Modal } from '@/components/ui/modal';
 import { fetchJson } from '@/lib/apiClient';
 import { useActiveBusiness } from '../../../ActiveBusinessProvider';
 import { ProPageShell } from '@/components/pro/ProPageShell';
-import { Check, Trash2, Plus, X, Calendar, User, FolderOpen, HelpCircle, AlertTriangle, Users } from 'lucide-react';
+import { Check, Trash2, Plus, X, Calendar, User, FolderOpen, HelpCircle, AlertTriangle, Users, Paperclip, FileText, Upload } from 'lucide-react';
 import { TASK_STATUS_OPTIONS, getTaskStatusBadgeClasses } from '@/lib/taskStatusUi';
 import { fmtDate } from '@/lib/format';
 
@@ -46,6 +46,8 @@ type ChecklistItem = {
   createdAt: string;
   updatedAt: string;
 };
+
+type TaskDocItem = { id: string; title: string; filename: string; mimeType: string; sizeBytes: number; createdAt: string };
 
 type TaskDetailResponse = { item: Task };
 type ChecklistResponse = { items: ChecklistItem[] };
@@ -101,6 +103,11 @@ export default function TaskDetailPage() {
   const [helpRecipient, setHelpRecipient] = useState('');
   const [helpIsProjectGroup, setHelpIsProjectGroup] = useState(false);
   const [helpSending, setHelpSending] = useState(false);
+
+  // Documents
+  const [taskDocs, setTaskDocs] = useState<TaskDocItem[]>([]);
+  const [docUploading, setDocUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Dropdown data
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
@@ -400,6 +407,43 @@ export default function TaskDetailPage() {
       { method: 'DELETE' },
     );
     await loadChecklist();
+  }
+
+  // ─── Document handlers ───────────────────────────────────────────────
+  const loadTaskDocs = useCallback(async () => {
+    if (!task?.projectId) { setTaskDocs([]); return; }
+    const res = await fetchJson<{ items: TaskDocItem[] }>(
+      `/api/pro/businesses/${businessId}/projects/${task.projectId}/documents?taskId=${task.id}`,
+    );
+    if (res.ok && res.data) setTaskDocs(res.data.items);
+  }, [businessId, task?.id, task?.projectId]);
+
+  useEffect(() => { void loadTaskDocs(); }, [loadTaskDocs]);
+
+  async function handleDocUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !task?.projectId) return;
+    setDocUploading(true);
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('title', file.name);
+    fd.append('taskId', task.id);
+    await fetchJson(
+      `/api/pro/businesses/${businessId}/projects/${task.projectId}/documents`,
+      { method: 'POST', body: fd },
+    );
+    setDocUploading(false);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    await loadTaskDocs();
+  }
+
+  async function handleDocDelete(docId: string) {
+    if (!task?.projectId) return;
+    await fetchJson(
+      `/api/pro/businesses/${businessId}/projects/${task.projectId}/documents/${docId}`,
+      { method: 'DELETE' },
+    );
+    await loadTaskDocs();
   }
 
   // ─── Help modal: group members ─────────────────────────────────────
@@ -777,6 +821,73 @@ export default function TaskDetailPage() {
           </form>
         ) : null}
       </Card>
+
+      {/* ── Documents ── */}
+      {task.projectId ? (
+        <Card className="p-5 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Paperclip size={15} style={{ color: 'var(--text-faint)' }} />
+              <p className="text-sm font-semibold" style={{ color: 'var(--text)' }}>Documents</p>
+              {taskDocs.length > 0 ? (
+                <span className="text-xs font-medium" style={{ color: 'var(--text-faint)' }}>{taskDocs.length}</span>
+              ) : null}
+            </div>
+            {isAdmin ? (
+              <>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  className="hidden"
+                  onChange={(e) => void handleDocUpload(e)}
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={docUploading}
+                >
+                  <Upload size={13} className="mr-1.5" />
+                  {docUploading ? 'Envoi...' : 'Ajouter'}
+                </Button>
+              </>
+            ) : null}
+          </div>
+
+          {taskDocs.length > 0 ? (
+            <div className="space-y-1">
+              {taskDocs.map((doc) => (
+                <div
+                  key={doc.id}
+                  className="flex items-center gap-3 rounded-lg px-3 py-2.5 group hover:bg-[var(--surface-hover)] transition-colors"
+                >
+                  <FileText size={15} style={{ color: 'var(--shell-accent)' }} className="shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm truncate" style={{ color: 'var(--text)' }}>{doc.title || doc.filename}</p>
+                    <p className="text-[11px]" style={{ color: 'var(--text-faint)' }}>
+                      {(doc.sizeBytes / 1024).toFixed(0)} Ko
+                    </p>
+                  </div>
+                  {isAdmin ? (
+                    <button
+                      type="button"
+                      onClick={() => void handleDocDelete(doc.id)}
+                      className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                      title="Supprimer"
+                    >
+                      <X size={14} style={{ color: 'var(--danger)' }} />
+                    </button>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs py-2" style={{ color: 'var(--text-faint)' }}>
+              Aucun document attache a cette tache.
+            </p>
+          )}
+        </Card>
+      ) : null}
 
       {/* ── Danger zone ── */}
       {isAdmin ? (
