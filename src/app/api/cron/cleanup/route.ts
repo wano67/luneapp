@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/server/db/client';
+import { localFileExists } from '@/server/storage/local';
 
 const CRON_SECRET = process.env.CRON_SECRET;
 
@@ -81,6 +82,34 @@ export async function POST(req: NextRequest) {
     },
   });
   results.expiredResetTokens = expiredResets.count;
+
+  // 7. Orphan documents (file missing from storage)
+  const allDocs = await prisma.businessDocument.findMany({
+    select: { id: true, storageKey: true },
+  });
+  let orphanDocCount = 0;
+  for (const doc of allDocs) {
+    const exists = await localFileExists(doc.storageKey);
+    if (!exists) {
+      await prisma.businessDocument.delete({ where: { id: doc.id } });
+      orphanDocCount++;
+    }
+  }
+  results.orphanDocuments = orphanDocCount;
+
+  // 8. Orphan product images (file missing from storage)
+  const allImages = await prisma.productImage.findMany({
+    select: { id: true, storageKey: true },
+  });
+  let orphanImgCount = 0;
+  for (const img of allImages) {
+    const exists = await localFileExists(img.storageKey);
+    if (!exists) {
+      await prisma.productImage.delete({ where: { id: img.id } });
+      orphanImgCount++;
+    }
+  }
+  results.orphanProductImages = orphanImgCount;
 
   return NextResponse.json({
     ok: true,

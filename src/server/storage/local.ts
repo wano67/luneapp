@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'crypto';
-import { mkdir, readFile, writeFile, rm } from 'fs/promises';
+import { mkdir, readFile, writeFile, rm, access } from 'fs/promises';
 import path from 'path';
 
 const ROOT = process.env.STORAGE_PATH || path.join(process.cwd(), 'uploads');
@@ -45,4 +45,13 @@ export async function readLocalFile(storageKey: string) {
 export async function deleteLocalFile(storageKey: string) {
   const fullPath = path.join(ROOT, storageKey);
   await rm(fullPath, { force: true });
+}
+
+export async function localFileExists(storageKey: string): Promise<boolean> {
+  try {
+    await access(path.join(ROOT, storageKey));
+    return true;
+  } catch {
+    return false;
+  }
 }
