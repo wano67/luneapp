@@ -1,21 +1,22 @@
 import { prisma } from '@/server/db/client';
 import { withBusinessRoute } from '@/server/http/routeHandler';
 import { jsonb, jsonbCreated, jsonbNoContent } from '@/server/http/json';
+import { hashToken, generateToken } from '@/server/security/tokenHash';
 
-// GET /api/pro/businesses/{businessId}/calendar/sync — get or check token
+// GET /api/pro/businesses/{businessId}/calendar/sync — check if token exists
 export const GET = withBusinessRoute(
   { minRole: 'MEMBER' },
   async (ctx) => {
     const existing = await prisma.calendarToken.findUnique({
       where: { userId_businessId: { userId: ctx.userId, businessId: ctx.businessId } },
-      select: { token: true, revokedAt: true, createdAt: true },
+      select: { revokedAt: true, createdAt: true },
     });
 
     if (!existing || existing.revokedAt) {
-      return jsonb({ token: null }, ctx.requestId);
+      return jsonb({ hasToken: false }, ctx.requestId);
     }
 
-    return jsonb({ token: existing.token, createdAt: existing.createdAt.toISOString() }, ctx.requestId);
+    return jsonb({ hasToken: true, createdAt: existing.createdAt.toISOString() }, ctx.requestId);
   },
 );
 
@@ -23,15 +24,16 @@ export const GET = withBusinessRoute(
 export const POST = withBusinessRoute(
   { minRole: 'MEMBER' },
   async (ctx) => {
-    // Upsert: create new or revive revoked token
-    const token = await prisma.calendarToken.upsert({
+    const rawToken = generateToken();
+    const tokenHash = hashToken(rawToken);
+
+    await prisma.calendarToken.upsert({
       where: { userId_businessId: { userId: ctx.userId, businessId: ctx.businessId } },
-      create: { userId: ctx.userId, businessId: ctx.businessId },
-      update: { revokedAt: null, token: crypto.randomUUID() },
-      select: { token: true, createdAt: true },
+      create: { userId: ctx.userId, businessId: ctx.businessId, token: tokenHash },
+      update: { revokedAt: null, token: tokenHash },
     });
 
-    return jsonbCreated({ token: token.token, createdAt: token.createdAt.toISOString() }, ctx.requestId);
+    return jsonbCreated({ token: rawToken, createdAt: new Date().toISOString() }, ctx.requestId);
   },
 );
 

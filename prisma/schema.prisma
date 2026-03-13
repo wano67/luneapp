@@ -634,6 +634,7 @@ model Project {
   updatedAt DateTime @updatedAt
 
   @@index([businessId, status])
+  @@index([businessId, archivedAt])
   @@index([businessId, categoryReferenceId])
   @@index([billingQuoteId])
 }
@@ -814,6 +815,7 @@ model Finance {
   @@index([businessId, inventoryProductId])
   @@index([businessId, deletedAt])
   @@index([businessId, reconciled])
+  @@index([businessId, projectId, date])
   @@index([recurringRuleId])
   @@unique([recurringRuleId, date])
 }
@@ -1376,6 +1378,7 @@ model LedgerEntry {
   updatedAt DateTime @updatedAt
 
   @@index([businessId, date])
+  @@index([businessId, sourceType, sourceId])
   @@index([sourceType, sourceId])
   @@unique([sourceType, sourceId])
 }
@@ -1607,6 +1610,7 @@ model Payment {
   @@index([projectId])
   @@index([clientId])
   @@index([businessId, deletedAt])
+  @@index([businessId, invoiceId])
   @@index([createdByUserId])
 }
 
@@ -2170,7 +2174,7 @@ model CalendarToken {
   id         BigInt    @id @default(autoincrement())
   userId     BigInt
   businessId BigInt
-  token      String    @unique @default(uuid())
+  token      String    @unique
   name       String    @default("Calendrier")
   revokedAt  DateTime?
   createdAt  DateTime  @default(now())
@@ -2205,7 +2209,7 @@ model PersonalCalendarEvent {
 model PersonalCalendarToken {
   id        BigInt    @id @default(autoincrement())
   userId    BigInt    @unique
-  token     String    @unique @default(uuid())
+  token     String    @unique
   name      String    @default("Calendrier personnel")
   revokedAt DateTime?
   createdAt DateTime  @default(now())
@@ -2462,7 +2466,7 @@ model PaymentLink {
   businessId  BigInt
   invoiceId   BigInt?
   clientId    BigInt?
-  token       String            @unique @default(uuid())
+  token       String            @unique
   amountCents Int
   currency    String            @default("EUR")
   description String?
@@ -2687,7 +2691,7 @@ model AccountantAccess {
   id          BigInt               @id @default(autoincrement())
   businessId  BigInt
   accountantUserId BigInt
-  token       String               @unique @default(uuid())
+  token       String               @unique
   accessLevel AccountantAccessLevel @default(READ_ONLY)
   expiresAt   DateTime?
   revokedAt   DateTime?

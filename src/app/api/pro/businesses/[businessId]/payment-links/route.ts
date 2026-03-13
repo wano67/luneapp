@@ -3,17 +3,17 @@ import { withBusinessRoute } from '@/server/http/routeHandler';
 import { jsonb, jsonbCreated } from '@/server/http/json';
 import { badRequest } from '@/server/http/apiUtils';
 import { parseIdOpt } from '@/server/http/parsers';
+import { hashToken, generateToken } from '@/server/security/tokenHash';
 
 function serialize(l: {
   id: bigint; businessId: bigint; invoiceId: bigint | null; clientId: bigint | null;
-  token: string; amountCents: number; currency: string; description: string | null;
+  amountCents: number; currency: string; description: string | null;
   status: string; expiresAt: Date | null; paidAt: Date | null; createdAt: Date;
   invoice?: { number: string | null } | null;
   client?: { name: string } | null;
 }) {
   return {
     id: l.id.toString(),
-    token: l.token,
     amountCents: l.amountCents,
     currency: l.currency,
     description: l.description,
@@ -23,7 +23,6 @@ function serialize(l: {
     expiresAt: l.expiresAt?.toISOString() ?? null,
     paidAt: l.paidAt?.toISOString() ?? null,
     createdAt: l.createdAt.toISOString(),
-    payUrl: `/pay/${l.token}`,
   };
 }
 
@@ -42,7 +41,7 @@ export const GET = withBusinessRoute<{ businessId: string }>(
       orderBy: { createdAt: 'desc' },
       take: 100,
     });
-    return jsonb({ items: items.map(serialize) }, ctx.requestId);
+    return jsonb({ items: items.map((l) => serialize(l)) }, ctx.requestId);
   },
 );
 
@@ -88,11 +87,15 @@ export const POST = withBusinessRoute<{ businessId: string }>(
       }
     }
 
+    const rawToken = generateToken();
+    const tokenHash = hashToken(rawToken);
+
     const item = await prisma.paymentLink.create({
       data: {
         businessId: ctx.businessId,
         invoiceId: invoiceIdBigInt,
         clientId: clientIdBigInt,
+        token: tokenHash,
         amountCents: Math.trunc(amountCents),
         description: typeof description === 'string' ? description.trim().slice(0, 500) || null : null,
         expiresAt: typeof expiresAt === 'string' ? new Date(expiresAt) : null,
@@ -100,6 +103,6 @@ export const POST = withBusinessRoute<{ businessId: string }>(
       include,
     });
 
-    return jsonbCreated({ item: serialize(item) }, ctx.requestId);
+    return jsonbCreated({ item: { ...serialize(item), payUrl: `/pay/${rawToken}` } }, ctx.requestId);
   },
 );

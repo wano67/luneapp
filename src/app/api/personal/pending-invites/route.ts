@@ -37,7 +37,7 @@ export const GET = withPersonalRoute(async (ctx) => {
       businessName: inv.business.name,
       businessId: inv.businessId.toString(),
       role: inv.role,
-      token: inv.token,
+      inviteId: inv.id.toString(),
       createdAt: inv.createdAt.toISOString(),
       expiresAt: inv.expiresAt?.toISOString() ?? null,
     }));

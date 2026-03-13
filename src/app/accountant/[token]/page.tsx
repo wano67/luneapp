@@ -1,5 +1,6 @@
 import { prisma } from '@/server/db/client';
 import { notFound } from 'next/navigation';
+import { hashToken } from '@/server/security/tokenHash';
 
 type Props = { params: Promise<{ token: string }> };
 
@@ -7,7 +8,7 @@ export default async function AccountantPortalPage({ params }: Props) {
   const { token } = await params;
 
   const access = await prisma.accountantAccess.findUnique({
-    where: { token },
+    where: { token: hashToken(token) },
   });
 
   if (!access) return notFound();

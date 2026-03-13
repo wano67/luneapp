@@ -3,6 +3,7 @@ import { prisma } from '@/server/db/client';
 import icalGenerator from 'ical-generator';
 import { projectRecurring } from '@/lib/calendar';
 import { rateLimit, makeIpKey } from '@/server/security/rateLimit';
+import { hashToken } from '@/server/security/tokenHash';
 
 // GET /api/ical/{token} → .ics feed
 export async function GET(
@@ -16,11 +17,12 @@ export async function GET(
   });
   if (limited) return limited;
 
-  const { token } = await params;
+  const { token: rawToken } = await params;
+  const tokenHash = hashToken(rawToken);
 
   // Try business token first, then personal token
   const businessToken = await prisma.calendarToken.findUnique({
-    where: { token },
+    where: { token: tokenHash },
     select: { userId: true, businessId: true, revokedAt: true },
   });
 
@@ -32,7 +34,7 @@ export async function GET(
   }
 
   const personalToken = await prisma.personalCalendarToken.findUnique({
-    where: { token },
+    where: { token: tokenHash },
     select: { userId: true, revokedAt: true },
   });
 

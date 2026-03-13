@@ -16,7 +16,6 @@ import {
 
 type PaymentLinkItem = {
   id: string;
-  token: string;
   amountCents: number;
   currency: string;
   description: string | null;
@@ -26,7 +25,7 @@ type PaymentLinkItem = {
   expiresAt: string | null;
   paidAt: string | null;
   createdAt: string;
-  payUrl: string;
+  payUrl?: string; // only returned at creation (POST)
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -201,9 +200,11 @@ export default function PaymentLinksPage() {
                 <TableCell className="text-right space-x-1">
                   {item.status === 'ACTIVE' && (
                     <>
-                      <Button size="sm" variant="outline" onClick={() => copyUrl(item.payUrl)} title="Copier le lien">
-                        <Copy className="w-3.5 h-3.5" />
-                      </Button>
+                      {item.payUrl && (
+                        <Button size="sm" variant="outline" onClick={() => copyUrl(item.payUrl!)} title="Copier le lien">
+                          <Copy className="w-3.5 h-3.5" />
+                        </Button>
+                      )}
                       <Button size="sm" variant="outline" onClick={() => cancelLink(item.id)} disabled={!isAdmin} title="Annuler">
                         <Ban className="w-3.5 h-3.5" />
                       </Button>

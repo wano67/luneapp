@@ -3,22 +3,28 @@ import { BusinessInviteStatus } from '@/generated/prisma';
 import { withPersonalRoute } from '@/server/http/routeHandler';
 import { jsonb } from '@/server/http/json';
 import { badRequest, notFound, readJson, unauthorized } from '@/server/http/apiUtils';
+import { hashToken } from '@/server/security/tokenHash';
+import { parseIdOpt } from '@/server/http/parsers';
 
 // POST /api/pro/businesses/invites/accept
 export const POST = withPersonalRoute(
   async (ctx, req) => {
     const body = await readJson(req);
-    if (!body || typeof (body as Record<string, unknown>).token !== 'string') {
-      return badRequest('Token requis.');
-    }
+    if (!body) return badRequest('Payload requis.');
+    const b = body as Record<string, unknown>;
+    const rawToken = typeof b.token === 'string' ? b.token.trim() : null;
+    const inviteIdBigInt = parseIdOpt(b.inviteId as string);
+    if (!rawToken && !inviteIdBigInt) return badRequest('Token ou inviteId requis.');
 
-    const token = ((body as Record<string, unknown>).token as string).trim();
-    if (!token) return badRequest('Token invalide.');
-
-    const invite = await prisma.businessInvite.findFirst({
-      where: { token },
-      include: { business: true },
-    });
+    const invite = rawToken
+      ? await prisma.businessInvite.findFirst({
+          where: { token: hashToken(rawToken) },
+          include: { business: true },
+        })
+      : await prisma.businessInvite.findFirst({
+          where: { id: inviteIdBigInt! },
+          include: { business: true },
+        });
 
     if (!invite || !invite.business) {
       return notFound('Invitation introuvable ou déjà utilisée.');

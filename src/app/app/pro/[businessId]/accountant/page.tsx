@@ -14,14 +14,13 @@ import { Plus, Trash2, Copy, Ban, UserCheck, X } from 'lucide-react';
 type AccessItem = {
   id: string;
   accountantUserId: string;
-  token: string;
   accessLevel: string;
   accountantName: string | null;
   accountantEmail: string | null;
   expiresAt: string | null;
   revokedAt: string | null;
   lastAccessAt: string | null;
-  portalUrl: string;
+  portalUrl?: string; // only returned at creation (POST)
   createdAt: string;
 };
 
@@ -203,9 +202,11 @@ export default function AccountantPage() {
                   <TableCell className="text-right space-x-1">
                     {isActive && (
                       <>
-                        <Button size="sm" variant="outline" onClick={() => copyPortalUrl(item.portalUrl)} title="Copier le lien">
-                          <Copy className="w-3.5 h-3.5" />
-                        </Button>
+                        {item.portalUrl && (
+                          <Button size="sm" variant="outline" onClick={() => copyPortalUrl(item.portalUrl!)} title="Copier le lien">
+                            <Copy className="w-3.5 h-3.5" />
+                          </Button>
+                        )}
                         <Button size="sm" variant="outline" onClick={() => revokeAccess(item.id)} title="Révoquer">
                           <Ban className="w-3.5 h-3.5" />
                         </Button>

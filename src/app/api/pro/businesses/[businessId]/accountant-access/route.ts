@@ -4,17 +4,18 @@ import { withBusinessRoute } from '@/server/http/routeHandler';
 import { jsonb, jsonbCreated } from '@/server/http/json';
 import { badRequest } from '@/server/http/apiUtils';
 import { parseIdOpt } from '@/server/http/parsers';
+import { hashToken, generateToken } from '@/server/security/tokenHash';
 
 function serialize(a: {
   id: bigint; businessId: bigint; accountantUserId: bigint; token: string;
   accessLevel: string; expiresAt: Date | null; revokedAt: Date | null;
   lastAccessAt: Date | null; createdAt: Date;
   accountant?: { firstName: string | null; lastName: string | null; email: string } | null;
-}, exposeToken = false) {
+}, rawToken?: string) {
   return {
     id: a.id.toString(),
     accountantUserId: a.accountantUserId.toString(),
-    ...(exposeToken ? { token: a.token, portalUrl: `/accountant/${a.token}` } : {}),
+    ...(rawToken ? { portalUrl: `/accountant/${rawToken}` } : {}),
     accessLevel: a.accessLevel,
     accountantName: a.accountant ? `${a.accountant.firstName ?? ''} ${a.accountant.lastName ?? ''}`.trim() || a.accountant.email : null,
     accountantEmail: a.accountant?.email ?? null,
@@ -77,16 +78,20 @@ export const POST = withBusinessRoute<{ businessId: string }>(
     });
     if (existing) return badRequest('Cet expert-comptable a déjà un accès.');
 
+    const rawToken = generateToken();
+    const tokenHash = hashToken(rawToken);
+
     const item = await prisma.accountantAccess.create({
       data: {
         businessId: ctx.businessId,
         accountantUserId: uid,
         accessLevel: level,
+        token: tokenHash,
         expiresAt: typeof expiresAt === 'string' ? new Date(expiresAt) : null,
       },
       include,
     });
 
-    return jsonbCreated({ item: serialize(item, true) }, ctx.requestId);
+    return jsonbCreated({ item: serialize(item, rawToken) }, ctx.requestId);
   },
 );

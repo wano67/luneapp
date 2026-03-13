@@ -4,15 +4,15 @@ import { withBusinessRoute } from '@/server/http/routeHandler';
 import { jsonb, jsonbCreated } from '@/server/http/json';
 import { badRequest, notFound, readJson, serverError } from '@/server/http/apiUtils';
 import { buildBaseUrl } from '@/server/http/baseUrl';
-import crypto from 'crypto';
 import { isValidEmail } from '@/lib/validation/email';
 import { sendInviteEmail } from '@/server/services/email';
 import { notify } from '@/server/services/notifications';
+import { hashToken, generateToken } from '@/server/security/tokenHash';
 
 // GET /api/pro/businesses/{businessId}/invites
 export const GET = withBusinessRoute(
   { minRole: 'ADMIN' },
-  async (ctx, req) => {
+  async (ctx) => {
     const business = await prisma.business.findUnique({ where: { id: ctx.businessId } });
     if (!business) return notFound('Entreprise introuvable.');
 
@@ -29,7 +29,6 @@ export const GET = withBusinessRoute(
     });
     const existingEmailSet = new Set(existingUsers.map((u) => u.email.toLowerCase()));
 
-    const baseUrl = buildBaseUrl(req);
     const now = Date.now();
     const expiredIds: bigint[] = [];
     const items = invites.map((inv) => {
@@ -41,11 +40,6 @@ export const GET = withBusinessRoute(
         expiredIds.push(inv.id);
       }
 
-      const inviteLink =
-        status === BusinessInviteStatus.PENDING || status === BusinessInviteStatus.ACCEPTED
-          ? `${baseUrl}/app/invites/accept?token=${encodeURIComponent(inv.token)}`
-          : undefined;
-
       return {
         id: inv.id,
         businessId: inv.businessId,
@@ -55,7 +49,6 @@ export const GET = withBusinessRoute(
         createdAt: inv.createdAt,
         expiresAt: inv.expiresAt,
         userExists: existingEmailSet.has(inv.email.toLowerCase()),
-        ...(inviteLink ? { inviteLink, tokenPreview: inv.token.slice(-6) } : {}),
       };
     });
 
@@ -114,7 +107,8 @@ export const POST = withBusinessRoute(
       }
     }
 
-    const rawToken = crypto.randomBytes(32).toString('base64url');
+    const rawToken = generateToken();
+    const tokenHash = hashToken(rawToken);
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7); // 7 jours
     const baseUrl = buildBaseUrl(req);
@@ -142,7 +136,7 @@ export const POST = withBusinessRoute(
           where: { id: existingInvite.id },
           data: {
             role,
-            token: rawToken,
+            token: tokenHash,
             expiresAt,
             status: BusinessInviteStatus.PENDING,
           },
@@ -153,7 +147,7 @@ export const POST = withBusinessRoute(
             businessId: ctx.businessId,
             email,
             role,
-            token: rawToken,
+            token: tokenHash,
             status: BusinessInviteStatus.PENDING,
             expiresAt,
           },
@@ -201,7 +195,13 @@ export const POST = withBusinessRoute(
     return jsonbCreated(
       {
         item: {
-          ...invite,
+          id: invite.id,
+          businessId: invite.businessId,
+          email: invite.email,
+          role: invite.role,
+          status: invite.status,
+          createdAt: invite.createdAt,
+          expiresAt: invite.expiresAt,
           inviteLink,
           tokenPreview: rawToken.slice(-6),
           userExists,

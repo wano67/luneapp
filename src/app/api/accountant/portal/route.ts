@@ -1,16 +1,21 @@
 import { prisma } from '@/server/db/client';
 import { NextRequest, NextResponse } from 'next/server';
+import { rateLimit, makeIpKey } from '@/server/security/rateLimit';
+import { hashToken } from '@/server/security/tokenHash';
 
 // GET /api/accountant/portal?token=xxx
 // Public endpoint for accountant portal — token-based auth
 export async function GET(req: NextRequest) {
+  const limited = rateLimit(req, { key: makeIpKey(req, 'accountant:portal'), limit: 30, windowMs: 60_000 });
+  if (limited) return limited;
+
   const token = req.nextUrl.searchParams.get('token');
   if (!token) {
     return NextResponse.json({ error: 'Token requis.' }, { status: 400 });
   }
 
   const access = await prisma.accountantAccess.findUnique({
-    where: { token },
+    where: { token: hashToken(token) },
   });
 
   if (!access) {

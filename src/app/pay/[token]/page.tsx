@@ -1,6 +1,7 @@
 import { prisma } from '@/server/db/client';
 import { notFound } from 'next/navigation';
 import { formatCents } from '@/lib/money';
+import { hashToken } from '@/server/security/tokenHash';
 
 type Props = { params: Promise<{ token: string }> };
 
@@ -8,7 +9,7 @@ export default async function PaymentPage({ params }: Props) {
   const { token } = await params;
 
   const link = await prisma.paymentLink.findUnique({
-    where: { token },
+    where: { token: hashToken(token) },
     include: {
       business: { select: { name: true } },
       invoice: { select: { number: true } },

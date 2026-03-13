@@ -10,6 +10,7 @@ type Props = {
 };
 
 export function CalendarSyncPanel({ apiBase }: Props) {
+  const [hasToken, setHasToken] = useState(false);
   const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
@@ -17,8 +18,8 @@ export function CalendarSyncPanel({ apiBase }: Props) {
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   useEffect(() => {
-    fetchJson<{ token: string | null }>(apiBase).then(res => {
-      if (res.ok && res.data) setToken(res.data.token);
+    fetchJson<{ hasToken: boolean }>(apiBase).then(res => {
+      if (res.ok && res.data) setHasToken(res.data.hasToken);
       setLoading(false);
     });
   }, [apiBase]);
@@ -26,13 +27,17 @@ export function CalendarSyncPanel({ apiBase }: Props) {
   const generate = useCallback(async () => {
     setGenerating(true);
     const res = await fetchJson<{ token: string }>(apiBase, { method: 'POST' });
-    if (res.ok && res.data) setToken(res.data.token);
+    if (res.ok && res.data) {
+      setToken(res.data.token);
+      setHasToken(true);
+    }
     setGenerating(false);
   }, [apiBase]);
 
   const revoke = useCallback(async () => {
     await fetchJson(apiBase, { method: 'DELETE' });
     setToken(null);
+    setHasToken(false);
   }, [apiBase]);
 
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
@@ -50,7 +55,7 @@ export function CalendarSyncPanel({ apiBase }: Props) {
     return <p className="text-sm text-[var(--text-secondary)]">Chargement…</p>;
   }
 
-  if (!token) {
+  if (!hasToken && !token) {
     return (
       <div className="space-y-3">
         <p className="text-sm text-[var(--text-secondary)]">
@@ -60,6 +65,32 @@ export function CalendarSyncPanel({ apiBase }: Props) {
           <RefreshCw size={14} className="mr-1.5" />
           {generating ? 'Génération…' : 'Activer la synchronisation'}
         </Button>
+      </div>
+    );
+  }
+
+  // Token exists but raw value not available (loaded from GET — hash only)
+  if (hasToken && !token) {
+    return (
+      <div className="space-y-4">
+        <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)]/50 p-3 space-y-2">
+          <p className="text-sm text-[var(--text)]">
+            La synchronisation calendrier est <strong>active</strong>.
+          </p>
+          <p className="text-xs text-[var(--text-secondary)]">
+            Pour obtenir les URLs de synchronisation, regénérez un nouveau lien ci-dessous. Le lien précédent sera remplacé.
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={generate} disabled={generating}>
+            <RefreshCw size={14} className="mr-1.5" />
+            {generating ? 'Génération…' : 'Regénérer le lien'}
+          </Button>
+          <Button variant="outline" onClick={revoke} className="!text-[var(--danger)] !border-[var(--danger)]">
+            <Trash2 size={14} className="mr-1.5" />
+            Révoquer
+          </Button>
+        </div>
       </div>
     );
   }

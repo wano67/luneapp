@@ -3,6 +3,7 @@ import { prisma } from '@/server/db/client';
 import icalGenerator from 'ical-generator';
 import { CalendarEventKind } from '@/generated/prisma';
 import { rateLimit, makeIpKey } from '@/server/security/rateLimit';
+import { hashToken } from '@/server/security/tokenHash';
 
 type TokenInfo = {
   userId: bigint;
@@ -10,15 +11,17 @@ type TokenInfo = {
   scope: 'pro' | 'personal';
 };
 
-async function resolveToken(token: string): Promise<TokenInfo | null> {
+async function resolveToken(rawToken: string): Promise<TokenInfo | null> {
+  const tokenHash = hashToken(rawToken);
+
   const bt = await prisma.calendarToken.findUnique({
-    where: { token },
+    where: { token: tokenHash },
     select: { userId: true, businessId: true, revokedAt: true },
   });
   if (bt && !bt.revokedAt) return { userId: bt.userId, businessId: bt.businessId, scope: 'pro' };
 
   const pt = await prisma.personalCalendarToken.findUnique({
-    where: { token },
+    where: { token: tokenHash },
     select: { userId: true, revokedAt: true },
   });
   if (pt && !pt.revokedAt) return { userId: pt.userId, businessId: null, scope: 'personal' };
