@@ -26,6 +26,15 @@ export default function NewProjectForm({ businessId }: Props) {
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
+  // Warn on navigation with unsaved changes
+  const isDirty = !!(name || clientId || startDate || endDate || categoryReferenceId);
+  useEffect(() => {
+    if (!isDirty) return;
+    const handler = (e: BeforeUnloadEvent) => { e.preventDefault(); };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [isDirty]);
+
   useEffect(() => {
     const controller = new AbortController();
     Promise.all([

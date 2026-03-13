@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Trash2, ChevronDown, ChevronUp, Play, Square, Clock, DollarSign, Paperclip, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -81,9 +81,7 @@ export function TaskSidePanel({
   // Time tracking state
   const [timeEntries, setTimeEntries] = useState<TimeEntryItem[]>([]);
   const [runningEntry, setRunningEntry] = useState<TimeEntryItem | null>(null);
-  const [elapsed, setElapsed] = useState(0);
   const [showTimeEntries, setShowTimeEntries] = useState(false);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const isAssignedToMe = Boolean(
     task && currentUserId && (
@@ -124,22 +122,6 @@ export function TaskSidePanel({
       }
     });
   }, [task?.id, open, businessId]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Live timer
-  useEffect(() => {
-    if (timerRef.current) clearInterval(timerRef.current);
-    if (!runningEntry) {
-      setElapsed(0);
-      return;
-    }
-    const updateElapsed = () => {
-      const diff = Math.floor((Date.now() - new Date(runningEntry.startedAt).getTime()) / 1000);
-      setElapsed(Math.max(0, diff));
-    };
-    updateElapsed();
-    timerRef.current = setInterval(updateElapsed, 1000);
-    return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  }, [runningEntry]);
 
   const startTimer = useCallback(async () => {
     if (!task) return;
@@ -434,35 +416,23 @@ export function TaskSidePanel({
             />
           </div>
 
+          {/* ═══ Durée estimée ═══ */}
+          <DurationPicker
+            minutes={task.estimatedMinutes ?? null}
+            onChange={(m) => patchField('estimatedMinutes', m)}
+            disabled={!canEdit}
+          />
+
           {/* ═══ Time Tracking ═══ */}
           <div className="space-y-2">
             <label className="text-xs font-medium text-[var(--text-secondary)]">Suivi du temps</label>
-            <div className="flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-2)]/60 px-3 py-2">
-              <Clock size={16} className="shrink-0 text-[var(--text-secondary)]" />
-              {runningEntry ? (
-                <>
-                  <span className="flex-1 font-mono text-sm font-semibold text-[var(--accent)]">
-                    {formatElapsed(elapsed)}
-                  </span>
-                  <Button size="sm" variant="danger" onClick={() => void stopTimer()} className="gap-1.5">
-                    <Square size={12} />
-                    Stop
-                  </Button>
-                </>
-              ) : (
-                <>
-                  <span className="flex-1 text-sm text-[var(--text-secondary)]">
-                    {totalTrackedMin > 0 ? formatDurationMin(totalTrackedMin) : 'Aucun temps suivi'}
-                  </span>
-                  {canEdit ? (
-                    <Button size="sm" onClick={() => void startTimer()} className="gap-1.5">
-                      <Play size={12} />
-                      Démarrer
-                    </Button>
-                  ) : null}
-                </>
-              )}
-            </div>
+            <LiveTimer
+              runningEntry={runningEntry}
+              totalTrackedMin={totalTrackedMin}
+              canEdit={canEdit}
+              onStart={() => void startTimer()}
+              onStop={() => void stopTimer()}
+            />
             {/* Total + toggle entries */}
             {timeEntries.length > 0 ? (
               <div className="flex items-center justify-between">
@@ -481,45 +451,13 @@ export function TaskSidePanel({
             ) : null}
             {/* Entries list */}
             {showTimeEntries ? (
-              <div className="max-h-48 space-y-1 overflow-y-auto">
-                {timeEntries.map((entry) => (
-                  <div
-                    key={entry.id}
-                    className="flex items-center gap-2 rounded-lg border border-[var(--border)]/50 bg-[var(--surface)] px-2.5 py-1.5 text-xs"
-                  >
-                    <span className="min-w-0 flex-1 truncate text-[var(--text-primary)]">
-                      {entry.userName ?? entry.userEmail}
-                    </span>
-                    <span className="font-mono text-[var(--text-secondary)]">
-                      {entry.stoppedAt
-                        ? formatDurationMin(entry.durationMin ?? 0)
-                        : formatElapsed(elapsed)}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => void toggleBillable(entry.id, !entry.billable)}
-                      title={entry.billable ? 'Facturable' : 'Non facturable'}
-                      className={cn(
-                        'rounded p-0.5 transition',
-                        entry.billable
-                          ? 'text-[var(--success)] hover:text-[var(--success)]'
-                          : 'text-[var(--text-faint)] hover:text-[var(--text-secondary)]',
-                      )}
-                    >
-                      <DollarSign size={12} />
-                    </button>
-                    {(isAdmin || entry.userId === currentUserId) ? (
-                      <button
-                        type="button"
-                        onClick={() => void deleteTimeEntry(entry.id)}
-                        className="text-[var(--text-faint)] hover:text-[var(--danger)]"
-                      >
-                        <Trash2 size={12} />
-                      </button>
-                    ) : null}
-                  </div>
-                ))}
-              </div>
+              <TimeEntriesList
+                entries={timeEntries}
+                isAdmin={isAdmin}
+                currentUserId={currentUserId}
+                onToggleBillable={toggleBillable}
+                onDelete={deleteTimeEntry}
+              />
             ) : null}
           </div>
 
@@ -617,21 +555,6 @@ export function TaskSidePanel({
                 </Select>
               ) : null}
 
-              {/* Temps estimé */}
-              <Input
-                label="Temps estimé (min)"
-                type="number"
-                min={0}
-                max={99999}
-                value={task.estimatedMinutes ?? ''}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  patchField('estimatedMinutes', v === '' ? null : Number(v));
-                }}
-                disabled={!canEdit}
-                placeholder="Ex: 120"
-              />
-
               {/* Tâche bloquée */}
               <div className="space-y-2">
                 <label className="flex items-center gap-2 text-sm text-[var(--text-primary)]">
@@ -714,3 +637,207 @@ function formatDurationMin(minutes: number): string {
   const m = minutes % 60;
   return m > 0 ? `${h}h${String(m).padStart(2, '0')}` : `${h}h`;
 }
+
+/* ═══ Duration Picker (hours:minutes) ═══ */
+
+function DurationPicker({ minutes, onChange, disabled }: {
+  minutes: number | null;
+  onChange: (m: number | null) => void;
+  disabled: boolean;
+}) {
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  // Track a local "editing" override; null means use the prop value
+  const [draft, setDraft] = useState<{ h: string; m: string } | null>(null);
+
+  const displayH = draft ? draft.h : (minutes != null ? String(Math.floor(minutes / 60)) : '');
+  const displayM = draft ? draft.m : (minutes != null ? String(minutes % 60) : '');
+
+  const commit = useCallback((hStr: string, mStr: string) => {
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      const hNum = parseInt(hStr) || 0;
+      const mNum = parseInt(mStr) || 0;
+      if (hStr === '' && mStr === '') {
+        onChange(null);
+      } else {
+        onChange(hNum * 60 + mNum);
+      }
+      setDraft(null); // sync back to prop
+    }, 600);
+  }, [onChange]);
+
+  return (
+    <div className="space-y-1">
+      <label className="text-xs font-medium text-[var(--text-secondary)]">Durée estimée</label>
+      <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1">
+          <input
+            type="number"
+            min={0}
+            max={999}
+            value={displayH}
+            onChange={(e) => {
+              const v = e.target.value;
+              const next = { h: v, m: draft?.m ?? displayM };
+              setDraft(next);
+              commit(next.h, next.m);
+            }}
+            disabled={disabled}
+            placeholder="0"
+            className="w-14 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-2 py-1.5 text-center text-sm text-[var(--text-primary)] outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent)]/30 disabled:opacity-50"
+          />
+          <span className="text-xs text-[var(--text-secondary)]">h</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <input
+            type="number"
+            min={0}
+            max={59}
+            value={displayM}
+            onChange={(e) => {
+              const v = e.target.value;
+              const next = { h: draft?.h ?? displayH, m: v };
+              setDraft(next);
+              commit(next.h, next.m);
+            }}
+            disabled={disabled}
+            placeholder="00"
+            className="w-14 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-2 py-1.5 text-center text-sm text-[var(--text-primary)] outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent)]/30 disabled:opacity-50"
+          />
+          <span className="text-xs text-[var(--text-secondary)]">min</span>
+        </div>
+      </div>
+      {minutes != null && minutes > 0 ? (
+        <p className="text-[11px] text-[var(--text-faint)]">
+          = {formatDurationMin(minutes)} ({minutes} min)
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+/* ═══ Live Timer (isolated to avoid full panel re-renders) ═══ */
+
+type LiveTimerEntry = { startedAt: string } | null;
+
+function computeElapsed(startedAt: string | null): number {
+  if (!startedAt) return 0;
+  return Math.max(0, Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000));
+}
+
+function useElapsed(startedAt: string | null): number {
+  const [elapsed, setElapsedVal] = useState(() => computeElapsed(startedAt));
+  const intervalRef = useRef<ReturnType<typeof setInterval>>(undefined);
+
+  useEffect(() => {
+    clearInterval(intervalRef.current);
+    if (!startedAt) return;
+    intervalRef.current = setInterval(() => {
+      setElapsedVal(computeElapsed(startedAt));
+    }, 1000);
+    return () => clearInterval(intervalRef.current);
+  }, [startedAt]);
+
+  return startedAt ? elapsed : 0;
+}
+
+const LiveTimer = memo(function LiveTimer({ runningEntry, totalTrackedMin, canEdit, onStart, onStop }: {
+  runningEntry: LiveTimerEntry;
+  totalTrackedMin: number;
+  canEdit: boolean;
+  onStart: () => void;
+  onStop: () => void;
+}) {
+  const elapsed = useElapsed(runningEntry?.startedAt ?? null);
+
+  return (
+    <div className="flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-2)]/60 px-3 py-2">
+      <Clock size={16} className="shrink-0 text-[var(--text-secondary)]" />
+      {runningEntry ? (
+        <>
+          <span className="flex-1 font-mono text-sm font-semibold text-[var(--accent)]">
+            {formatElapsed(elapsed)}
+          </span>
+          <Button size="sm" variant="danger" onClick={onStop} className="gap-1.5">
+            <Square size={12} />
+            Stop
+          </Button>
+        </>
+      ) : (
+        <>
+          <span className="flex-1 text-sm text-[var(--text-secondary)]">
+            {totalTrackedMin > 0 ? formatDurationMin(totalTrackedMin) : 'Aucun temps suivi'}
+          </span>
+          {canEdit ? (
+            <Button size="sm" onClick={onStart} className="gap-1.5">
+              <Play size={12} />
+              Démarrer
+            </Button>
+          ) : null}
+        </>
+      )}
+    </div>
+  );
+});
+
+/* ═══ Time Entries List (isolated) ═══ */
+
+type TimeEntryDisplay = {
+  id: string;
+  userId: string;
+  userName: string | null;
+  userEmail: string;
+  stoppedAt: string | null;
+  durationMin: number | null;
+  billable: boolean;
+};
+
+const TimeEntriesList = memo(function TimeEntriesList({ entries, isAdmin, currentUserId, onToggleBillable, onDelete }: {
+  entries: TimeEntryDisplay[];
+  isAdmin: boolean;
+  currentUserId?: string | null;
+  onToggleBillable: (id: string, billable: boolean) => Promise<void>;
+  onDelete: (id: string) => Promise<void>;
+}) {
+  return (
+    <div className="max-h-48 space-y-1 overflow-y-auto">
+      {entries.map((entry) => (
+        <div
+          key={entry.id}
+          className="flex items-center gap-2 rounded-lg border border-[var(--border)]/50 bg-[var(--surface)] px-2.5 py-1.5 text-xs"
+        >
+          <span className="min-w-0 flex-1 truncate text-[var(--text-primary)]">
+            {entry.userName ?? entry.userEmail}
+          </span>
+          <span className="font-mono text-[var(--text-secondary)]">
+            {entry.stoppedAt
+              ? formatDurationMin(entry.durationMin ?? 0)
+              : '...'}
+          </span>
+          <button
+            type="button"
+            onClick={() => void onToggleBillable(entry.id, !entry.billable)}
+            title={entry.billable ? 'Facturable' : 'Non facturable'}
+            className={cn(
+              'rounded p-0.5 transition',
+              entry.billable
+                ? 'text-[var(--success)] hover:text-[var(--success)]'
+                : 'text-[var(--text-faint)] hover:text-[var(--text-secondary)]',
+            )}
+          >
+            <DollarSign size={12} />
+          </button>
+          {(isAdmin || entry.userId === currentUserId) ? (
+            <button
+              type="button"
+              onClick={() => void onDelete(entry.id)}
+              className="text-[var(--text-faint)] hover:text-[var(--danger)]"
+            >
+              <Trash2 size={12} />
+            </button>
+          ) : null}
+        </div>
+      ))}
+    </div>
+  );
+});

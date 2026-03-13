@@ -165,6 +165,14 @@ export function ClientInfoTab({ businessId, clientId, client, onUpdated }: Props
     );
   }, [client, form]);
 
+  // Warn on navigation with unsaved changes
+  useEffect(() => {
+    if (!editing || !hasChanges) return;
+    const handler = (e: BeforeUnloadEvent) => { e.preventDefault(); };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [editing, hasChanges]);
+
   function resetForm() {
     setForm({
       name: client.name ?? '',

@@ -108,6 +108,7 @@ export function RecurringRuleModal({
                     setForm((prev) => ({ ...prev, amount: sanitizeEuroInput(e.target.value) }))
                   }
                   placeholder="0,00"
+                  disabled={loading}
                 />
               </label>
               <label className="space-y-1">
@@ -116,6 +117,7 @@ export function RecurringRuleModal({
                   value={form.category}
                   onChange={(e) => setForm((prev) => ({ ...prev, category: e.target.value }))}
                   placeholder="Ex: Loyer, Assurance…"
+                  disabled={loading}
                 />
               </label>
               <label className="space-y-1">
@@ -124,6 +126,7 @@ export function RecurringRuleModal({
                   value={form.vendor}
                   onChange={(e) => setForm((prev) => ({ ...prev, vendor: e.target.value }))}
                   placeholder="Optionnel"
+                  disabled={loading}
                 />
               </label>
               <label className="space-y-1">
@@ -131,6 +134,7 @@ export function RecurringRuleModal({
                 <Select
                   value={form.method}
                   onChange={(e) => setForm((prev) => ({ ...prev, method: e.target.value as PaymentMethod }))}
+                  disabled={loading}
                 >
                   {METHOD_OPTIONS.map((opt) => (
                     <option key={opt.value} value={opt.value}>
@@ -145,6 +149,7 @@ export function RecurringRuleModal({
                   type="date"
                   value={form.startDate}
                   onChange={(e) => setForm((prev) => ({ ...prev, startDate: e.target.value }))}
+                  disabled={loading}
                 />
               </label>
               <label className="space-y-1">
@@ -153,6 +158,7 @@ export function RecurringRuleModal({
                   type="date"
                   value={form.endDate}
                   onChange={(e) => setForm((prev) => ({ ...prev, endDate: e.target.value }))}
+                  disabled={loading}
                 />
               </label>
               <label className="space-y-1">
@@ -160,6 +166,7 @@ export function RecurringRuleModal({
                 <Select
                   value={form.frequency}
                   onChange={(e) => setForm((prev) => ({ ...prev, frequency: e.target.value as 'MONTHLY' | 'YEARLY' }))}
+                  disabled={loading}
                 >
                   <option value="MONTHLY">Mensuel</option>
                   <option value="YEARLY">Annuel</option>
@@ -171,6 +178,7 @@ export function RecurringRuleModal({
                   checked={form.isActive}
                   onChange={(e) => setForm((prev) => ({ ...prev, isActive: e.target.checked }))}
                   className="h-4 w-4 rounded border border-[var(--border)] accent-[var(--shell-accent)]"
+                  disabled={loading}
                 />
                 <span className="text-sm text-[var(--text-primary)]">Règle active</span>
               </label>
@@ -195,6 +203,7 @@ export function RecurringRuleModal({
                       checked={applyFuture}
                       onChange={(e) => setApplyFuture(e.target.checked)}
                       className="h-4 w-4 rounded border border-[var(--border)] accent-[var(--shell-accent)]"
+                      disabled={loading}
                     />
                     Appliquer aux futures
                   </label>
@@ -204,6 +213,7 @@ export function RecurringRuleModal({
                       checked={recalculate}
                       onChange={(e) => setRecalculate(e.target.checked)}
                       className="h-4 w-4 rounded border border-[var(--border)] accent-[var(--shell-accent)]"
+                      disabled={loading}
                     />
                     Recalculer
                   </label>
@@ -216,6 +226,7 @@ export function RecurringRuleModal({
                       type="number"
                       min={1}
                       max={36}
+                      disabled={loading}
                     />
                     <span className="text-xs text-[var(--text-secondary)]">mois</span>
                   </label>

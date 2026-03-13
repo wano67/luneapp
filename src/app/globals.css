@@ -177,8 +177,11 @@
 html,
 body {
   min-height: 100%;
-  overflow-x: hidden;
   scroll-padding-top: 60px;
+}
+
+body {
+  overflow-x: clip;
 }
 
 body {
@@ -332,7 +335,7 @@ a:hover {
     animation: toast-enter 0.3s ease-out both;
   }
   .animate-fade-in-up {
-    animation: fade-in-up 0.4s ease-out both;
+    animation: fade-in-up 0.4s ease-out backwards;
   }
   .animate-page-enter {
     animation: page-enter 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;

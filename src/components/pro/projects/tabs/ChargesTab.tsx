@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Plus, Trash2 } from 'lucide-react';
+import { AlertTriangle, Plus, Trash2 } from 'lucide-react';
 import { KpiCard } from '@/components/ui/kpi-card';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -246,9 +246,28 @@ export function ChargesTab({ businessId, projectId, isAdmin }: Props) {
         <div className="p-4 pb-0">
           <h3 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>Coût de l&apos;équipe</h3>
           <p className="text-xs mt-1" style={{ color: 'var(--text-secondary)' }}>
-            Calculé à partir des heures estimées et du taux horaire de chaque membre.
+            Calculé à partir des heures estimées sur les tâches × taux horaire du membre (fiche employé).
           </p>
         </div>
+
+        {/* Warnings for incomplete data */}
+        {!loading && data && data.laborCosts.length > 0 && (
+          (() => {
+            const missingRate = data.laborCosts.filter((lc) => !lc.hourlyCostCents || lc.hourlyCostCents === '0');
+            if (missingRate.length === 0) return null;
+            return (
+              <div className="mx-4 mt-3 flex items-start gap-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-900/20 dark:text-amber-400">
+                <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+                <span>
+                  {missingRate.length === 1
+                    ? `${missingRate[0].userName} n\u2019a pas de taux horaire renseigné (fiche employé). Son coût est à 0\u00A0€.`
+                    : `${missingRate.length} membres n\u2019ont pas de taux horaire renseigné (fiche employé). Leur coût est à 0\u00A0€.`}
+                </span>
+              </div>
+            );
+          })()
+        )}
+
         <Table>
           <TableHeader>
             <TableRow>
@@ -266,7 +285,11 @@ export function ChargesTab({ businessId, projectId, isAdmin }: Props) {
                   <TableCell className="font-medium">{lc.userName}</TableCell>
                   <TableCell>{lc.jobTitle ?? '—'}</TableCell>
                   <TableCell className="text-right">{fmtHours(lc.totalEstimatedMinutes)}</TableCell>
-                  <TableCell className="text-right">{fmtHourlyCost(lc.hourlyCostCents)}</TableCell>
+                  <TableCell className="text-right">
+                    {lc.hourlyCostCents && lc.hourlyCostCents !== '0'
+                      ? fmtHourlyCost(lc.hourlyCostCents)
+                      : <span className="text-amber-600">Non renseigné</span>}
+                  </TableCell>
                   <TableCell className="text-right font-medium">
                     {fmtKpi(lc.totalLaborCostCents)}
                   </TableCell>
@@ -274,7 +297,9 @@ export function ChargesTab({ businessId, projectId, isAdmin }: Props) {
               ))
             ) : (
               <TableEmpty>
-                {loading ? 'Chargement…' : 'Aucun membre avec des tâches estimées.'}
+                {loading
+                  ? 'Chargement…'
+                  : 'Aucun membre avec des tâches estimées. Assignez des tâches avec un temps estimé pour calculer le coût équipe.'}
               </TableEmpty>
             )}
           </TableBody>
