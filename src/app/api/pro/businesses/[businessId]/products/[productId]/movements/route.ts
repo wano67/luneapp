@@ -92,6 +92,23 @@ export const POST = withBusinessRoute<{ businessId: string; productId: string }>
     });
     if (!product) return notFound('Produit introuvable.');
 
+    // Check stock sufficiency for OUT movements
+    if (type === 'OUT') {
+      const movements = await prisma.inventoryMovement.findMany({
+        where: { productId: productIdBigInt },
+        select: { type: true, quantity: true },
+      });
+      let currentStock = 0;
+      for (const m of movements) {
+        if (m.type === 'IN') currentStock += m.quantity;
+        else if (m.type === 'OUT') currentStock -= m.quantity;
+        else currentStock += m.quantity;
+      }
+      if (quantity > currentStock) {
+        return badRequest(`Stock insuffisant (${currentStock} disponible, ${quantity} demandé).`);
+      }
+    }
+
     const movement = await prisma.$transaction(async (tx) => {
       const created = await tx.inventoryMovement.create({
         data: {

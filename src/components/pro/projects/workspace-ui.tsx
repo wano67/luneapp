@@ -119,13 +119,14 @@ export function StatCard({
   );
 }
 
-export type StatusPillTone = 'default' | 'success' | 'danger' | 'info';
+export type StatusPillTone = 'default' | 'success' | 'danger' | 'info' | 'warning';
 
 const STATUS_PILL_STYLES: Record<StatusPillTone, string> = {
   default: 'border-[var(--border)]/60 bg-[var(--surface-2)]/70 text-[var(--text-secondary)]',
   success: 'border-[var(--success)]/30 bg-[var(--success-bg)] text-[var(--success)]',
   danger: 'border-[var(--danger-border)] bg-[var(--danger-bg)] text-[var(--danger)]',
   info: 'border-[var(--accent-strong)]/30 bg-[var(--surface-2)]/70 text-[var(--accent-strong)]',
+  warning: 'border-amber-400/30 bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400',
 };
 
 export function StatusPill({ label, value, tone = 'default' }: { label: string; value: string; tone?: StatusPillTone }) {

@@ -91,7 +91,7 @@ export function DashboardPanel({ businessId }: { businessId: string }) {
           {/* KPIs */}
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <Card className="p-4 text-center">
-              <p className="text-xs text-[var(--text-secondary)]">Chiffre d&apos;affaires HT</p>
+              <p className="text-xs text-[var(--text-secondary)]">Chiffre d&apos;affaires TTC</p>
               <p className="text-lg font-semibold text-[var(--text-primary)]">{kpi(data.chiffreAffairesCents)}</p>
             </Card>
             <Card className="p-4 text-center">

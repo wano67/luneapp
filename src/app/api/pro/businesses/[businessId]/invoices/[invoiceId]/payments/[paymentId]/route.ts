@@ -26,7 +26,7 @@ export const DELETE = withBusinessRoute<{ businessId: string; invoiceId: string;
     }
 
     const payment = await prisma.payment.findFirst({
-      where: { id: paymentIdBigInt, businessId: businessIdBigInt, invoiceId: invoiceIdBigInt },
+      where: { id: paymentIdBigInt, businessId: businessIdBigInt, invoiceId: invoiceIdBigInt, deletedAt: null },
     });
     if (!payment) return withIdNoStore(notFound('Paiement introuvable.'), requestId);
 

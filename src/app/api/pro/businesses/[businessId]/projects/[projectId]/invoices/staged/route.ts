@@ -8,7 +8,8 @@ import { InvoiceStatus } from '@/generated/prisma';
 import { notifyInvoiceCreated } from '@/server/services/notifications';
 
 function roundPercent(amount: bigint, percent: number) {
-  return (amount * BigInt(Math.round(percent))) / BigInt(100);
+  const p = BigInt(Math.round(percent));
+  return (amount * p + BigInt(50)) / BigInt(100);
 }
 
 type StagedMode = 'PERCENT' | 'AMOUNT' | 'FINAL';
@@ -125,13 +126,23 @@ export const POST = withBusinessRoute<{ businessId: string; projectId: string }>
 
     void notifyInvoiceCreated(ctx.userId, ctx.businessId, projectId, label);
 
+    // Auto-create e-invoice (PDP — e-facture obligatoire)
+    await prisma.eInvoice.create({
+      data: {
+        businessId: ctx.businessId,
+        invoiceId: invoice.id,
+        format: 'FACTUR_X',
+        status: 'DRAFT',
+      },
+    }).catch(() => null); // non-blocking
+
     // Auto-create payment link
     await prisma.paymentLink.create({
       data: {
         businessId: ctx.businessId,
         invoiceId: invoice.id,
         clientId: clientId ?? undefined,
-        amountCents: Number(invoice.totalCents),
+        amountCents: Number(BigInt(invoice.totalCents) > BigInt(Number.MAX_SAFE_INTEGER) ? BigInt(Number.MAX_SAFE_INTEGER) : invoice.totalCents),
         currency,
         description: label,
         status: 'ACTIVE',

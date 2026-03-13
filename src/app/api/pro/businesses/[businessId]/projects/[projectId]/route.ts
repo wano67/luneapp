@@ -151,7 +151,21 @@ export const PATCH = withBusinessRoute<{ businessId: string; projectId: string }
       if (!isValidStatus((body as { status?: unknown }).status)) {
         return badRequest('Statut invalide.');
       }
-      data.status = (body as { status: ProjectStatus }).status;
+      const newStatus = (body as { status: ProjectStatus }).status;
+      const currentStatus = project.status;
+      // Block invalid transitions: CANCELLED projects cannot be reactivated
+      if (currentStatus === ProjectStatus.CANCELLED && newStatus !== ProjectStatus.CANCELLED) {
+        return badRequest('Un projet annulé ne peut pas être réactivé.');
+      }
+      // ACTIVE status must go through /start endpoint (checks prerequisites)
+      if (newStatus === ProjectStatus.ACTIVE && currentStatus !== ProjectStatus.ACTIVE) {
+        return badRequest('Utilisez le démarrage projet pour passer en actif.');
+      }
+      // Archived projects cannot change status without unarchiving first
+      if (project.archivedAt && newStatus !== currentStatus) {
+        return badRequest('Désarchivez le projet avant de changer son statut.');
+      }
+      data.status = newStatus;
     }
 
     if ('quoteStatus' in body) {

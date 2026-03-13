@@ -38,12 +38,18 @@ async function autoCategorizeFinance(
   vendor: string | null,
   type: 'INCOME' | 'EXPENSE',
   amountCents: bigint,
+  financeDate: Date,
 ) {
   try {
     const result = await categorizeEntry(category, vendor, type);
     if (!result || result.confidence < 40) return;
 
-    const vatRate = 2000;
+    // Lookup business VAT settings instead of hardcoding 20%
+    const settings = await prisma.businessSettings.findUnique({
+      where: { businessId },
+      select: { vatEnabled: true, vatRatePercent: true },
+    });
+    const vatRate = settings?.vatEnabled ? (settings.vatRatePercent ?? 20) * 100 : 0;
     const vat = computeVat(amountCents, vatRate);
 
     await prisma.$transaction(async (tx) => {
@@ -67,11 +73,11 @@ async function autoCategorizeFinance(
         pieceRef: null,
         category: result.label,
         vendor,
-        date: new Date(),
+        date: financeDate,
       });
     });
-  } catch (err) {
-    console.error('[auto-categorize] Failed for finance', financeId.toString(), err);
+  } catch {
+    // non-blocking best-effort — no action needed on failure
   }
 }
 
@@ -588,7 +594,7 @@ export const POST = withBusinessRoute(
     });
   } else {
     // Auto-categorize in background if no accountCode was provided
-    void autoCategorizeFinance(finance.id, businessIdBigInt, category, vendor, typeRaw as 'INCOME' | 'EXPENSE', amountCents);
+    void autoCategorizeFinance(finance.id, businessIdBigInt, category, vendor, typeRaw as 'INCOME' | 'EXPENSE', amountCents, finance.date);
   }
 
   return jsonb({ item: enrichFinance(finance) }, requestId, { status: 201 });

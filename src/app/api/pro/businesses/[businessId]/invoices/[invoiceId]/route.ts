@@ -29,7 +29,8 @@ import { parseIdOpt, parseDateOpt } from '@/server/http/parsers';
 import { assessInvoiceCompliance } from '@/server/billing/invoiceCompliance';
 
 function roundPercent(amount: bigint, percent: number) {
-  return (amount * BigInt(Math.round(percent))) / BigInt(100);
+  const p = BigInt(Math.round(percent));
+  return (amount * p + BigInt(50)) / BigInt(100);
 }
 
 type InvoiceWithItems = NonNullable<

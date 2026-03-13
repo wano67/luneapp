@@ -100,7 +100,10 @@ export const POST = withBusinessRoute(
   });
   if (!invoice) return withIdNoStore(notFound('Facture introuvable.'), requestId);
   if (invoice.status === InvoiceStatus.CANCELLED) {
-    return withIdNoStore(badRequest('Impossible d’ajouter un paiement sur une facture annulée.'), requestId);
+    return withIdNoStore(badRequest('Facture annulee.'), requestId);
+  }
+  if (invoice.status === InvoiceStatus.DRAFT) {
+    return withIdNoStore(badRequest('Facture en brouillon.'), requestId);
   }
   if (clientId && invoice.clientId !== clientId) {
     return withIdNoStore(badRequest('invoiceId ne correspond pas au client.'), requestId);

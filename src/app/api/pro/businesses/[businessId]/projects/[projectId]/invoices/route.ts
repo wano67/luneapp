@@ -28,6 +28,7 @@ export const GET = withBusinessRoute<{ businessId: string; projectId: string }>(
       orderBy: { createdAt: 'desc' },
       include: {
         paymentLinks: { select: { token: true, status: true } },
+        eInvoices: { select: { id: true, status: true, format: true, transmittedAt: true } },
       },
     });
 
@@ -94,6 +95,14 @@ export const GET = withBusinessRoute<{ businessId: string; projectId: string }>(
             createdAt: inv.createdAt,
             updatedAt: inv.updatedAt,
             paymentLinkToken: inv.paymentLinks?.find((pl) => pl.status === 'ACTIVE')?.token ?? null,
+            eInvoice: inv.eInvoices?.[0]
+              ? {
+                  id: inv.eInvoices[0].id.toString(),
+                  status: inv.eInvoices[0].status,
+                  format: inv.eInvoices[0].format,
+                  transmittedAt: inv.eInvoices[0].transmittedAt?.toISOString() ?? null,
+                }
+              : null,
           };
         }),
       },

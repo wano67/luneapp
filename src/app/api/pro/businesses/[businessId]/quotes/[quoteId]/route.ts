@@ -11,7 +11,8 @@ import { parseCentsInput } from '@/lib/money';
 import { notifyQuoteSigned } from '@/server/services/notifications';
 
 function roundPercent(amount: bigint, percent: number) {
-  return (amount * BigInt(Math.round(percent))) / BigInt(100);
+  const p = BigInt(Math.round(percent));
+  return (amount * p + BigInt(50)) / BigInt(100);
 }
 
 // GET /api/pro/businesses/{businessId}/quotes/{quoteId}

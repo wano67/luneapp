@@ -71,8 +71,8 @@ export const POST = withBusinessRoute<{ businessId: string; projectId: string }>
     if (typeof body.depositPercent === 'number' && body.depositPercent >= 0 && body.depositPercent <= 100) {
       depositPercent = body.depositPercent;
     }
-    const depositCents = Math.round((Number(pricing.totalCents) * depositPercent) / 100);
-    const balanceCents = Number(pricing.totalCents) - depositCents;
+    const depositCentsBig = (pricing.totalCents * BigInt(Math.round(depositPercent)) + BigInt(50)) / BigInt(100);
+    const balanceCentsBig = pricing.totalCents - depositCentsBig;
 
     // Internal note
     const internalNote = typeof body.internalNote === 'string' ? body.internalNote.trim() || null : null;
@@ -88,8 +88,8 @@ export const POST = withBusinessRoute<{ businessId: string; projectId: string }>
           depositPercent,
           currency: pricing.currency,
           totalCents: pricing.totalCents,
-          depositCents,
-          balanceCents,
+          depositCents: depositCentsBig,
+          balanceCents: balanceCentsBig,
           expiresAt,
           ...(internalNote ? { note: internalNote } : {}),
           items: {

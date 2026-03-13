@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/card';
 import { DebugRequestId } from '@/components/ui/debug-request-id';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { fetchJson } from '@/lib/apiClient';
+import { useRevalidationKey } from '@/lib/revalidate';
 
 type ForecastResponse = {
   businessId: string;
@@ -30,6 +31,7 @@ function formatMoney(cents: string) {
 }
 
 export function ForecastingPanel({ businessId }: { businessId: string }) {
+  const rv = useRevalidationKey(['pro:finances']);
   const [data, setData] = useState<ForecastResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -57,7 +59,7 @@ export function ForecastingPanel({ businessId }: { businessId: string }) {
     return () => {
       mounted = false;
     };
-  }, [businessId]);
+  }, [businessId, rv]);
 
   return (
     <div className="space-y-4">
@@ -70,8 +72,8 @@ export function ForecastingPanel({ businessId }: { businessId: string }) {
         <>
           <Card className="p-4 space-y-1">
             <div className="text-sm text-[var(--text-faint)]">
-              Historique: {new Date(data.historyRange.from).toLocaleDateString()} →{' '}
-              {new Date(data.historyRange.to).toLocaleDateString()}
+              Historique: {new Date(data.historyRange.from).toLocaleDateString('fr-FR')} →{' '}
+              {new Date(data.historyRange.to).toLocaleDateString('fr-FR')}
             </div>
             <div className="text-sm text-[var(--text-faint)]">
               Hypothèses: {data.assumptions.note} (moyenne sur {data.assumptions.monthsAveraged} mois)

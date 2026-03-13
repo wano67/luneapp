@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/card';
 import { DebugRequestId } from '@/components/ui/debug-request-id';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { fetchJson } from '@/lib/apiClient';
+import { useRevalidationKey } from '@/lib/revalidate';
 
 type TreasuryResponse = {
   businessId: string;
@@ -25,6 +26,7 @@ function formatMoney(cents: string) {
 }
 
 export function TreasuryPanel({ businessId }: { businessId: string }) {
+  const rv = useRevalidationKey(['pro:finances']);
   const [data, setData] = useState<TreasuryResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -52,7 +54,7 @@ export function TreasuryPanel({ businessId }: { businessId: string }) {
     return () => {
       mounted = false;
     };
-  }, [businessId]);
+  }, [businessId, rv]);
 
   return (
     <div className="space-y-4">
@@ -79,7 +81,7 @@ export function TreasuryPanel({ businessId }: { businessId: string }) {
               </div>
             </div>
             <div className="text-xs text-[var(--text-faint)]">
-              Période : {new Date(data.range.from).toLocaleDateString()} → {new Date(data.range.to).toLocaleDateString()}
+              Période : {new Date(data.range.from).toLocaleDateString('fr-FR')} → {new Date(data.range.to).toLocaleDateString('fr-FR')}
             </div>
           </Card>
 

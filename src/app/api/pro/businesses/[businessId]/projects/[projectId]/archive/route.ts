@@ -1,7 +1,7 @@
 import { prisma } from '@/server/db/client';
 import { withBusinessRoute } from '@/server/http/routeHandler';
 import { jsonb } from '@/server/http/json';
-import { notFound } from '@/server/http/apiUtils';
+import { badRequest, notFound } from '@/server/http/apiUtils';
 import { parseId } from '@/server/http/parsers';
 
 // POST /api/pro/businesses/{businessId}/projects/{projectId}/archive
@@ -21,6 +21,7 @@ export const POST = withBusinessRoute<{ businessId: string; projectId: string }>
       where: { id: projectId, businessId: ctx.businessId },
     });
     if (!project) return notFound('Projet introuvable.');
+    if (project.archivedAt) return badRequest('Projet déjà archivé.');
 
     const updated = await prisma.project.update({
       where: { id: projectId },

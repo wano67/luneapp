@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { DebugRequestId } from '@/components/ui/debug-request-id';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
+import { formatCents } from '@/lib/money';
+import { useRevalidationKey } from '@/lib/revalidate';
 import { useActiveBusiness } from '@/app/app/pro/ActiveBusinessProvider';
 
 type LedgerLine = {
@@ -36,6 +38,7 @@ const SOURCE_LABELS: Record<string, string> = {
 };
 
 export function LedgerPanel({ businessId }: { businessId: string }) {
+  const rv = useRevalidationKey(['pro:finances']);
   const active = useActiveBusiness({ optional: true });
   const role = active?.activeBusiness?.role ?? null;
   const isAdmin = role === 'ADMIN' || role === 'OWNER';
@@ -77,7 +80,7 @@ export function LedgerPanel({ businessId }: { businessId: string }) {
   useEffect(() => {
     void load();
     return () => controllerRef.current?.abort();
-  }, [businessId, load]);
+  }, [businessId, load, rv]);
 
   const formatted = useMemo(
     () =>
@@ -138,8 +141,8 @@ export function LedgerPanel({ businessId }: { businessId: string }) {
                       </p>
                     </div>
                     <div className="flex items-center gap-2 text-xs text-[var(--text-secondary)]">
-                      <Badge variant="neutral">Débit {entry.debit}</Badge>
-                      <Badge variant="neutral">Crédit {entry.credit}</Badge>
+                      <Badge variant="neutral">Débit {formatCents(entry.debit)}</Badge>
+                      <Badge variant="neutral">Crédit {formatCents(entry.credit)}</Badge>
                       <Badge variant="neutral">{entry.lines.length} lignes</Badge>
                       <span className="text-[var(--text-primary)] underline">Détail</span>
                     </div>
@@ -155,7 +158,7 @@ export function LedgerPanel({ businessId }: { businessId: string }) {
                         </div>
                         {line.accountName ? <p className="text-[11px] text-[var(--text-secondary)]">{line.accountName}</p> : null}
                         <p className="text-[11px] text-[var(--text-secondary)]">
-                          Débit: {line.debitCents ?? '0'} · Crédit: {line.creditCents ?? '0'}
+                          Débit: {formatCents(line.debitCents ?? '0')} · Crédit: {formatCents(line.creditCents ?? '0')}
                         </p>
                       </div>
                     ))}

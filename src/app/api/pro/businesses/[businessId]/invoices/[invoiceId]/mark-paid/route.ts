@@ -41,6 +41,9 @@ export const POST = withBusinessRoute<{ businessId: string; invoiceId: string }>
     if (invoice.status === InvoiceStatus.CANCELLED) {
       return withIdNoStore(badRequest('Facture annulée.'), requestId);
     }
+    if (invoice.status === InvoiceStatus.DRAFT) {
+      return withIdNoStore(badRequest('Impossible de payer une facture en brouillon. Envoyez-la d\u0027abord.'), requestId);
+    }
 
     try {
       await prisma.$transaction(async (tx) => {

@@ -153,7 +153,6 @@ export function FinanceEntriesPanel({ businessId }: Props) {
       setItems(normalized);
     } catch (err) {
       if (effectiveSignal?.aborted) return;
-      console.error(err);
       setError(getErrorMessage(err));
     } finally {
       if (!effectiveSignal?.aborted) setLoading(false);

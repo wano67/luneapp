@@ -6,6 +6,13 @@ import { invoiceRowTone, paymentStatusTone } from '@/components/pro/projects/tab
 import { formatCurrencyEUR } from '@/lib/formatCurrency';
 import { getInvoiceStatusLabelFR, getPaymentStatusLabelFR } from '@/lib/billingStatus';
 
+type EInvoiceInfo = {
+  id: string;
+  status: string;
+  format: string;
+  transmittedAt: string | null;
+};
+
 type InvoiceItem = {
   id: string;
   status: string;
@@ -24,7 +31,21 @@ type InvoiceItem = {
   createdAt: string;
   quoteId: string | null;
   paymentLinkToken?: string | null;
+  eInvoice?: EInvoiceInfo | null;
 };
+
+function eInvoiceBadge(eInvoice?: EInvoiceInfo | null): { label: string; tone: 'success' | 'warning' | 'danger' | 'info' } | null {
+  if (!eInvoice) return null;
+  switch (eInvoice.status) {
+    case 'DRAFT': return { label: 'E-facture', tone: 'warning' };
+    case 'PENDING': return { label: 'E-facture en attente', tone: 'info' };
+    case 'TRANSMITTED': return { label: 'E-facture transmise', tone: 'info' };
+    case 'ACCEPTED': return { label: 'E-facture acceptée', tone: 'success' };
+    case 'REJECTED': return { label: 'E-facture rejetée', tone: 'danger' };
+    case 'ERROR': return { label: 'E-facture erreur', tone: 'danger' };
+    default: return null;
+  }
+}
 
 // Helpers — mirrored from ProjectWorkspace (pure functions, no external deps)
 function normalizePaymentStatus(value?: string | null): 'UNPAID' | 'PARTIAL' | 'PAID' | null {
@@ -93,7 +114,7 @@ export function BillingInvoicesSection({
     <SectionCard>
       <SectionHeader
         title="Factures"
-        subtitle="Générées à partir des devis envoyés/signés ou en facturation par étapes."
+        subtitle="E-factures PDP conformes, générées automatiquement à partir des devis ou par étapes."
         actions={
           isBillingEmpty ? null : (
             <KebabMenu
@@ -159,6 +180,10 @@ export function BillingInvoicesSection({
                 <div className="flex flex-wrap gap-1">
                   <StatusPill label="" value={statusLabel} tone={invoiceRowTone(invoice.status)} />
                   <StatusPill label="" value={paymentStatusLabel} tone={paymentStatusTone(getInvoicePaymentStatus(invoice))} />
+                  {(() => {
+                    const badge = eInvoiceBadge(invoice.eInvoice);
+                    return badge ? <StatusPill label="" value={badge.label} tone={badge.tone} /> : null;
+                  })()}
                 </div>
                 <div className="text-right text-sm font-semibold text-[var(--text-primary)]">
                   {formatCurrencyEUR(Number(invoice.totalCents), { minimumFractionDigits: 0 })}

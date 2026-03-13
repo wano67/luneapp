@@ -163,13 +163,24 @@ export const POST = withBusinessRoute<{ businessId: string; quoteId: string }>(
       return created;
     });
 
+    // Auto-create e-invoice (PDP — e-facture obligatoire)
+    await prisma.eInvoice.create({
+      data: {
+        businessId: businessIdBigInt,
+        invoiceId: invoice.id,
+        format: 'FACTUR_X',
+        status: 'DRAFT',
+        siren: quote.business.siret?.replace(/\s/g, '').slice(0, 9) ?? undefined,
+      },
+    }).catch(() => null); // non-blocking
+
     // Auto-create payment link
     await prisma.paymentLink.create({
       data: {
         businessId: businessIdBigInt,
         invoiceId: invoice.id,
         clientId: quote.clientId ?? undefined,
-        amountCents: Number(invoice.totalCents),
+        amountCents: Number(BigInt(invoice.totalCents) > BigInt(Number.MAX_SAFE_INTEGER) ? BigInt(Number.MAX_SAFE_INTEGER) : invoice.totalCents),
         currency: invoice.currency,
         description: `Facture ${invoice.number ?? ''}`.trim(),
         status: 'ACTIVE',

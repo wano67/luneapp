@@ -227,14 +227,14 @@ async function handlePut(info: TokenInfo, path: string, icsData: string): Promis
   const allDay = dtstart ? !dtstart.includes('T') && /^\d{8}$/.test(dtstart.replace(/^VALUE=DATE:/, '')) : false;
 
   if (info.scope === 'pro' && info.businessId) {
-    // Check if existing event with this icalUid
+    // Check if existing event with this icalUid — scoped to this business
     const existing = await prisma.calendarEvent.findUnique({ where: { icalUid: uid } });
-    if (existing) {
+    if (existing && existing.businessId === info.businessId) {
       await prisma.calendarEvent.update({
         where: { id: existing.id },
         data: { title, description, location, startAt: start, endAt: end, allDay },
       });
-    } else {
+    } else if (!existing) {
       await prisma.calendarEvent.create({
         data: {
           businessId: info.businessId,
@@ -251,14 +251,14 @@ async function handlePut(info: TokenInfo, path: string, icsData: string): Promis
       });
     }
   } else {
-    // Personal
+    // Personal — scoped to this user
     const existing = await prisma.personalCalendarEvent.findUnique({ where: { icalUid: uid } });
-    if (existing) {
+    if (existing && existing.userId === info.userId) {
       await prisma.personalCalendarEvent.update({
         where: { id: existing.id },
         data: { title, description, location, startAt: start, endAt: end, allDay },
       });
-    } else {
+    } else if (!existing) {
       await prisma.personalCalendarEvent.create({
         data: {
           userId: info.userId,

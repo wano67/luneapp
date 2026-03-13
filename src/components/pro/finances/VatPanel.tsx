@@ -6,6 +6,7 @@ import { Select } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { fetchJson } from '@/lib/apiClient';
 import { formatCents } from '@/lib/money';
+import { useRevalidationKey } from '@/lib/revalidate';
 
 type TauxEntry = {
   tauxBps: number;
@@ -29,6 +30,7 @@ function kpi(cents: string) {
 }
 
 export function VatPanel({ businessId }: { businessId: string }) {
+  const rv = useRevalidationKey(['pro:finances']);
   const now = new Date();
   const currentYear = now.getFullYear();
   const currentMonth = now.getMonth();
@@ -44,16 +46,23 @@ export function VatPanel({ businessId }: { businessId: string }) {
 
   const computePeriod = useCallback(() => {
     const y = Number.parseInt(year, 10);
+    const pad = (n: number) => String(n).padStart(2, '0');
     if (mode === 'monthly') {
       const m = Number.parseInt(month, 10);
       const from = new Date(y, m, 1);
       const to = new Date(y, m + 1, 0);
-      return { from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10) };
+      return {
+        from: `${from.getFullYear()}-${pad(from.getMonth() + 1)}-${pad(from.getDate())}`,
+        to: `${to.getFullYear()}-${pad(to.getMonth() + 1)}-${pad(to.getDate())}`,
+      };
     }
     const q = Number.parseInt(quarter, 10);
     const from = new Date(y, q * 3, 1);
     const to = new Date(y, q * 3 + 3, 0);
-    return { from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10) };
+    return {
+      from: `${from.getFullYear()}-${pad(from.getMonth() + 1)}-${pad(from.getDate())}`,
+      to: `${to.getFullYear()}-${pad(to.getMonth() + 1)}-${pad(to.getDate())}`,
+    };
   }, [year, month, quarter, mode]);
 
   useEffect(() => {
@@ -73,7 +82,7 @@ export function VatPanel({ businessId }: { businessId: string }) {
       }
     });
     return () => { cancelled = true; };
-  }, [businessId, computePeriod]);
+  }, [businessId, computePeriod, rv]);
 
   const tvaAPayer = data ? Number(data.tvaAPayerCents) : 0;
   const creditTva = data ? Number(data.creditTvaCents) : 0;

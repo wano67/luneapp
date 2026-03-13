@@ -84,9 +84,13 @@ export function FixedChargesPanel({ businessId }: { businessId: string }) {
   // KPIs
   const activeRules = rules.filter((r) => r.isActive);
   const inactiveRules = rules.filter((r) => !r.isActive);
-  const monthlyTotalCents = activeRules
-    .filter((r) => r.frequency === 'MONTHLY')
-    .reduce((acc, r) => acc + Number(r.amountCents), 0);
+  const monthlyTotalCents = activeRules.reduce((acc, r) => {
+    const cents = Number(r.amountCents);
+    if (r.frequency === 'MONTHLY') return acc + cents;
+    if (r.frequency === 'QUARTERLY') return acc + Math.round(cents / 3);
+    if (r.frequency === 'YEARLY') return acc + Math.round(cents / 12);
+    return acc + cents;
+  }, 0);
 
   return (
     <div className="space-y-4">

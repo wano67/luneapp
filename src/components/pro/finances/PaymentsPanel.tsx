@@ -9,6 +9,7 @@ import { Select } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableEmpty, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { formatCurrency, formatDate, paginate, type PaymentMethod } from '@/app/app/pro/pro-data';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
+import { useRevalidationKey } from '@/lib/revalidate';
 import { KpiCard } from '@/components/ui/kpi-card';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -62,6 +63,7 @@ function entryLabel(entry: FinanceEntry): string {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function PaymentsPanel({ businessId }: { businessId: string }) {
+  const rv = useRevalidationKey(['pro:finances']);
   const [entries, setEntries] = useState<FinanceEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -102,7 +104,7 @@ export function PaymentsPanel({ businessId }: { businessId: string }) {
     if (!businessId) return;
     void loadEntries();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [businessId]);
+  }, [businessId, rv]);
 
   // ─── Filtered & sorted ───────────────────────────────────────────────────
 

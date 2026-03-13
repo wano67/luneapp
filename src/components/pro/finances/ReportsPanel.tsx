@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { fetchJson } from '@/lib/apiClient';
 import { formatCents } from '@/lib/money';
+import { useRevalidationKey } from '@/lib/revalidate';
 import { Download } from 'lucide-react';
 
 // ── Types ──
@@ -58,6 +59,7 @@ function formatDate(iso: string) {
 // ── Component ──
 
 export function ReportsPanel({ businessId }: { businessId: string }) {
+  const rv = useRevalidationKey(['pro:finances']);
   const currentYear = new Date().getFullYear();
   const [activeReport, setActiveReport] = useState<'fec' | 'balance' | 'grand-livre'>('balance');
   const [year, setYear] = useState(String(currentYear));
@@ -118,7 +120,7 @@ export function ReportsPanel({ businessId }: { businessId: string }) {
       });
     }
     return () => { cancelled = true; };
-  }, [activeReport, businessId, from, to]);
+  }, [activeReport, businessId, from, to, rv]);
 
   return (
     <div className="space-y-4">
