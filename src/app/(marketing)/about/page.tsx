@@ -96,7 +96,7 @@ export default function AboutPage() {
           </div>
           <div className="flex gap-2">
             <Button asChild>
-              <Link href="/register">Créer un compte</Link>
+              <Link href="/waitlist">Rejoindre la liste</Link>
             </Button>
             <Button asChild variant="outline">
               <Link href="/contact">Nous écrire</Link>

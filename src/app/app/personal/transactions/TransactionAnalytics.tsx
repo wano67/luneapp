@@ -174,7 +174,7 @@ export function TransactionAnalytics({ analytics, loading, periodText }: Props) 
                     <div className="flex items-center justify-between">
                       <p className="truncate text-sm text-[var(--text)]">{pa.accountName}</p>
                       <span className="shrink-0 text-xs font-medium text-[var(--text-faint)]">
-                        {pa.count} txn · {fmtKpi(pa.totalCents)}
+                        {pa.count} transactions · {fmtKpi(pa.totalCents)}
                       </span>
                     </div>
                     <div className="h-2 w-full overflow-hidden rounded-full bg-[var(--surface-2)]">

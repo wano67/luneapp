@@ -27,6 +27,7 @@ type UncategorizedGroup = {
   sampleLabel: string;
   count: number;
   avgAmountCents: string;
+  totalAmountCents: string;
   lastDate: string;
 };
 
@@ -459,6 +460,33 @@ export default function PersoTransactionsPage() {
 
   const activeFilterCount = [accountId, type, from, to].filter(Boolean).length;
 
+  // ─── Derived: group transactions by date ──────────────────────────────────
+
+  const groupedByDate = useMemo(() => {
+    const groups: { date: string; label: string; items: TxItem[] }[] = [];
+    let currentKey = '';
+    for (const t of items) {
+      const dk = dayKey(new Date(t.date));
+      if (dk !== currentKey) {
+        currentKey = dk;
+        const dateLabel = (() => {
+          try {
+            const d = new Date(t.date);
+            const today = new Date();
+            const yesterday = new Date(); yesterday.setDate(today.getDate() - 1);
+            if (dayKey(d) === dayKey(today)) return 'Aujourd\'hui';
+            if (dayKey(d) === dayKey(yesterday)) return 'Hier';
+            return new Intl.DateTimeFormat('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' }).format(d);
+          } catch { return dk; }
+        })();
+        groups.push({ date: dk, label: dateLabel, items: [t] });
+      } else {
+        groups[groups.length - 1].items.push(t);
+      }
+    }
+    return groups;
+  }, [items]);
+
   // ─── Render ─────────────────────────────────────────────────────────────────
 
   const periodText = periodLabel(from, to);
@@ -550,47 +578,65 @@ export default function PersoTransactionsPage() {
         {/* Analytics Dashboard */}
         <TransactionAnalytics analytics={analytics} loading={loadingAnalytics} periodText={periodText} />
 
-        {/* Uncategorized groups */}
+        {/* Transactions récurrentes à catégoriser */}
         {!loadingGroups && !loadingCategories && uncatGroups.length > 0 ? (
-          <section className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] overflow-hidden">
-            <div className="border-b border-[var(--border)] px-5 py-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-semibold text-[var(--text)]">Transactions récurrentes à catégoriser</p>
-                  <p className="mt-0.5 text-xs text-[var(--text-faint)]">
-                    {uncatGroups.length} groupe{uncatGroups.length > 1 ? 's' : ''} détecté{uncatGroups.length > 1 ? 's' : ''} — catégorise-les pour mieux budgétiser
-                  </p>
+          <section className="rounded-2xl border border-amber-500/30 bg-amber-500/5 overflow-hidden">
+            <div className="px-5 py-3.5 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="flex h-6 w-6 items-center justify-center rounded-full bg-amber-500/15">
+                  <svg className="h-3.5 w-3.5 text-amber-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 9v4m0 4h.01M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg>
                 </div>
+                <p className="text-sm font-medium text-[var(--text)]">
+                  {uncatGroups.length} groupe{uncatGroups.length > 1 ? 's' : ''} non catégorisé{uncatGroups.length > 1 ? 's' : ''}
+                </p>
               </div>
+              <p className="text-xs text-[var(--text-faint)]">Attribue une catégorie pour un meilleur suivi</p>
             </div>
-            <div className="divide-y divide-[var(--border)]">
-              {uncatGroups.map((g) => (
-                <div key={g.normalizedLabel} className="flex flex-col gap-2 px-5 py-3.5 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium text-[var(--text)]">{g.sampleLabel}</p>
-                    <p className="text-xs text-[var(--text-faint)]">
-                      {g.count} transaction{g.count > 1 ? 's' : ''} · ~{formatCents(g.avgAmountCents, 'EUR')}/tx
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Select
-                      value=""
-                      onChange={(e) => {
-                        if (e.target.value) categorizeGroup(g.normalizedLabel, e.target.value);
-                      }}
-                      disabled={categorizingLabel === g.normalizedLabel}
-                      className="h-9 w-44 rounded-xl text-xs"
-                    >
-                      <option value="">
-                        {categorizingLabel === g.normalizedLabel ? 'Application…' : 'Catégoriser'}
-                      </option>
-                      {categories.map((c) => (
-                        <option key={c.id} value={c.id}>{c.name}</option>
-                      ))}
-                    </Select>
-                  </div>
-                </div>
-              ))}
+            <div className="border-t border-amber-500/20">
+              <table className="w-full">
+                <thead>
+                  <tr className="text-left text-[11px] font-medium uppercase tracking-wider text-[var(--text-faint)]">
+                    <th className="py-2.5 pl-5 pr-2">Libellé</th>
+                    <th className="px-2 py-2.5 text-right whitespace-nowrap">Nb</th>
+                    <th className="px-2 py-2.5 text-right whitespace-nowrap hidden sm:table-cell">Moy.</th>
+                    <th className="px-2 py-2.5 text-right whitespace-nowrap">Total</th>
+                    <th className="py-2.5 pl-2 pr-5 text-right">Catégorie</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[var(--border)]/50">
+                  {uncatGroups.map((g) => (
+                    <tr key={g.normalizedLabel} className="hover:bg-[var(--surface)]/50 transition-colors">
+                      <td className="py-2.5 pl-5 pr-2">
+                        <p className="text-sm font-medium text-[var(--text)] truncate max-w-[260px]">{g.sampleLabel}</p>
+                      </td>
+                      <td className="px-2 py-2.5 text-right">
+                        <span className="text-xs font-medium text-[var(--text-secondary)]">{g.count}x</span>
+                      </td>
+                      <td className="px-2 py-2.5 text-right hidden sm:table-cell">
+                        <span className="text-xs text-[var(--text-faint)]">{formatCents(g.avgAmountCents, 'EUR')}</span>
+                      </td>
+                      <td className="px-2 py-2.5 text-right">
+                        <span className="text-sm font-semibold text-[var(--danger)]">{formatCents(g.totalAmountCents, 'EUR')}</span>
+                      </td>
+                      <td className="py-2.5 pl-2 pr-5 text-right">
+                        <Select
+                          value=""
+                          onChange={(e) => { if (e.target.value) categorizeGroup(g.normalizedLabel, e.target.value); }}
+                          disabled={categorizingLabel === g.normalizedLabel}
+                          className="h-8 w-36 rounded-lg text-xs ml-auto"
+                        >
+                          <option value="">
+                            {categorizingLabel === g.normalizedLabel ? 'Application…' : 'Catégoriser'}
+                          </option>
+                          {categories.map((c) => (
+                            <option key={c.id} value={c.id}>{c.name}</option>
+                          ))}
+                        </Select>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </section>
         ) : null}
@@ -613,95 +659,122 @@ export default function PersoTransactionsPage() {
 
         {/* Transaction List */}
         <section className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] overflow-hidden">
-          <div className="border-b border-[var(--border)] px-5 py-4">
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-semibold text-[var(--text)]">
-                {loadingList ? 'Chargement…' : `${items.length} transaction(s)`}
-              </p>
-              <p className="text-xs text-[var(--text-faint)]">{periodText}</p>
-            </div>
-          </div>
-
           {loadingList ? (
-            <div className="space-y-0 divide-y divide-[var(--border)]">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <div key={i} className="flex items-center gap-4 px-5 py-4">
-                  <div className="h-5 w-5 rounded bg-[var(--surface-2)] animate-skeleton-pulse" />
-                  <div className="flex-1 space-y-2">
-                    <div className="h-4 w-40 rounded bg-[var(--surface-2)] animate-skeleton-pulse" />
-                    <div className="h-3 w-24 rounded bg-[var(--surface-2)] animate-skeleton-pulse" />
+            <div className="divide-y divide-[var(--border)]">
+              {Array.from({ length: 8 }).map((_, i) => (
+                <div key={i} className="flex items-center gap-3 px-5 py-3">
+                  <div className="h-4 w-4 rounded bg-[var(--surface-2)] animate-skeleton-pulse" />
+                  <div className="h-9 w-9 rounded-full bg-[var(--surface-2)] animate-skeleton-pulse" />
+                  <div className="flex-1 space-y-1.5">
+                    <div className="h-3.5 w-36 rounded bg-[var(--surface-2)] animate-skeleton-pulse" />
+                    <div className="h-3 w-20 rounded bg-[var(--surface-2)] animate-skeleton-pulse" />
                   </div>
-                  <div className="h-4 w-20 rounded bg-[var(--surface-2)] animate-skeleton-pulse" />
+                  <div className="h-4 w-16 rounded bg-[var(--surface-2)] animate-skeleton-pulse" />
                 </div>
               ))}
             </div>
           ) : items.length === 0 ? (
-            <div className="p-8">
-              <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)]/30 p-6 text-center">
-                <p className="text-sm font-medium text-[var(--text)]">Aucune transaction</p>
-                <p className="mt-1 text-sm text-[var(--text-faint)]">
-                  Ajoute ta première transaction pour commencer à suivre tes finances.
-                </p>
-                <div className="mt-4 flex justify-center">
-                  <Button onClick={openAddModal} disabled={loadingAccounts || !accounts.length}>Ajouter une transaction</Button>
-                </div>
+            <div className="p-10 text-center">
+              <p className="text-sm font-medium text-[var(--text)]">Aucune transaction</p>
+              <p className="mt-1 text-sm text-[var(--text-faint)]">
+                Ajoute ta première transaction pour commencer.
+              </p>
+              <div className="mt-4 flex justify-center">
+                <Button onClick={openAddModal} disabled={loadingAccounts || !accounts.length}>Ajouter une transaction</Button>
               </div>
             </div>
           ) : (
-            <div className="divide-y divide-[var(--border)]">
-              {items.map((t) => {
-                const neg = isNegCents(t.amountCents);
-                return (
-                  <div key={t.id} className="group flex flex-col gap-2 px-5 py-3.5 sm:flex-row sm:items-center sm:justify-between hover:bg-[var(--surface-2)]/30 transition-colors">
-                    <div className="flex items-start gap-3">
-                      <input
-                        type="checkbox" checked={selectedIds.has(t.id)} onChange={() => toggleSelected(t.id)}
-                        className="mt-1 h-5 w-5 accent-blue-500" aria-label="Sélectionner"
-                      />
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="truncate text-sm font-medium text-[var(--text)]">{t.label}</p>
-                          <span className="rounded-full border border-[var(--border)] px-2 py-0.5 text-[11px] text-[var(--text-faint)]">
-                            {t.account?.name || 'Compte'}
-                          </span>
-                          {t.category ? (
-                            <span className="rounded-full border border-[var(--border)] px-2 py-0.5 text-[11px] text-[var(--text-faint)]">
-                              {t.category.name}
-                            </span>
-                          ) : null}
-                        </div>
-                        <p className="text-xs text-[var(--text-muted)]">
-                          {fmtDate(t.date)}{t.note ? ` · ${t.note}` : ''}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between gap-2 sm:justify-end">
-                      <p className={`text-sm font-semibold ${neg ? 'text-[var(--danger)]' : 'text-[var(--success)]'}`}>
-                        {neg ? '-' : '+'}{formatCents(absCents(t.amountCents), t.currency)}
-                      </p>
-                      <div className="flex gap-2 transition sm:opacity-0 sm:group-hover:opacity-100">
-                        <Button variant="outline" onClick={() => openEditModal(t)} className="h-9 rounded-xl px-3 text-xs">Modifier</Button>
-                        <Button variant="outline" onClick={() => deleteMany([t.id])} className="h-9 rounded-xl px-3 text-xs">Supprimer</Button>
-                      </div>
-                    </div>
+            <div>
+              {groupedByDate.map((group) => (
+                <div key={group.date}>
+                  {/* Date header */}
+                  <div className="sticky top-0 z-10 border-b border-[var(--border)] bg-[var(--surface-2)]/60 backdrop-blur-sm px-5 py-2">
+                    <p className="text-xs font-semibold text-[var(--text-faint)] capitalize">{group.label}</p>
                   </div>
-                );
-              })}
+                  {/* Transactions for this date */}
+                  <div className="divide-y divide-[var(--border)]/50">
+                    {group.items.map((t) => {
+                      const neg = isNegCents(t.amountCents);
+                      return (
+                        <div
+                          key={t.id}
+                          className="group flex items-center gap-3 px-5 py-3 hover:bg-[var(--surface-2)]/30 transition-colors cursor-pointer"
+                          onClick={() => openEditModal(t)}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.has(t.id)}
+                            onChange={(e) => { e.stopPropagation(); toggleSelected(t.id); }}
+                            onClick={(e) => e.stopPropagation()}
+                            className="h-4 w-4 accent-[var(--shell-accent)] shrink-0"
+                            aria-label="Sélectionner"
+                          />
+                          {/* Icon circle */}
+                          <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${neg ? 'bg-[var(--danger)]/10' : 'bg-[var(--success)]/10'}`}>
+                            <svg className={`h-4 w-4 ${neg ? 'text-[var(--danger)]' : 'text-[var(--success)]'}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              {neg ? <><line x1="12" y1="5" x2="12" y2="19" /><polyline points="19 12 12 19 5 12" /></> : <><line x1="12" y1="19" x2="12" y2="5" /><polyline points="5 12 12 5 19 12" /></>}
+                            </svg>
+                          </div>
+                          {/* Content */}
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-medium text-[var(--text)]">{t.label}</p>
+                            <div className="flex items-center gap-1.5 text-xs text-[var(--text-faint)]">
+                              <span>{t.account?.name}</span>
+                              {t.category ? (
+                                <>
+                                  <span>·</span>
+                                  <span>{t.category.name}</span>
+                                </>
+                              ) : null}
+                              {t.note ? (
+                                <>
+                                  <span>·</span>
+                                  <span className="truncate max-w-[120px]">{t.note}</span>
+                                </>
+                              ) : null}
+                            </div>
+                          </div>
+                          {/* Amount + actions */}
+                          <div className="flex items-center gap-2 shrink-0">
+                            <p className={`text-sm font-semibold tabular-nums ${neg ? 'text-[var(--danger)]' : 'text-[var(--success)]'}`}>
+                              {neg ? '-' : '+'}{formatCents(absCents(t.amountCents), t.currency)}
+                            </p>
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); deleteMany([t.id]); }}
+                              className="hidden h-7 w-7 items-center justify-center rounded-lg text-[var(--text-faint)] hover:bg-[var(--danger)]/10 hover:text-[var(--danger)] transition-colors group-hover:flex"
+                              aria-label="Supprimer"
+                            >
+                              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
             </div>
           )}
 
-          <div className="border-t border-[var(--border)] px-5 py-4">
-            <div className="flex items-center justify-between">
-              <p className="text-xs text-[var(--text-muted)]">{nextCursor ? 'Plus de résultats disponibles' : 'Fin de liste'}</p>
-              <Button
-                variant="outline"
-                onClick={() => fetchTransactions({ reset: false })}
-                disabled={!nextCursor || loadingMore || loadingList}
-              >
-                {loadingMore ? 'Chargement…' : 'Charger plus'}
-              </Button>
+          {/* Load more */}
+          {items.length > 0 && (
+            <div className="border-t border-[var(--border)] px-5 py-3 flex items-center justify-between">
+              <p className="text-xs text-[var(--text-faint)]">
+                {items.length} transaction{items.length > 1 ? 's' : ''}{nextCursor ? ' · Plus disponible' : ''}
+              </p>
+              {nextCursor ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => fetchTransactions({ reset: false })}
+                  disabled={loadingMore}
+                >
+                  {loadingMore ? 'Chargement…' : 'Charger plus'}
+                </Button>
+              ) : null}
             </div>
-          </div>
+          )}
         </section>
 
         {/* Create modal */}

@@ -490,3 +490,39 @@ export async function notifyQuoteCreated(
     includeSelf: true,
   });
 }
+
+/** Notify project members + admins when a payment is received on an invoice. */
+export async function notifyPaymentReceived(
+  actorUserId: bigint,
+  businessId: bigint,
+  projectId: bigint,
+  amountLabel: string,
+  invoiceNumber: string | null,
+) {
+  const userIds = await projectRecipients(businessId, projectId);
+  await notify(userIds, actorUserId, {
+    businessId,
+    type: 'PAYMENT_RECEIVED',
+    title: `Paiement reçu : ${amountLabel}`,
+    body: invoiceNumber ? `Facture ${invoiceNumber}` : undefined,
+    projectId,
+    includeSelf: true,
+  });
+}
+
+/** Notify project members + admins when a quote is signed/accepted. */
+export async function notifyQuoteSigned(
+  actorUserId: bigint,
+  businessId: bigint,
+  projectId: bigint,
+  quoteNumber: string | null,
+) {
+  const userIds = await projectRecipients(businessId, projectId);
+  await notify(userIds, actorUserId, {
+    businessId,
+    type: 'QUOTE_SIGNED',
+    title: `Devis accepté${quoteNumber ? ` : ${quoteNumber}` : ''}`,
+    projectId,
+    includeSelf: true,
+  });
+}

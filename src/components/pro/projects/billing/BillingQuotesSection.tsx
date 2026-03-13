@@ -73,8 +73,8 @@ export function BillingQuotesSection({
   return (
     <SectionCard>
       <SectionHeader
-        title="Devis"
-        subtitle="Crée et gère les devis du projet."
+        title="Devis & offres"
+        subtitle="Construisez vos offres commerciales et gérez les devis du projet."
         actions={
           isBillingEmpty ? null : (
             <Button

@@ -13,6 +13,7 @@ import { BankConnectionSection } from './sections/BankConnectionSection';
 import { NotificationsSection } from './sections/NotificationsSection';
 import { SessionSection } from './sections/SessionSection';
 import { ProBusinessSection } from './sections/ProBusinessSection';
+import { ParrainageSection } from './sections/ParrainageSection';
 import { DangerSection } from './sections/DangerSection';
 
 const SECTIONS = [
@@ -24,6 +25,7 @@ const SECTIONS = [
   { id: 'notifications', label: 'Notifications' },
   { id: 'session', label: 'Session' },
   { id: 'pro', label: 'Espace PRO' },
+  { id: 'parrainage', label: 'Parrainage' },
   { id: 'danger', label: 'Suppression' },
 ] as const;
 
@@ -50,6 +52,7 @@ export default function AccountPage() {
         <section id="notifications"><NotificationsSection /></section>
         <section id="session"><SessionSection /></section>
         <section id="pro"><ProBusinessSection /></section>
+        <section id="parrainage"><ParrainageSection /></section>
         <section id="danger"><DangerSection /></section>
       </div>
     </PageContainer>

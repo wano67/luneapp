@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { fetchJson } from '@/lib/apiClient';
 import { formatCents } from '@/lib/money';
+import { Download } from 'lucide-react';
 
 // ── Types ──
 
@@ -76,6 +77,18 @@ export function ReportsPanel({ businessId }: { businessId: string }) {
     URL.revokeObjectURL(a.href);
   }, [businessId, year]);
 
+  const handlePdfDownload = useCallback(async (report: 'balance' | 'grand-livre') => {
+    const url = `/api/pro/businesses/${businessId}/accounting/${report}/pdf?from=${from}&to=${to}`;
+    const response = await fetch(url);
+    if (!response.ok) return;
+    const blob = await response.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `${report}-${from}-${to}.pdf`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }, [businessId, from, to]);
+
   // ── Balance ──
   const [balance, setBalance] = useState<BalanceData | null>(null);
   const [balanceLoading, setBalanceLoading] = useState(true);
@@ -135,6 +148,9 @@ export function ReportsPanel({ businessId }: { businessId: string }) {
             <Input type="date" className="w-36" value={from} onChange={(e) => setFrom(e.target.value)} />
             <span className="text-xs text-[var(--text-secondary)]">→</span>
             <Input type="date" className="w-36" value={to} onChange={(e) => setTo(e.target.value)} />
+            <Button size="sm" variant="outline" className="gap-1" onClick={() => handlePdfDownload(activeReport as 'balance' | 'grand-livre')}>
+              <Download size={14} /> PDF
+            </Button>
           </div>
         )}
       </div>

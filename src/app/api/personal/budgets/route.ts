@@ -19,7 +19,7 @@ export const GET = withPersonalRoute(async (ctx) => {
   const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
   const nextMonthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
 
-  const [categorySpending, totalExpenseAgg, savingsGoals] = await Promise.all([
+  const [categorySpending, totalExpenseAgg, totalIncomeAgg, savingsGoals, activeSubscriptions] = await Promise.all([
     budgets.some((b) => b.categoryId !== null)
       ? prisma.personalTransaction.groupBy({
           by: ['categoryId'],
@@ -40,6 +40,14 @@ export const GET = withPersonalRoute(async (ctx) => {
       },
       _sum: { amountCents: true },
     }),
+    prisma.personalTransaction.aggregate({
+      where: {
+        userId: ctx.userId,
+        type: 'INCOME',
+        date: { gte: monthStart, lt: nextMonthStart },
+      },
+      _sum: { amountCents: true },
+    }),
     prisma.savingsGoal.findMany({
       where: {
         userId: ctx.userId,
@@ -56,6 +64,10 @@ export const GET = withPersonalRoute(async (ctx) => {
         deadline: true,
       },
     }),
+    prisma.personalSubscription.findMany({
+      where: { userId: ctx.userId, isActive: true },
+      select: { amountCents: true, frequency: true },
+    }),
   ]);
 
   const spendMap = new Map<bigint, bigint>();
@@ -63,26 +75,58 @@ export const GET = withPersonalRoute(async (ctx) => {
     if (row.categoryId) spendMap.set(row.categoryId, row._sum.amountCents ?? 0n);
   }
 
-  const raw = totalExpenseAgg._sum.amountCents ?? 0n;
-  const monthExpenseCents = raw < 0n ? -raw : raw;
+  const rawExpense = totalExpenseAgg._sum.amountCents ?? 0n;
+  const monthExpenseCents = rawExpense < 0n ? -rawExpense : rawExpense;
+
+  const rawIncome = totalIncomeAgg._sum.amountCents ?? 0n;
+  const monthIncomeCents = rawIncome < 0n ? -rawIncome : rawIncome;
 
   const totalSavingsBudgetCents = savingsGoals.reduce(
     (s, g) => s + (g.monthlyContributionCents ?? 0n), 0n,
   );
 
+  // Compute total spending in budgeted categories
+  let budgetedExpenseCents = 0n;
+  for (const amount of spendMap.values()) {
+    budgetedExpenseCents += amount < 0n ? -amount : amount;
+  }
+  const unbudgetedExpenseCents = monthExpenseCents > budgetedExpenseCents
+    ? monthExpenseCents - budgetedExpenseCents
+    : 0n;
+
+  // Compute total fixed charges (subscriptions) monthly equivalent
+  function toMonthlyCents(amountCents: bigint, frequency: string): bigint {
+    switch (frequency) {
+      case 'WEEKLY':    return (amountCents * 52n) / 12n;
+      case 'QUARTERLY': return amountCents / 3n;
+      case 'YEARLY':    return amountCents / 12n;
+      default:          return amountCents;
+    }
+  }
+  const totalFixedChargesMonthlyCents = activeSubscriptions.reduce(
+    (sum, s) => sum + toMonthlyCents(s.amountCents < 0n ? -s.amountCents : s.amountCents, s.frequency),
+    0n,
+  );
+
   return jsonb(
     {
       monthExpenseCents,
-      items: budgets.map((b) => ({
-        id: b.id,
-        name: b.name,
-        period: b.period,
-        limitCents: b.limitCents,
-        spentCents: b.categoryId ? (spendMap.get(b.categoryId) ?? 0n) : 0n,
-        category: b.category,
-        createdAt: b.createdAt,
-        updatedAt: b.updatedAt,
-      })),
+      monthIncomeCents,
+      unbudgetedExpenseCents,
+      totalFixedChargesMonthlyCents,
+      items: budgets.map((b) => {
+        const rawSpent = b.categoryId ? (spendMap.get(b.categoryId) ?? 0n) : 0n;
+        return {
+          id: b.id,
+          name: b.name,
+          period: b.period,
+          limitCents: b.limitCents,
+          spentCents: rawSpent < 0n ? -rawSpent : rawSpent,
+          category: b.category,
+          createdAt: b.createdAt,
+          updatedAt: b.updatedAt,
+        };
+      }),
       savingsGoals: savingsGoals.map((g) => ({
         id: g.id,
         name: g.name,

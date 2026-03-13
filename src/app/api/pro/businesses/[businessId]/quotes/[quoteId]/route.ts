@@ -8,6 +8,7 @@ import { parseIdOpt, parseDateOpt } from '@/server/http/parsers';
 import { assignDocumentNumber } from '@/server/services/numbering';
 import { buildClientSnapshot, buildIssuerSnapshot } from '@/server/billing/snapshots';
 import { parseCentsInput } from '@/lib/money';
+import { notifyQuoteSigned } from '@/server/services/notifications';
 
 function roundPercent(amount: bigint, percent: number) {
   return (amount * BigInt(Math.round(percent))) / BigInt(100);
@@ -469,6 +470,10 @@ export const PATCH = withBusinessRoute<{ businessId: string; quoteId: string }>(
 
     if (!updated) {
       return badRequest('items invalides.');
+    }
+
+    if (hasStatus && nextStatus === QuoteStatus.SIGNED) {
+      void notifyQuoteSigned(ctx.userId, businessIdBigInt, existing.projectId, updated.number);
     }
 
     return jsonb({ item: updated }, requestId);

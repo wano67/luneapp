@@ -8,6 +8,8 @@ import { upsertCashSaleLedgerForInvoicePaid } from '@/server/services/ledger';
 import { upsertFinanceForInvoicePaid } from '@/server/billing/invoiceFinance';
 import { parseCentsInput } from '@/lib/money';
 import { parseIdOpt, parseDateOpt } from '@/server/http/parsers';
+import { formatCurrencyEUR } from '@/lib/formatCurrency';
+import { notifyPaymentReceived } from '@/server/services/notifications';
 
 function parsePaymentMethod(value: unknown): PaymentMethod {
   if (typeof value !== 'string') return PaymentMethod.WIRE;
@@ -175,6 +177,16 @@ export const POST = withBusinessRoute<{ businessId: string; invoiceId: string }>
         return withIdNoStore(badRequest('Montant supérieur au reste à payer.'), requestId);
       }
       throw err;
+    }
+
+    if (invoice.projectId) {
+      void notifyPaymentReceived(
+        ctx.userId,
+        businessIdBigInt,
+        invoice.projectId,
+        formatCurrencyEUR(Number(amountCents), { minimumFractionDigits: 0 }),
+        invoice.number,
+      );
     }
 
     return jsonbCreated({ ok: true }, requestId);

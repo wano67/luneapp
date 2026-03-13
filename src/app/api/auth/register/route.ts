@@ -18,7 +18,7 @@ import { isValidEmail, normalizeEmail } from '@/lib/validation/email';
 import { prisma } from '@/server/db/client';
 import crypto from 'crypto';
 import { buildBaseUrl } from '@/server/http/baseUrl';
-import { sendVerificationEmail } from '@/server/services/email';
+import { sendVerificationEmail, sendReferralNotificationEmail } from '@/server/services/email';
 
 const MIN_PASSWORD_LENGTH = 8;
 const MAX_PASSWORD_LENGTH = 128;
@@ -51,6 +51,7 @@ export async function POST(request: NextRequest) {
   const password = body.password.trim();
   const name = typeof body.name === 'string' ? body.name : undefined;
   const inviteToken = typeof body.inviteToken === 'string' ? body.inviteToken.trim() : null;
+  const referralCode = typeof body.referralCode === 'string' ? body.referralCode.trim() : null;
   const acceptedTerms = body.acceptedTerms === true;
   const acceptedPrivacy = body.acceptedPrivacy === true;
   const marketingConsent = body.marketingConsent === true;
@@ -104,6 +105,26 @@ export async function POST(request: NextRequest) {
         ...(inviteToken ? { pendingInviteToken: inviteToken } : {}),
       },
     });
+
+    // Link referral if a valid referral code was provided
+    if (referralCode) {
+      const referrer = await prisma.user.findUnique({
+        where: { referralCode },
+        select: { id: true, name: true, email: true },
+      });
+      if (referrer && referrer.id !== user.id) {
+        await prisma.user.update({
+          where: { id: user.id },
+          data: { referredById: referrer.id },
+        });
+        // Notify the referrer
+        sendReferralNotificationEmail({
+          to: referrer.email,
+          referrerName: referrer.name ?? 'Utilisateur',
+          refereeName: name ?? email,
+        }).catch(() => {});
+      }
+    }
 
     const baseUrl = buildBaseUrl(request);
     const verificationLink = `${baseUrl}/api/auth/verify-email?token=${encodeURIComponent(rawVerificationToken)}`;

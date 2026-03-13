@@ -162,6 +162,12 @@ model User {
   dashboardPeriodDays          Int     @default(30)
   itemsPerPage                 Int     @default(50)
 
+  // Parrainage
+  referralCode  String?  @unique
+  referredById  BigInt?
+  referredBy    User?    @relation("Referrals", fields: [referredById], references: [id])
+  referrals     User[]   @relation("Referrals")
+
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -1996,6 +2002,9 @@ enum NotificationType {
   DOCUMENT_UPLOADED
   INVOICE_CREATED
   QUOTE_CREATED
+  PAYMENT_RECEIVED
+  INVOICE_OVERDUE
+  QUOTE_SIGNED
 }
 
 // ────────── Business Regulation Enums ──────────
@@ -2692,4 +2701,14 @@ model AccountantAccess {
 
   @@unique([businessId, accountantUserId])
   @@index([token])
+}
+
+// ────────── Waitlist ──────────
+
+model WaitlistEntry {
+  id              BigInt    @id @default(autoincrement())
+  email           String    @unique
+  referredByCode  String?
+  createdAt       DateTime  @default(now())
+  invitedAt       DateTime?
 }

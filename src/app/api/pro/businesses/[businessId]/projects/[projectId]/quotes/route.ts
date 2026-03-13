@@ -41,11 +41,13 @@ export const POST = withBusinessRoute<{ businessId: string; projectId: string }>
       windowMs: 60 * 60 * 1000,
     },
   },
-  async (ctx, _req, params) => {
+  async (ctx, req, params) => {
     const { requestId, businessId: businessIdBigInt, userId } = ctx;
     const projectId = params?.projectId;
     if (!projectId || !/^\d+$/.test(projectId)) return badRequest('projectId invalide.');
     const projectIdBigInt = BigInt(projectId);
+
+    const body = await req.json().catch(() => ({})) as Record<string, unknown>;
 
     const pricing = await computeProjectPricing(businessIdBigInt, projectIdBigInt);
     if (!pricing) return notFound('Projet introuvable.');
@@ -57,8 +59,23 @@ export const POST = withBusinessRoute<{ businessId: string; projectId: string }>
       return badRequest(`Prix manquant pour les services suivants: ${names}. Definissez un tarif avant de creer un devis.`);
     }
 
+    // Expiry: use body.expiresOffsetDays or default 30
+    const expiresOffsetDays = typeof body.expiresOffsetDays === 'number' && body.expiresOffsetDays > 0
+      ? Math.min(Math.trunc(body.expiresOffsetDays), 365)
+      : 30;
     const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 30);
+    expiresAt.setDate(expiresAt.getDate() + expiresOffsetDays);
+
+    // Deposit: use body.depositPercent or pricing default
+    let depositPercent = pricing.depositPercent;
+    if (typeof body.depositPercent === 'number' && body.depositPercent >= 0 && body.depositPercent <= 100) {
+      depositPercent = body.depositPercent;
+    }
+    const depositCents = Math.round((Number(pricing.totalCents) * depositPercent) / 100);
+    const balanceCents = Number(pricing.totalCents) - depositCents;
+
+    // Internal note
+    const internalNote = typeof body.internalNote === 'string' ? body.internalNote.trim() || null : null;
 
     const quote = await prisma.$transaction(async (tx) => {
       const created = await tx.quote.create({
@@ -68,12 +85,13 @@ export const POST = withBusinessRoute<{ businessId: string; projectId: string }>
           clientId: pricing.clientId ?? undefined,
           createdByUserId: userId,
           status: QuoteStatus.DRAFT,
-          depositPercent: pricing.depositPercent,
+          depositPercent,
           currency: pricing.currency,
           totalCents: pricing.totalCents,
-          depositCents: pricing.depositCents,
-          balanceCents: pricing.balanceCents,
+          depositCents,
+          balanceCents,
           expiresAt,
+          ...(internalNote ? { note: internalNote } : {}),
           items: {
             create: pricing.items.map((item) => ({
               serviceId: item.serviceId ?? undefined,

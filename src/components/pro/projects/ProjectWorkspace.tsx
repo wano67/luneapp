@@ -225,6 +225,10 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
     quoteWizardGenerateTasks, setQuoteWizardGenerateTasks,
     quoteWizardAssigneeId, setQuoteWizardAssigneeId,
     quoteWizardDueOffsetDays, setQuoteWizardDueOffsetDays,
+    quoteWizardExpiresOffsetDays, setQuoteWizardExpiresOffsetDays,
+    quoteWizardDepositPercent, setQuoteWizardDepositPercent,
+    quoteWizardPaymentTermsDays, setQuoteWizardPaymentTermsDays,
+    quoteWizardInternalNote, setQuoteWizardInternalNote,
     quoteWizardError, quoteWizardInfo, quoteWizardSaving, quoteWizardResult,
     wizardLineValidation, wizardCanContinue,
     openQuoteWizard, closeQuoteWizard,
@@ -908,6 +912,14 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
         onAssigneeIdChange={setQuoteWizardAssigneeId}
         dueOffsetDays={quoteWizardDueOffsetDays}
         onDueOffsetDaysChange={setQuoteWizardDueOffsetDays}
+        expiresOffsetDays={quoteWizardExpiresOffsetDays}
+        onExpiresOffsetDaysChange={setQuoteWizardExpiresOffsetDays}
+        depositPercent={quoteWizardDepositPercent}
+        onDepositPercentChange={setQuoteWizardDepositPercent}
+        paymentTermsDays={quoteWizardPaymentTermsDays}
+        onPaymentTermsDaysChange={setQuoteWizardPaymentTermsDays}
+        internalNote={quoteWizardInternalNote}
+        onInternalNoteChange={setQuoteWizardInternalNote}
         error={quoteWizardError}
         info={quoteWizardInfo}
         saving={quoteWizardSaving}

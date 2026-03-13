@@ -185,8 +185,8 @@ export default function LoginForm({ redirectPath = '/app' }: LoginFormProps) {
                 </p>
                 <p>
                   Pas de compte ?{' '}
-                  <Link href="/register" className="text-[var(--accent-strong)] hover:underline">
-                    Créer un compte
+                  <Link href="/waitlist" className="text-[var(--accent-strong)] hover:underline">
+                    Rejoindre la liste d&apos;attente
                   </Link>
                 </p>
               </div>

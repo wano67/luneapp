@@ -1,185 +1,147 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
-import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { SectionHeader } from '@/components/ui/section-header';
-import { Faq } from '@/components/marketing/Faq';
 import { ScrollReveal } from '@/components/marketing/ScrollReveal';
 import { StaggerChildren } from '@/components/marketing/StaggerChildren';
+import { WaitlistForm } from '@/components/marketing/WaitlistForm';
+import { AppFacade } from '@/components/marketing/AppFacade';
 
 export const metadata: Metadata = {
-  title: 'Pivot • Gérez votre activité pro et vos finances perso',
+  title: 'Pivot • Votre activité pro et vos finances perso, bientôt réunies',
   description:
-    'Pivot réunit la gestion de votre activité professionnelle et vos finances personnelles en un seul espace simple et sécurisé.',
+    'Pivot arrive bientôt. Un seul espace pour piloter votre activité professionnelle et vos finances personnelles. Rejoignez la liste d\'attente.',
   openGraph: {
-    title: 'Pivot • Gérez votre activité pro et vos finances perso',
+    title: 'Pivot • Bientôt disponible',
     description:
-      'Pivot réunit la gestion de votre activité professionnelle et vos finances personnelles en un seul espace simple et sécurisé.',
+      'Un seul espace pour piloter votre activité pro et vos finances perso. Rejoignez la liste d\'attente.',
   },
 };
 
-const faqItems = [
+const keyFeatures = [
   {
-    question: 'Puis-je utiliser Pivot seulement pour le pro ou seulement pour le perso ?',
-    answer:
-      'Oui. Les espaces sont indépendants : activez le pro, le perso, ou les deux selon vos besoins.',
+    title: 'Comptabilité automatisée',
+    desc: 'Grand livre, bilan, TVA et export FEC générés automatiquement. Votre comptable reçoit un dossier propre, sans effort.',
   },
   {
-    question: 'Pivot fonctionne-t-il sur mobile ?',
-    answer:
-      'Oui. L\'interface est pensée mobile-first : tout fonctionne sur smartphone comme sur ordinateur.',
+    title: 'Patrimoine en temps réel',
+    desc: 'Comptes bancaires, épargne, investissements, immobilier. Visualisez l\'ensemble de votre patrimoine sur un seul tableau de bord.',
   },
   {
-    question: 'Peut-on inviter des collaborateurs ?',
-    answer:
-      'Oui. Chaque entreprise peut accueillir des membres avec des rôles différents (admin, membre, viewer).',
+    title: 'Projections financières',
+    desc: 'Simulez votre trésorerie, vos revenus nets et votre épargne à 3, 6, 12 mois. Prenez des décisions éclairées.',
   },
   {
-    question: 'Comment tester avant de payer ?',
-    answer:
-      'Le plan Essentiel est gratuit. Le plan Pro offre un essai de 14 jours sans carte bancaire.',
+    title: 'Factures et devis certifiés PDP',
+    desc: 'Créez, envoyez et suivez vos devis et factures conformes Factur-X. Numérotation automatique, export PDF et signature électronique.',
+  },
+  {
+    title: 'Impôts et charges automatiques',
+    desc: 'IS, TVA, cotisations sociales, rémunération du dirigeant. Pivot calcule tout et vous donne une vision nette de votre résultat.',
+  },
+  {
+    title: 'Gestion d\'équipe',
+    desc: 'Invitez vos collaborateurs, assignez des rôles, organisez par pôles. Tâches, calendrier partagé et suivi de charge.',
   },
 ];
 
 export default function HomePage() {
   return (
-    <div className="space-y-20">
+    <div className="space-y-24">
       {/* ── Hero ── */}
-      <section className="flex flex-col items-center text-center pt-8 md:pt-16">
+      <section className="flex flex-col items-center pt-8 text-center md:pt-16">
         <ScrollReveal animation="reveal-up">
+          <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-[var(--accent)]/30 bg-[var(--accent)]/10 px-4 py-1.5">
+            <span className="relative flex h-2 w-2">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--accent)] opacity-75" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-[var(--accent)]" />
+            </span>
+            <span className="text-xs font-semibold uppercase tracking-wider text-[var(--accent)]">
+              En construction
+            </span>
+          </div>
+        </ScrollReveal>
+        <ScrollReveal animation="reveal-up" delay={50}>
           <h1 className="max-w-3xl text-4xl font-semibold leading-tight md:text-5xl lg:text-6xl">
-            Votre activité pro et vos finances perso, enfin réunies.
+            Votre activit&eacute; pro et vos finances perso, bient&ocirc;t r&eacute;unies.
           </h1>
         </ScrollReveal>
         <ScrollReveal animation="reveal-up" delay={100}>
           <p className="mt-6 max-w-xl text-lg leading-relaxed text-[var(--text-secondary)]">
             Pivot est l&apos;espace unique pour piloter vos clients, projets, factures
-            et suivre vos dépenses personnelles. Simple, sécurisé, accessible.
+            et suivre vos d&eacute;penses personnelles. Simple, s&eacute;curis&eacute;, accessible.
           </p>
         </ScrollReveal>
-        <ScrollReveal animation="reveal-up" delay={200}>
-          <div className="mt-8 flex flex-wrap justify-center gap-3">
-            <Button asChild size="lg">
-              <Link href="/register">Commencer gratuitement</Link>
-            </Button>
-            <Button asChild variant="outline" size="lg">
-              <Link href="/features">Voir les fonctionnalités</Link>
-            </Button>
-          </div>
+        <ScrollReveal animation="reveal-up" delay={200} className="mt-8 w-full max-w-md">
+          <WaitlistForm variant="hero" />
         </ScrollReveal>
       </section>
 
-      {/* ── 3 value props ── */}
-      <StaggerChildren className="grid gap-6 md:grid-cols-3">
-        {[
-          {
-            title: 'Espace Pro',
-            desc: 'Prospects, clients, projets, devis et factures. Tout pour piloter votre activité au quotidien.',
-          },
-          {
-            title: 'Espace Perso',
-            desc: 'Comptes, transactions, budgets et épargne. Gardez une vue claire sur vos finances personnelles.',
-          },
-          {
-            title: 'Simple et sécurisé',
-            desc: 'Pas de configuration complexe. Vos données sont protégées, votre interface reste épurée.',
-          },
-        ].map((item) => (
-          <Card key={item.title} className="feature-card-lift border-[var(--border)] bg-[var(--surface)] p-6">
-            <div className="text-lg font-semibold text-[var(--text)]">{item.title}</div>
-            <p className="mt-2 text-sm leading-relaxed text-[var(--text-secondary)]">{item.desc}</p>
-          </Card>
-        ))}
-      </StaggerChildren>
+      {/* ── App facade ── */}
+      <ScrollReveal animation="reveal-scale" delay={100}>
+        <AppFacade />
+      </ScrollReveal>
 
-      {/* ── Comment ça marche ── */}
-      <section className="space-y-6">
+      {/* ── Key features that save time ── */}
+      <section className="space-y-8">
         <ScrollReveal>
           <SectionHeader
             variant="marketing"
-            title="Opérationnel en 3 étapes"
-            description="Créez votre compte, ajoutez votre activité, et pilotez."
+            title="Ce qui vous fait gagner du temps"
+            description="Des automatismes pens&eacute;s pour les ind&eacute;pendants, agences et petites &eacute;quipes."
           />
         </ScrollReveal>
-        <StaggerChildren className="grid gap-6 md:grid-cols-3">
-          {[
-            {
-              step: '1',
-              title: 'Créez votre compte',
-              desc: 'Inscription gratuite en quelques secondes.',
-            },
-            {
-              step: '2',
-              title: 'Ajoutez votre activité',
-              desc: 'Créez une entreprise et invitez votre équipe.',
-            },
-            {
-              step: '3',
-              title: 'Pilotez au quotidien',
-              desc: 'Gérez clients, projets et finances depuis un seul endroit.',
-            },
-          ].map((item) => (
-            <Card key={item.step} className="feature-card-lift border-[var(--border)] bg-[var(--surface)] p-6">
-              <div
-                className="flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold text-white"
-                style={{ background: 'var(--accent)' }}
-              >
-                {item.step}
-              </div>
-              <div className="mt-3 text-base font-semibold text-[var(--text)]">{item.title}</div>
-              <p className="mt-1 text-sm leading-relaxed text-[var(--text-secondary)]">{item.desc}</p>
+        <StaggerChildren className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          {keyFeatures.map((item) => (
+            <Card key={item.title} className="feature-card-lift border-[var(--border)] bg-[var(--surface)] p-6">
+              <div className="text-base font-semibold text-[var(--text)]">{item.title}</div>
+              <p className="mt-2 text-sm leading-relaxed text-[var(--text-secondary)]">{item.desc}</p>
             </Card>
           ))}
         </StaggerChildren>
       </section>
 
-      {/* ── Pricing teaser ── */}
-      <ScrollReveal>
-        <section className="space-y-6">
+      {/* ── Two spaces ── */}
+      <section className="space-y-6">
+        <ScrollReveal>
           <SectionHeader
             variant="marketing"
-            title="Des tarifs simples"
-            description="Commencez gratuitement, évoluez quand vous en avez besoin."
+            title="Deux espaces, un seul outil"
+            description="Pro et perso cohabitent sans se m&eacute;langer."
           />
-          <div className="grid gap-4 md:grid-cols-3">
-            <Card className="feature-card-lift border-[var(--border)] bg-[var(--surface)] p-5 text-center">
-              <div className="text-sm font-medium text-[var(--text-secondary)]">Essentiel</div>
-              <div className="mt-1 text-2xl font-bold text-[var(--text)]">Gratuit</div>
-              <p className="mt-2 text-xs text-[var(--text-faint)]">1 entreprise, espace perso</p>
-            </Card>
-            <Card className="feature-card-lift border-[var(--accent-strong)] bg-[var(--surface)] p-5 text-center shadow-md shadow-[var(--shadow-float)]/20">
-              <div className="text-sm font-semibold text-[var(--accent)]">Pro</div>
-              <div className="mt-1 text-2xl font-bold text-[var(--text)]">24€<span className="text-sm font-normal text-[var(--text-secondary)]"> / mois</span></div>
-              <p className="mt-2 text-xs text-[var(--text-faint)]">Entreprises illimitées, équipe</p>
-            </Card>
-            <Card className="feature-card-lift border-[var(--border)] bg-[var(--surface)] p-5 text-center">
-              <div className="text-sm font-medium text-[var(--text-secondary)]">Équipe</div>
-              <div className="mt-1 text-2xl font-bold text-[var(--text)]">Sur devis</div>
-              <p className="mt-2 text-xs text-[var(--text-faint)]">Intégrations, support dédié</p>
-            </Card>
-          </div>
-          <div className="text-center">
-            <Button asChild variant="outline">
-              <Link href="/pricing">Comparer les plans</Link>
-            </Button>
-          </div>
-        </section>
-      </ScrollReveal>
-
-      {/* ── FAQ ── */}
-      <Faq items={faqItems} />
+        </ScrollReveal>
+        <StaggerChildren className="grid gap-6 md:grid-cols-2">
+          <Card className="feature-card-lift border-[var(--border)] bg-[var(--surface)] p-6">
+            <div className="mb-2 text-lg font-semibold text-[var(--text)]">Espace Pro</div>
+            <ul className="space-y-1.5 text-sm leading-relaxed text-[var(--text-secondary)]">
+              <li>Prospects, clients et pipeline commercial</li>
+              <li>Projets, services et suivi d&apos;avancement</li>
+              <li>Devis, factures et comptabilit&eacute; automatis&eacute;e</li>
+              <li>Gestion d&apos;&eacute;quipe, t&acirc;ches et calendrier</li>
+              <li>Stock, catalogue et portail client</li>
+            </ul>
+          </Card>
+          <Card className="feature-card-lift border-[var(--border)] bg-[var(--surface)] p-6">
+            <div className="mb-2 text-lg font-semibold text-[var(--text)]">Espace Personnel</div>
+            <ul className="space-y-1.5 text-sm leading-relaxed text-[var(--text-secondary)]">
+              <li>Comptes bancaires et sync Open Banking</li>
+              <li>Transactions, cat&eacute;gorisation et r&egrave;gles auto</li>
+              <li>Budgets mensuels et suivi des d&eacute;penses</li>
+              <li>&Eacute;pargne, objectifs et projection patrimoniale</li>
+              <li>Abonnements et charges fixes</li>
+            </ul>
+          </Card>
+        </StaggerChildren>
+      </section>
 
       {/* ── Final CTA ── */}
       <ScrollReveal animation="reveal-scale">
         <section className="rounded-3xl bg-[var(--accent)] p-8 text-center shadow-md">
-          <h2 className="text-2xl font-semibold text-white">Prêt à simplifier votre quotidien ?</h2>
-          <p className="mt-3 text-sm text-white/80">
-            Créez votre compte gratuitement et commencez à piloter votre activité.
+          <h2 className="text-2xl font-semibold text-white">Pr&ecirc;t &agrave; simplifier votre quotidien ?</h2>
+          <p className="mx-auto mt-3 max-w-md text-sm text-white/80">
+            Rejoignez la liste d&apos;attente et soyez parmi les premiers &agrave; d&eacute;couvrir Pivot.
           </p>
-          <div className="mt-6 flex flex-wrap justify-center gap-3">
-            <Button asChild size="lg" className="bg-white text-[var(--accent)] hover:bg-white/90">
-              <Link href="/register">Commencer gratuitement</Link>
-            </Button>
+          <div className="mx-auto mt-6 max-w-sm">
+            <WaitlistForm />
           </div>
         </section>
       </ScrollReveal>

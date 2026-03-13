@@ -163,6 +163,20 @@ export const POST = withBusinessRoute<{ businessId: string; quoteId: string }>(
       return created;
     });
 
+    // Auto-create payment link
+    await prisma.paymentLink.create({
+      data: {
+        businessId: businessIdBigInt,
+        invoiceId: invoice.id,
+        clientId: quote.clientId ?? undefined,
+        amountCents: Number(invoice.totalCents),
+        currency: invoice.currency,
+        description: `Facture ${invoice.number ?? ''}`.trim(),
+        status: 'ACTIVE',
+        expiresAt: new Date(Date.now() + 90 * 86_400_000),
+      },
+    }).catch(() => null); // non-blocking
+
     const basePath = `/api/pro/businesses/${businessIdBigInt}/invoices/${invoice.id}`;
 
     return jsonbCreated(

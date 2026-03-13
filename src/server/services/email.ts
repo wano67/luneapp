@@ -41,7 +41,7 @@ export async function sendInviteEmail(params: InviteEmailParams): Promise<void> 
     year: 'numeric',
   }).format(expiresAt);
 
-  const fromAddress = process.env.RESEND_FROM_EMAIL?.trim() || 'Lune <noreply@lune.app>';
+  const fromAddress = process.env.RESEND_FROM_EMAIL?.trim() || 'Pivot <noreply@pivotapp.fr>';
   const inviterDisplay = inviterName || 'Un administrateur';
 
   const buttonLabel = userExists === false ? 'Cr&eacute;er mon compte' : 'Accepter l&apos;invitation';
@@ -76,7 +76,7 @@ export async function sendInviteEmail(params: InviteEmailParams): Promise<void> 
     await resend.emails.send({
       from: fromAddress,
       to,
-      subject: `Invitation à rejoindre ${businessName} sur Lune`,
+      subject: `Invitation à rejoindre ${businessName} sur Pivot`,
       html,
     });
   } catch (error) {
@@ -95,7 +95,7 @@ export async function sendVerificationEmail(params: VerificationEmailParams): Pr
   if (!resend) return;
 
   const { to, name, verificationLink } = params;
-  const fromAddress = process.env.RESEND_FROM_EMAIL?.trim() || 'Lune <noreply@lune.app>';
+  const fromAddress = process.env.RESEND_FROM_EMAIL?.trim() || 'Pivot <noreply@pivotapp.fr>';
   const greeting = name ? `Bonjour ${name},` : 'Bonjour,';
 
   const html = `<!DOCTYPE html>
@@ -105,7 +105,7 @@ export async function sendVerificationEmail(params: VerificationEmailParams): Pr
   <div style="max-width:560px;margin:40px auto;background:#fff;border-radius:12px;padding:40px;border:1px solid #e5e5e5;">
     <h1 style="font-size:20px;color:#111;margin:0 0 8px;">Confirmez votre adresse email</h1>
     <p style="color:#555;font-size:14px;line-height:1.6;margin:0 0 24px;">
-      ${greeting} merci de vous &ecirc;tre inscrit sur Lune. Cliquez sur le bouton ci-dessous pour v&eacute;rifier votre adresse email.
+      ${greeting} merci de vous &ecirc;tre inscrit sur Pivot. Cliquez sur le bouton ci-dessous pour v&eacute;rifier votre adresse email.
     </p>
     <a href="${verificationLink}"
        style="display:inline-block;padding:12px 28px;background:#111;color:#fff;text-decoration:none;border-radius:8px;font-size:14px;font-weight:600;">
@@ -122,7 +122,7 @@ export async function sendVerificationEmail(params: VerificationEmailParams): Pr
     await resend.emails.send({
       from: fromAddress,
       to,
-      subject: 'Confirmez votre adresse email — Lune',
+      subject: 'Confirmez votre adresse email — Pivot',
       html,
     });
   } catch (error) {
@@ -143,7 +143,7 @@ export async function sendPasswordResetEmail(params: PasswordResetEmailParams): 
   if (!resend) return;
 
   const { to, name, resetLink } = params;
-  const fromAddress = process.env.RESEND_FROM_EMAIL?.trim() || 'Lune <noreply@lune.app>';
+  const fromAddress = process.env.RESEND_FROM_EMAIL?.trim() || 'Pivot <noreply@pivotapp.fr>';
   const greeting = name ? `Bonjour ${name},` : 'Bonjour,';
 
   const html = `<!DOCTYPE html>
@@ -170,7 +170,7 @@ export async function sendPasswordResetEmail(params: PasswordResetEmailParams): 
     await resend.emails.send({
       from: fromAddress,
       to,
-      subject: 'Réinitialisation de votre mot de passe — Lune',
+      subject: 'Réinitialisation de votre mot de passe — Pivot',
       html,
     });
   } catch (error) {
@@ -193,7 +193,7 @@ export async function sendProjectShareEmail(params: ProjectShareEmailParams): Pr
   if (!resend) return;
 
   const { to, businessName, projectName, shareLink, expiresAt } = params;
-  const fromAddress = process.env.RESEND_FROM_EMAIL?.trim() || 'Lune <noreply@lune.app>';
+  const fromAddress = process.env.RESEND_FROM_EMAIL?.trim() || 'Pivot <noreply@pivotapp.fr>';
 
   const expiryLine = expiresAt
     ? `Ce lien expire le ${new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }).format(expiresAt)}.`
@@ -231,5 +231,98 @@ export async function sendProjectShareEmail(params: ProjectShareEmailParams): Pr
     });
   } catch (error) {
     console.error('[email] Failed to send project share email:', error instanceof Error ? error.message : 'unknown');
+  }
+}
+
+// ── Waitlist confirmation email ────────────────────────────────────────────
+
+type WaitlistConfirmationEmailParams = { to: string };
+
+export async function sendWaitlistConfirmationEmail(params: WaitlistConfirmationEmailParams): Promise<void> {
+  const resend = getResend();
+  if (!resend) return;
+
+  const { to } = params;
+  const fromAddress = process.env.RESEND_FROM_EMAIL?.trim() || 'Pivot <noreply@pivotapp.fr>';
+
+  const html = `<!DOCTYPE html>
+<html lang="fr">
+<head><meta charset="utf-8" /></head>
+<body style="margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f5f5f5;">
+  <div style="max-width:560px;margin:40px auto;background:#fff;border-radius:12px;padding:40px;border:1px solid #e5e5e5;">
+    <h1 style="font-size:20px;color:#111;margin:0 0 8px;">Vous &ecirc;tes sur la liste !</h1>
+    <p style="color:#555;font-size:14px;line-height:1.6;margin:0 0 8px;">
+      Merci de votre int&eacute;r&ecirc;t pour <strong>Pivot</strong>. Votre place est r&eacute;serv&eacute;e.
+    </p>
+    <p style="color:#555;font-size:14px;line-height:1.6;margin:0 0 8px;">
+      Nous pr&eacute;parons quelque chose de sp&eacute;cial pour vous aider &agrave; piloter votre activit&eacute; pro et vos finances perso depuis un seul endroit.
+    </p>
+    <p style="color:#555;font-size:14px;line-height:1.6;margin:0 0 24px;">
+      Vous recevrez un email d&egrave;s que votre acc&egrave;s sera pr&ecirc;t. &Agrave; tr&egrave;s bient&ocirc;t !
+    </p>
+    <div style="padding:16px;background:#f9f9f9;border-radius:8px;text-align:center;">
+      <p style="color:#111;font-size:14px;font-weight:600;margin:0;">Pivot arrive bient&ocirc;t.</p>
+      <p style="color:#888;font-size:12px;margin:4px 0 0;">Restez &agrave; l&apos;&eacute;coute.</p>
+    </div>
+  </div>
+</body>
+</html>`;
+
+  try {
+    await resend.emails.send({
+      from: fromAddress,
+      to,
+      subject: 'Pivot — Vous êtes sur la liste d\'attente !',
+      html,
+    });
+  } catch (error) {
+    console.error('[email] Failed to send waitlist confirmation email:', error instanceof Error ? error.message : 'unknown');
+  }
+}
+
+// ── Referral notification email ────────────────────────────────────────────
+
+type ReferralNotificationEmailParams = {
+  to: string;
+  referrerName: string | null;
+  refereeName: string;
+};
+
+export async function sendReferralNotificationEmail(params: ReferralNotificationEmailParams): Promise<void> {
+  const resend = getResend();
+  if (!resend) return;
+
+  const { to, referrerName, refereeName } = params;
+  const fromAddress = process.env.RESEND_FROM_EMAIL?.trim() || 'Pivot <noreply@pivotapp.fr>';
+  const greeting = referrerName ? `Bonjour ${referrerName},` : 'Bonjour,';
+
+  const html = `<!DOCTYPE html>
+<html lang="fr">
+<head><meta charset="utf-8" /></head>
+<body style="margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f5f5f5;">
+  <div style="max-width:560px;margin:40px auto;background:#fff;border-radius:12px;padding:40px;border:1px solid #e5e5e5;">
+    <h1 style="font-size:20px;color:#111;margin:0 0 8px;">Quelqu&apos;un a rejoint Pivot gr&acirc;ce &agrave; vous !</h1>
+    <p style="color:#555;font-size:14px;line-height:1.6;margin:0 0 8px;">
+      ${greeting} <strong>${refereeName}</strong> vient de s&apos;inscrire sur Pivot avec votre lien de parrainage.
+    </p>
+    <p style="color:#555;font-size:14px;line-height:1.6;margin:0 0 24px;">
+      Continuez &agrave; partager votre lien pour grimper dans le classement !
+    </p>
+    <div style="padding:16px;background:#f9f9f9;border-radius:8px;text-align:center;">
+      <p style="color:#111;font-size:14px;font-weight:600;margin:0;">Merci pour votre soutien.</p>
+    </div>
+  </div>
+</body>
+</html>`;
+
+  try {
+    await resend.emails.send({
+      from: fromAddress,
+      to,
+      subject: 'Pivot — Un nouveau filleul a rejoint la liste !',
+      html,
+    });
+  } catch (error) {
+    console.error('[email] Failed to send referral notification email:', error instanceof Error ? error.message : 'unknown');
   }
 }

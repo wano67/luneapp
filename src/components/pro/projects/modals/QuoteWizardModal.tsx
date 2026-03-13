@@ -46,7 +46,7 @@ export type WizardMember = {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const WIZARD_STEPS = ['Prestations', 'Résumé'] as const;
+const WIZARD_STEPS = ['Prestations', 'Conditions', 'Résumé'] as const;
 
 const UI = {
   sectionSoft: 'rounded-2xl border border-[var(--border)]/60 bg-[var(--surface-2)]/60 p-3',
@@ -163,6 +163,15 @@ export type QuoteWizardModalProps = {
   onAssigneeIdChange: (value: string) => void;
   dueOffsetDays: string;
   onDueOffsetDaysChange: (value: string) => void;
+  // Conditions step
+  expiresOffsetDays: string;
+  onExpiresOffsetDaysChange: (value: string) => void;
+  depositPercent: string;
+  onDepositPercentChange: (value: string) => void;
+  paymentTermsDays: string;
+  onPaymentTermsDaysChange: (value: string) => void;
+  internalNote: string;
+  onInternalNoteChange: (value: string) => void;
   error: string | null;
   info: string | null;
   saving: boolean;
@@ -208,6 +217,14 @@ export function QuoteWizardModal({
   onAssigneeIdChange,
   dueOffsetDays,
   onDueOffsetDaysChange,
+  expiresOffsetDays,
+  onExpiresOffsetDaysChange,
+  depositPercent,
+  onDepositPercentChange,
+  paymentTermsDays,
+  onPaymentTermsDaysChange,
+  internalNote,
+  onInternalNoteChange,
   error,
   info,
   saving,
@@ -254,8 +271,8 @@ export function QuoteWizardModal({
     <Modal
       open={open}
       onCloseAction={onClose}
-      title="Créer un devis"
-      description="Ajoutez vos prestations et les tâches associées, puis créez le devis."
+      title="Construire une offre"
+      description="Ajoutez vos prestations, définissez les conditions, puis générez le devis."
       size="lg"
     >
       {result ? (
@@ -600,8 +617,64 @@ export function QuoteWizardModal({
             </div>
           ) : null}
 
-          {/* Step 1 — Résumé */}
+          {/* Step 1 — Conditions */}
           {step === 1 ? (
+            <div className="space-y-4">
+              <p className="text-sm text-[var(--text-secondary)]">
+                Définissez les conditions commerciales de votre offre.
+              </p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="flex w-full flex-col gap-1">
+                  <span className="text-sm font-medium text-[var(--text-secondary)]">Validité du devis</span>
+                  <select
+                    value={expiresOffsetDays}
+                    onChange={(e) => onExpiresOffsetDaysChange(e.target.value)}
+                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-sm text-[var(--text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
+                  >
+                    <option value="15">15 jours</option>
+                    <option value="30">30 jours</option>
+                    <option value="60">60 jours</option>
+                    <option value="90">90 jours</option>
+                  </select>
+                </label>
+                <label className="flex w-full flex-col gap-1">
+                  <span className="text-sm font-medium text-[var(--text-secondary)]">Acompte</span>
+                  <select
+                    value={depositPercent}
+                    onChange={(e) => onDepositPercentChange(e.target.value)}
+                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-sm text-[var(--text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
+                  >
+                    <option value="">Par défaut (paramètres business)</option>
+                    <option value="0">0 %</option>
+                    <option value="30">30 %</option>
+                    <option value="50">50 %</option>
+                    <option value="100">100 %</option>
+                  </select>
+                </label>
+              </div>
+              <Input
+                label="Délai de paiement (jours)"
+                type="number"
+                min={0}
+                max={365}
+                value={paymentTermsDays}
+                onChange={(e) => onPaymentTermsDaysChange(e.target.value)}
+                placeholder="Ex : 30"
+              />
+              <label className="flex w-full flex-col gap-1">
+                <span className="text-sm font-medium text-[var(--text-secondary)]">Note interne</span>
+                <textarea
+                  className="min-h-[80px] w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)]"
+                  value={internalNote}
+                  onChange={(e) => onInternalNoteChange(e.target.value)}
+                  placeholder="Note visible uniquement par votre équipe (non incluse dans le devis client)"
+                />
+              </label>
+            </div>
+          ) : null}
+
+          {/* Step 2 — Résumé */}
+          {step === 2 ? (
             <div className="space-y-4">
               <div className="grid gap-3 sm:grid-cols-3">
                 <div className={cn(UI.sectionSoft, 'text-right')}>
@@ -628,8 +701,23 @@ export function QuoteWizardModal({
                   Temps total estimé : <span className="font-semibold">{formatMinutes(totalEstMin)}</span>
                 </p>
               ) : null}
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className={cn(UI.sectionSoft)}>
+                  <p className={UI.label}>Validité</p>
+                  <p className={UI.value}>{expiresOffsetDays} jours</p>
+                </div>
+                <div className={cn(UI.sectionSoft)}>
+                  <p className={UI.label}>Acompte</p>
+                  <p className={UI.value}>{depositPercent ? `${depositPercent} %` : 'Par défaut'}</p>
+                </div>
+              </div>
+              {paymentTermsDays ? (
+                <p className="text-sm text-[var(--text-secondary)]">
+                  Délai de paiement : <span className="font-semibold">{paymentTermsDays} jours</span>
+                </p>
+              ) : null}
               <p className="text-sm text-[var(--text-secondary)]">
-                Le devis sera généré avec les prestations ci-dessus.
+                Le devis sera généré avec les prestations et conditions ci-dessus.
               </p>
             </div>
           ) : null}
@@ -650,10 +738,10 @@ export function QuoteWizardModal({
                 Retour
               </Button>
             ) : null}
-            {step < 1 ? (
+            {step < 2 ? (
               <Button
-                onClick={() => onStepChange(1)}
-                disabled={!canContinue}
+                onClick={() => onStepChange(step + 1)}
+                disabled={step === 0 && !canContinue}
               >
                 Continuer
               </Button>

@@ -1,7 +1,7 @@
 // src/app/register/page.tsx
 'use client';
 
-import { useState, FormEvent, type ChangeEvent } from 'react';
+import { useState, useEffect, FormEvent, type ChangeEvent } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Card } from '@/components/ui/card';
@@ -34,6 +34,13 @@ export default function RegisterPage() {
   const [error, setError] = useState<string | null>(null);
   const [requestId, setRequestId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  // Without an invite token, redirect to waitlist
+  useEffect(() => {
+    if (!inviteToken) router.replace('/waitlist');
+  }, [inviteToken, router]);
+
+  if (!inviteToken) return null;
 
   async function savePreferences(pref: Prefs) {
     await fetch('/api/account/preferences', {

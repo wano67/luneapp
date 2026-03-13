@@ -111,6 +111,10 @@ export function useQuoteWizard({
   const [quoteWizardGenerateTasks, setQuoteWizardGenerateTasks] = useState(true);
   const [quoteWizardAssigneeId, setQuoteWizardAssigneeId] = useState('');
   const [quoteWizardDueOffsetDays, setQuoteWizardDueOffsetDays] = useState('');
+  const [quoteWizardExpiresOffsetDays, setQuoteWizardExpiresOffsetDays] = useState('30');
+  const [quoteWizardDepositPercent, setQuoteWizardDepositPercent] = useState('');
+  const [quoteWizardPaymentTermsDays, setQuoteWizardPaymentTermsDays] = useState('');
+  const [quoteWizardInternalNote, setQuoteWizardInternalNote] = useState('');
   const [quoteWizardError, setQuoteWizardError] = useState<string | null>(null);
   const [quoteWizardInfo, setQuoteWizardInfo] = useState<string | null>(null);
   const [quoteWizardSaving, setQuoteWizardSaving] = useState(false);
@@ -161,6 +165,10 @@ export function useQuoteWizard({
     setQuoteWizardGenerateTasks(true);
     setQuoteWizardAssigneeId('');
     setQuoteWizardDueOffsetDays('');
+    setQuoteWizardExpiresOffsetDays('30');
+    setQuoteWizardDepositPercent('');
+    setQuoteWizardPaymentTermsDays('');
+    setQuoteWizardInternalNote('');
     setQuoteWizardError(null);
     setQuoteWizardInfo(null);
     setQuoteWizardResult(null);
@@ -385,11 +393,23 @@ export function useQuoteWizard({
       } // end else (services not yet posted)
 
       setQuoteWizardInfo('Génération du devis…');
+      const quoteBody: Record<string, unknown> = {};
+      const expiresOffset = Number(quoteWizardExpiresOffsetDays);
+      if (Number.isFinite(expiresOffset) && expiresOffset > 0) quoteBody.expiresOffsetDays = expiresOffset;
+      const depositPct = Number(quoteWizardDepositPercent);
+      if (Number.isFinite(depositPct) && depositPct >= 0 && depositPct <= 100) quoteBody.depositPercent = depositPct;
+      const payTerms = Number(quoteWizardPaymentTermsDays);
+      if (Number.isFinite(payTerms) && payTerms > 0) quoteBody.paymentTermsDays = payTerms;
+      if (quoteWizardInternalNote.trim()) quoteBody.internalNote = quoteWizardInternalNote.trim();
       const quoteRes = await fetchJson<{
         item: { id: string };
         pdfUrl: string;
         downloadUrl: string;
-      }>(`/api/pro/businesses/${businessId}/projects/${projectId}/quotes`, { method: 'POST' });
+      }>(`/api/pro/businesses/${businessId}/projects/${projectId}/quotes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(quoteBody),
+      });
       if (!quoteRes.ok || !quoteRes.data) {
         throw new Error(quoteRes.error ?? 'Création du devis impossible.');
       }
@@ -413,6 +433,10 @@ export function useQuoteWizard({
     quoteWizardGenerateTasks,
     quoteWizardLines,
     quoteWizardAssigneeId,
+    quoteWizardExpiresOffsetDays,
+    quoteWizardDepositPercent,
+    quoteWizardPaymentTermsDays,
+    quoteWizardInternalNote,
     businessId,
     projectId,
     onBillingInfo,
@@ -433,6 +457,14 @@ export function useQuoteWizard({
     setQuoteWizardAssigneeId,
     quoteWizardDueOffsetDays,
     setQuoteWizardDueOffsetDays,
+    quoteWizardExpiresOffsetDays,
+    setQuoteWizardExpiresOffsetDays,
+    quoteWizardDepositPercent,
+    setQuoteWizardDepositPercent,
+    quoteWizardPaymentTermsDays,
+    setQuoteWizardPaymentTermsDays,
+    quoteWizardInternalNote,
+    setQuoteWizardInternalNote,
     quoteWizardError,
     quoteWizardInfo,
     quoteWizardSaving,

@@ -75,7 +75,7 @@ export function MarketingHeader() {
             Se connecter
           </Link>
           <Link
-            href="/register"
+            href="/waitlist"
             className="hidden items-center transition-opacity hover:opacity-90 md:inline-flex"
             style={{
               background: 'var(--shell-accent)',
@@ -88,7 +88,7 @@ export function MarketingHeader() {
               textTransform: 'uppercase',
             }}
           >
-            Créer un compte
+            Rejoindre la liste
           </Link>
 
           {/* Mobile hamburger */}
@@ -158,7 +158,7 @@ export function MarketingHeader() {
               Se connecter
             </Link>
             <Link
-              href="/register"
+              href="/waitlist"
               onClick={() => setMenuOpen(false)}
               className="w-full rounded-xl py-2.5 text-center text-sm transition-opacity hover:opacity-90"
               style={{
@@ -169,7 +169,7 @@ export function MarketingHeader() {
                 textTransform: 'uppercase',
               }}
             >
-              Créer un compte
+              Rejoindre la liste
             </Link>
           </div>
         </div>

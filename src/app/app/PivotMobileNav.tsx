@@ -3,7 +3,7 @@
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 import Link from 'next/link';
-import { X, Home, BarChart3 } from 'lucide-react';
+import { X, Home, BarChart3, Gift } from 'lucide-react';
 import { useBodyScrollLock } from '@/lib/scrollLock';
 import {
   IconPerso,
@@ -293,12 +293,20 @@ export default function PivotMobileNav({ space, pathname, businessId, businesses
             )}
 
             {/* Mon compte */}
-            <div>
+            <div className="flex flex-col gap-0.5">
               <BubbleMenuItem
                 icon={<IconSettings size={22} color="currentColor" />}
                 label={userName || 'Mon compte'}
                 href="/app/account"
                 active={pathname.startsWith('/app/account')}
+                onClick={close}
+                compact={compact}
+              />
+              <BubbleMenuItem
+                icon={<Gift size={22} />}
+                label="Parrainage"
+                href="/app/account#parrainage"
+                active={false}
                 onClick={close}
                 compact={compact}
               />

@@ -147,7 +147,7 @@ export default function FeaturesPage() {
           </div>
           <div className="flex gap-2">
             <Button asChild>
-              <Link href="/register">Créer un compte</Link>
+              <Link href="/waitlist">Rejoindre la liste</Link>
             </Button>
             <Button asChild variant="outline">
               <Link href="/pricing">Voir les tarifs</Link>

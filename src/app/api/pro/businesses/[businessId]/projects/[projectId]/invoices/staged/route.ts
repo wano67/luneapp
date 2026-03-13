@@ -125,6 +125,20 @@ export const POST = withBusinessRoute<{ businessId: string; projectId: string }>
 
     void notifyInvoiceCreated(ctx.userId, ctx.businessId, projectId, label);
 
+    // Auto-create payment link
+    await prisma.paymentLink.create({
+      data: {
+        businessId: ctx.businessId,
+        invoiceId: invoice.id,
+        clientId: clientId ?? undefined,
+        amountCents: Number(invoice.totalCents),
+        currency,
+        description: label,
+        status: 'ACTIVE',
+        expiresAt: new Date(Date.now() + 90 * 86_400_000),
+      },
+    }).catch(() => null); // non-blocking
+
     const basePath = `/api/pro/businesses/${params.businessId}/invoices/${invoice.id}`;
 
     return jsonb(

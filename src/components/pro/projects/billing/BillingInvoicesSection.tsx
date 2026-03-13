@@ -23,6 +23,7 @@ type InvoiceItem = {
   lastPaidAt?: string | null;
   createdAt: string;
   quoteId: string | null;
+  paymentLinkToken?: string | null;
 };
 
 // Helpers — mirrored from ProjectWorkspace (pure functions, no external deps)
@@ -171,6 +172,17 @@ export function BillingInvoicesSection({
                     ariaLabel="Actions facture"
                     items={[
                       { label: 'PDF', href: pdfUrl, newTab: true },
+                      ...(invoice.paymentLinkToken
+                        ? [
+                            {
+                              label: 'Copier lien de paiement',
+                              onClick: () => {
+                                const url = `${window.location.origin}/pay/${invoice.paymentLinkToken}`;
+                                void navigator.clipboard.writeText(url);
+                              },
+                            },
+                          ]
+                        : []),
                       ...(canManagePayments
                         ? [
                             {

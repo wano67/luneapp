@@ -67,15 +67,20 @@ export const GET = withPersonalRoute(async (ctx, req) => {
     }
   }
 
-  // Filter groups with 2+ occurrences, sort by count desc
+  // Filter groups with 2+ occurrences, sort by total amount desc
   const items = Array.from(groups.values())
     .filter((g) => g.count >= 2)
-    .sort((a, b) => b.count - a.count)
+    .sort((a, b) => {
+      if (b.totalAbsCents > a.totalAbsCents) return 1;
+      if (b.totalAbsCents < a.totalAbsCents) return -1;
+      return b.count - a.count;
+    })
     .map((g) => ({
       normalizedLabel: g.normalizedLabel,
       sampleLabel: g.sampleLabels[0],
       count: g.count,
       avgAmountCents: g.totalAbsCents / BigInt(g.count),
+      totalAmountCents: g.totalAbsCents,
       lastDate: g.lastDate.toISOString(),
     }));
 

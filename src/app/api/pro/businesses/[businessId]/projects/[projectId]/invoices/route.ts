@@ -26,6 +26,9 @@ export const GET = withBusinessRoute<{ businessId: string; projectId: string }>(
     const invoices = await prisma.invoice.findMany({
       where: { businessId: ctx.businessId, projectId },
       orderBy: { createdAt: 'desc' },
+      include: {
+        paymentLinks: { select: { token: true, status: true } },
+      },
     });
 
     const invoiceIds = invoices.map((inv) => inv.id);
@@ -90,6 +93,7 @@ export const GET = withBusinessRoute<{ businessId: string; projectId: string }>(
             lastPaidAt: summary?.lastPaidAt ?? null,
             createdAt: inv.createdAt,
             updatedAt: inv.updatedAt,
+            paymentLinkToken: inv.paymentLinks?.find((pl) => pl.status === 'ACTIVE')?.token ?? null,
           };
         }),
       },

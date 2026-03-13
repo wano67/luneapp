@@ -98,6 +98,8 @@ export function toPublicUser(user: User): PublicUser {
     acceptedTermsAt: user.acceptedTermsAt,
     acceptedPrivacyAt: user.acceptedPrivacyAt,
     marketingConsentAt: user.marketingConsentAt,
+    referralCode: user.referralCode,
+    referredById: user.referredById,
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
   };

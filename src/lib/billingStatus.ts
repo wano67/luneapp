@@ -1,9 +1,9 @@
 type StatusLabelMap = Record<string, string>;
 
 const QUOTE_STATUS_LABELS: StatusLabelMap = {
-  DRAFT: 'Brouillon',
+  DRAFT: 'Offre',
   SENT: 'Envoyé',
-  SIGNED: 'Signé',
+  SIGNED: 'Accepté',
   CANCELLED: 'Annulé',
   EXPIRED: 'Expiré',
 };

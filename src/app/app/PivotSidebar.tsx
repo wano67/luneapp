@@ -2,7 +2,7 @@
 
 import type { ReactNode } from 'react';
 import Link from 'next/link';
-import { ChevronDown, ChevronRight } from 'lucide-react';
+import { ChevronDown, ChevronRight, Gift } from 'lucide-react';
 import { proNavSections, hasMinRole } from '@/config/proNav';
 import { pivotIconMap } from '@/config/pivotNavIcons';
 import {
@@ -158,6 +158,7 @@ export default function PivotSidebar({ space, pathname, businessId, businesses, 
           <Item icon={(c) => <IconPerso size={20} color={c} />} label="Perso" href="/app/personal" active={space === 'perso'} collapsed={collapsed} />
           <Item icon={(c) => <IconEntreprise size={20} color={c} />} label="Entreprise" href="/app/pro" active={space === 'pro'} collapsed={collapsed} />
           <Item icon={(c) => <IconFocus size={20} color={c} />} label="Focus" href="/app/focus" active={space === 'focus'} collapsed={collapsed} />
+          <Item icon={(c) => <Gift size={20} color={c} />} label="Parrainage" href="/app/account#parrainage" active={false} collapsed={collapsed} />
         </Section>
 
         {/* User card */}

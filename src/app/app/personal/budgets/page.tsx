@@ -17,7 +17,7 @@ import { formatCentsToEuroDisplay, parseEuroToCents, sanitizeEuroInput } from '@
 import { useUserPreferences } from '@/lib/hooks/useUserPreferences';
 import { revalidate, useRevalidationKey } from '@/lib/revalidate';
 import { SUBSCRIPTION_PROVIDERS, groupProvidersByCategory, type SubscriptionProvider, type SubscriptionPlan } from '@/config/commonSubscriptions';
-import { Plus, Search, ChevronLeft, Zap, PiggyBank, Pencil, Check, X } from 'lucide-react';
+import { Plus, Search, ChevronLeft, Zap, PiggyBank, Pencil, Check, X, TrendingUp, TrendingDown, AlertTriangle, Calendar } from 'lucide-react';
 import Link from 'next/link';
 
 /* ═══ Types ═══ */
@@ -95,6 +95,55 @@ const FREQUENCY_LABELS: Record<string, string> = {
   YEARLY: 'Annuel',
 };
 
+/* ═══ Budget Templates ═══ */
+
+type BudgetTemplate = {
+  name: string;
+  icon: string;
+  suggestedCents: number;
+  period: 'MONTHLY' | 'YEARLY';
+  categoryMatch?: string; // auto-match category name (lowercase)
+};
+
+const BUDGET_TEMPLATES: { category: string; items: BudgetTemplate[] }[] = [
+  {
+    category: 'Logement',
+    items: [
+      { name: 'Loyer', icon: '🏠', suggestedCents: 80000, period: 'MONTHLY', categoryMatch: 'loyer' },
+      { name: 'Électricité', icon: '⚡', suggestedCents: 12000, period: 'MONTHLY', categoryMatch: 'électricité' },
+      { name: 'Gaz', icon: '🔥', suggestedCents: 8000, period: 'MONTHLY', categoryMatch: 'gaz' },
+      { name: 'Eau', icon: '💧', suggestedCents: 4000, period: 'MONTHLY', categoryMatch: 'eau' },
+      { name: 'Assurance habitation', icon: '🛡️', suggestedCents: 3000, period: 'MONTHLY', categoryMatch: 'assurance' },
+    ],
+  },
+  {
+    category: 'Quotidien',
+    items: [
+      { name: 'Courses & alimentation', icon: '🛒', suggestedCents: 40000, period: 'MONTHLY', categoryMatch: 'alimentation' },
+      { name: 'Restaurants', icon: '🍽️', suggestedCents: 15000, period: 'MONTHLY', categoryMatch: 'restaurant' },
+      { name: 'Transport', icon: '🚗', suggestedCents: 15000, period: 'MONTHLY', categoryMatch: 'transport' },
+      { name: 'Essence / Carburant', icon: '⛽', suggestedCents: 12000, period: 'MONTHLY', categoryMatch: 'essence' },
+    ],
+  },
+  {
+    category: 'Loisirs & personnel',
+    items: [
+      { name: 'Loisirs & sorties', icon: '🎭', suggestedCents: 15000, period: 'MONTHLY', categoryMatch: 'loisir' },
+      { name: 'Shopping & vêtements', icon: '👕', suggestedCents: 10000, period: 'MONTHLY', categoryMatch: 'vêtement' },
+      { name: 'Abonnements', icon: '📱', suggestedCents: 5000, period: 'MONTHLY', categoryMatch: 'abonnement' },
+      { name: 'Sport & bien-être', icon: '🏋️', suggestedCents: 5000, period: 'MONTHLY', categoryMatch: 'sport' },
+    ],
+  },
+  {
+    category: 'Santé & éducation',
+    items: [
+      { name: 'Santé', icon: '🏥', suggestedCents: 8000, period: 'MONTHLY', categoryMatch: 'santé' },
+      { name: 'Mutuelle', icon: '💊', suggestedCents: 5000, period: 'MONTHLY', categoryMatch: 'mutuelle' },
+      { name: 'Éducation & formation', icon: '📚', suggestedCents: 10000, period: 'MONTHLY', categoryMatch: 'éducation' },
+    ],
+  },
+];
+
 /* ═══ Helpers ═══ */
 
 function toMonthlyCents(amountCents: string, freq: string): bigint {
@@ -104,6 +153,24 @@ function toMonthlyCents(amountCents: string, freq: string): bigint {
     case 'QUARTERLY': return (a * 4n) / 12n;
     case 'YEARLY':    return a / 12n;
     default:          return a;
+  }
+}
+
+function toYearlyCents(amountCents: string, freq: string): bigint {
+  const a = BigInt(amountCents);
+  switch (freq) {
+    case 'WEEKLY':    return a * 52n;
+    case 'MONTHLY':   return a * 12n;
+    case 'QUARTERLY': return a * 4n;
+    default:          return a;
+  }
+}
+
+function formatLastSeen(iso: string): string {
+  try {
+    return new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(iso));
+  } catch {
+    return iso;
   }
 }
 
@@ -136,6 +203,9 @@ export default function BudgetsPage() {
   // ── Budget state ──
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [monthExpenseCents, setMonthExpenseCents] = useState(0n);
+  const [monthIncomeCents, setMonthIncomeCents] = useState(0n);
+  const [unbudgetedExpenseCents, setUnbudgetedExpenseCents] = useState(0n);
+  const [totalFixedChargesMonthlyCents, setTotalFixedChargesMonthlyCents] = useState(0n);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -144,6 +214,7 @@ export default function BudgetsPage() {
   const [budgetForm, setBudgetForm] = useState<BudgetFormState>(EMPTY_BUDGET_FORM);
   const [budgetSaving, setBudgetSaving] = useState(false);
   const [budgetSaveError, setBudgetSaveError] = useState<string | null>(null);
+  const [budgetPickerStep, setBudgetPickerStep] = useState<'picker' | 'form'>('picker');
 
   // ── Subscription state ──
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
@@ -172,13 +243,24 @@ export default function BudgetsPage() {
   const load = useCallback(async () => {
     setLoading(true);
     const [bRes, cRes, sRes] = await Promise.all([
-      fetchJson<{ items: Budget[]; monthExpenseCents: string; savingsGoals: SavingsGoalBudget[]; totalSavingsBudgetCents: string }>('/api/personal/budgets'),
+      fetchJson<{
+        items: Budget[];
+        monthExpenseCents: string;
+        monthIncomeCents: string;
+        unbudgetedExpenseCents: string;
+        totalFixedChargesMonthlyCents: string;
+        savingsGoals: SavingsGoalBudget[];
+        totalSavingsBudgetCents: string;
+      }>('/api/personal/budgets'),
       fetchJson<{ items: Category[] }>('/api/personal/categories'),
       fetchJson<{ items: Subscription[] }>('/api/personal/subscriptions'),
     ]);
     if (bRes.ok && bRes.data) {
       setBudgets(bRes.data.items ?? []);
       setMonthExpenseCents(BigInt(String(bRes.data.monthExpenseCents ?? '0')));
+      setMonthIncomeCents(BigInt(String(bRes.data.monthIncomeCents ?? '0')));
+      setUnbudgetedExpenseCents(BigInt(String(bRes.data.unbudgetedExpenseCents ?? '0')));
+      setTotalFixedChargesMonthlyCents(BigInt(String(bRes.data.totalFixedChargesMonthlyCents ?? '0')));
       setSavingsGoals(bRes.data.savingsGoals ?? []);
       setTotalSavingsBudgetCents(BigInt(String(bRes.data.totalSavingsBudgetCents ?? '0')));
     } else {
@@ -208,6 +290,7 @@ export default function BudgetsPage() {
     setBudgetEditingId(null);
     setBudgetForm({ ...EMPTY_BUDGET_FORM, period: prefs.defaultBudgetPeriod as BudgetFormState['period'] });
     setBudgetSaveError(null);
+    setBudgetPickerStep('picker');
     setBudgetModalOpen(true);
   }
 
@@ -220,7 +303,26 @@ export default function BudgetsPage() {
       categoryId: b.category?.id ?? '',
     });
     setBudgetSaveError(null);
+    setBudgetPickerStep('form');
     setBudgetModalOpen(true);
+  }
+
+  function selectBudgetTemplate(tpl: BudgetTemplate) {
+    const matchedCat = tpl.categoryMatch
+      ? categories.find((c) => c.name.toLowerCase().includes(tpl.categoryMatch!))
+      : undefined;
+    setBudgetForm({
+      name: tpl.name,
+      limitAmount: (tpl.suggestedCents / 100).toFixed(2),
+      period: tpl.period,
+      categoryId: matchedCat?.id ?? '',
+    });
+    setBudgetPickerStep('form');
+  }
+
+  function openBudgetCustom() {
+    setBudgetForm({ ...EMPTY_BUDGET_FORM, period: prefs.defaultBudgetPeriod as BudgetFormState['period'] });
+    setBudgetPickerStep('form');
   }
 
   async function handleBudgetSave() {
@@ -413,6 +515,29 @@ export default function BudgetsPage() {
     setSubModalOpen(true);
   }
 
+  const [linkingLabel, setLinkingLabel] = useState<string | null>(null);
+
+  async function linkRecurringToBudget(recurringLabel: string, budgetId: string) {
+    const budget = budgets.find((b) => b.id === budgetId);
+    if (!budget?.category) return;
+    setLinkingLabel(recurringLabel);
+    try {
+      const res = await fetchJson('/api/personal/transactions/categorize-group', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pattern: recurringLabel, categoryId: budget.category.id }),
+      });
+      if (res.ok) {
+        await Promise.all([load(), loadRecurring()]);
+        revalidate('personal:wallet');
+      }
+    } catch {
+      // ignore
+    } finally {
+      setLinkingLabel(null);
+    }
+  }
+
   /* ═══ Savings contribution inline edit ═══ */
 
   function startEditSavings(g: SavingsGoalBudget) {
@@ -458,8 +583,8 @@ export default function BudgetsPage() {
   return (
     <PageContainer className="space-y-6">
       <PageHeader
-        title="Budgets & charges fixes"
-        subtitle="Suivi de tes enveloppes et de tes abonnements."
+        title="Gestion du budget"
+        subtitle="Vue d'ensemble de tes finances, budgets et charges."
         actions={
           <div className="flex gap-2">
             <Button size="sm" variant="outline" onClick={() => setCatalogOpen(true)}>
@@ -475,23 +600,90 @@ export default function BudgetsPage() {
       {error ? <p className="text-sm text-[var(--danger)]">{error}</p> : null}
 
       {/* ── KPIs ── */}
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+        <KpiCard
+          label="Revenus du mois"
+          value={formatCentsToEuroDisplay(monthIncomeCents.toString())}
+          trend={monthIncomeCents > 0n ? 'up' : undefined}
+        />
+        <KpiCard
+          label="Charges fixes / mois"
+          value={formatCentsToEuroDisplay(totalFixedChargesMonthlyCents.toString())}
+        />
+        <KpiCard
+          label="Dépensé ce mois"
+          value={formatCentsToEuroDisplay(monthExpenseCents.toString())}
+          trend={monthExpenseCents > totalLimit ? 'down' : 'up'}
+        />
+        <KpiCard
+          label="Hors budget"
+          value={formatCentsToEuroDisplay(unbudgetedExpenseCents.toString())}
+          trend={unbudgetedExpenseCents > 0n ? 'down' : 'up'}
+        />
+      </div>
+
+      {/* ── Synthèse mensuelle ── */}
       {(() => {
-        const remainingCents = totalLimit - monthExpenseCents;
-        const remainingPositive = remainingCents >= 0n;
+        const disponible = monthIncomeCents - totalFixedChargesMonthlyCents - totalLimit - totalSavingsBudgetCents;
+        const disponiblePositive = disponible >= 0n;
         return (
-          <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
-            <KpiCard label="Total budgété" value={formatCentsToEuroDisplay(totalLimit.toString())} />
-            <KpiCard
-              label="Dépensé ce mois"
-              value={formatCentsToEuroDisplay(monthExpenseCents.toString())}
-              trend={monthExpenseCents > totalLimit ? 'down' : 'up'}
-            />
-            <KpiCard
-              label="Reste à dépenser"
-              value={formatCentsToEuroDisplay((remainingPositive ? remainingCents : -remainingCents).toString())}
-              trend={remainingPositive ? 'up' : 'down'}
-            />
-          </div>
+          <Card className="p-5">
+            <p className="text-xs font-semibold uppercase tracking-widest text-[var(--text-faint)] mb-3">
+              Synthèse mensuelle
+            </p>
+            <div className="space-y-2 text-sm">
+              <div className="flex items-center justify-between">
+                <span className="flex items-center gap-2 text-[var(--text-secondary)]">
+                  <TrendingUp size={14} className="text-[var(--success)]" /> Revenus
+                </span>
+                <span className="font-semibold text-[var(--success)]">
+                  +{formatCentsToEuroDisplay(monthIncomeCents.toString())}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="flex items-center gap-2 text-[var(--text-secondary)]">
+                  <TrendingDown size={14} className="text-[var(--danger)]" /> Charges fixes
+                </span>
+                <span className="font-medium text-[var(--danger)]">
+                  -{formatCentsToEuroDisplay(totalFixedChargesMonthlyCents.toString())}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="flex items-center gap-2 text-[var(--text-secondary)]">
+                  <TrendingDown size={14} className="text-[var(--danger)]" /> Budgets alloués
+                </span>
+                <span className="font-medium text-[var(--danger)]">
+                  -{formatCentsToEuroDisplay(totalLimit.toString())}
+                </span>
+              </div>
+              {totalSavingsBudgetCents > 0n ? (
+                <div className="flex items-center justify-between">
+                  <span className="flex items-center gap-2 text-[var(--text-secondary)]">
+                    <PiggyBank size={14} className="text-[var(--primary)]" /> Épargne programmée
+                  </span>
+                  <span className="font-medium text-[var(--primary)]">
+                    -{formatCentsToEuroDisplay(totalSavingsBudgetCents.toString())}
+                  </span>
+                </div>
+              ) : null}
+              <div className="border-t border-[var(--border)] pt-2 flex items-center justify-between">
+                <span className="font-semibold">Capacité restante</span>
+                <span className={`font-bold text-base ${disponiblePositive ? 'text-[var(--success)]' : 'text-[var(--danger)]'}`}>
+                  {disponiblePositive ? '' : '-'}{formatCentsToEuroDisplay((disponiblePositive ? disponible : -disponible).toString())}
+                </span>
+              </div>
+              {unbudgetedExpenseCents > 0n ? (
+                <div className="flex items-center justify-between text-xs pt-1">
+                  <span className="flex items-center gap-1.5 text-[var(--warning)]">
+                    <AlertTriangle size={12} /> Dépenses hors budget ce mois
+                  </span>
+                  <span className="font-semibold text-[var(--warning)]">
+                    {formatCentsToEuroDisplay(unbudgetedExpenseCents.toString())}
+                  </span>
+                </div>
+              ) : null}
+            </div>
+          </Card>
         );
       })()}
 
@@ -700,47 +892,124 @@ export default function BudgetsPage() {
         )}
       </section>
 
-      {/* ════════════════ CHARGES DÉTECTÉES SECTION ════════════════ */}
+      {/* ════════════════ DÉPENSES RÉCURRENTES DÉTECTÉES ════════════════ */}
       <section>
-        <div className="flex items-center gap-2 mb-3">
+        <div className="flex items-center gap-2 mb-1">
           <Zap size={18} className="text-[var(--warning)]" />
-          <h2 className="text-lg font-semibold">Charges détectées</h2>
+          <h2 className="text-lg font-semibold">Dépenses récurrentes détectées</h2>
         </div>
         <p className="text-xs text-[var(--text-faint)] mb-3">
-          Dépenses récurrentes détectées dans tes transactions des 12 derniers mois.
+          Analyse automatique de tes transactions des 12 derniers mois. Ajoute-les en charges fixes pour mieux suivre ton budget.
         </p>
         {recurringLoading ? (
           <p className="text-sm text-[var(--text-faint)]">Analyse en cours…</p>
         ) : recurring.length === 0 ? (
           <p className="text-sm text-[var(--text-faint)]">
-            Aucune charge récurrente détectée pour le moment.
+            Aucune dépense récurrente détectée pour le moment.
           </p>
         ) : (
-          <div className="space-y-2">
+          <div className="space-y-3">
             {recurring.map((r) => {
               const monthly = toMonthlyCents(r.estimatedAmountCents, r.estimatedFrequency);
+              const yearly = toYearlyCents(r.estimatedAmountCents, r.estimatedFrequency);
+              const impactPct = monthExpenseCents > 0n
+                ? Number((monthly * 100n) / monthExpenseCents)
+                : 0;
               return (
                 <Card key={r.label} className="p-4">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="font-semibold capitalize">{r.label}</p>
-                        <Badge variant="neutral">{FREQUENCY_LABELS[r.estimatedFrequency]}</Badge>
-                        <Badge variant="neutral">{r.occurrences} occurrence{r.occurrences > 1 ? 's' : ''}</Badge>
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2 mb-2">
+                        <p className="text-base font-semibold capitalize">{r.label}</p>
                         {r.categoryName ? <Badge variant="neutral">{r.categoryName}</Badge> : null}
                       </div>
-                      <p className="mt-1 text-xs text-[var(--text-faint)]">
-                        ~{formatCentsToEuroDisplay(r.estimatedAmountCents)} / {FREQUENCY_LABELS[r.estimatedFrequency]?.toLowerCase()}
-                        {r.estimatedFrequency !== 'MONTHLY' ? ` · ~${formatCentsToEuroDisplay(monthly.toString())} / mois` : ''}
-                      </p>
+
+                      {/* Données clés mises en évidence */}
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-2">
+                        <div className="rounded-lg bg-[var(--surface-2)] px-3 py-2">
+                          <p className="text-[10px] uppercase tracking-wide text-[var(--text-faint)]">Coût mensuel</p>
+                          <p className="text-sm font-bold text-[var(--danger)]">
+                            ~{formatCentsToEuroDisplay(monthly.toString())}
+                          </p>
+                        </div>
+                        <div className="rounded-lg bg-[var(--surface-2)] px-3 py-2">
+                          <p className="text-[10px] uppercase tracking-wide text-[var(--text-faint)]">Coût annuel</p>
+                          <p className="text-sm font-bold text-[var(--text)]">
+                            ~{formatCentsToEuroDisplay(yearly.toString())}
+                          </p>
+                        </div>
+                        {impactPct > 0 ? (
+                          <div className="rounded-lg bg-[var(--surface-2)] px-3 py-2">
+                            <p className="text-[10px] uppercase tracking-wide text-[var(--text-faint)]">Impact budget</p>
+                            <p className="text-sm font-bold text-[var(--warning)]">
+                              {impactPct}% des dépenses
+                            </p>
+                          </div>
+                        ) : null}
+                      </div>
+
+                      {/* Détails */}
+                      <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--text-faint)]">
+                        <span className="flex items-center gap-1">
+                          <Calendar size={11} /> {FREQUENCY_LABELS[r.estimatedFrequency]}
+                        </span>
+                        <span>·</span>
+                        <span>{r.occurrences} occurrence{r.occurrences > 1 ? 's' : ''}</span>
+                        <span>·</span>
+                        <span>Dernière : {formatLastSeen(r.lastSeen)}</span>
+                      </div>
                     </div>
-                    <Button size="sm" onClick={() => addRecurringAsSub(r)}>
-                      <Plus size={14} /> Ajouter
-                    </Button>
+                    <div className="flex flex-col gap-2 shrink-0">
+                      {budgets.filter((b) => b.category).length > 0 && (
+                        <Select
+                          value=""
+                          onChange={(e) => { if (e.target.value) linkRecurringToBudget(r.label, e.target.value); }}
+                          disabled={linkingLabel === r.label}
+                          className="h-8 w-44 rounded-lg text-xs"
+                        >
+                          <option value="">
+                            {linkingLabel === r.label ? 'Association…' : 'Associer à un budget'}
+                          </option>
+                          {budgets.filter((b) => b.category).map((b) => (
+                            <option key={b.id} value={b.id}>{b.name}</option>
+                          ))}
+                        </Select>
+                      )}
+                      <Button size="sm" variant="outline" className="shrink-0" onClick={() => addRecurringAsSub(r)}>
+                        <Plus size={14} /> Charge fixe
+                      </Button>
+                    </div>
                   </div>
                 </Card>
               );
             })}
+
+            {/* Total estimé */}
+            {(() => {
+              const totalMonthly = recurring.reduce(
+                (sum, r) => sum + toMonthlyCents(r.estimatedAmountCents, r.estimatedFrequency), 0n,
+              );
+              const totalYearly = recurring.reduce(
+                (sum, r) => sum + toYearlyCents(r.estimatedAmountCents, r.estimatedFrequency), 0n,
+              );
+              return (
+                <Card className="p-4 border-dashed">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-sm font-semibold text-[var(--text-secondary)]">
+                      Total estimé des dépenses récurrentes non suivies
+                    </p>
+                    <div className="flex gap-4 text-sm">
+                      <span className="font-bold text-[var(--danger)]">
+                        ~{formatCentsToEuroDisplay(totalMonthly.toString())} / mois
+                      </span>
+                      <span className="font-semibold text-[var(--text-faint)]">
+                        ~{formatCentsToEuroDisplay(totalYearly.toString())} / an
+                      </span>
+                    </div>
+                  </div>
+                </Card>
+              );
+            })()}
           </div>
         )}
       </section>
@@ -920,58 +1189,133 @@ export default function BudgetsPage() {
       <Modal
         open={budgetModalOpen}
         onCloseAction={() => setBudgetModalOpen(false)}
-        title={budgetEditingId ? 'Modifier le budget' : 'Nouveau budget'}
-        description="Définissez une enveloppe mensuelle ou annuelle par catégorie."
+        title={
+          budgetEditingId
+            ? 'Modifier le budget'
+            : budgetPickerStep === 'picker'
+              ? 'Nouveau budget'
+              : `Budget : ${budgetForm.name || 'Personnalisé'}`
+        }
+        description={
+          budgetEditingId
+            ? 'Modifiez votre enveloppe budgétaire.'
+            : budgetPickerStep === 'picker'
+              ? 'Choisissez un type de budget ou créez le vôtre.'
+              : 'Ajustez le montant et la catégorie liée.'
+        }
       >
-        <div className="space-y-4">
-          {budgetSaveError ? <p className="text-xs text-[var(--danger)]">{budgetSaveError}</p> : null}
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label className="col-span-2 text-sm">
-              <span className="text-xs text-[var(--text-faint)]">Nom du budget</span>
-              <Input
-                value={budgetForm.name}
-                onChange={(e) => setBudgetForm((p) => ({ ...p, name: e.target.value }))}
-                placeholder="Ex: Alimentation"
-              />
-            </label>
-            <label className="text-sm">
-              <span className="text-xs text-[var(--text-faint)]">Montant limite (€)</span>
-              <Input
-                value={budgetForm.limitAmount}
-                onChange={(e) => setBudgetForm((p) => ({ ...p, limitAmount: sanitizeEuroInput(e.target.value) }))}
-                placeholder="500"
-              />
-            </label>
-            <label className="text-sm">
-              <span className="text-xs text-[var(--text-faint)]">Période</span>
-              <Select
-                value={budgetForm.period}
-                onChange={(e) => setBudgetForm((p) => ({ ...p, period: e.target.value as 'MONTHLY' | 'YEARLY' }))}
-              >
-                <option value="MONTHLY">Mensuel</option>
-                <option value="YEARLY">Annuel</option>
-              </Select>
-            </label>
-            <label className="col-span-2 text-sm">
-              <span className="text-xs text-[var(--text-faint)]">Catégorie liée (optionnel)</span>
-              <Select
-                value={budgetForm.categoryId}
-                onChange={(e) => setBudgetForm((p) => ({ ...p, categoryId: e.target.value }))}
-              >
-                <option value="">— Aucune catégorie —</option>
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </Select>
-            </label>
+        {budgetPickerStep === 'picker' && !budgetEditingId ? (
+          <div className="space-y-4">
+            {/* Custom budget button */}
+            <button
+              type="button"
+              onClick={openBudgetCustom}
+              className="flex items-center gap-3 w-full rounded-xl border border-dashed border-[var(--border)] p-3 text-sm font-medium hover:bg-[var(--surface-hover)] transition-colors"
+            >
+              <Plus size={16} className="text-[var(--text-faint)]" />
+              Budget personnalisé
+            </button>
+
+            {/* Template grid by category */}
+            <div className="max-h-[50vh] overflow-y-auto space-y-4">
+              {BUDGET_TEMPLATES.map((group) => (
+                <div key={group.category}>
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-faint)] mb-2">
+                    {group.category}
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {group.items.map((tpl) => {
+                      const alreadyExists = budgets.some(
+                        (b) => b.name.toLowerCase() === tpl.name.toLowerCase(),
+                      );
+                      return (
+                        <button
+                          key={tpl.name}
+                          type="button"
+                          onClick={() => selectBudgetTemplate(tpl)}
+                          disabled={alreadyExists}
+                          className={`flex items-center gap-3 rounded-xl border border-[var(--border)] p-3 text-left transition-colors ${alreadyExists ? 'opacity-40 cursor-not-allowed' : 'hover:bg-[var(--surface-hover)]'}`}
+                        >
+                          <span className="text-xl">{tpl.icon}</span>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-semibold truncate">{tpl.name}</p>
+                            <p className="text-xs text-[var(--text-faint)]">
+                              ~{(tpl.suggestedCents / 100).toFixed(0)} € / mois
+                            </p>
+                          </div>
+                          {alreadyExists && (
+                            <span className="shrink-0 text-[10px] font-medium text-[var(--success)]">
+                              <Check size={14} />
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
-          <div className="flex justify-end gap-2">
-            <Button size="sm" variant="outline" onClick={() => setBudgetModalOpen(false)}>Annuler</Button>
-            <Button size="sm" onClick={handleBudgetSave} disabled={budgetSaving}>
-              {budgetSaving ? 'Enregistrement…' : budgetEditingId ? 'Enregistrer' : 'Créer'}
-            </Button>
+        ) : (
+          <div className="space-y-4">
+            {!budgetEditingId && (
+              <button
+                type="button"
+                onClick={() => setBudgetPickerStep('picker')}
+                className="flex items-center gap-1 text-sm text-[var(--text-faint)] hover:text-[var(--text)] transition-colors"
+              >
+                <ChevronLeft size={16} /> Retour aux suggestions
+              </button>
+            )}
+            {budgetSaveError ? <p className="text-xs text-[var(--danger)]">{budgetSaveError}</p> : null}
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="col-span-2 text-sm">
+                <span className="text-xs text-[var(--text-faint)]">Nom du budget</span>
+                <Input
+                  value={budgetForm.name}
+                  onChange={(e) => setBudgetForm((p) => ({ ...p, name: e.target.value }))}
+                  placeholder="Ex: Alimentation"
+                />
+              </label>
+              <label className="text-sm">
+                <span className="text-xs text-[var(--text-faint)]">Montant limite (€)</span>
+                <Input
+                  value={budgetForm.limitAmount}
+                  onChange={(e) => setBudgetForm((p) => ({ ...p, limitAmount: sanitizeEuroInput(e.target.value) }))}
+                  placeholder="500"
+                />
+              </label>
+              <label className="text-sm">
+                <span className="text-xs text-[var(--text-faint)]">Période</span>
+                <Select
+                  value={budgetForm.period}
+                  onChange={(e) => setBudgetForm((p) => ({ ...p, period: e.target.value as 'MONTHLY' | 'YEARLY' }))}
+                >
+                  <option value="MONTHLY">Mensuel</option>
+                  <option value="YEARLY">Annuel</option>
+                </Select>
+              </label>
+              <label className="col-span-2 text-sm">
+                <span className="text-xs text-[var(--text-faint)]">Catégorie liée (optionnel)</span>
+                <Select
+                  value={budgetForm.categoryId}
+                  onChange={(e) => setBudgetForm((p) => ({ ...p, categoryId: e.target.value }))}
+                >
+                  <option value="">— Aucune catégorie —</option>
+                  {categories.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </Select>
+              </label>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button size="sm" variant="outline" onClick={() => setBudgetModalOpen(false)}>Annuler</Button>
+              <Button size="sm" onClick={handleBudgetSave} disabled={budgetSaving}>
+                {budgetSaving ? 'Enregistrement…' : budgetEditingId ? 'Enregistrer' : 'Créer'}
+              </Button>
+            </div>
           </div>
-        </div>
+        )}
       </Modal>
     </PageContainer>
   );

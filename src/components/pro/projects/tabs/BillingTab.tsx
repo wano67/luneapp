@@ -485,13 +485,13 @@ export function BillingTab({
           </div>
         ) : (
           <div className="mt-6 rounded-3xl border border-[var(--border)]/70 bg-[var(--surface-2)]/60 p-6 text-center">
-            <p className="text-base font-semibold text-[var(--text-primary)]">Créer un devis</p>
+            <p className="text-base font-semibold text-[var(--text-primary)]">Construisez votre offre commerciale</p>
             <p className="mt-2 text-sm text-[var(--text-secondary)]">
-              Ajoutez vos prestations, générez les tâches, puis créez le devis.
+              Ajoutez vos prestations, définissez les conditions, puis générez le devis.
             </p>
             <div className="mt-4 flex flex-col items-center justify-center gap-2 sm:flex-row">
               <Button onClick={onOpenQuoteWizard} disabled={!isAdmin}>
-                Créer un devis
+                Créer une offre
               </Button>
               <Button asChild variant="ghost">
                 <Link href={`/app/pro/${businessId}/services`}>Créer un service dans le catalogue</Link>

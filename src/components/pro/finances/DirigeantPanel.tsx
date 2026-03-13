@@ -8,9 +8,10 @@ import { fetchJson } from '@/lib/apiClient';
 import { formatCents } from '@/lib/money';
 import { useToast } from '@/components/ui/toast';
 import { revalidate } from '@/lib/revalidate';
-import { Plus, Trash2, Target, Calculator, Users, TrendingUp } from 'lucide-react';
+import { Plus, Trash2, Target, Calculator, Users, TrendingUp, Banknote } from 'lucide-react';
 import { AssociateFormModal } from './AssociateFormModal';
 import { GoalFormModal } from './GoalFormModal';
+import { parseEuroToCents } from '@/lib/money';
 
 type Associate = {
   id: string;
@@ -83,23 +84,79 @@ export function DirigeantPanel({ businessId }: { businessId: string }) {
   const [optResult, setOptResult] = useState<OptimalResult | null>(null);
   const [optLoading, setOptLoading] = useState(false);
 
+  // Finance KPI data per associate
+  type FinanceEntry = { category: string; amountCents: number };
+  const [financeEntries, setFinanceEntries] = useState<FinanceEntry[]>([]);
+
+  // Versement form per associate
+  const [versementForm, setVersementForm] = useState<{
+    associateId: string;
+    kind: 'salary' | 'dividend';
+    amount: string;
+    date: string;
+  } | null>(null);
+  const [versementSaving, setVersementSaving] = useState(false);
+
   const [fetchKey, setFetchKey] = useState(0);
+  const currentYear = new Date().getFullYear();
 
   useEffect(() => {
     let cancelled = false;
     Promise.all([
       fetchJson<{ items: Associate[] }>(`/api/pro/businesses/${businessId}/associates`),
-      fetchJson<{ items: Goal[] }>(`/api/pro/businesses/${businessId}/goals?year=${new Date().getFullYear()}`),
-    ]).then(([assocRes, goalsRes]) => {
+      fetchJson<{ items: Goal[] }>(`/api/pro/businesses/${businessId}/goals?year=${currentYear}`),
+      fetchJson<{ items: FinanceEntry[] }>(`/api/pro/businesses/${businessId}/finances?type=EXPENSE&year=${currentYear}`),
+    ]).then(([assocRes, goalsRes, finRes]) => {
       if (cancelled) return;
       if (assocRes.ok && assocRes.data) setAssociates(assocRes.data.items);
       if (goalsRes.ok && goalsRes.data) setGoals(goalsRes.data.items);
+      if (finRes.ok && finRes.data) setFinanceEntries(finRes.data.items);
       setLoading(false);
     });
     return () => { cancelled = true; };
-  }, [businessId, fetchKey]);
+  }, [businessId, fetchKey, currentYear]);
 
   const reload = useCallback(() => { setFetchKey((k) => k + 1); revalidate('pro:finances'); }, []);
+
+  // Compute paid salaries and dividends per associate from finance entries
+  function getPaidCents(associateId: string, kind: 'salary' | 'dividend'): number {
+    const prefix = kind === 'salary' ? `SALAIRE:${associateId}` : `DIVIDENDE:${associateId}`;
+    return financeEntries
+      .filter((e) => e.category === prefix)
+      .reduce((sum, e) => sum + Math.abs(e.amountCents), 0);
+  }
+
+  async function handleVersement() {
+    if (!versementForm) return;
+    const cents = parseEuroToCents(versementForm.amount);
+    if (!cents || cents <= 0) {
+      toast.error('Montant invalide.');
+      return;
+    }
+    setVersementSaving(true);
+    const category = versementForm.kind === 'salary'
+      ? `SALAIRE:${versementForm.associateId}`
+      : `DIVIDENDE:${versementForm.associateId}`;
+    const res = await fetchJson(`/api/pro/businesses/${businessId}/finances`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: 'EXPENSE',
+        amountCents: cents,
+        category,
+        date: versementForm.date || new Date().toISOString().slice(0, 10),
+        note: versementForm.kind === 'salary' ? 'Versement salaire dirigeant' : 'Distribution dividendes',
+      }),
+    });
+    setVersementSaving(false);
+    if (res.ok) {
+      toast.success(versementForm.kind === 'salary' ? 'Versement salaire enregistre.' : 'Distribution enregistree.');
+      setVersementForm(null);
+      reload();
+    } else {
+      toast.error(res.error ?? 'Erreur.');
+    }
+  }
 
   // Debounced simulation
   useEffect(() => {
@@ -229,6 +286,91 @@ export function DirigeantPanel({ businessId }: { businessId: string }) {
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {/* KPIs versé vs cible per associate */}
+        {associates.length > 0 && (
+          <div className="mt-4 space-y-3">
+            {associates.map((a) => {
+              const salaryPaid = getPaidCents(a.id, 'salary');
+              const dividendPaid = getPaidCents(a.id, 'dividend');
+              const salaryTarget = a.grossSalaryYearlyCents;
+              const dividendTarget = a.dividendsCents;
+              const salaryPct = salaryTarget > 0 ? Math.min(100, Math.round((salaryPaid / salaryTarget) * 100)) : 0;
+              const dividendPct = dividendTarget > 0 ? Math.min(100, Math.round((dividendPaid / dividendTarget) * 100)) : 0;
+              const isFormOpen = versementForm?.associateId === a.id;
+
+              return (
+                <div key={a.id} className="rounded-xl border border-[var(--border)]/40 p-3 space-y-2">
+                  <p className="text-sm font-medium text-[var(--text-primary)]">{a.name}</p>
+                  {salaryTarget > 0 && (
+                    <div>
+                      <div className="flex items-center justify-between text-xs text-[var(--text-secondary)]">
+                        <span>Salaire verse {currentYear}</span>
+                        <span>{formatCents(salaryPaid)} / {formatCents(salaryTarget)}</span>
+                      </div>
+                      <div className="mt-1 h-1.5 w-full rounded-full bg-[var(--border)]">
+                        <div className="h-full rounded-full bg-[var(--shell-accent)] transition-all" style={{ width: `${salaryPct}%` }} />
+                      </div>
+                    </div>
+                  )}
+                  {dividendTarget > 0 && (
+                    <div>
+                      <div className="flex items-center justify-between text-xs text-[var(--text-secondary)]">
+                        <span>Dividendes verses {currentYear}</span>
+                        <span>{formatCents(dividendPaid)} / {formatCents(dividendTarget)}</span>
+                      </div>
+                      <div className="mt-1 h-1.5 w-full rounded-full bg-[var(--border)]">
+                        <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${dividendPct}%` }} />
+                      </div>
+                    </div>
+                  )}
+                  <div className="flex gap-2 pt-1">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="gap-1 text-xs"
+                      onClick={() => setVersementForm({ associateId: a.id, kind: 'salary', amount: '', date: new Date().toISOString().slice(0, 10) })}
+                    >
+                      <Banknote size={12} /> Versement salaire
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="gap-1 text-xs"
+                      onClick={() => setVersementForm({ associateId: a.id, kind: 'dividend', amount: '', date: new Date().toISOString().slice(0, 10) })}
+                    >
+                      <Banknote size={12} /> Distribution dividendes
+                    </Button>
+                  </div>
+                  {isFormOpen && versementForm && (
+                    <div className="mt-2 flex items-end gap-2 rounded-lg border border-[var(--border)]/40 bg-[var(--surface)] p-3">
+                      <Input
+                        label={versementForm.kind === 'salary' ? 'Montant salaire (EUR)' : 'Montant dividendes (EUR)'}
+                        type="text"
+                        inputMode="decimal"
+                        value={versementForm.amount}
+                        onChange={(e) => setVersementForm({ ...versementForm, amount: e.target.value })}
+                        placeholder="Ex : 3000"
+                      />
+                      <Input
+                        label="Date"
+                        type="date"
+                        value={versementForm.date}
+                        onChange={(e) => setVersementForm({ ...versementForm, date: e.target.value })}
+                      />
+                      <Button size="sm" onClick={handleVersement} disabled={versementSaving}>
+                        {versementSaving ? 'En cours...' : 'Valider'}
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => setVersementForm(null)}>
+                        Annuler
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
       </Card>

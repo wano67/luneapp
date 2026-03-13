@@ -561,7 +561,10 @@ function HeroCard({
           {loading ? (
             <div className="h-10 w-32 rounded-lg bg-[var(--surface-2)] animate-skeleton-pulse" />
           ) : (
-            <span className="text-[32px] md:text-[28px] font-extrabold leading-tight text-[var(--shell-accent)]">
+            <span
+              className="text-[32px] md:text-[28px] font-extrabold leading-tight"
+              style={{ color: !isPositive && value.includes('-') ? '#FF808B' : 'var(--shell-accent)' }}
+            >
               {value}
             </span>
           )}
