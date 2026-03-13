@@ -150,3 +150,70 @@ export function handleMissingCreds(message: string) {
   console.log(message);
   process.exit(0);
 }
+
+// ---------------------------------------------------------------------------
+// Assertion helpers
+// ---------------------------------------------------------------------------
+
+export function assert(condition: unknown, message: string): asserts condition {
+  if (!condition) throw new Error(`Assertion failed: ${message}`);
+}
+
+export function assertEqual<T>(actual: T, expected: T, label: string) {
+  if (actual !== expected) {
+    throw new Error(`${label}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
+  }
+}
+
+export function assertStatus(res: Response, expected: number, label: string) {
+  if (res.status !== expected) {
+    throw new Error(`${label}: expected HTTP ${expected}, got ${res.status}`);
+  }
+}
+
+export function assertListShape(json: unknown, label: string) {
+  const body = json as Record<string, unknown>;
+  assert(body && Array.isArray(body.items), `${label}: expected { items: [] }`);
+  return body.items as unknown[];
+}
+
+export function assertItemShape(json: unknown, label: string) {
+  const body = json as Record<string, unknown>;
+  assert(body && body.item && typeof body.item === 'object', `${label}: expected { item: {} }`);
+  return body.item as Record<string, unknown>;
+}
+
+// ---------------------------------------------------------------------------
+// Standard login + pick business helper
+// ---------------------------------------------------------------------------
+
+export async function loginAndPickBusiness(
+  request: ReturnType<typeof createRequester>['request'],
+  opts?: { preferAdmin?: boolean },
+) {
+  const creds = getSmokeCreds({ preferAdmin: opts?.preferAdmin ?? true });
+  const { res } = await request('/api/auth/login', {
+    method: 'POST',
+    body: { email: creds.email, password: creds.password },
+  });
+  if (!res.ok) throw new Error(`Login failed (${res.status})`);
+
+  const { json: bizJson } = await request('/api/pro/businesses');
+  const businesses = (bizJson as { items?: Array<{ business?: { id?: string } }> })?.items ?? [];
+  const businessId = businesses[0]?.business?.id;
+  if (!businessId) throw new Error('No business found after login');
+  return { businessId, creds };
+}
+
+export async function loginPersonal(
+  request: ReturnType<typeof createRequester>['request'],
+  opts?: { preferAdmin?: boolean },
+) {
+  const creds = getSmokeCreds({ preferAdmin: opts?.preferAdmin });
+  const { res } = await request('/api/auth/login', {
+    method: 'POST',
+    body: { email: creds.email, password: creds.password },
+  });
+  if (!res.ok) throw new Error(`Login failed (${res.status})`);
+  return creds;
+}
