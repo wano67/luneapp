@@ -3,8 +3,8 @@ import { CalendarEventKind } from '@/generated/prisma';
 import { withBusinessRoute } from '@/server/http/routeHandler';
 import { jsonb, jsonbCreated } from '@/server/http/json';
 import { badRequest } from '@/server/http/apiUtils';
-import { dayKey } from '@/lib/date';
 import { projectRecurring, type CalendarEvent } from '@/lib/calendar';
+import { tzDayKey, tzTimeStr, safeTz } from '@/lib/tz';
 
 const INTERACTION_LABELS: Record<string, string> = {
   CALL: 'Appel',
@@ -27,10 +27,14 @@ export const GET = withBusinessRoute(
     const fromStr = url.searchParams.get('from');
     const toStr = url.searchParams.get('to');
     if (!fromStr || !toStr) return badRequest('Paramètres from et to requis (YYYY-MM-DD).');
+    const tz = safeTz(url.searchParams.get('tz'));
 
+    // Widen range by ±1 day to handle timezone offsets (up to ±14h)
     const from = new Date(fromStr + 'T00:00:00Z');
     const to = new Date(toStr + 'T23:59:59Z');
     if (isNaN(from.getTime()) || isNaN(to.getTime())) return badRequest('Dates invalides.');
+    from.setUTCDate(from.getUTCDate() - 1);
+    to.setUTCDate(to.getUTCDate() + 1);
 
     const [tasks, interactions, recurringRules, calendarEvents] = await Promise.all([
       // 1. Tasks with dueDate in range (exclude DONE)
@@ -120,7 +124,7 @@ export const GET = withBusinessRoute(
       if (!t.dueDate) continue;
       events.push({
         id: `task-${t.id}`,
-        date: dayKey(t.dueDate),
+        date: tzDayKey(t.dueDate, tz),
         title: t.title,
         type: 'task',
         meta: {
@@ -141,7 +145,7 @@ export const GET = withBusinessRoute(
       if (i.nextActionDate && i.nextActionDate >= from && i.nextActionDate <= to) {
         events.push({
           id: `interaction-next-${i.id}`,
-          date: dayKey(i.nextActionDate),
+          date: tzDayKey(i.nextActionDate, tz),
           title: `Suivi: ${preview}`,
           type: 'interaction',
           meta: { interactionType: label, clientName: i.client?.name ?? null },
@@ -151,7 +155,7 @@ export const GET = withBusinessRoute(
       if ((i.type === 'MEETING' || i.type === 'CALL') && i.happenedAt >= from && i.happenedAt <= to) {
         events.push({
           id: `interaction-${i.id}`,
-          date: dayKey(i.happenedAt),
+          date: tzDayKey(i.happenedAt, tz),
           title: `${label}: ${preview}`,
           type: 'interaction',
           meta: { interactionType: label, clientName: i.client?.name ?? null },
@@ -174,8 +178,8 @@ export const GET = withBusinessRoute(
         : rule.category;
       for (const d of projected) {
         events.push({
-          id: `finance-${rule.id}-${dayKey(d)}`,
-          date: dayKey(d),
+          id: `finance-${rule.id}-${tzDayKey(d, tz)}`,
+          date: tzDayKey(d, tz),
           title,
           type: 'finance',
           meta: {
@@ -190,11 +194,11 @@ export const GET = withBusinessRoute(
 
     // Calendar events (appointments, reminders) → events
     for (const ce of calendarEvents) {
-      const startTime = ce.allDay ? null : ce.startAt.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-      const endTime = ce.allDay || !ce.endAt ? null : ce.endAt.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+      const startTime = ce.allDay ? null : tzTimeStr(ce.startAt, tz);
+      const endTime = ce.allDay || !ce.endAt ? null : tzTimeStr(ce.endAt, tz);
       events.push({
         id: `event-${ce.id}`,
-        date: dayKey(ce.startAt),
+        date: tzDayKey(ce.startAt, tz),
         title: ce.title,
         type: 'event',
         meta: {

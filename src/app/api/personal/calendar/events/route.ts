@@ -3,8 +3,8 @@ import { CalendarEventKind } from '@/generated/prisma';
 import { withPersonalRoute } from '@/server/http/routeHandler';
 import { jsonb, jsonbCreated } from '@/server/http/json';
 import { badRequest } from '@/server/http/apiUtils';
-import { dayKey } from '@/lib/date';
 import { projectRecurring, type CalendarEvent } from '@/lib/calendar';
+import { tzDayKey, tzTimeStr, safeTz } from '@/lib/tz';
 
 const KIND_LABELS: Record<string, string> = {
   APPOINTMENT: 'RDV',
@@ -17,10 +17,14 @@ export const GET = withPersonalRoute(async (ctx, req) => {
   const fromStr = url.searchParams.get('from');
   const toStr = url.searchParams.get('to');
   if (!fromStr || !toStr) return badRequest('Paramètres from et to requis (YYYY-MM-DD).');
+  const tz = safeTz(url.searchParams.get('tz'));
 
+  // Widen range by ±1 day to handle timezone offsets (up to ±14h)
   const from = new Date(fromStr + 'T00:00:00Z');
   const to = new Date(toStr + 'T23:59:59Z');
   if (isNaN(from.getTime()) || isNaN(to.getTime())) return badRequest('Dates invalides.');
+  from.setUTCDate(from.getUTCDate() - 1);
+  to.setUTCDate(to.getUTCDate() + 1);
 
   const [subscriptions, incomes, goals, calendarEvents] = await Promise.all([
     // 1. Active subscriptions
@@ -94,8 +98,8 @@ export const GET = withPersonalRoute(async (ctx, req) => {
     });
     for (const d of projected) {
       events.push({
-        id: `sub-${sub.id}-${dayKey(d)}`,
-        date: dayKey(d),
+        id: `sub-${sub.id}-${tzDayKey(d, tz)}`,
+        date: tzDayKey(d, tz),
         title: sub.name,
         type: 'subscription',
         meta: {
@@ -110,7 +114,7 @@ export const GET = withPersonalRoute(async (ctx, req) => {
   for (const inc of incomes) {
     events.push({
       id: `income-${inc.id}`,
-      date: dayKey(inc.date),
+      date: tzDayKey(inc.date, tz),
       title: inc.label,
       type: 'finance',
       meta: { amountCents: inc.amountCents.toString() },
@@ -122,7 +126,7 @@ export const GET = withPersonalRoute(async (ctx, req) => {
     if (!g.deadline) continue;
     events.push({
       id: `savings-${g.id}`,
-      date: dayKey(g.deadline),
+      date: tzDayKey(g.deadline, tz),
       title: `Objectif: ${g.name}`,
       type: 'savings',
       meta: {
@@ -134,11 +138,11 @@ export const GET = withPersonalRoute(async (ctx, req) => {
 
   // Personal calendar events (appointments, reminders)
   for (const ce of calendarEvents) {
-    const startTime = ce.allDay ? null : ce.startAt.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-    const endTime = ce.allDay || !ce.endAt ? null : ce.endAt.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+    const startTime = ce.allDay ? null : tzTimeStr(ce.startAt, tz);
+    const endTime = ce.allDay || !ce.endAt ? null : tzTimeStr(ce.endAt, tz);
     events.push({
       id: `event-${ce.id}`,
-      date: dayKey(ce.startAt),
+      date: tzDayKey(ce.startAt, tz),
       title: ce.title,
       type: 'event',
       meta: {

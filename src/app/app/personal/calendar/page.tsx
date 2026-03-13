@@ -49,8 +49,9 @@ export default function PersonalCalendarPage() {
     const controller = new AbortController();
     const from = addDays(startOfMonth(currentMonth), -7);
     const to = addDays(startOfMonth(addMonths(currentMonth, 1)), 7);
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
     fetchJson<{ items: CalendarEvent[] }>(
-      `/api/personal/calendar/events?from=${dayKey(from)}&to=${dayKey(to)}`,
+      `/api/personal/calendar/events?from=${dayKey(from)}&to=${dayKey(to)}&tz=${encodeURIComponent(tz)}`,
       {},
       controller.signal,
     ).then(res => {
