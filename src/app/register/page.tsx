@@ -298,7 +298,7 @@ export default function RegisterPage() {
                   <span className="text-xs text-[var(--text-secondary)]">
                     J&apos;accepte les{' '}
                     <Link href="/legal/terms" target="_blank" className="text-[var(--accent-strong)] hover:underline">
-                      conditions g\u00e9n\u00e9rales de vente
+                      conditions générales de vente
                     </Link>
                     {' '}*
                   </span>
@@ -314,7 +314,7 @@ export default function RegisterPage() {
                   <span className="text-xs text-[var(--text-secondary)]">
                     J&apos;accepte la{' '}
                     <Link href="/legal/privacy" target="_blank" className="text-[var(--accent-strong)] hover:underline">
-                      politique de confidentialit\u00e9
+                      politique de confidentialité
                     </Link>
                     {' '}*
                   </span>

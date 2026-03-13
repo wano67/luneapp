@@ -1,5 +1,6 @@
 "use client";
 
+import Link from 'next/link';
 import { cn } from '@/lib/cn';
 import { SectionCard, SectionHeader, KebabMenu, UI, formatDate, StatusPill } from '@/components/pro/projects/workspace-ui';
 import { invoiceRowTone, paymentStatusTone } from '@/components/pro/projects/tabs/BillingTab';
@@ -172,9 +173,12 @@ export function BillingInvoicesSection({
                 className="flex flex-col gap-3 rounded-2xl border border-[var(--border)]/70 bg-[var(--surface-2)]/60 px-3 py-3 md:grid md:grid-cols-[minmax(0,1.4fr)_minmax(0,0.8fr)_minmax(0,0.6fr)_auto] md:items-center md:gap-3"
               >
                 <div className="min-w-0">
-                  <p className="text-sm font-semibold text-[var(--text-primary)]">
+                  <Link
+                    href={detailUrl}
+                    className="text-sm font-semibold text-[var(--text-primary)] hover:text-[var(--accent)] hover:underline transition-colors"
+                  >
                     {invoice.number ?? `Facture #${invoice.id}`}
-                  </p>
+                  </Link>
                   <p className="text-xs text-[var(--text-secondary)]">{dateLabel}</p>
                 </div>
                 <div className="flex flex-wrap gap-1">

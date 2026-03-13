@@ -383,7 +383,7 @@ export function FilesTab({
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium text-[var(--text-primary)]">{doc.title}</p>
                     <p className="text-[11px] text-[var(--text-secondary)]">
-                      {formatBytes(doc.sizeBytes)} \u00b7 {formatDate(doc.createdAt)}
+                      {formatBytes(doc.sizeBytes)} · {formatDate(doc.createdAt)}
                     </p>
                   </div>
                 </div>

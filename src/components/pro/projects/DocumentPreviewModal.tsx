@@ -74,7 +74,7 @@ export function DocumentPreviewModal({ open, onClose, document: doc, viewUrl, do
               </p>
             </div>
             <p className="text-xs" style={{ color: 'var(--text-faint)' }}>
-              Aper\u00e7u non disponible pour ce type de fichier.
+              Aperçu non disponible pour ce type de fichier.
             </p>
           </div>
         )}
@@ -87,7 +87,7 @@ export function DocumentPreviewModal({ open, onClose, document: doc, viewUrl, do
           <Button asChild size="sm">
             <a href={downloadUrl(doc.id)} download>
               <Download size={14} className="mr-1" />
-              T\u00e9l\u00e9charger
+              Télécharger
             </a>
           </Button>
         </div>

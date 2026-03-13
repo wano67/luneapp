@@ -273,7 +273,7 @@ export default function ShareProjectPage() {
             />
           </div>
           <p className="mt-1.5 text-xs" style={{ color: 'var(--text-faint)' }}>
-            {project.tasksSummary.done}/{project.tasksSummary.total} t\u00e2ches termin\u00e9es
+            {project.tasksSummary.done}/{project.tasksSummary.total} tâches terminées
           </p>
         </div>
       </div>
@@ -347,7 +347,7 @@ function ProjetTab({ project, services }: { project: ShareData['project']; servi
       {/* Scope */}
       {project.prestationsText && (
         <div className="rounded-xl border p-5" style={{ borderColor: 'var(--border)', background: 'var(--surface)' }}>
-          <h2 className="mb-3 text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>P\u00e9rim\u00e8tre du projet</h2>
+          <h2 className="mb-3 text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Périmètre du projet</h2>
           <p className="whitespace-pre-wrap text-sm" style={{ color: 'var(--text-secondary)', lineHeight: 1.7 }}>
             {project.prestationsText}
           </p>
@@ -396,7 +396,7 @@ function ProjetTab({ project, services }: { project: ShareData['project']; servi
       {/* Empty state */}
       {!project.prestationsText && services.length === 0 && (
         <div className="rounded-xl border p-8 text-center" style={{ borderColor: 'var(--border)', background: 'var(--surface)' }}>
-          <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>Aucun d\u00e9tail de projet pour l&apos;instant.</p>
+          <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>Aucun détail de projet pour l&apos;instant.</p>
         </div>
       )}
     </div>
@@ -512,7 +512,7 @@ function FacturationTab({
           </div>
           <div className="mt-3 border-t pt-3" style={{ borderColor: 'var(--border)' }}>
             <p className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>
-              Total re\u00e7u :{' '}
+              Total reçu :{' '}
               <span className="font-semibold" style={{ color: 'var(--success)' }}>
                 {fmtCents(payments.reduce((sum, p) => sum + Number(p.amountCents), 0).toString())}
               </span>
