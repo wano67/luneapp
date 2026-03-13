@@ -17,6 +17,7 @@ type ServiceData = {
 };
 
 type QuoteData = {
+  id: string;
   number: string | null;
   status: string;
   totalCents: string;
@@ -27,6 +28,7 @@ type QuoteData = {
 };
 
 type InvoiceData = {
+  id: string;
   number: string | null;
   status: string;
   totalCents: string;
@@ -315,9 +317,11 @@ export default function ShareProjectPage() {
         )}
         {activeTab === 'billing' && (
           <FacturationTab
+            token={token}
             quotes={quotes}
             invoices={invoices}
             payments={payments}
+            onRefresh={fetchData}
           />
         )}
         {activeTab === 'documents' && (
@@ -406,14 +410,46 @@ function ProjetTab({ project, services }: { project: ShareData['project']; servi
 /* ═══ Facturation Tab ═══ */
 
 function FacturationTab({
+  token,
   quotes,
   invoices,
   payments,
+  onRefresh,
 }: {
+  token: string;
   quotes: QuoteData[];
   invoices: InvoiceData[];
   payments: PaymentData[];
+  onRefresh: () => void;
 }) {
+  const [signingId, setSigningId] = useState<string | null>(null);
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  const [signFeedback, setSignFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  async function handleSignQuote(quoteId: string) {
+    setSigningId(quoteId);
+    setSignFeedback(null);
+    try {
+      const res = await fetch(`/api/share/${token}/actions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'sign_quote', quoteId }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setSignFeedback({ type: 'success', message: 'Devis signé avec succès !' });
+        setConfirmingId(null);
+        onRefresh();
+      } else {
+        setSignFeedback({ type: 'error', message: data.error ?? 'Erreur lors de la signature.' });
+      }
+    } catch {
+      setSignFeedback({ type: 'error', message: 'Erreur de connexion.' });
+    } finally {
+      setSigningId(null);
+    }
+  }
+
   const hasContent = quotes.length > 0 || invoices.length > 0;
 
   if (!hasContent) {
@@ -426,33 +462,94 @@ function FacturationTab({
 
   return (
     <div className="flex flex-col gap-5 animate-fade-in-up">
+      {/* Sign feedback */}
+      {signFeedback && (
+        <div
+          className="flex items-center gap-2 rounded-xl px-4 py-3 text-sm"
+          style={{
+            background: signFeedback.type === 'success' ? 'var(--success-bg, #ecfdf5)' : 'var(--error-bg, #fef2f2)',
+            color: signFeedback.type === 'success' ? 'var(--success, #059669)' : 'var(--error, #dc2626)',
+          }}
+        >
+          {signFeedback.type === 'success' ? <CheckCircle size={16} /> : <AlertCircle size={16} />}
+          {signFeedback.message}
+          <button onClick={() => setSignFeedback(null)} className="ml-auto" aria-label="Fermer">
+            <X size={14} />
+          </button>
+        </div>
+      )}
+
       {/* Quotes */}
       {quotes.length > 0 && (
         <div className="rounded-xl border p-5" style={{ borderColor: 'var(--border)', background: 'var(--surface)' }}>
           <h2 className="mb-3 text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Devis</h2>
           <div className="flex flex-col gap-2">
-            {quotes.map((q, i) => (
-              <div
-                key={`q-${i}`}
-                className="flex items-center justify-between rounded-lg px-3 py-2.5"
-                style={{ background: 'var(--surface-hover)' }}
-              >
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                    {q.number ?? 'Devis'}
-                  </span>
-                  {q.issuedAt && (
-                    <span className="text-xs" style={{ color: 'var(--text-faint)' }}>{fmtDate(q.issuedAt)}</span>
+            {quotes.map((q) => {
+              const canSign = q.status === 'SENT';
+              const isConfirming = confirmingId === q.id;
+              const isSigning = signingId === q.id;
+              return (
+                <div key={q.id}>
+                  <div
+                    className="flex items-center justify-between rounded-lg px-3 py-2.5"
+                    style={{ background: 'var(--surface-hover)' }}
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                        {q.number ?? 'Devis'}
+                      </span>
+                      {q.issuedAt && (
+                        <span className="text-xs" style={{ color: 'var(--text-faint)' }}>{fmtDate(q.issuedAt)}</span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-3 shrink-0">
+                      <BillingBadge status={q.status} />
+                      <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+                        {fmtCents(q.totalCents, q.currency)}
+                      </span>
+                      {canSign && !isConfirming && (
+                        <button
+                          onClick={() => setConfirmingId(q.id)}
+                          className="rounded-lg px-3 py-1.5 text-xs font-medium transition-colors"
+                          style={{ background: 'var(--text-primary)', color: 'var(--surface)' }}
+                        >
+                          Signer
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  {/* Confirmation step */}
+                  {isConfirming && (
+                    <div
+                      className="mt-2 rounded-lg border p-4"
+                      style={{ borderColor: 'var(--border)', background: 'var(--surface)' }}
+                    >
+                      <p className="text-sm mb-3" style={{ color: 'var(--text-primary)' }}>
+                        Confirmez-vous la signature du devis <strong>{q.number ?? ''}</strong> d&apos;un montant de <strong>{fmtCents(q.totalCents, q.currency)}</strong> ?
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleSignQuote(q.id)}
+                          disabled={isSigning}
+                          className="rounded-lg px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50"
+                          style={{ background: 'var(--text-primary)', color: 'var(--surface)' }}
+                        >
+                          {isSigning ? 'Signature...' : 'Je confirme la signature'}
+                        </button>
+                        <button
+                          onClick={() => setConfirmingId(null)}
+                          disabled={isSigning}
+                          className="rounded-lg px-4 py-2 text-sm font-medium transition-colors"
+                          style={{ color: 'var(--text-secondary)' }}
+                        >
+                          Annuler
+                        </button>
+                      </div>
+                    </div>
                   )}
                 </div>
-                <div className="flex items-center gap-3 shrink-0">
-                  <BillingBadge status={q.status} />
-                  <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
-                    {fmtCents(q.totalCents, q.currency)}
-                  </span>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}

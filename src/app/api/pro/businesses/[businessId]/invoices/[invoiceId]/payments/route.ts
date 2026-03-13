@@ -9,7 +9,8 @@ import { upsertFinanceForInvoicePaid } from '@/server/billing/invoiceFinance';
 import { parseCentsInput } from '@/lib/money';
 import { parseIdOpt, parseDateOpt } from '@/server/http/parsers';
 import { formatCurrencyEUR } from '@/lib/formatCurrency';
-import { notifyPaymentReceived } from '@/server/services/notifications';
+import { notifyPaymentReceived, notifyDepositPaid, notifyProjectActivated, notifyProjectCompleted } from '@/server/services/notifications';
+import { evaluateProjectLifecycle } from '@/server/billing/projectLifecycle';
 
 function parsePaymentMethod(value: unknown): PaymentMethod {
   if (typeof value !== 'string') return PaymentMethod.WIRE;
@@ -190,6 +191,24 @@ export const POST = withBusinessRoute<{ businessId: string; invoiceId: string }>
         formatCurrencyEUR(Number(amountCents), { minimumFractionDigits: 0 }),
         invoice.number,
       );
+
+      // Evaluate project lifecycle (deposit detection, activation, completion)
+      try {
+        const lifecycle = await prisma.$transaction(async (tx) => {
+          return evaluateProjectLifecycle(tx, invoice.projectId, businessIdBigInt);
+        });
+        if (lifecycle.depositBecamePaid) {
+          void notifyDepositPaid(ctx.userId, businessIdBigInt, invoice.projectId);
+        }
+        if (lifecycle.projectBecameActive) {
+          void notifyProjectActivated(ctx.userId, businessIdBigInt, invoice.projectId);
+        }
+        if (lifecycle.projectBecameCompleted) {
+          void notifyProjectCompleted(businessIdBigInt, invoice.projectId);
+        }
+      } catch {
+        // Lifecycle evaluation is best-effort — don't fail the payment
+      }
     }
 
     return jsonbCreated({ ok: true }, requestId);

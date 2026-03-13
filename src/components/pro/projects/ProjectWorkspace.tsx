@@ -47,6 +47,7 @@ import { ChargesTab } from '@/components/pro/projects/tabs/ChargesTab';
 import { VaultTab } from '@/components/pro/projects/tabs/VaultTab';
 import { Modal } from '@/components/ui/modal';
 import { Input } from '@/components/ui/input';
+import { EmailConfirmModal } from '@/components/ui/EmailConfirmModal';
 import { Copy, Check } from 'lucide-react';
 import { useToast } from '@/components/ui/toast';
 
@@ -538,6 +539,8 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
     handleGenerateRecurringInvoice,
     openStagedInvoiceModal, closeStagedInvoiceModal, handleCreateStagedInvoice,
     handleInvoiceStatus,
+    requestQuoteSent, requestInvoiceSent,
+    emailConfirmState, emailConfirmLoading, handleEmailConfirm, closeEmailConfirm,
     openQuoteDateModal, openInvoiceDateModal,
     handleSaveQuoteDate, handleSaveInvoiceDate, handleSaveDepositDate,
     openQuoteEditor, closeQuoteEditor, addQuoteLine, removeQuoteLine, handleSaveQuoteEdit,
@@ -815,6 +818,7 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
             onOpenQuoteDateModal={openQuoteDateModal}
             onSetBillingReference={handleSetBillingReference}
             onQuoteStatus={handleQuoteStatus}
+            onRequestQuoteSent={requestQuoteSent}
             onOpenCancelQuoteModal={openCancelQuoteModal}
             onCreateInvoice={handleCreateInvoice}
             onDeleteQuote={handleDeleteQuote}
@@ -822,6 +826,7 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
             onOpenInvoiceEditor={openInvoiceEditor}
             onOpenInvoiceDateModal={openInvoiceDateModal}
             onInvoiceStatus={handleInvoiceStatus}
+            onRequestInvoiceSent={requestInvoiceSent}
             onDeleteInvoice={handleDeleteInvoice}
           />
         </BillingProvider>
@@ -972,6 +977,19 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
         }
         onApplyShortcut={applyPaymentShortcut}
         onSave={handleSavePayment}
+      />
+
+      {/* Email confirmation modal — intercepts quote/invoice SENT */}
+      <EmailConfirmModal
+        open={!!emailConfirmState}
+        onCloseAction={closeEmailConfirm}
+        onConfirm={(sendEmail, clientEmail) =>
+          handleEmailConfirm(sendEmail, clientEmail, shareLink)
+        }
+        documentType={emailConfirmState?.type === 'quote' ? 'devis' : 'facture'}
+        documentLabel={emailConfirmState?.number}
+        totalLabel={emailConfirmState?.totalLabel}
+        loading={emailConfirmLoading}
       />
 
       {/* Share modal */}

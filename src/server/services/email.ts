@@ -234,6 +234,174 @@ export async function sendProjectShareEmail(params: ProjectShareEmailParams): Pr
   }
 }
 
+// ── Quote email ───────────────────────────────────────────────────────────
+
+type QuoteEmailParams = {
+  to: string;
+  businessName: string;
+  projectName: string;
+  quoteNumber: string | null;
+  totalLabel: string;
+  shareLink: string;
+};
+
+export async function sendQuoteEmail(params: QuoteEmailParams): Promise<void> {
+  const resend = getResend();
+  if (!resend) return;
+
+  const { to, businessName, projectName, quoteNumber, totalLabel, shareLink } = params;
+  const fromAddress = process.env.RESEND_FROM_EMAIL?.trim() || 'Pivot <noreply@pivotapp.fr>';
+  const label = quoteNumber ? `devis ${quoteNumber}` : 'devis';
+
+  const html = `<!DOCTYPE html>
+<html lang="fr">
+<head><meta charset="utf-8" /></head>
+<body style="margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f5f5f5;">
+  <div style="max-width:560px;margin:40px auto;background:#fff;border-radius:12px;padding:40px;border:1px solid #e5e5e5;">
+    <h1 style="font-size:20px;color:#111;margin:0 0 8px;">Votre ${label}</h1>
+    <p style="color:#555;font-size:14px;line-height:1.6;margin:0 0 8px;">
+      <strong>${businessName}</strong> vous a envoy&eacute; un ${label} pour le projet <strong>&laquo; ${projectName} &raquo;</strong>.
+    </p>
+    <p style="color:#555;font-size:14px;line-height:1.6;margin:0 0 24px;">
+      Montant : <strong>${totalLabel}</strong>
+    </p>
+    <a href="${shareLink}"
+       style="display:inline-block;padding:12px 28px;background:#111;color:#fff;text-decoration:none;border-radius:8px;font-size:14px;font-weight:600;">
+      Voir le devis
+    </a>
+    <p style="color:#888;font-size:12px;margin:24px 0 0;">
+      Vous pouvez consulter et signer ce devis depuis votre espace de suivi.
+    </p>
+  </div>
+</body>
+</html>`;
+
+  try {
+    await resend.emails.send({
+      from: fromAddress,
+      to,
+      subject: `${businessName} — ${quoteNumber ? `Devis ${quoteNumber}` : 'Nouveau devis'} pour « ${projectName} »`,
+      html,
+    });
+  } catch (error) {
+    console.error('[email] Failed to send quote email:', error instanceof Error ? error.message : 'unknown');
+  }
+}
+
+// ── Invoice email ─────────────────────────────────────────────────────────
+
+type InvoiceEmailParams = {
+  to: string;
+  businessName: string;
+  projectName: string;
+  invoiceNumber: string | null;
+  totalLabel: string;
+  dueAt: string | null;
+  shareLink: string;
+};
+
+export async function sendInvoiceEmail(params: InvoiceEmailParams): Promise<void> {
+  const resend = getResend();
+  if (!resend) return;
+
+  const { to, businessName, projectName, invoiceNumber, totalLabel, dueAt, shareLink } = params;
+  const fromAddress = process.env.RESEND_FROM_EMAIL?.trim() || 'Pivot <noreply@pivotapp.fr>';
+  const label = invoiceNumber ? `facture ${invoiceNumber}` : 'facture';
+
+  const dueLine = dueAt
+    ? `&Eacute;ch&eacute;ance : <strong>${dueAt}</strong>`
+    : '';
+
+  const html = `<!DOCTYPE html>
+<html lang="fr">
+<head><meta charset="utf-8" /></head>
+<body style="margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f5f5f5;">
+  <div style="max-width:560px;margin:40px auto;background:#fff;border-radius:12px;padding:40px;border:1px solid #e5e5e5;">
+    <h1 style="font-size:20px;color:#111;margin:0 0 8px;">Votre ${label}</h1>
+    <p style="color:#555;font-size:14px;line-height:1.6;margin:0 0 8px;">
+      <strong>${businessName}</strong> vous a envoy&eacute; une ${label} pour le projet <strong>&laquo; ${projectName} &raquo;</strong>.
+    </p>
+    <p style="color:#555;font-size:14px;line-height:1.6;margin:0 0 ${dueLine ? '8px' : '24px'};">
+      Montant : <strong>${totalLabel}</strong>
+    </p>
+    ${dueLine ? `<p style="color:#555;font-size:14px;line-height:1.6;margin:0 0 24px;">${dueLine}</p>` : ''}
+    <a href="${shareLink}"
+       style="display:inline-block;padding:12px 28px;background:#111;color:#fff;text-decoration:none;border-radius:8px;font-size:14px;font-weight:600;">
+      Voir la facture
+    </a>
+    <p style="color:#888;font-size:12px;margin:24px 0 0;">
+      Consultez le d&eacute;tail de cette facture depuis votre espace de suivi.
+    </p>
+  </div>
+</body>
+</html>`;
+
+  try {
+    await resend.emails.send({
+      from: fromAddress,
+      to,
+      subject: `${businessName} — ${invoiceNumber ? `Facture ${invoiceNumber}` : 'Nouvelle facture'} pour « ${projectName} »`,
+      html,
+    });
+  } catch (error) {
+    console.error('[email] Failed to send invoice email:', error instanceof Error ? error.message : 'unknown');
+  }
+}
+
+// ── E-invoice email ───────────────────────────────────────────────────────
+
+type EInvoiceEmailParams = {
+  to: string;
+  businessName: string;
+  projectName: string;
+  invoiceNumber: string | null;
+  totalLabel: string;
+  shareLink: string;
+};
+
+export async function sendEInvoiceEmail(params: EInvoiceEmailParams): Promise<void> {
+  const resend = getResend();
+  if (!resend) return;
+
+  const { to, businessName, projectName, invoiceNumber, totalLabel, shareLink } = params;
+  const fromAddress = process.env.RESEND_FROM_EMAIL?.trim() || 'Pivot <noreply@pivotapp.fr>';
+  const label = invoiceNumber ? `e-facture ${invoiceNumber}` : 'e-facture';
+
+  const html = `<!DOCTYPE html>
+<html lang="fr">
+<head><meta charset="utf-8" /></head>
+<body style="margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f5f5f5;">
+  <div style="max-width:560px;margin:40px auto;background:#fff;border-radius:12px;padding:40px;border:1px solid #e5e5e5;">
+    <h1 style="font-size:20px;color:#111;margin:0 0 8px;">Votre ${label}</h1>
+    <p style="color:#555;font-size:14px;line-height:1.6;margin:0 0 8px;">
+      <strong>${businessName}</strong> vous a transmis une ${label} pour le projet <strong>&laquo; ${projectName} &raquo;</strong>.
+    </p>
+    <p style="color:#555;font-size:14px;line-height:1.6;margin:0 0 24px;">
+      Montant : <strong>${totalLabel}</strong>
+    </p>
+    <a href="${shareLink}"
+       style="display:inline-block;padding:12px 28px;background:#111;color:#fff;text-decoration:none;border-radius:8px;font-size:14px;font-weight:600;">
+      Voir le projet
+    </a>
+    <p style="color:#888;font-size:12px;margin:24px 0 0;">
+      Consultez les d&eacute;tails depuis votre espace de suivi.
+    </p>
+  </div>
+</body>
+</html>`;
+
+  try {
+    await resend.emails.send({
+      from: fromAddress,
+      to,
+      subject: `${businessName} — ${invoiceNumber ? `E-facture ${invoiceNumber}` : 'Nouvelle e-facture'} pour « ${projectName} »`,
+      html,
+    });
+  } catch (error) {
+    console.error('[email] Failed to send e-invoice email:', error instanceof Error ? error.message : 'unknown');
+  }
+}
+
 // ── Waitlist confirmation email ────────────────────────────────────────────
 
 type WaitlistConfirmationEmailParams = { to: string };

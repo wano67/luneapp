@@ -93,6 +93,7 @@ export type BillingInvoicesSectionProps = {
   onOpenInvoiceEditor: (invoiceId: string) => void;
   onOpenInvoiceDateModal: (invoice: InvoiceItem) => void;
   onInvoiceStatus: (invoiceId: string, status: 'SENT' | 'CANCELLED') => void;
+  onRequestInvoiceSent: (invoiceId: string, invoiceNumber: string | null, totalLabel: string) => void;
   onDeleteInvoice: (invoiceId: string) => void;
 };
 
@@ -109,6 +110,7 @@ export function BillingInvoicesSection({
   onOpenInvoiceEditor,
   onOpenInvoiceDateModal,
   onInvoiceStatus,
+  onRequestInvoiceSent,
   onDeleteInvoice,
 }: BillingInvoicesSectionProps) {
   return (
@@ -224,7 +226,11 @@ export function BillingInvoicesSection({
                         ? [
                             {
                               label: 'Envoyer',
-                              onClick: () => onInvoiceStatus(invoice.id, 'SENT'),
+                              onClick: () => onRequestInvoiceSent(
+                                invoice.id,
+                                invoice.number,
+                                formatCurrencyEUR(Number(invoice.totalCents), { minimumFractionDigits: 0 }),
+                              ),
                               disabled: !isAdmin || invoiceActionId === invoice.id,
                             },
                           ]

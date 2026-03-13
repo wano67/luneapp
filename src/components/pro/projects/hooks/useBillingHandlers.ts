@@ -227,6 +227,15 @@ export function useBillingHandlers({
   const [dateModalError, setDateModalError] = useState<string | null>(null);
   const [dateModalSaving, setDateModalSaving] = useState(false);
 
+  // ─── Email confirmation modal ─────────────────────────────────────────────
+  const [emailConfirmState, setEmailConfirmState] = useState<{
+    type: 'quote' | 'invoice';
+    id: string;
+    number: string | null;
+    totalLabel: string;
+  } | null>(null);
+  const [emailConfirmLoading, setEmailConfirmLoading] = useState(false);
+
   // Sync deposit draft from project
   useEffect(() => {
     setDepositPaidDraft(projectDepositPaidAt ? projectDepositPaidAt.slice(0, 10) : '');
@@ -375,18 +384,28 @@ export function useBillingHandlers({
     }
   }
 
-  async function handleQuoteStatus(quoteId: string, nextStatus: 'SENT' | 'SIGNED' | 'EXPIRED') {
+  async function handleQuoteStatus(
+    quoteId: string,
+    nextStatus: 'SENT' | 'SIGNED' | 'EXPIRED',
+    opts?: { sendEmail?: boolean; clientEmail?: string; shareLink?: string },
+  ) {
     if (!requireAdmin(onBillingError)) return;
     setQuoteActionId(quoteId);
     onBillingError(null);
     onBillingInfo(null);
     try {
+      const payload: Record<string, unknown> = { status: nextStatus };
+      if (opts?.sendEmail) {
+        payload.sendEmail = true;
+        payload.clientEmail = opts.clientEmail;
+        payload.shareLink = opts.shareLink;
+      }
       const res = await fetchJson<{ quote: QuoteItemLocal }>(
         `/api/pro/businesses/${businessId}/quotes/${quoteId}`,
         {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ status: nextStatus }),
+          body: JSON.stringify(payload),
         }
       );
       if (!res.ok) {
@@ -400,6 +419,12 @@ export function useBillingHandlers({
     } finally {
       setQuoteActionId(null);
     }
+  }
+
+  /** Open the email confirmation modal before marking a quote as SENT. */
+  function requestQuoteSent(quoteId: string, quoteNumber: string | null, totalLabel: string) {
+    if (!requireAdmin(onBillingError)) return;
+    setEmailConfirmState({ type: 'quote', id: quoteId, number: quoteNumber, totalLabel });
   }
 
   async function handleCreateInvoice(quoteId: string) {
@@ -535,18 +560,28 @@ export function useBillingHandlers({
     }
   }
 
-  async function handleInvoiceStatus(invoiceId: string, nextStatus: 'SENT' | 'CANCELLED') {
+  async function handleInvoiceStatus(
+    invoiceId: string,
+    nextStatus: 'SENT' | 'CANCELLED',
+    opts?: { sendEmail?: boolean; clientEmail?: string; shareLink?: string },
+  ) {
     if (!requireAdmin(onBillingError)) return;
     setInvoiceActionId(invoiceId);
     onBillingError(null);
     onBillingInfo(null);
     try {
+      const payload: Record<string, unknown> = { status: nextStatus };
+      if (opts?.sendEmail) {
+        payload.sendEmail = true;
+        payload.clientEmail = opts.clientEmail;
+        payload.shareLink = opts.shareLink;
+      }
       const res = await fetchJson<{ item: InvoiceItemLocal }>(
         `/api/pro/businesses/${businessId}/invoices/${invoiceId}`,
         {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ status: nextStatus }),
+          body: JSON.stringify(payload),
         }
       );
       if (!res.ok) {
@@ -560,6 +595,36 @@ export function useBillingHandlers({
     } finally {
       setInvoiceActionId(null);
     }
+  }
+
+  /** Open the email confirmation modal before marking an invoice as SENT. */
+  function requestInvoiceSent(invoiceId: string, invoiceNumber: string | null, totalLabel: string) {
+    if (!requireAdmin(onBillingError)) return;
+    setEmailConfirmState({ type: 'invoice', id: invoiceId, number: invoiceNumber, totalLabel });
+  }
+
+  /** Called when the user confirms/cancels the email modal. */
+  async function handleEmailConfirm(sendEmail: boolean, clientEmail: string, shareLink: string | null) {
+    if (!emailConfirmState) return;
+    setEmailConfirmLoading(true);
+    try {
+      const { type, id } = emailConfirmState;
+      const opts = sendEmail && clientEmail && shareLink
+        ? { sendEmail: true, clientEmail, shareLink }
+        : undefined;
+      if (type === 'quote') {
+        await handleQuoteStatus(id, 'SENT', opts);
+      } else {
+        await handleInvoiceStatus(id, 'SENT', opts);
+      }
+    } finally {
+      setEmailConfirmLoading(false);
+      setEmailConfirmState(null);
+    }
+  }
+
+  function closeEmailConfirm() {
+    setEmailConfirmState(null);
   }
 
   // ─── Date modals ───────────────────────────────────────────────────────────
@@ -896,6 +961,12 @@ export function useBillingHandlers({
     closeStagedInvoiceModal,
     handleCreateStagedInvoice,
     handleInvoiceStatus,
+    requestQuoteSent,
+    requestInvoiceSent,
+    emailConfirmState,
+    emailConfirmLoading,
+    handleEmailConfirm,
+    closeEmailConfirm,
     openQuoteDateModal,
     openInvoiceDateModal,
     handleSaveQuoteDate,

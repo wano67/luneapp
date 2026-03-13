@@ -27,6 +27,10 @@ import { createLedgerForInvoiceConsumption, upsertCashSaleLedgerForInvoicePaid }
 import { parseCentsInput } from '@/lib/money';
 import { parseIdOpt, parseDateOpt } from '@/server/http/parsers';
 import { assessInvoiceCompliance } from '@/server/billing/invoiceCompliance';
+import { evaluateProjectLifecycle } from '@/server/billing/projectLifecycle';
+import { notifyDepositPaid, notifyProjectActivated, notifyProjectCompleted, notifyInvoiceSentToClient } from '@/server/services/notifications';
+import { sendInvoiceEmail } from '@/server/services/email';
+import { formatCurrencyEUR } from '@/lib/formatCurrency';
 
 function roundPercent(amount: bigint, percent: number) {
   const p = BigInt(Math.round(percent));
@@ -303,6 +307,13 @@ export const PATCH = withBusinessRoute<{ businessId: string; invoiceId: string }
         itemUpdates.push({ id: BigInt(idRaw), productId });
       }
     }
+
+    // Email sending options (optional, for SENT transition)
+    const sendEmailFlag = (body as { sendEmail?: unknown }).sendEmail === true;
+    const clientEmailRaw = (body as { clientEmail?: unknown }).clientEmail;
+    const shareLinkRaw = (body as { shareLink?: unknown }).shareLink;
+    const clientEmail = typeof clientEmailRaw === 'string' ? clientEmailRaw.trim() : null;
+    const shareLink = typeof shareLinkRaw === 'string' ? shareLinkRaw.trim() : null;
 
     const statusRaw = (body as { status?: unknown }).status;
     const hasStatus = statusRaw !== undefined;
@@ -803,6 +814,51 @@ export const PATCH = withBusinessRoute<{ businessId: string; invoiceId: string }
         },
         update: {},
       });
+    }
+
+    // Evaluate project lifecycle when invoice becomes PAID
+    const isNowPaid = updated.status === InvoiceStatus.PAID && existing.status !== InvoiceStatus.PAID;
+    if (isNowPaid && updated.projectId) {
+      try {
+        const lifecycle = await prisma.$transaction(async (tx) => {
+          return evaluateProjectLifecycle(tx, updated.projectId!, businessIdBigInt);
+        });
+        if (lifecycle.depositBecamePaid) {
+          void notifyDepositPaid(ctx.userId, businessIdBigInt, updated.projectId);
+        }
+        if (lifecycle.projectBecameActive) {
+          void notifyProjectActivated(ctx.userId, businessIdBigInt, updated.projectId);
+        }
+        if (lifecycle.projectBecameCompleted) {
+          void notifyProjectCompleted(businessIdBigInt, updated.projectId);
+        }
+      } catch {
+        // Best-effort lifecycle evaluation
+      }
+    }
+
+    // Send email to client if requested (SENT transition)
+    const isNowSent = updated.status === InvoiceStatus.SENT && existing.status === InvoiceStatus.DRAFT;
+    if (isNowSent && sendEmailFlag && clientEmail && shareLink && updated.projectId) {
+      const [business, project] = await Promise.all([
+        prisma.business.findUnique({ where: { id: businessIdBigInt }, select: { name: true } }),
+        prisma.project.findUnique({ where: { id: updated.projectId }, select: { name: true } }),
+      ]);
+      if (business && project) {
+        const dueLabel = updated.dueAt
+          ? new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }).format(updated.dueAt)
+          : null;
+        void sendInvoiceEmail({
+          to: clientEmail,
+          businessName: business.name,
+          projectName: project.name,
+          invoiceNumber: updated.number,
+          totalLabel: formatCurrencyEUR(Number(updated.totalCents), { minimumFractionDigits: 0 }),
+          dueAt: dueLabel,
+          shareLink,
+        });
+        void notifyInvoiceSentToClient(ctx.userId, businessIdBigInt, updated.projectId, updated.number, clientEmail);
+      }
     }
 
     const paymentSummary = await computeInvoicePaymentSummary(prisma, updated as InvoiceWithItems);

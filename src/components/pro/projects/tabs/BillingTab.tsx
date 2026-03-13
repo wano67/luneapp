@@ -62,6 +62,7 @@ export type BillingTabProps = {
   onOpenQuoteDateModal: (quote: QuoteItem) => void;
   onSetBillingReference: (quoteId: string) => void;
   onQuoteStatus: (quoteId: string, status: 'SENT' | 'SIGNED' | 'EXPIRED') => void;
+  onRequestQuoteSent: (quoteId: string, quoteNumber: string | null, totalLabel: string) => void;
   onOpenCancelQuoteModal: (quote: QuoteItem) => void;
   onCreateInvoice: (quoteId: string) => void;
   onDeleteQuote: (quoteId: string) => void;
@@ -71,6 +72,7 @@ export type BillingTabProps = {
   onOpenInvoiceEditor: (invoiceId: string) => void;
   onOpenInvoiceDateModal: (invoice: InvoiceItem) => void;
   onInvoiceStatus: (invoiceId: string, status: 'SENT' | 'CANCELLED') => void;
+  onRequestInvoiceSent: (invoiceId: string, invoiceNumber: string | null, totalLabel: string) => void;
   onDeleteInvoice: (invoiceId: string) => void;
 };
 
@@ -145,6 +147,7 @@ export function BillingTab({
   onOpenQuoteDateModal,
   onSetBillingReference,
   onQuoteStatus,
+  onRequestQuoteSent,
   onOpenCancelQuoteModal,
   onCreateInvoice,
   onDeleteQuote,
@@ -152,6 +155,7 @@ export function BillingTab({
   onOpenInvoiceEditor,
   onOpenInvoiceDateModal,
   onInvoiceStatus,
+  onRequestInvoiceSent,
   onDeleteInvoice,
 }: BillingTabProps) {
   const {
@@ -479,6 +483,7 @@ export function BillingTab({
         onOpenQuoteDateModal={onOpenQuoteDateModal}
         onSetBillingReference={onSetBillingReference}
         onQuoteStatus={onQuoteStatus}
+        onRequestQuoteSent={onRequestQuoteSent}
         onOpenCancelQuoteModal={onOpenCancelQuoteModal}
         onCreateInvoice={onCreateInvoice}
         onDeleteQuote={onDeleteQuote}
@@ -498,6 +503,7 @@ export function BillingTab({
         onOpenInvoiceEditor={onOpenInvoiceEditor}
         onOpenInvoiceDateModal={onOpenInvoiceDateModal}
         onInvoiceStatus={onInvoiceStatus}
+        onRequestInvoiceSent={onRequestInvoiceSent}
         onDeleteInvoice={onDeleteInvoice}
       />
 

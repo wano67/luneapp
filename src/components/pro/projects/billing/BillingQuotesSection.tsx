@@ -43,6 +43,7 @@ export type BillingQuotesSectionProps = {
   onOpenQuoteDateModal: (quote: QuoteItem) => void;
   onSetBillingReference: (quoteId: string) => void;
   onQuoteStatus: (quoteId: string, status: 'SENT' | 'SIGNED' | 'EXPIRED') => void;
+  onRequestQuoteSent: (quoteId: string, quoteNumber: string | null, totalLabel: string) => void;
   onOpenCancelQuoteModal: (quote: QuoteItem) => void;
   onCreateInvoice: (quoteId: string) => void;
   onDeleteQuote: (quoteId: string) => void;
@@ -66,6 +67,7 @@ export function BillingQuotesSection({
   onOpenQuoteDateModal,
   onSetBillingReference,
   onQuoteStatus,
+  onRequestQuoteSent,
   onOpenCancelQuoteModal,
   onCreateInvoice,
   onDeleteQuote,
@@ -170,7 +172,11 @@ export function BillingQuotesSection({
                         ? [
                             {
                               label: 'Envoyer',
-                              onClick: () => onQuoteStatus(quote.id, 'SENT'),
+                              onClick: () => onRequestQuoteSent(
+                                quote.id,
+                                quote.number,
+                                formatCurrencyEUR(Number(quote.totalCents), { minimumFractionDigits: 0 }),
+                              ),
                               disabled: !isAdmin || quoteActionId === quote.id,
                             },
                           ]

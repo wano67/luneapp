@@ -510,6 +510,95 @@ export async function notifyPaymentReceived(
   });
 }
 
+/** Notify project members + admins when a deposit is fully paid. */
+export async function notifyDepositPaid(
+  actorUserId: bigint,
+  businessId: bigint,
+  projectId: bigint,
+) {
+  const userIds = await projectRecipients(businessId, projectId);
+  await notify(userIds, actorUserId, {
+    businessId,
+    type: 'DEPOSIT_PAID',
+    title: 'Acompte encaissé',
+    body: 'Le dépôt a été intégralement réglé.',
+    projectId,
+    includeSelf: true,
+  });
+}
+
+/** Notify project members + admins when a project is automatically activated. */
+export async function notifyProjectActivated(
+  actorUserId: bigint,
+  businessId: bigint,
+  projectId: bigint,
+) {
+  const userIds = await projectRecipients(businessId, projectId);
+  await notify(userIds, actorUserId, {
+    businessId,
+    type: 'PROJECT_ACTIVATED',
+    title: 'Projet démarré',
+    body: 'Le devis est signé et l\'acompte réglé — le projet passe en actif.',
+    projectId,
+    includeSelf: true,
+  });
+}
+
+/** Notify project members + admins when a project is automatically completed. */
+export async function notifyProjectCompleted(
+  businessId: bigint,
+  projectId: bigint,
+) {
+  const userIds = await projectRecipients(businessId, projectId);
+  const SYSTEM_USER = 0n;
+  await notify(userIds, SYSTEM_USER, {
+    businessId,
+    type: 'PROJECT_COMPLETED',
+    title: 'Projet terminé',
+    body: 'Toutes les factures sont soldées — le projet est marqué comme terminé.',
+    projectId,
+    includeSelf: true,
+  });
+}
+
+/** Notify project members + admins when a quote is sent to client by email. */
+export async function notifyQuoteSentToClient(
+  actorUserId: bigint,
+  businessId: bigint,
+  projectId: bigint,
+  quoteNumber: string | null,
+  clientEmail: string,
+) {
+  const userIds = await projectRecipients(businessId, projectId);
+  await notify(userIds, actorUserId, {
+    businessId,
+    type: 'QUOTE_SENT_TO_CLIENT',
+    title: `Devis envoyé${quoteNumber ? ` : ${quoteNumber}` : ''}`,
+    body: `Envoyé par email à ${clientEmail}`,
+    projectId,
+    includeSelf: true,
+  });
+}
+
+/** Notify project members + admins when an invoice is sent to client by email. */
+export async function notifyInvoiceSentToClient(
+  actorUserId: bigint,
+  businessId: bigint,
+  projectId: bigint,
+  invoiceNumber: string | null,
+  clientEmail: string,
+) {
+  const userIds = await projectRecipients(businessId, projectId);
+  await notify(userIds, actorUserId, {
+    businessId,
+    type: 'INVOICE_SENT_TO_CLIENT',
+    title: `Facture envoyée${invoiceNumber ? ` : ${invoiceNumber}` : ''}`,
+    body: `Envoyée par email à ${clientEmail}`,
+    projectId,
+    includeSelf: true,
+  });
+}
+
 /** Notify project members + admins when a quote is signed/accepted. */
 export async function notifyQuoteSigned(
   actorUserId: bigint,

@@ -90,6 +90,7 @@ export async function GET(
         status: { in: ['SENT', 'SIGNED'] },
       },
       select: {
+        id: true,
         number: true,
         status: true,
         totalCents: true,
@@ -107,6 +108,7 @@ export async function GET(
         status: { in: ['SENT', 'PAID'] },
       },
       select: {
+        id: true,
         number: true,
         status: true,
         totalCents: true,

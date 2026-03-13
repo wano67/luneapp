@@ -7,7 +7,10 @@ import { parseIdOpt, parseDateOpt } from '@/server/http/parsers';
 import { assignDocumentNumber } from '@/server/services/numbering';
 import { buildClientSnapshot, buildIssuerSnapshot } from '@/server/billing/snapshots';
 import { parseCentsInput } from '@/lib/money';
-import { notifyQuoteSigned } from '@/server/services/notifications';
+import { notifyQuoteSigned, notifyProjectActivated, notifyQuoteSentToClient } from '@/server/services/notifications';
+import { evaluateProjectLifecycle } from '@/server/billing/projectLifecycle';
+import { sendQuoteEmail } from '@/server/services/email';
+import { formatCurrencyEUR } from '@/lib/formatCurrency';
 
 function roundPercent(amount: bigint, percent: number) {
   const p = BigInt(Math.round(percent));
@@ -73,6 +76,13 @@ export const PATCH = withBusinessRoute<{ businessId: string; quoteId: string }>(
     const expiresAtRaw = (body as { expiresAt?: unknown }).expiresAt;
     const cancelReasonRaw = (body as { cancelReason?: unknown }).cancelReason;
     const itemsRaw = (body as { items?: unknown }).items;
+
+    // Email sending options (optional, for SENT transition)
+    const sendEmailFlag = (body as { sendEmail?: unknown }).sendEmail === true;
+    const clientEmailRaw = (body as { clientEmail?: unknown }).clientEmail;
+    const shareLinkRaw = (body as { shareLink?: unknown }).shareLink;
+    const clientEmail = typeof clientEmailRaw === 'string' ? clientEmailRaw.trim() : null;
+    const shareLink = typeof shareLinkRaw === 'string' ? shareLinkRaw.trim() : null;
 
     const wantsItemsUpdate = itemsRaw !== undefined;
     const wantsMetaUpdate = noteRaw !== undefined || issuedAtRaw !== undefined || expiresAtRaw !== undefined;
@@ -474,6 +484,37 @@ export const PATCH = withBusinessRoute<{ businessId: string; quoteId: string }>(
 
     if (hasStatus && nextStatus === QuoteStatus.SIGNED) {
       void notifyQuoteSigned(ctx.userId, businessIdBigInt, existing.projectId, updated.number);
+
+      // Evaluate project lifecycle (quote signed might trigger activation)
+      try {
+        const lifecycle = await prisma.$transaction(async (tx) => {
+          return evaluateProjectLifecycle(tx, existing.projectId, businessIdBigInt);
+        });
+        if (lifecycle.projectBecameActive) {
+          void notifyProjectActivated(ctx.userId, businessIdBigInt, existing.projectId);
+        }
+      } catch {
+        // Best-effort — don't fail the quote update
+      }
+    }
+
+    // Send email to client if requested (SENT transition)
+    if (hasStatus && nextStatus === QuoteStatus.SENT && sendEmailFlag && clientEmail && shareLink) {
+      const [business, project] = await Promise.all([
+        prisma.business.findUnique({ where: { id: businessIdBigInt }, select: { name: true } }),
+        prisma.project.findUnique({ where: { id: existing.projectId }, select: { name: true } }),
+      ]);
+      if (business && project) {
+        void sendQuoteEmail({
+          to: clientEmail,
+          businessName: business.name,
+          projectName: project.name,
+          quoteNumber: updated.number,
+          totalLabel: formatCurrencyEUR(Number(updated.totalCents), { minimumFractionDigits: 0 }),
+          shareLink,
+        });
+        void notifyQuoteSentToClient(ctx.userId, businessIdBigInt, existing.projectId, updated.number, clientEmail);
+      }
     }
 
     return jsonb({ item: updated }, requestId);
