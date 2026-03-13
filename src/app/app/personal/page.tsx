@@ -161,7 +161,7 @@ export default function WalletHomePage() {
       savingsCapacityPositive: capacity >= 0n,
       treasuryPct: treasuryPctVal,
       treasuryDelta: fmtDelta(periodNet),
-      treasuryPositive: treasuryPctVal != null ? treasuryPctVal >= 0 : periodNet >= 0n,
+      treasuryPositive: periodNet >= 0n,
       expensePct: expensePctVal,
       expenseDelta: fmtDelta(expenseDiff),
       chargesPositive: expenseDiff <= 0n,
@@ -520,9 +520,6 @@ function HeroCard({
 }) {
   const [hovered, setHovered] = useState(false);
   const isPositive = positive ?? true;
-  const badgeBg = isPositive ? 'rgba(0, 194, 110, 0.15)' : 'rgba(255, 128, 139, 0.15)';
-  const badgeColor = isPositive ? '#00C26E' : '#FF808B';
-  const deltaColor = isPositive ? '#45D195' : '#FF808B';
 
   return (
     <Link
@@ -538,17 +535,19 @@ function HeroCard({
       <div className="flex items-start justify-between gap-2">
         <span className="text-sm font-medium text-[var(--text)]">{label}</span>
         {pctChange != null ? (
-          <div className="flex items-center gap-1 rounded-xl px-3 py-1.5" style={{ background: badgeBg }}>
+          <div
+            className={`flex items-center gap-1 rounded-xl px-3 py-1.5 ${isPositive ? 'bg-[var(--success-bg)]' : 'bg-[var(--danger-bg)]'}`}
+          >
             <span
-              className="font-bold text-[14px] leading-[14px]"
-              style={{ fontFamily: 'var(--font-roboto-mono), monospace', color: badgeColor }}
+              className={`font-bold text-[14px] leading-[14px] ${isPositive ? 'text-[var(--success)]' : 'text-[var(--danger)]'}`}
+              style={{ fontFamily: 'var(--font-roboto-mono), monospace' }}
             >
               {pctChange > 0 ? '+' : ''}{pctChange}%
             </span>
             {pctChange >= 0 ? (
-              <ChartNoAxesColumnIncreasing size={14} style={{ color: badgeColor }} />
+              <ChartNoAxesColumnIncreasing size={14} className={isPositive ? 'text-[var(--success)]' : 'text-[var(--danger)]'} />
             ) : (
-              <ChartNoAxesColumnDecreasing size={14} style={{ color: badgeColor }} />
+              <ChartNoAxesColumnDecreasing size={14} className={isPositive ? 'text-[var(--success)]' : 'text-[var(--danger)]'} />
             )}
           </div>
         ) : null}
@@ -556,27 +555,22 @@ function HeroCard({
       <div className="flex items-end justify-between gap-2">
         <div className="flex flex-col gap-1 min-w-0">
           {delta ? (
-            <span className="text-base font-bold uppercase" style={{ color: deltaColor }}>{delta}</span>
+            <span className={`text-base font-bold uppercase ${isPositive ? 'text-[var(--success)]' : 'text-[var(--danger)]'}`}>
+              {delta}
+            </span>
           ) : null}
           {loading ? (
             <div className="h-10 w-32 rounded-lg bg-[var(--surface-2)] animate-skeleton-pulse" />
           ) : (
-            <span
-              className="text-[32px] md:text-[28px] font-extrabold leading-tight"
-              style={{ color: !isPositive && value.includes('-') ? '#FF808B' : 'var(--shell-accent)' }}
-            >
+            <span className="text-[32px] md:text-[28px] font-extrabold leading-tight text-[var(--text)]">
               {value}
             </span>
           )}
         </div>
         <div
-          className="shrink-0 inline-flex items-center justify-center gap-3 rounded-xl px-3 py-2.5 transition-colors"
-          style={{
-            background: hovered ? '#BF7F82' : 'white',
-            border: `1px solid ${hovered ? '#BF7F82' : 'black'}`,
-          }}
+          className={`shrink-0 inline-flex items-center justify-center gap-3 rounded-xl px-3 py-2.5 transition-colors border ${hovered ? 'bg-[var(--shell-accent)] border-[var(--shell-accent)]' : 'bg-[var(--surface)] border-[var(--border)]'}`}
         >
-          <ChevronRight size={14} strokeWidth={2.5} className="transition-colors" style={{ color: hovered ? 'white' : 'black' }} />
+          <ChevronRight size={14} strokeWidth={2.5} className={`transition-colors ${hovered ? 'text-white' : 'text-[var(--text)]'}`} />
         </div>
       </div>
     </Link>
