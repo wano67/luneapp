@@ -1,6 +1,7 @@
 import { isIP } from 'node:net';
 import { NextRequest, NextResponse } from 'next/server';
 import { getRequestId } from '@/server/http/apiUtils';
+import { rateLimit, makeIpKey } from '@/server/security/rateLimit';
 import { normalizeWebsiteUrl } from '@/lib/website';
 import { getLogoCandidates } from '@/lib/logo/getLogoCandidates';
 import { validateLogoUrl } from '@/lib/logo/validateLogoUrl';
@@ -42,6 +43,10 @@ function isBlockedHost(hostname: string) {
 
 export async function GET(request: NextRequest) {
   const requestId = getRequestId(request);
+
+  const rl = rateLimit(request, { key: makeIpKey(request, 'favicon'), limit: 30, windowMs: 60_000 });
+  if (rl) return rl;
+
   const urlParam = request.nextUrl.searchParams.get('url');
   const normalized = normalizeWebsiteUrl(urlParam);
   const target = normalized.value;

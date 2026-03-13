@@ -50,14 +50,12 @@ export const PATCH = withBusinessRoute<{ businessId: string; accessId: string }>
       item: {
         id: updated.id.toString(),
         accountantUserId: updated.accountantUserId.toString(),
-        token: updated.token,
         accessLevel: updated.accessLevel,
         accountantName: updated.accountant ? `${updated.accountant.firstName ?? ''} ${updated.accountant.lastName ?? ''}`.trim() || updated.accountant.email : null,
         accountantEmail: updated.accountant?.email ?? null,
         expiresAt: updated.expiresAt?.toISOString() ?? null,
         revokedAt: updated.revokedAt?.toISOString() ?? null,
         lastAccessAt: updated.lastAccessAt?.toISOString() ?? null,
-        portalUrl: `/accountant/${updated.token}`,
         createdAt: updated.createdAt.toISOString(),
       },
     }, ctx.requestId);

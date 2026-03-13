@@ -2,6 +2,7 @@ import { prisma } from '@/server/db/client';
 import { withPersonalRoute } from '@/server/http/routeHandler';
 import { jsonb } from '@/server/http/json';
 import { serializeNotification } from '@/server/http/serializeNotification';
+import { parseCursorOpt } from '@/server/http/parsers';
 
 // GET /api/personal/notifications — aggregate cross-business
 export const GET = withPersonalRoute(async (ctx, req) => {
@@ -10,12 +11,12 @@ export const GET = withPersonalRoute(async (ctx, req) => {
   const unreadOnly = url.searchParams.get('unreadOnly') === 'true';
   const limitParam = parseInt(url.searchParams.get('limit') ?? '30', 10);
   const limit = Math.min(Math.max(1, limitParam), 100);
-  const cursor = url.searchParams.get('cursor');
+  const cursorId = parseCursorOpt(url.searchParams.get('cursor'));
 
   const where = {
     userId,
     ...(unreadOnly ? { isRead: false } : {}),
-    ...(cursor ? { id: { lt: BigInt(cursor) } } : {}),
+    ...(cursorId ? { id: { lt: cursorId } } : {}),
   };
 
   const [items, unreadCount] = await Promise.all([

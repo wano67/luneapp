@@ -3,6 +3,7 @@ import { NotificationType } from '@/generated/prisma';
 import { withBusinessRoute } from '@/server/http/routeHandler';
 import { jsonb } from '@/server/http/json';
 import { serializeNotification } from '@/server/http/serializeNotification';
+import { parseCursorOpt } from '@/server/http/parsers';
 
 // GET /api/pro/businesses/{businessId}/notifications
 export const GET = withBusinessRoute(
@@ -16,7 +17,7 @@ export const GET = withBusinessRoute(
     const unreadOnly = url.searchParams.get('unreadOnly') === 'true';
     const limitParam = parseInt(url.searchParams.get('limit') ?? '30', 10);
     const limit = Math.min(Math.max(1, limitParam), 100);
-    const cursor = url.searchParams.get('cursor');
+    const cursorId = parseCursorOpt(url.searchParams.get('cursor'));
 
     const typeParam = url.searchParams.get('type');
     const allTypes = Object.values(NotificationType) as string[];
@@ -29,7 +30,7 @@ export const GET = withBusinessRoute(
       businessId,
       ...(unreadOnly ? { isRead: false } : {}),
       ...(typeFilter ? { type: { in: typeFilter } } : {}),
-      ...(cursor ? { id: { lt: BigInt(cursor) } } : {}),
+      ...(cursorId ? { id: { lt: cursorId } } : {}),
     };
 
     const [items, unreadCount] = await Promise.all([

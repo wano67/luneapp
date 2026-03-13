@@ -7,7 +7,7 @@ import { badRequest, withIdNoStore } from '@/server/http/apiUtils';
 import { ensureDelegate } from '@/server/http/delegates';
 import { parseCentsInput, parseEuroToCents } from '@/lib/money';
 import { addMonths, enumerateMonthlyDates } from '@/server/finances/recurring';
-import { parseIdOpt, parseDateOpt } from '@/server/http/parsers';
+import { parseIdOpt, parseDateOpt, parseCursorOpt } from '@/server/http/parsers';
 import { computeVat } from '@/config/pcg';
 import { upsertLedgerForFinance } from '@/server/services/financeToLedger';
 import { categorizeEntry } from '@/server/services/ocr';
@@ -286,8 +286,7 @@ export const GET = withBusinessRoute({ minRole: 'VIEWER' }, async (ctx, request)
   // Pagination
   const limitParam = searchParams.get('limit');
   const limit = Math.min(500, Math.max(1, parseInt(limitParam ?? '200', 10) || 200));
-  const cursorParam = searchParams.get('cursor');
-  const cursorId = cursorParam && /^\d+$/.test(cursorParam) ? BigInt(cursorParam) : null;
+  const cursorId = parseCursorOpt(searchParams.get('cursor'));
 
   const finances = await prisma.finance.findMany({
     where,

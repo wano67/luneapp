@@ -5,7 +5,7 @@ import { withBusinessRoute } from '@/server/http/routeHandler';
 import { jsonb, jsonbCreated } from '@/server/http/json';
 import { badRequest } from '@/server/http/apiUtils';
 import { ensureDelegate } from '@/server/http/delegates';
-import { parseIdOpt } from '@/server/http/parsers';
+import { parseIdOpt, parseCursorOpt } from '@/server/http/parsers';
 import { serializeTask } from '@/server/http/serializeTask';
 import { notifyTaskAssigned, notifyPoleAssigned } from '@/server/services/notifications';
 
@@ -51,8 +51,7 @@ export const GET = withBusinessRoute<{ businessId: string }>(
     // Pagination
     const limitParam = searchParams.get('limit');
     const limit = Math.min(500, Math.max(1, parseInt(limitParam ?? '200', 10) || 200));
-    const cursorParam = searchParams.get('cursor');
-    const cursorId = cursorParam && /^\d+$/.test(cursorParam) ? BigInt(cursorParam) : null;
+    const cursorId = parseCursorOpt(searchParams.get('cursor'));
 
     const tasks = await prisma.task.findMany({
       where: {

@@ -10,18 +10,17 @@ function serialize(a: {
   accessLevel: string; expiresAt: Date | null; revokedAt: Date | null;
   lastAccessAt: Date | null; createdAt: Date;
   accountant?: { firstName: string | null; lastName: string | null; email: string } | null;
-}) {
+}, exposeToken = false) {
   return {
     id: a.id.toString(),
     accountantUserId: a.accountantUserId.toString(),
-    token: a.token,
+    ...(exposeToken ? { token: a.token, portalUrl: `/accountant/${a.token}` } : {}),
     accessLevel: a.accessLevel,
     accountantName: a.accountant ? `${a.accountant.firstName ?? ''} ${a.accountant.lastName ?? ''}`.trim() || a.accountant.email : null,
     accountantEmail: a.accountant?.email ?? null,
     expiresAt: a.expiresAt?.toISOString() ?? null,
     revokedAt: a.revokedAt?.toISOString() ?? null,
     lastAccessAt: a.lastAccessAt?.toISOString() ?? null,
-    portalUrl: `/accountant/${a.token}`,
     createdAt: a.createdAt.toISOString(),
   };
 }
@@ -41,7 +40,7 @@ export const GET = withBusinessRoute<{ businessId: string }>(
       include,
       orderBy: { createdAt: 'desc' },
     });
-    return jsonb({ items: items.map(serialize) }, ctx.requestId);
+    return jsonb({ items: items.map((a) => serialize(a)) }, ctx.requestId);
   },
 );
 
@@ -88,6 +87,6 @@ export const POST = withBusinessRoute<{ businessId: string }>(
       include,
     });
 
-    return jsonbCreated({ item: serialize(item) }, ctx.requestId);
+    return jsonbCreated({ item: serialize(item, true) }, ctx.requestId);
   },
 );

@@ -7,7 +7,7 @@ import {
   ProspectStatus,
 } from '@/generated/prisma';
 import { withBusinessRoute } from '@/server/http/routeHandler';
-import { parseDateOpt, parseStr } from '@/server/http/parsers';
+import { parseDateOpt, parseStr, parseCursorOpt } from '@/server/http/parsers';
 import { jsonb, jsonbCreated } from '@/server/http/json';
 import { badRequest, isRecord, withIdNoStore } from '@/server/http/apiUtils';
 import { ensureDelegate } from '@/server/http/delegates';
@@ -77,8 +77,7 @@ export const GET = withBusinessRoute({ minRole: 'VIEWER' }, async (ctx, request)
   // Pagination
   const limitParam = searchParams.get('limit');
   const limit = Math.min(200, Math.max(1, parseInt(limitParam ?? '100', 10) || 100));
-  const cursorParam = searchParams.get('cursor');
-  const cursorId = cursorParam && /^\d+$/.test(cursorParam) ? BigInt(cursorParam) : null;
+  const cursorId = parseCursorOpt(searchParams.get('cursor'));
 
   const prospects = await prisma.prospect.findMany({
     where,

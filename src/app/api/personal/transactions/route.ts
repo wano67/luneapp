@@ -43,8 +43,12 @@ function parseCursor(cursor: string): { date: Date; id: bigint } | null {
   if (!dateStr || !idStr) return null;
   const d = new Date(dateStr);
   if (Number.isNaN(d.getTime())) return null;
-  if (!/^\d+$/.test(idStr)) return null;
-  return { date: d, id: BigInt(idStr) };
+  if (!/^\d{1,19}$/.test(idStr)) return null;
+  try {
+    return { date: d, id: BigInt(idStr) };
+  } catch {
+    return null;
+  }
 }
 
 function makeCursor(t: { date: Date; id: bigint }) {

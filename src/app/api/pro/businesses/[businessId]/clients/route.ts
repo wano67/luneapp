@@ -1,6 +1,6 @@
 import { prisma } from '@/server/db/client';
 import { withBusinessRoute } from '@/server/http/routeHandler';
-import { parseIdOpt, parseStr } from '@/server/http/parsers';
+import { parseIdOpt, parseStr, parseCursorOpt } from '@/server/http/parsers';
 import { jsonb, jsonbCreated } from '@/server/http/json';
 import { badRequest, withIdNoStore } from '@/server/http/apiUtils';
 import { ClientStatus, LeadSource } from '@/generated/prisma';
@@ -59,8 +59,7 @@ export const GET = withBusinessRoute({ minRole: 'VIEWER' }, async (ctx, req) => 
   // Pagination
   const limitParam = searchParams.get('limit');
   const limit = Math.min(200, Math.max(1, parseInt(limitParam ?? '100', 10) || 100));
-  const cursorParam = searchParams.get('cursor');
-  const cursorId = cursorParam && /^\d+$/.test(cursorParam) ? BigInt(cursorParam) : null;
+  const cursorId = parseCursorOpt(searchParams.get('cursor'));
 
   const where = {
     businessId: ctx.businessId,

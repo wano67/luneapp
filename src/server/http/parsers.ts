@@ -144,6 +144,20 @@ export function parseBool(value: unknown): boolean {
 }
 
 // ---------------------------------------------------------------------------
+// Cursor (pagination)
+// ---------------------------------------------------------------------------
+
+/** Parse un cursor string en BigInt. Retourne null si invalide. */
+export function parseCursorOpt(value: string | null | undefined): bigint | null {
+  if (!value || !/^\d{1,19}$/.test(value)) return null;
+  try {
+    return BigInt(value);
+  } catch {
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // IDs array (pour bulk operations)
 // ---------------------------------------------------------------------------
 

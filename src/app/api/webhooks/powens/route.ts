@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createHmac } from 'crypto';
+import { createHmac, timingSafeEqual } from 'crypto';
 import { prisma } from '@/server/db/client';
+import { rateLimit, makeIpKey } from '@/server/security/rateLimit';
 import { syncPowensData } from '@/server/services/powensSync';
 
 /**
@@ -8,6 +9,9 @@ import { syncPowensData } from '@/server/services/powensSync';
  * Vérifie la signature HMAC-SHA256 du payload.
  */
 export async function POST(req: NextRequest) {
+  const rl = rateLimit(req, { key: makeIpKey(req, 'webhook:powens'), limit: 120, windowMs: 60_000 });
+  if (rl) return rl;
+
   const secret = process.env.POWENS_WEBHOOK_SECRET;
   if (!secret) {
     console.error('[webhook:powens] POWENS_WEBHOOK_SECRET non configuré');
@@ -21,7 +25,7 @@ export async function POST(req: NextRequest) {
   const signature = req.headers.get('powens-signature') || req.headers.get('biapi-signature') || '';
   const expected = createHmac('sha256', secret).update(rawBody).digest('hex');
 
-  if (!signature || signature !== expected) {
+  if (!signature || signature.length !== expected.length || !timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) {
     console.warn('[webhook:powens] Signature invalide');
     return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
   }

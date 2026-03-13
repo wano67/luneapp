@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { withNoStore, assertSameOrigin } from '@/server/security/csrf';
 import { getRequestId, withRequestId, badRequest } from '@/server/http/apiUtils';
+import { rateLimit, makeIpKey } from '@/server/security/rateLimit';
 
 const UA =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0 Safari/537.36';
@@ -216,6 +217,10 @@ async function findLogo(url: URL, signal?: AbortSignal): Promise<LogoResult | nu
 
 export async function GET(request: NextRequest) {
   const requestId = getRequestId(request);
+
+  const rl = rateLimit(request, { key: makeIpKey(request, 'logo'), limit: 30, windowMs: 60_000 });
+  if (rl) return rl;
+
   const csrf = assertSameOrigin(request);
   if (csrf) return withNoStore(withRequestId(csrf, requestId));
 
