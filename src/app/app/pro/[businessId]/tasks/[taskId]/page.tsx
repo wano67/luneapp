@@ -1,7 +1,7 @@
 // src/app/app/pro/[businessId]/tasks/[taskId]/page.tsx
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { Card } from '@/components/ui/card';
@@ -15,57 +15,11 @@ import { ProPageShell } from '@/components/pro/ProPageShell';
 import { Check, Trash2, Plus, X, Calendar, User, FolderOpen, HelpCircle, AlertTriangle, Users, Paperclip, FileText, Upload, Download, StickyNote } from 'lucide-react';
 import { TASK_STATUS_OPTIONS, getTaskStatusBadgeClasses } from '@/lib/taskStatusUi';
 import { fmtDate } from '@/lib/format';
-
-type Task = {
-  id: string;
-  businessId: string;
-  projectId: string | null;
-  projectName: string | null;
-  parentTaskId: string | null;
-  assigneeUserId: string | null;
-  assigneeEmail: string | null;
-  assigneeName: string | null;
-  title: string;
-  status: string;
-  dueDate: string | null;
-  notes: string | null;
-  progress: number;
-  isBlocked: boolean;
-  blockedReason: string | null;
-  createdAt: string;
-  updatedAt: string;
-};
-
-type ChecklistItem = {
-  id: string;
-  title: string;
-  position: number;
-  isCompleted: boolean;
-  completedAt: string | null;
-  completedBy: { id: string; name: string | null; email: string | null } | null;
-  createdAt: string;
-  updatedAt: string;
-};
-
-type TaskDocItem = { id: string; title: string; filename: string; mimeType: string; sizeBytes: number; createdAt: string };
-
-type TaskDetailResponse = { item: Task };
-type ChecklistResponse = { items: ChecklistItem[] };
-type TeamMember = {
-  userId: string;
-  membershipId: string;
-  name: string | null;
-  email: string;
-  role: string;
-  organizationUnit: { id: string; name: string } | null;
-};
-type ProjectOption = { id: string; name: string };
-type ProjectMember = {
-  userId: string;
-  name: string | null;
-  email: string;
-  implicit: boolean;
-};
+import type { TeamMember } from './useTaskDetail';
+import { useTaskDetail } from './useTaskDetail';
+import { useTaskForm } from './useTaskForm';
+import { useTaskChecklist } from './useTaskChecklist';
+import { useTaskDocuments } from './useTaskDocuments';
 
 export default function TaskDetailPage() {
   const params = useParams();
@@ -77,200 +31,67 @@ export default function TaskDetailPage() {
   const activeCtx = useActiveBusiness({ optional: true });
   const role = activeCtx?.activeBusiness?.role;
   const isAdmin = role === 'ADMIN' || role === 'OWNER';
-  const [myUserId, setMyUserId] = useState('');
   const canChangeStatus = role === 'ADMIN' || role === 'OWNER' || role === 'MEMBER';
 
-  const [task, setTask] = useState<Task | null>(null);
-  const [checklistItems, setChecklistItems] = useState<ChecklistItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // ─── Hooks ──────────────────────────────────────────────────────────
+  const {
+    task,
+    loading,
+    error,
+    myUserId,
+    teamMembers,
+    projectMembers,
+    projects,
+    checklistItems,
+    loadChecklist,
+    patchTask,
+  } = useTaskDetail(businessId, taskId, isAdmin);
 
-  // Edit states
-  const [editingTitle, setEditingTitle] = useState(false);
-  const [titleDraft, setTitleDraft] = useState('');
-  const [saving, setSaving] = useState(false);
-  const titleInputRef = useRef<HTMLInputElement>(null);
+  const {
+    editingTitle,
+    setEditingTitle,
+    titleDraft,
+    setTitleDraft,
+    saving,
+    titleInputRef,
+    editingNotes,
+    setEditingNotes,
+    notesDraft,
+    setNotesDraft,
+    startEditTitle,
+    saveTitle,
+    handleStatusChange,
+    handleDueDateChange,
+    handleAssigneeChange,
+    handleProjectChange,
+    handleUnblock,
+    startEditNotes,
+    saveNotes,
+  } = useTaskForm(task, isAdmin, patchTask);
 
-  // Checklist
-  const [checklistTitle, setChecklistTitle] = useState('');
-  const [checklistSaving, setChecklistSaving] = useState(false);
+  const {
+    checklistTitle,
+    setChecklistTitle,
+    checklistSaving,
+    checklistSorted,
+    checklistDone,
+    checklistTotal,
+    handleAddChecklistItem,
+    handleToggleChecklistItem,
+    handleDeleteChecklistItem,
+  } = useTaskChecklist(businessId, taskId, isAdmin, checklistItems, loadChecklist);
 
-  // Notes
-  const [editingNotes, setEditingNotes] = useState(false);
-  const [notesDraft, setNotesDraft] = useState('');
+  const {
+    taskDocs,
+    docUploading,
+    fileInputRef,
+    handleDocUpload,
+    handleDocDelete,
+  } = useTaskDocuments(businessId, task);
 
-  // Delete
+  // ─── Delete modal (simple toggle, kept in page) ────────────────────
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
-
-  // Help request
-  const [helpOpen, setHelpOpen] = useState(false);
-  const [helpMessage, setHelpMessage] = useState('');
-  const [helpRecipient, setHelpRecipient] = useState('');
-  const [helpIsProjectGroup, setHelpIsProjectGroup] = useState(false);
-  const [helpSending, setHelpSending] = useState(false);
-
-  // Documents
-  const [taskDocs, setTaskDocs] = useState<TaskDocItem[]>([]);
-  const [docUploading, setDocUploading] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // Dropdown data
-  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
-  const [projectMembers, setProjectMembers] = useState<ProjectMember[]>([]);
-  const [projects, setProjects] = useState<ProjectOption[]>([]);
-
-  // ─── Load task ──────────────────────────────────────────────────────
-  const loadChecklist = useCallback(
-    async (signal?: AbortSignal) => {
-      const res = await fetchJson<ChecklistResponse>(
-        `/api/pro/businesses/${businessId}/tasks/${taskId}/checklist`,
-        {},
-        signal,
-      );
-      if (res.ok && res.data) setChecklistItems(res.data.items ?? []);
-    },
-    [businessId, taskId],
-  );
-
-  useEffect(() => {
-    const controller = new AbortController();
-    async function load() {
-      try {
-        setLoading(true);
-        setError(null);
-        const res = await fetchJson<TaskDetailResponse>(
-          `/api/pro/businesses/${businessId}/tasks/${taskId}`,
-          {},
-          controller.signal,
-        );
-        if (controller.signal.aborted) return;
-        if (res.status === 401) {
-          window.location.href = `/login?from=${encodeURIComponent(window.location.pathname)}`;
-          return;
-        }
-        if (!res.ok || !res.data) {
-          setError(res.error ?? 'Tache introuvable.');
-          setTask(null);
-          return;
-        }
-        setTask(res.data.item);
-        void loadChecklist(controller.signal);
-      } catch {
-        if (!controller.signal.aborted) setError('Impossible de charger la tache.');
-      } finally {
-        if (!controller.signal.aborted) setLoading(false);
-      }
-    }
-    void load();
-    return () => controller.abort();
-  }, [businessId, taskId, loadChecklist]);
-
-  // Load current user ID
-  useEffect(() => {
-    fetchJson<{ user: { id: string } }>('/api/auth/me').then((res) => {
-      if (res.ok && res.data?.user?.id) setMyUserId(String(res.data.user.id));
-    });
-  }, []);
-
-  // Load team members (for everyone — needed for help request)
-  useEffect(() => {
-    if (!businessId) return;
-    const controller = new AbortController();
-    fetchJson<{ items: TeamMember[] }>(
-      `/api/pro/businesses/${businessId}/members`,
-      {},
-      controller.signal,
-    ).then((res) => {
-      if (res.ok && res.data) setTeamMembers(res.data.items);
-    });
-    return () => controller.abort();
-  }, [businessId]);
-
-  // Load projects (admin only)
-  useEffect(() => {
-    if (!businessId || !isAdmin) return;
-    const controller = new AbortController();
-    fetchJson<{ items: ProjectOption[] }>(
-      `/api/pro/businesses/${businessId}/projects?scope=ACTIVE`,
-      {},
-      controller.signal,
-    ).then((res) => {
-      if (res.ok && res.data) setProjects(res.data.items);
-    });
-    return () => controller.abort();
-  }, [businessId, isAdmin]);
-
-  // Load project members when task has a project
-  useEffect(() => {
-    if (!businessId || !task?.projectId) return;
-    const controller = new AbortController();
-    fetchJson<{ items: ProjectMember[] }>(
-      `/api/pro/businesses/${businessId}/projects/${task.projectId}/members`,
-      {},
-      controller.signal,
-    ).then((res) => {
-      if (res.ok && res.data) setProjectMembers(res.data.items);
-    });
-    return () => controller.abort();
-  }, [businessId, task?.projectId]);
-
-  // ─── PATCH helper ──────────────────────────────────────────────────
-  const patchTask = useCallback(
-    async (payload: Record<string, unknown>) => {
-      setSaving(true);
-      const res = await fetchJson<TaskDetailResponse>(
-        `/api/pro/businesses/${businessId}/tasks/${taskId}`,
-        {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        },
-      );
-      if (res.ok && res.data) setTask(res.data.item);
-      setSaving(false);
-      return res.ok;
-    },
-    [businessId, taskId],
-  );
-
-  // ─── Handlers ──────────────────────────────────────────────────────
-  function startEditTitle() {
-    if (!isAdmin || !task) return;
-    setTitleDraft(task.title);
-    setEditingTitle(true);
-    setTimeout(() => titleInputRef.current?.focus(), 0);
-  }
-
-  async function saveTitle() {
-    const trimmed = titleDraft.trim();
-    if (!trimmed || trimmed === task?.title) {
-      setEditingTitle(false);
-      return;
-    }
-    await patchTask({ title: trimmed });
-    setEditingTitle(false);
-  }
-
-  async function handleStatusChange(newStatus: string) {
-    if (!canChangeStatus) return;
-    await patchTask({ status: newStatus });
-  }
-
-  async function handleDueDateChange(value: string) {
-    if (!isAdmin) return;
-    await patchTask({ dueDate: value ? new Date(value).toISOString() : null });
-  }
-
-  async function handleAssigneeChange(userId: string) {
-    if (!isAdmin) return;
-    await patchTask({ assigneeUserId: userId || null });
-  }
-
-  async function handleProjectChange(projectId: string) {
-    if (!isAdmin) return;
-    await patchTask({ projectId: projectId || null });
-  }
 
   async function handleDelete() {
     setDeleting(true);
@@ -284,27 +105,13 @@ export default function TaskDetailPage() {
     }
   }
 
-  async function handleUnblock() {
-    await patchTask({ isBlocked: false, blockedReason: null });
-  }
+  // ─── Help request modal (simple toggle, kept in page) ──────────────
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [helpMessage, setHelpMessage] = useState('');
+  const [helpRecipient, setHelpRecipient] = useState('');
+  const [helpIsProjectGroup, setHelpIsProjectGroup] = useState(false);
+  const [helpSending, setHelpSending] = useState(false);
 
-  function startEditNotes() {
-    if (!isAdmin || !task) return;
-    setNotesDraft(task.notes ?? '');
-    setEditingNotes(true);
-  }
-
-  async function saveNotes() {
-    const trimmed = notesDraft.trim();
-    if (trimmed === (task?.notes ?? '')) {
-      setEditingNotes(false);
-      return;
-    }
-    await patchTask({ notes: trimmed || null });
-    setEditingNotes(false);
-  }
-
-  // ─── Help request ──────────────────────────────────────────────────
   async function handleSendHelp() {
     if ((!helpRecipient && !helpIsProjectGroup) || helpSending) return;
     setHelpSending(true);
@@ -388,86 +195,6 @@ export default function TaskDetailPage() {
     setHelpIsProjectGroup(false);
   }
 
-  // ─── Checklist handlers ────────────────────────────────────────────
-  async function handleAddChecklistItem() {
-    if (!isAdmin || checklistSaving) return;
-    const title = checklistTitle.trim();
-    if (!title) return;
-    setChecklistSaving(true);
-    const res = await fetchJson<{ item: ChecklistItem }>(
-      `/api/pro/businesses/${businessId}/tasks/${taskId}/checklist`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title }),
-      },
-    );
-    if (res.ok) {
-      setChecklistTitle('');
-      await loadChecklist();
-    }
-    setChecklistSaving(false);
-  }
-
-  async function handleToggleChecklistItem(item: ChecklistItem, nextValue: boolean) {
-    if (!isAdmin) return;
-    await fetchJson(
-      `/api/pro/businesses/${businessId}/tasks/${taskId}/checklist/${item.id}`,
-      {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ isCompleted: nextValue }),
-      },
-    );
-    await loadChecklist();
-  }
-
-  async function handleDeleteChecklistItem(itemId: string) {
-    if (!isAdmin) return;
-    await fetchJson(
-      `/api/pro/businesses/${businessId}/tasks/${taskId}/checklist/${itemId}`,
-      { method: 'DELETE' },
-    );
-    await loadChecklist();
-  }
-
-  // ─── Document handlers ───────────────────────────────────────────────
-  const loadTaskDocs = useCallback(async () => {
-    if (!task?.projectId) { setTaskDocs([]); return; }
-    const res = await fetchJson<{ items: TaskDocItem[] }>(
-      `/api/pro/businesses/${businessId}/projects/${task.projectId}/documents?taskId=${task.id}`,
-    );
-    if (res.ok && res.data) setTaskDocs(res.data.items);
-  }, [businessId, task?.id, task?.projectId]);
-
-  useEffect(() => { void loadTaskDocs(); }, [loadTaskDocs]);
-
-  async function handleDocUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file || !task?.projectId) return;
-    setDocUploading(true);
-    const fd = new FormData();
-    fd.append('file', file);
-    fd.append('title', file.name);
-    fd.append('taskId', task.id);
-    await fetchJson(
-      `/api/pro/businesses/${businessId}/projects/${task.projectId}/documents`,
-      { method: 'POST', body: fd },
-    );
-    setDocUploading(false);
-    if (fileInputRef.current) fileInputRef.current.value = '';
-    await loadTaskDocs();
-  }
-
-  async function handleDocDelete(docId: string) {
-    if (!task?.projectId) return;
-    await fetchJson(
-      `/api/pro/businesses/${businessId}/projects/${task.projectId}/documents/${docId}`,
-      { method: 'DELETE' },
-    );
-    await loadTaskDocs();
-  }
-
   // ─── Help modal: group members ─────────────────────────────────────
   function getHelpRecipients() {
     const otherMembers = teamMembers.filter((m) => m.userId !== myUserId);
@@ -526,9 +253,6 @@ export default function TaskDetailPage() {
   }
 
   const isDone = task.status === 'DONE';
-  const checklistSorted = [...checklistItems].sort((a, b) => a.position - b.position);
-  const checklistDone = checklistItems.filter((i) => i.isCompleted).length;
-  const checklistTotal = checklistItems.length;
   const dueDateValue = task.dueDate ? task.dueDate.slice(0, 10) : '';
   const { inProject, byPole, other } = getHelpRecipients();
 

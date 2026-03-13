@@ -13,6 +13,7 @@ export const GET = withBusinessRoute<{ businessId: string }>(
     const fromDate = parseDateOpt(searchParams.get('from'));
     const toDate = parseDateOpt(searchParams.get('to'));
 
+    const MAX_ENTRIES = 5000;
     const entries = await prisma.ledgerEntry.findMany({
       where: {
         businessId: businessIdBigInt,
@@ -27,6 +28,7 @@ export const GET = withBusinessRoute<{ businessId: string }>(
       },
       include: { lines: true },
       orderBy: [{ date: 'asc' }, { id: 'asc' }],
+      take: MAX_ENTRIES,
     });
 
     // Group lines by accountCode

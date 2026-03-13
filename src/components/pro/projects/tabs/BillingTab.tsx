@@ -20,95 +20,19 @@ import {
 import { BillingQuotesSection } from '@/components/pro/projects/billing/BillingQuotesSection';
 import { BillingInvoicesSection } from '@/components/pro/projects/billing/BillingInvoicesSection';
 import { BillingServiceCard } from '@/components/pro/projects/billing/BillingServiceCard';
-import type { ServiceDraft, PricingLine } from '@/components/pro/projects/billing/BillingServiceCard';
+import type { ServiceDraft } from '@/components/pro/projects/billing/BillingServiceCard';
 import type { StatusPillTone } from '@/components/pro/projects/workspace-ui';
-import type { SummaryTotals } from '@/components/pro/projects/hooks/useBillingComputed';
-import type {
-  ServiceItem,
-  TaskItem,
-  MemberItem,
-  QuoteItem,
-  InvoiceItem,
-} from '@/components/pro/projects/hooks/useProjectDataLoaders';
+import type { QuoteItem, InvoiceItem } from '@/components/pro/projects/hooks/useProjectDataLoaders';
+import { useBillingContext } from '@/components/pro/projects/tabs/BillingContext';
 
-// ─── Local types ─────────────────────────────────────────────────────────────
-
-type LegalBlocks = {
-  filled: number;
-  total: number;
-  blocks: Array<{ label: string; value?: string | null }>;
-};
-
-// ─── Props ────────────────────────────────────────────────────────────────────
+// ─── Handler-only Props ──────────────────────────────────────────────────────
 
 export type BillingTabProps = {
-  // Status
-  billingError: string | null;
-  billingInfo: string | null;
-  isAdmin: boolean;
-  isBillingEmpty: boolean;
-  businessId: string;
-
-  // Summary
-  summaryTotals: SummaryTotals;
-  depositPercentLabel: string;
-  depositPaidLabel: string;
-  canEditDepositPaidDate: boolean;
-  alreadyPaidCents: number;
-  alreadyInvoicedCents: number;
-  remainingToInvoiceCents: number;
-  remainingToCollectCents: number;
-  vatEnabled: boolean;
-  billingSettingsPaymentTermsDays: number | null | undefined;
-  showSummaryDetails: boolean;
-  projectQuoteStatus: string | null | undefined;
-  projectDepositStatus: string | null | undefined;
-  creatingQuote: boolean;
-
-  // Prestations
-  prestationsDraft: string;
-  prestationsSaving: boolean;
-  prestationsDirty: boolean;
-  prestationsError: string | null;
-
-  // Services
-  services: ServiceItem[];
-  pricingTotals: { missingCount: number; totalCents: number };
-  missingPriceNames: string[];
-  serviceDrafts: Record<string, ServiceDraft>;
-  lineErrors: Record<string, string>;
-  lineSavingId: string | null;
-  dragOverServiceId: string | null;
-  draggingServiceId: string | null;
-  pricingByServiceId: Map<string, PricingLine>;
-  catalogDurationById: Map<string, number | null>;
-  tasksByServiceId: Map<string, TaskItem[]>;
-  openServiceTasks: Record<string, boolean>;
-  openNotes: Record<string, boolean>;
-  templatesApplying: Record<string, boolean>;
-  recurringInvoiceActionId: string | null;
-  reordering: boolean;
-  members: MemberItem[];
-  taskUpdating: Record<string, boolean>;
+  // State setters (needed for inline callbacks in service cards)
   setServiceDrafts: Dispatch<SetStateAction<Record<string, ServiceDraft>>>;
   setLineErrors: Dispatch<SetStateAction<Record<string, string>>>;
   setOpenNotes: Dispatch<SetStateAction<Record<string, boolean>>>;
   setOpenServiceTasks: Dispatch<SetStateAction<Record<string, boolean>>>;
-
-  // Quotes
-  quotes: QuoteItem[];
-  quoteActionId: string | null;
-  invoiceActionId: string | null;
-  invoiceByQuoteId: Map<string, string>;
-  billingReferenceId: string | null;
-  referenceUpdatingId: string | null;
-
-  // Invoices
-  invoices: InvoiceItem[];
-
-  // Legal
-  legalConfigured: boolean;
-  legalBlocks: LegalBlocks;
 
   // Handlers — summary
   onCreateQuote: () => void;
@@ -196,60 +120,10 @@ export function invoiceRowTone(status: string): StatusPillTone {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function BillingTab({
-  billingError,
-  billingInfo,
-  isAdmin,
-  isBillingEmpty,
-  businessId,
-  summaryTotals,
-  depositPercentLabel,
-  depositPaidLabel,
-  canEditDepositPaidDate,
-  alreadyPaidCents,
-  alreadyInvoicedCents,
-  remainingToInvoiceCents,
-  remainingToCollectCents,
-  vatEnabled,
-  billingSettingsPaymentTermsDays,
-  showSummaryDetails,
-  projectQuoteStatus,
-  projectDepositStatus,
-  creatingQuote,
-  prestationsDraft,
-  prestationsSaving,
-  prestationsDirty,
-  prestationsError,
-  services,
-  pricingTotals,
-  missingPriceNames,
-  serviceDrafts,
-  lineErrors,
-  lineSavingId,
-  dragOverServiceId,
-  draggingServiceId,
-  pricingByServiceId,
-  catalogDurationById,
-  tasksByServiceId,
-  openServiceTasks,
-  openNotes,
-  templatesApplying,
-  recurringInvoiceActionId,
-  reordering,
-  members,
-  taskUpdating,
   setServiceDrafts,
   setLineErrors,
   setOpenNotes,
   setOpenServiceTasks,
-  quotes,
-  quoteActionId,
-  invoiceActionId,
-  invoiceByQuoteId,
-  billingReferenceId,
-  referenceUpdatingId,
-  invoices,
-  legalConfigured,
-  legalBlocks,
   onCreateQuote,
   onOpenStagedInvoiceModal,
   onToggleSummaryDetails,
@@ -280,6 +154,59 @@ export function BillingTab({
   onInvoiceStatus,
   onDeleteInvoice,
 }: BillingTabProps) {
+  const {
+    billingError,
+    billingInfo,
+    isAdmin,
+    isBillingEmpty,
+    businessId,
+    summaryTotals,
+    depositPercentLabel,
+    depositPaidLabel,
+    canEditDepositPaidDate,
+    alreadyPaidCents,
+    alreadyInvoicedCents,
+    remainingToInvoiceCents,
+    remainingToCollectCents,
+    vatEnabled,
+    billingSettingsPaymentTermsDays,
+    showSummaryDetails,
+    projectQuoteStatus,
+    projectDepositStatus,
+    creatingQuote,
+    prestationsDraft,
+    prestationsSaving,
+    prestationsDirty,
+    prestationsError,
+    services,
+    pricingTotals,
+    missingPriceNames,
+    serviceDrafts,
+    lineErrors,
+    lineSavingId,
+    dragOverServiceId,
+    draggingServiceId,
+    pricingByServiceId,
+    catalogDurationById,
+    tasksByServiceId,
+    openServiceTasks,
+    openNotes,
+    templatesApplying,
+    recurringInvoiceActionId,
+    reordering,
+    members,
+    taskUpdating,
+    quotes,
+    quoteActionId,
+    invoiceActionId,
+    invoiceByQuoteId,
+    billingReferenceId,
+    referenceUpdatingId,
+    invoices,
+    legalConfigured,
+    legalBlocks,
+  } = useBillingContext();
+
   return (
     <div className="space-y-5">
       {billingError ? (

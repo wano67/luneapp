@@ -16,7 +16,8 @@ import { useServiceData } from '@/components/pro/services/hooks/useServiceData';
 import { ServicesKpis } from '@/components/pro/services/ServicesKpis';
 import { ServicesTable } from '@/components/pro/services/ServicesTable';
 import { ServiceFormModal } from '@/components/pro/services/ServiceFormModal';
-import { ServiceImportModal } from '@/components/pro/services/ServiceImportModal';
+import dynamic from 'next/dynamic';
+const ServiceImportModal = dynamic(() => import('@/components/pro/services/ServiceImportModal').then(m => m.ServiceImportModal), { ssr: false });
 import { ServiceDeleteConfirmModal } from '@/components/pro/services/ServiceDeleteConfirmModal';
 import type { ServiceItem } from '@/components/pro/services/service-types';
 

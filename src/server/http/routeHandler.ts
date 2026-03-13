@@ -63,6 +63,8 @@ type BusinessRouteOptions = {
   minRole: BusinessRole;
   /** Configuration optionnelle du rate limiting. */
   rateLimit?: RateLimitConfig;
+  /** Désactive le rate limit par défaut si true. */
+  noRateLimit?: boolean;
 };
 
 /**
@@ -116,13 +118,21 @@ export function withBusinessRoute<P extends { businessId: string } = { businessI
 
       const ctx: BusinessRouteContext = { userId, businessId, requestId, membership };
 
-      // 5. Rate limiting optionnel
+      // 5. Rate limiting (explicite ou par défaut : 120 req/min par user+route)
       if (options.rateLimit) {
         const key = options.rateLimit.key(ctx);
         const limited = rateLimit(req, {
           key,
           limit: options.rateLimit.limit,
           windowMs: options.rateLimit.windowMs,
+        });
+        if (limited) return withIdNoStore(limited, requestId);
+      } else if (!options.noRateLimit) {
+        const path = req.nextUrl.pathname;
+        const limited = rateLimit(req, {
+          key: `${path}:u${ctx.userId}`,
+          limit: 120,
+          windowMs: 60_000,
         });
         if (limited) return withIdNoStore(limited, requestId);
       }
@@ -164,6 +174,7 @@ export type PersonalRouteContext = {
 
 /**
  * Wrap une route Personal (pas de businessId).
+ * Rate limiting par défaut : 120 req/min par user + route.
  */
 export function withPersonalRoute(
   handler: (ctx: PersonalRouteContext, req: NextRequest) => Promise<NextResponse>
@@ -182,6 +193,15 @@ export function withPersonalRoute(
       } catch {
         return withIdNoStore(unauthorized(), requestId);
       }
+
+      // Rate limiting par défaut : 120 req/min par user + route
+      const path = req.nextUrl.pathname;
+      const limited = rateLimit(req, {
+        key: `${path}:u${userId}`,
+        limit: 120,
+        windowMs: 60_000,
+      });
+      if (limited) return withIdNoStore(limited, requestId);
 
       const ctx: PersonalRouteContext = { userId, requestId };
       return await handler(ctx, req);

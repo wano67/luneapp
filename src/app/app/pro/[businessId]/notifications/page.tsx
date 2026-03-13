@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { ProPageShell } from '@/components/pro/ProPageShell';
 import { Button } from '@/components/ui/button';
+import { formatRelativeDate } from '@/lib/format';
 import { Skeleton } from '@/components/ui/skeleton';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import { useToast } from '@/components/ui/toast';
@@ -48,20 +49,6 @@ const FILTER_TYPE_MAP: Record<string, string> = {
 /*  Helpers                                                                   */
 /* -------------------------------------------------------------------------- */
 
-function formatRelativeDate(dateStr: string): string {
-  const now = Date.now();
-  const then = new Date(dateStr).getTime();
-  const diffMs = now - then;
-  const diffMin = Math.floor(diffMs / 60_000);
-  if (diffMin < 1) return 'À l\'instant';
-  if (diffMin < 60) return `Il y a ${diffMin} min`;
-  const diffH = Math.floor(diffMin / 60);
-  if (diffH < 24) return `Il y a ${diffH}h`;
-  const diffD = Math.floor(diffH / 24);
-  if (diffD === 1) return 'Hier';
-  if (diffD < 7) return `Il y a ${diffD}j`;
-  return new Date(dateStr).toLocaleDateString('fr-FR');
-}
 
 function NotifIcon({ type }: { type: string }) {
   const iconProps = { size: 14, style: { color: 'white' } as React.CSSProperties };

@@ -3,6 +3,7 @@
 import type { ReactNode } from 'react';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
+import { formatRelativeDate } from '@/lib/format';
 import { ChevronDown, Search, CheckSquare, Calendar, MessageSquare, AlertTriangle, AlertOctagon, UserPlus, Users, UserSearch, X, Loader2, FileText, Receipt } from 'lucide-react';
 import {
   IconAlert,
@@ -39,23 +40,6 @@ type SearchResultItem = {
 
 /* ═══ Helpers ═══ */
 
-function formatRelativeDate(dateStr: string): string {
-  try {
-    const d = new Date(dateStr);
-    const diffMs = Date.now() - d.getTime();
-    const diffMins = Math.floor(diffMs / 60_000);
-    if (diffMins < 1) return 'À l\'instant';
-    if (diffMins < 60) return `Il y a ${diffMins} min`;
-    const diffHours = Math.floor(diffMins / 60);
-    if (diffHours < 24) return `Il y a ${diffHours}h`;
-    const diffDays = Math.floor(diffHours / 24);
-    if (diffDays === 1) return 'Hier';
-    if (diffDays <= 7) return `Il y a ${diffDays}j`;
-    return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
-  } catch {
-    return '';
-  }
-}
 
 /* ═══ Sub-page labels ═══ */
 

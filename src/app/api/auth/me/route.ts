@@ -4,6 +4,7 @@ import { AUTH_COOKIE_NAME, toPublicUser } from '@/server/auth/auth.service';
 import { verifyAuthToken } from '@/server/auth/jwt';
 import { jsonNoStore } from '@/server/security/csrf';
 import { getRequestId, withRequestId } from '@/server/http/apiUtils';
+import { rateLimit, makeIpKey } from '@/server/security/rateLimit';
 
 function unauthorized(reason?: string) {
   return NextResponse.json(
@@ -38,6 +39,10 @@ async function getUserIdFromRequest(request: NextRequest): Promise<bigint | null
 
 export async function GET(request: NextRequest) {
   const requestId = getRequestId(request);
+
+  const limited = rateLimit(request, { key: makeIpKey(request, 'auth:me'), limit: 60, windowMs: 60_000 });
+  if (limited) return limited;
+
   const userId = await getUserIdFromRequest(request);
 
   if (!userId) {

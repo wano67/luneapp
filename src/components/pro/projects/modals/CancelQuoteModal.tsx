@@ -52,7 +52,7 @@ export function CancelQuoteModal({
           <Button variant="outline" onClick={onClose}>
             Annuler
           </Button>
-          <Button onClick={onConfirm} disabled={!isAdmin || saving}>
+          <Button onClick={onConfirm} disabled={!isAdmin || saving || !editor?.reason?.trim()}>
             {saving ? 'Annulation…' : 'Confirmer'}
           </Button>
         </div>

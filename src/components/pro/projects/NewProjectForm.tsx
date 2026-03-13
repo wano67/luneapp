@@ -53,6 +53,7 @@ export default function NewProjectForm({ businessId }: Props) {
     const trimmed = name.trim();
     if (!trimmed) { setError('Le nom du projet est requis.'); return; }
     if (!clientId) { setError('Sélectionne un client.'); return; }
+    if (startDate && endDate && startDate > endDate) { setError('La date de fin doit être après la date de début.'); return; }
     setLoading(true);
     setError('');
     try {

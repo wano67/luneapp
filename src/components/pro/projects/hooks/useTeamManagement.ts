@@ -181,6 +181,9 @@ export function useTeamManagement({
       setUnitErrors('Réservé aux admins/owners.');
       return;
     }
+    const unit = organizationUnits.find((u) => u.id === unitId);
+    const label = unit?.name ?? 'ce pôle';
+    if (typeof window !== 'undefined' && !window.confirm(`Supprimer "${label}" ? Cette action est irréversible.`)) return;
     setUnitErrors(null);
     const res = await fetchJson(
       `/api/pro/businesses/${businessId}/organization/units/${unitId}`,

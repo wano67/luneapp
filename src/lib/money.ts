@@ -153,10 +153,6 @@ export function formatCents(cents: string | number | bigint, currency = 'EUR') {
   }
 }
 
-export function formatCentsExact(cents: string | number | bigint, currency = 'EUR') {
-  return formatCents(cents, currency);
-}
-
 export function absCents(cents: string) {
   try {
     const b = BigInt(cents);

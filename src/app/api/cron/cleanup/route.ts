@@ -83,33 +83,33 @@ export async function POST(req: NextRequest) {
   });
   results.expiredResetTokens = expiredResets.count;
 
-  // 7. Orphan documents (file missing from storage)
+  // 7. Orphan documents (file missing from storage) — batched
   const allDocs = await prisma.businessDocument.findMany({
     select: { id: true, storageKey: true },
+    take: 5000,
   });
-  let orphanDocCount = 0;
-  for (const doc of allDocs) {
-    const exists = await localFileExists(doc.storageKey);
-    if (!exists) {
-      await prisma.businessDocument.delete({ where: { id: doc.id } });
-      orphanDocCount++;
-    }
+  const docChecks = await Promise.all(
+    allDocs.map(async (doc) => ({ id: doc.id, exists: await localFileExists(doc.storageKey) }))
+  );
+  const orphanDocIds = docChecks.filter((d) => !d.exists).map((d) => d.id);
+  if (orphanDocIds.length > 0) {
+    await prisma.businessDocument.deleteMany({ where: { id: { in: orphanDocIds } } });
   }
-  results.orphanDocuments = orphanDocCount;
+  results.orphanDocuments = orphanDocIds.length;
 
-  // 8. Orphan product images (file missing from storage)
+  // 8. Orphan product images (file missing from storage) — batched
   const allImages = await prisma.productImage.findMany({
     select: { id: true, storageKey: true },
+    take: 5000,
   });
-  let orphanImgCount = 0;
-  for (const img of allImages) {
-    const exists = await localFileExists(img.storageKey);
-    if (!exists) {
-      await prisma.productImage.delete({ where: { id: img.id } });
-      orphanImgCount++;
-    }
+  const imgChecks = await Promise.all(
+    allImages.map(async (img) => ({ id: img.id, exists: await localFileExists(img.storageKey) }))
+  );
+  const orphanImgIds = imgChecks.filter((i) => !i.exists).map((i) => i.id);
+  if (orphanImgIds.length > 0) {
+    await prisma.productImage.deleteMany({ where: { id: { in: orphanImgIds } } });
   }
-  results.orphanProductImages = orphanImgCount;
+  results.orphanProductImages = orphanImgIds.length;
 
   return NextResponse.json({
     ok: true,

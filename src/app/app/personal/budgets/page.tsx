@@ -1,6 +1,5 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -12,571 +11,33 @@ import { Select } from '@/components/ui/select';
 import { PageContainer } from '@/components/layouts/PageContainer';
 import { PageHeader } from '@/components/layouts/PageHeader';
 import { FaviconAvatar } from '@/app/app/components/FaviconAvatar';
-import { fetchJson, getErrorMessage } from '@/lib/apiClient';
-import { formatCentsToEuroDisplay, parseEuroToCents, sanitizeEuroInput } from '@/lib/money';
+import { formatCentsToEuroDisplay, sanitizeEuroInput } from '@/lib/money';
 import { useUserPreferences } from '@/lib/hooks/useUserPreferences';
-import { revalidate, useRevalidationKey } from '@/lib/revalidate';
-import { SUBSCRIPTION_PROVIDERS, groupProvidersByCategory, type SubscriptionProvider, type SubscriptionPlan } from '@/config/commonSubscriptions';
 import { Plus, Search, ChevronLeft, Zap, PiggyBank, Pencil, Check, X, TrendingUp, TrendingDown, AlertTriangle, Calendar } from 'lucide-react';
 import Link from 'next/link';
 
-/* ═══ Types ═══ */
-
-type Category = { id: string; name: string };
-
-type Budget = {
-  id: string;
-  name: string;
-  period: 'MONTHLY' | 'YEARLY';
-  limitCents: string;
-  spentCents: string;
-  category: Category | null;
-};
-
-type Subscription = {
-  id: string;
-  name: string;
-  amountCents: string;
-  frequency: 'WEEKLY' | 'MONTHLY' | 'QUARTERLY' | 'YEARLY';
-  startDate: string;
-  endDate: string | null;
-  isActive: boolean;
-  note: string | null;
-  category: Category | null;
-};
-
-type RecurringCandidate = {
-  label: string;
-  estimatedAmountCents: string;
-  estimatedFrequency: 'WEEKLY' | 'MONTHLY' | 'QUARTERLY' | 'YEARLY';
-  occurrences: number;
-  lastSeen: string;
-  categoryId: string | null;
-  categoryName: string | null;
-};
-
-type SavingsGoalBudget = {
-  id: string;
-  name: string;
-  targetCents: string;
-  monthlyContributionCents: string | null;
-  priority: number;
-  deadline: string | null;
-};
-
-type BudgetFormState = {
-  name: string;
-  limitAmount: string;
-  period: 'MONTHLY' | 'YEARLY';
-  categoryId: string;
-};
-
-type SubFormState = {
-  name: string;
-  amount: string;
-  frequency: 'WEEKLY' | 'MONTHLY' | 'QUARTERLY' | 'YEARLY';
-  startDate: string;
-  endDate: string;
-  categoryId: string;
-  note: string;
-};
-
-const EMPTY_BUDGET_FORM: BudgetFormState = { name: '', limitAmount: '', period: 'MONTHLY', categoryId: '' };
-const EMPTY_SUB_FORM: SubFormState = {
-  name: '', amount: '', frequency: 'MONTHLY',
-  startDate: new Date().toISOString().slice(0, 10),
-  endDate: '', categoryId: '', note: '',
-};
-
-const FREQUENCY_LABELS: Record<string, string> = {
-  WEEKLY: 'Hebdo',
-  MONTHLY: 'Mensuel',
-  QUARTERLY: 'Trimestriel',
-  YEARLY: 'Annuel',
-};
-
-/* ═══ Budget Templates ═══ */
-
-type BudgetTemplate = {
-  name: string;
-  icon: string;
-  suggestedCents: number;
-  period: 'MONTHLY' | 'YEARLY';
-  categoryMatch?: string; // auto-match category name (lowercase)
-};
-
-const BUDGET_TEMPLATES: { category: string; items: BudgetTemplate[] }[] = [
-  {
-    category: 'Logement',
-    items: [
-      { name: 'Loyer', icon: '🏠', suggestedCents: 80000, period: 'MONTHLY', categoryMatch: 'loyer' },
-      { name: 'Électricité', icon: '⚡', suggestedCents: 12000, period: 'MONTHLY', categoryMatch: 'électricité' },
-      { name: 'Gaz', icon: '🔥', suggestedCents: 8000, period: 'MONTHLY', categoryMatch: 'gaz' },
-      { name: 'Eau', icon: '💧', suggestedCents: 4000, period: 'MONTHLY', categoryMatch: 'eau' },
-      { name: 'Assurance habitation', icon: '🛡️', suggestedCents: 3000, period: 'MONTHLY', categoryMatch: 'assurance' },
-    ],
-  },
-  {
-    category: 'Quotidien',
-    items: [
-      { name: 'Courses & alimentation', icon: '🛒', suggestedCents: 40000, period: 'MONTHLY', categoryMatch: 'alimentation' },
-      { name: 'Restaurants', icon: '🍽️', suggestedCents: 15000, period: 'MONTHLY', categoryMatch: 'restaurant' },
-      { name: 'Transport', icon: '🚗', suggestedCents: 15000, period: 'MONTHLY', categoryMatch: 'transport' },
-      { name: 'Essence / Carburant', icon: '⛽', suggestedCents: 12000, period: 'MONTHLY', categoryMatch: 'essence' },
-    ],
-  },
-  {
-    category: 'Loisirs & personnel',
-    items: [
-      { name: 'Loisirs & sorties', icon: '🎭', suggestedCents: 15000, period: 'MONTHLY', categoryMatch: 'loisir' },
-      { name: 'Shopping & vêtements', icon: '👕', suggestedCents: 10000, period: 'MONTHLY', categoryMatch: 'vêtement' },
-      { name: 'Abonnements', icon: '📱', suggestedCents: 5000, period: 'MONTHLY', categoryMatch: 'abonnement' },
-      { name: 'Sport & bien-être', icon: '🏋️', suggestedCents: 5000, period: 'MONTHLY', categoryMatch: 'sport' },
-    ],
-  },
-  {
-    category: 'Santé & éducation',
-    items: [
-      { name: 'Santé', icon: '🏥', suggestedCents: 8000, period: 'MONTHLY', categoryMatch: 'santé' },
-      { name: 'Mutuelle', icon: '💊', suggestedCents: 5000, period: 'MONTHLY', categoryMatch: 'mutuelle' },
-      { name: 'Éducation & formation', icon: '📚', suggestedCents: 10000, period: 'MONTHLY', categoryMatch: 'éducation' },
-    ],
-  },
-];
-
-/* ═══ Helpers ═══ */
-
-function toMonthlyCents(amountCents: string, freq: string): bigint {
-  const a = BigInt(amountCents);
-  switch (freq) {
-    case 'WEEKLY':    return (a * 52n) / 12n;
-    case 'QUARTERLY': return (a * 4n) / 12n;
-    case 'YEARLY':    return a / 12n;
-    default:          return a;
-  }
-}
-
-function toYearlyCents(amountCents: string, freq: string): bigint {
-  const a = BigInt(amountCents);
-  switch (freq) {
-    case 'WEEKLY':    return a * 52n;
-    case 'MONTHLY':   return a * 12n;
-    case 'QUARTERLY': return a * 4n;
-    default:          return a;
-  }
-}
-
-function formatLastSeen(iso: string): string {
-  try {
-    return new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(iso));
-  } catch {
-    return iso;
-  }
-}
-
-function centsToInputValue(cents: string): string {
-  try {
-    const b = BigInt(cents);
-    const abs = b < 0n ? -b : b;
-    const euros = abs / 100n;
-    const rem = abs % 100n;
-    return `${euros}.${rem.toString().padStart(2, '0')}`;
-  } catch {
-    return '';
-  }
-}
-
-function toDateInput(iso: string | null): string {
-  if (!iso) return '';
-  try {
-    return new Date(iso).toISOString().slice(0, 10);
-  } catch {
-    return '';
-  }
-}
+import { useBudgetData, toMonthlyCents, toYearlyCents, formatLastSeen, FREQUENCY_LABELS, BUDGET_TEMPLATES } from './useBudgetData';
+import { useBudgetForm } from './useBudgetForm';
+import { useSubscriptionForm } from './useSubscriptionForm';
 
 /* ═══ Page ═══ */
 
 export default function BudgetsPage() {
   const { prefs } = useUserPreferences();
 
-  // ── Budget state ──
-  const [budgets, setBudgets] = useState<Budget[]>([]);
-  const [monthExpenseCents, setMonthExpenseCents] = useState(0n);
-  const [monthIncomeCents, setMonthIncomeCents] = useState(0n);
-  const [unbudgetedExpenseCents, setUnbudgetedExpenseCents] = useState(0n);
-  const [totalFixedChargesMonthlyCents, setTotalFixedChargesMonthlyCents] = useState(0n);
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [budgetModalOpen, setBudgetModalOpen] = useState(false);
-  const [budgetEditingId, setBudgetEditingId] = useState<string | null>(null);
-  const [budgetForm, setBudgetForm] = useState<BudgetFormState>(EMPTY_BUDGET_FORM);
-  const [budgetSaving, setBudgetSaving] = useState(false);
-  const [budgetSaveError, setBudgetSaveError] = useState<string | null>(null);
-  const [budgetPickerStep, setBudgetPickerStep] = useState<'picker' | 'form'>('picker');
+  const data = useBudgetData();
 
-  // ── Subscription state ──
-  const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
-  const [subModalOpen, setSubModalOpen] = useState(false);
-  const [subEditingId, setSubEditingId] = useState<string | null>(null);
-  const [subForm, setSubForm] = useState<SubFormState>(EMPTY_SUB_FORM);
-  const [subSaving, setSubSaving] = useState(false);
-  const [subSaveError, setSubSaveError] = useState<string | null>(null);
-  const [catalogOpen, setCatalogOpen] = useState(false);
-  const [catalogSearch, setCatalogSearch] = useState('');
-  const [selectedProvider, setSelectedProvider] = useState<SubscriptionProvider | null>(null);
+  const budget = useBudgetForm({
+    categories: data.categories,
+    defaultBudgetPeriod: prefs.defaultBudgetPeriod,
+    load: data.load,
+  });
 
-  // ── Savings goals (épargne programmée) state ──
-  const [savingsGoals, setSavingsGoals] = useState<SavingsGoalBudget[]>([]);
-  const [totalSavingsBudgetCents, setTotalSavingsBudgetCents] = useState(0n);
-  const [editingSavingsId, setEditingSavingsId] = useState<string | null>(null);
-  const [editingSavingsAmount, setEditingSavingsAmount] = useState('');
-  const [savingSavingsGoal, setSavingSavingsGoal] = useState(false);
-
-  // ── Recurring detection state ──
-  const [recurring, setRecurring] = useState<RecurringCandidate[]>([]);
-  const [recurringLoading, setRecurringLoading] = useState(false);
-
-  /* ═══ Data loading ═══ */
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    const [bRes, cRes, sRes] = await Promise.all([
-      fetchJson<{
-        items: Budget[];
-        monthExpenseCents: string;
-        monthIncomeCents: string;
-        unbudgetedExpenseCents: string;
-        totalFixedChargesMonthlyCents: string;
-        savingsGoals: SavingsGoalBudget[];
-        totalSavingsBudgetCents: string;
-      }>('/api/personal/budgets'),
-      fetchJson<{ items: Category[] }>('/api/personal/categories'),
-      fetchJson<{ items: Subscription[] }>('/api/personal/subscriptions'),
-    ]);
-    if (bRes.ok && bRes.data) {
-      setBudgets(bRes.data.items ?? []);
-      setMonthExpenseCents(BigInt(String(bRes.data.monthExpenseCents ?? '0')));
-      setMonthIncomeCents(BigInt(String(bRes.data.monthIncomeCents ?? '0')));
-      setUnbudgetedExpenseCents(BigInt(String(bRes.data.unbudgetedExpenseCents ?? '0')));
-      setTotalFixedChargesMonthlyCents(BigInt(String(bRes.data.totalFixedChargesMonthlyCents ?? '0')));
-      setSavingsGoals(bRes.data.savingsGoals ?? []);
-      setTotalSavingsBudgetCents(BigInt(String(bRes.data.totalSavingsBudgetCents ?? '0')));
-    } else {
-      setError(bRes.error ?? 'Impossible de charger les budgets.');
-    }
-    if (cRes.ok && cRes.data) setCategories(cRes.data.items ?? []);
-    if (sRes.ok && sRes.data) setSubscriptions(sRes.data.items ?? []);
-    setLoading(false);
-  }, []);
-
-  const loadRecurring = useCallback(async () => {
-    setRecurringLoading(true);
-    const res = await fetchJson<{ items: RecurringCandidate[] }>('/api/personal/transactions/recurring');
-    if (res.ok && res.data) setRecurring(res.data.items ?? []);
-    setRecurringLoading(false);
-  }, []);
-
-  const walletRv = useRevalidationKey(['personal:wallet']);
-  useEffect(() => {
-    void load();
-    void loadRecurring();
-  }, [load, loadRecurring, walletRv]);
-
-  /* ═══ Budget CRUD ═══ */
-
-  function openBudgetCreate() {
-    setBudgetEditingId(null);
-    setBudgetForm({ ...EMPTY_BUDGET_FORM, period: prefs.defaultBudgetPeriod as BudgetFormState['period'] });
-    setBudgetSaveError(null);
-    setBudgetPickerStep('picker');
-    setBudgetModalOpen(true);
-  }
-
-  function openBudgetEdit(b: Budget) {
-    setBudgetEditingId(b.id);
-    setBudgetForm({
-      name: b.name,
-      limitAmount: centsToInputValue(b.limitCents),
-      period: b.period,
-      categoryId: b.category?.id ?? '',
-    });
-    setBudgetSaveError(null);
-    setBudgetPickerStep('form');
-    setBudgetModalOpen(true);
-  }
-
-  function selectBudgetTemplate(tpl: BudgetTemplate) {
-    const matchedCat = tpl.categoryMatch
-      ? categories.find((c) => c.name.toLowerCase().includes(tpl.categoryMatch!))
-      : undefined;
-    setBudgetForm({
-      name: tpl.name,
-      limitAmount: (tpl.suggestedCents / 100).toFixed(2),
-      period: tpl.period,
-      categoryId: matchedCat?.id ?? '',
-    });
-    setBudgetPickerStep('form');
-  }
-
-  function openBudgetCustom() {
-    setBudgetForm({ ...EMPTY_BUDGET_FORM, period: prefs.defaultBudgetPeriod as BudgetFormState['period'] });
-    setBudgetPickerStep('form');
-  }
-
-  async function handleBudgetSave() {
-    setBudgetSaveError(null);
-    setBudgetSaving(true);
-    try {
-      const limitCents = parseEuroToCents(budgetForm.limitAmount.replace(',', '.'));
-      if (!Number.isFinite(limitCents) || limitCents <= 0) {
-        setBudgetSaveError('Montant invalide.');
-        return;
-      }
-      if (!budgetForm.name.trim()) {
-        setBudgetSaveError('Nom requis.');
-        return;
-      }
-      const body = {
-        name: budgetForm.name.trim(),
-        limitCents,
-        period: budgetForm.period,
-        categoryId: budgetForm.categoryId || null,
-      };
-      const res = budgetEditingId
-        ? await fetchJson(`/api/personal/budgets/${budgetEditingId}`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body),
-          })
-        : await fetchJson('/api/personal/budgets', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body),
-          });
-      if (!res.ok) {
-        setBudgetSaveError(res.error ?? 'Erreur lors de la sauvegarde.');
-        return;
-      }
-      setBudgetModalOpen(false);
-      await load();
-      revalidate('personal:wallet');
-    } catch (e) {
-      setBudgetSaveError(getErrorMessage(e));
-    } finally {
-      setBudgetSaving(false);
-    }
-  }
-
-  async function handleBudgetDelete(id: string) {
-    const res = await fetchJson(`/api/personal/budgets/${id}`, { method: 'DELETE' });
-    if (res.ok) { await load(); revalidate('personal:wallet'); }
-  }
-
-  /* ═══ Subscription CRUD ═══ */
-
-  function openSubCreate() {
-    setSubEditingId(null);
-    setSubForm({ ...EMPTY_SUB_FORM, frequency: prefs.defaultSubscriptionFrequency as SubFormState['frequency'] });
-    setSubSaveError(null);
-    setSubModalOpen(true);
-  }
-
-  function openSubFromPlan(provider: SubscriptionProvider, plan: SubscriptionPlan) {
-    setCatalogOpen(false);
-    setCatalogSearch('');
-    setSelectedProvider(null);
-    setSubEditingId(null);
-    setSubForm({
-      name: provider.plans.length === 1 ? provider.name : `${provider.name} — ${plan.label}`,
-      amount: (plan.defaultCents / 100).toFixed(2),
-      frequency: plan.frequency,
-      startDate: new Date().toISOString().slice(0, 10),
-      endDate: '',
-      categoryId: '',
-      note: '',
-    });
-    setSubSaveError(null);
-    setSubModalOpen(true);
-  }
-
-  function handleProviderClick(provider: SubscriptionProvider) {
-    if (provider.plans.length === 1) {
-      openSubFromPlan(provider, provider.plans[0]);
-    } else {
-      setSelectedProvider(provider);
-    }
-  }
-
-  function openManualCreate() {
-    setCatalogOpen(false);
-    setCatalogSearch('');
-    setSelectedProvider(null);
-    openSubCreate();
-  }
-
-  function openSubEdit(s: Subscription) {
-    setSubEditingId(s.id);
-    setSubForm({
-      name: s.name,
-      amount: centsToInputValue(s.amountCents),
-      frequency: s.frequency,
-      startDate: toDateInput(s.startDate),
-      endDate: toDateInput(s.endDate),
-      categoryId: s.category?.id ?? '',
-      note: s.note ?? '',
-    });
-    setSubSaveError(null);
-    setSubModalOpen(true);
-  }
-
-  async function handleSubSave() {
-    setSubSaveError(null);
-    setSubSaving(true);
-    try {
-      const amountCents = parseEuroToCents(subForm.amount.replace(',', '.'));
-      if (!Number.isFinite(amountCents) || amountCents <= 0) {
-        setSubSaveError('Montant invalide.');
-        return;
-      }
-      if (!subForm.name.trim()) {
-        setSubSaveError('Nom requis.');
-        return;
-      }
-      if (!subForm.startDate) {
-        setSubSaveError('Date de début requise.');
-        return;
-      }
-      const body = {
-        name: subForm.name.trim(),
-        amountCents,
-        frequency: subForm.frequency,
-        startDate: subForm.startDate,
-        endDate: subForm.endDate || null,
-        categoryId: subForm.categoryId || null,
-        note: subForm.note.trim() || null,
-      };
-      const res = subEditingId
-        ? await fetchJson(`/api/personal/subscriptions/${subEditingId}`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body),
-          })
-        : await fetchJson('/api/personal/subscriptions', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body),
-          });
-      if (!res.ok) {
-        setSubSaveError(res.error ?? 'Erreur lors de la sauvegarde.');
-        return;
-      }
-      setSubModalOpen(false);
-      await load();
-      revalidate('personal:wallet');
-      void loadRecurring();
-    } catch (e) {
-      setSubSaveError(getErrorMessage(e));
-    } finally {
-      setSubSaving(false);
-    }
-  }
-
-  async function handleSubToggleActive(s: Subscription) {
-    await fetchJson(`/api/personal/subscriptions/${s.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ isActive: !s.isActive }),
-    });
-    await load();
-    revalidate('personal:wallet');
-  }
-
-  async function handleSubDelete(id: string) {
-    const res = await fetchJson(`/api/personal/subscriptions/${id}`, { method: 'DELETE' });
-    if (res.ok) { await load(); revalidate('personal:wallet'); }
-  }
-
-  /* ═══ Add recurring as subscription ═══ */
-
-  function addRecurringAsSub(r: RecurringCandidate) {
-    setSubEditingId(null);
-    setSubForm({
-      name: r.label,
-      amount: centsToInputValue(r.estimatedAmountCents),
-      frequency: r.estimatedFrequency,
-      startDate: new Date().toISOString().slice(0, 10),
-      endDate: '',
-      categoryId: r.categoryId ?? '',
-      note: '',
-    });
-    setSubSaveError(null);
-    setSubModalOpen(true);
-  }
-
-  const [linkingLabel, setLinkingLabel] = useState<string | null>(null);
-
-  async function linkRecurringToBudget(recurringLabel: string, budgetId: string) {
-    const budget = budgets.find((b) => b.id === budgetId);
-    if (!budget?.category) return;
-    setLinkingLabel(recurringLabel);
-    try {
-      const res = await fetchJson('/api/personal/transactions/categorize-group', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pattern: recurringLabel, categoryId: budget.category.id }),
-      });
-      if (res.ok) {
-        await Promise.all([load(), loadRecurring()]);
-        revalidate('personal:wallet');
-      }
-    } catch {
-      // ignore
-    } finally {
-      setLinkingLabel(null);
-    }
-  }
-
-  /* ═══ Savings contribution inline edit ═══ */
-
-  function startEditSavings(g: SavingsGoalBudget) {
-    setEditingSavingsId(g.id);
-    setEditingSavingsAmount(g.monthlyContributionCents ? centsToInputValue(g.monthlyContributionCents) : '');
-  }
-
-  async function saveSavingsContribution(goalId: string) {
-    setSavingSavingsGoal(true);
-    try {
-      const cents = editingSavingsAmount.trim()
-        ? parseEuroToCents(editingSavingsAmount.replace(',', '.'))
-        : 0;
-      if (!Number.isFinite(cents) || cents < 0) return;
-      await fetchJson(`/api/personal/savings/${goalId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ monthlyContributionCents: cents || null }),
-      });
-      setEditingSavingsId(null);
-      await load();
-      revalidate('personal:savings');
-    } finally {
-      setSavingSavingsGoal(false);
-    }
-  }
-
-  /* ═══ Computed ═══ */
-
-  const totalLimit = budgets.reduce((s, b) => s + BigInt(b.limitCents), 0n);
-  const overBudget = budgets.filter((b) => BigInt(b.spentCents) > BigInt(b.limitCents)).length;
-
-  const catalogGrouped = useMemo(() => {
-    const q = catalogSearch.toLowerCase().trim();
-    const filtered = q
-      ? SUBSCRIPTION_PROVIDERS.filter((p) => p.name.toLowerCase().includes(q) || p.category.toLowerCase().includes(q))
-      : SUBSCRIPTION_PROVIDERS;
-    return groupProvidersByCategory(filtered);
-  }, [catalogSearch]);
+  const sub = useSubscriptionForm({
+    defaultSubscriptionFrequency: prefs.defaultSubscriptionFrequency,
+    load: data.load,
+    loadRecurring: data.loadRecurring,
+  });
 
   /* ═══ Render ═══ */
 
@@ -587,44 +48,44 @@ export default function BudgetsPage() {
         subtitle="Vue d'ensemble de tes finances, budgets et charges."
         actions={
           <div className="flex gap-2">
-            <Button size="sm" variant="outline" onClick={() => setCatalogOpen(true)}>
+            <Button size="sm" variant="outline" onClick={sub.openCatalog}>
               <Plus size={14} /> Charge fixe
             </Button>
-            <Button size="sm" onClick={openBudgetCreate}>
+            <Button size="sm" onClick={budget.openBudgetCreate}>
               <Plus size={14} /> Budget
             </Button>
           </div>
         }
       />
 
-      {error ? <p className="text-sm text-[var(--danger)]">{error}</p> : null}
+      {data.error ? <p className="text-sm text-[var(--danger)]">{data.error}</p> : null}
 
       {/* ── KPIs ── */}
       <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard
           label="Revenus du mois"
-          value={formatCentsToEuroDisplay(monthIncomeCents.toString())}
-          trend={monthIncomeCents > 0n ? 'up' : undefined}
+          value={formatCentsToEuroDisplay(data.monthIncomeCents.toString())}
+          trend={data.monthIncomeCents > 0n ? 'up' : undefined}
         />
         <KpiCard
           label="Charges fixes / mois"
-          value={formatCentsToEuroDisplay(totalFixedChargesMonthlyCents.toString())}
+          value={formatCentsToEuroDisplay(data.totalFixedChargesMonthlyCents.toString())}
         />
         <KpiCard
           label="Dépensé ce mois"
-          value={formatCentsToEuroDisplay(monthExpenseCents.toString())}
-          trend={monthExpenseCents > totalLimit ? 'down' : 'up'}
+          value={formatCentsToEuroDisplay(data.monthExpenseCents.toString())}
+          trend={data.monthExpenseCents > data.totalLimit ? 'down' : 'up'}
         />
         <KpiCard
           label="Hors budget"
-          value={formatCentsToEuroDisplay(unbudgetedExpenseCents.toString())}
-          trend={unbudgetedExpenseCents > 0n ? 'down' : 'up'}
+          value={formatCentsToEuroDisplay(data.unbudgetedExpenseCents.toString())}
+          trend={data.unbudgetedExpenseCents > 0n ? 'down' : 'up'}
         />
       </div>
 
       {/* ── Synthèse mensuelle ── */}
       {(() => {
-        const disponible = monthIncomeCents - totalFixedChargesMonthlyCents - totalLimit - totalSavingsBudgetCents;
+        const disponible = data.monthIncomeCents - data.totalFixedChargesMonthlyCents - data.totalLimit - data.totalSavingsBudgetCents;
         const disponiblePositive = disponible >= 0n;
         return (
           <Card className="p-5">
@@ -637,7 +98,7 @@ export default function BudgetsPage() {
                   <TrendingUp size={14} className="text-[var(--success)]" /> Revenus
                 </span>
                 <span className="font-semibold text-[var(--success)]">
-                  +{formatCentsToEuroDisplay(monthIncomeCents.toString())}
+                  +{formatCentsToEuroDisplay(data.monthIncomeCents.toString())}
                 </span>
               </div>
               <div className="flex items-center justify-between">
@@ -645,7 +106,7 @@ export default function BudgetsPage() {
                   <TrendingDown size={14} className="text-[var(--danger)]" /> Charges fixes
                 </span>
                 <span className="font-medium text-[var(--danger)]">
-                  -{formatCentsToEuroDisplay(totalFixedChargesMonthlyCents.toString())}
+                  -{formatCentsToEuroDisplay(data.totalFixedChargesMonthlyCents.toString())}
                 </span>
               </div>
               <div className="flex items-center justify-between">
@@ -653,16 +114,16 @@ export default function BudgetsPage() {
                   <TrendingDown size={14} className="text-[var(--danger)]" /> Budgets alloués
                 </span>
                 <span className="font-medium text-[var(--danger)]">
-                  -{formatCentsToEuroDisplay(totalLimit.toString())}
+                  -{formatCentsToEuroDisplay(data.totalLimit.toString())}
                 </span>
               </div>
-              {totalSavingsBudgetCents > 0n ? (
+              {data.totalSavingsBudgetCents > 0n ? (
                 <div className="flex items-center justify-between">
                   <span className="flex items-center gap-2 text-[var(--text-secondary)]">
                     <PiggyBank size={14} className="text-[var(--primary)]" /> Épargne programmée
                   </span>
                   <span className="font-medium text-[var(--primary)]">
-                    -{formatCentsToEuroDisplay(totalSavingsBudgetCents.toString())}
+                    -{formatCentsToEuroDisplay(data.totalSavingsBudgetCents.toString())}
                   </span>
                 </div>
               ) : null}
@@ -672,13 +133,13 @@ export default function BudgetsPage() {
                   {disponiblePositive ? '' : '-'}{formatCentsToEuroDisplay((disponiblePositive ? disponible : -disponible).toString())}
                 </span>
               </div>
-              {unbudgetedExpenseCents > 0n ? (
+              {data.unbudgetedExpenseCents > 0n ? (
                 <div className="flex items-center justify-between text-xs pt-1">
                   <span className="flex items-center gap-1.5 text-[var(--warning)]">
                     <AlertTriangle size={12} /> Dépenses hors budget ce mois
                   </span>
                   <span className="font-semibold text-[var(--warning)]">
-                    {formatCentsToEuroDisplay(unbudgetedExpenseCents.toString())}
+                    {formatCentsToEuroDisplay(data.unbudgetedExpenseCents.toString())}
                   </span>
                 </div>
               ) : null}
@@ -687,26 +148,26 @@ export default function BudgetsPage() {
         );
       })()}
 
-      {overBudget > 0 ? (
+      {data.overBudget > 0 ? (
         <p className="text-sm font-semibold text-[var(--danger)]">
-          {overBudget} budget{overBudget > 1 ? 's' : ''} dépassé{overBudget > 1 ? 's' : ''}
+          {data.overBudget} budget{data.overBudget > 1 ? 's' : ''} dépassé{data.overBudget > 1 ? 's' : ''}
         </p>
       ) : null}
 
       {/* ════════════════ BUDGETS SECTION ════════════════ */}
       <section>
         <h2 className="text-lg font-semibold mb-3">Budgets</h2>
-        {loading ? (
+        {data.loading ? (
           <p className="text-sm text-[var(--text-faint)]">Chargement…</p>
-        ) : budgets.length === 0 ? (
+        ) : data.budgets.length === 0 ? (
           <EmptyState
             title="Aucun budget"
             description="Crée des enveloppes pour suivre tes catégories de dépenses."
-            action={<Button size="sm" onClick={openBudgetCreate}>Créer un budget</Button>}
+            action={<Button size="sm" onClick={budget.openBudgetCreate}>Créer un budget</Button>}
           />
         ) : (
           <div className="space-y-3">
-            {budgets.map((b) => {
+            {data.budgets.map((b) => {
               const spent = BigInt(b.spentCents);
               const limit = BigInt(b.limitCents);
               const pct = limit > 0n ? Number((spent * 100n) / limit) : 0;
@@ -727,8 +188,8 @@ export default function BudgetsPage() {
                       </p>
                     </div>
                     <div className="flex gap-2">
-                      <Button size="sm" variant="outline" onClick={() => openBudgetEdit(b)}>Modifier</Button>
-                      <Button size="sm" variant="danger" onClick={() => handleBudgetDelete(b.id)}>Supprimer</Button>
+                      <Button size="sm" variant="outline" onClick={() => budget.openBudgetEdit(b)}>Modifier</Button>
+                      <Button size="sm" variant="danger" onClick={() => budget.handleBudgetDelete(b.id)}>Supprimer</Button>
                     </div>
                   </div>
                   <div className="mt-3 h-2 overflow-hidden rounded-full bg-[var(--surface-2)]">
@@ -763,7 +224,7 @@ export default function BudgetsPage() {
             Gérer les objectifs →
           </Link>
         </div>
-        {savingsGoals.length === 0 ? (
+        {data.savingsGoals.length === 0 ? (
           <Card className="p-4">
             <p className="text-sm text-[var(--text-faint)]">
               Aucun objectif d&apos;épargne avec contribution mensuelle.{' '}
@@ -775,7 +236,7 @@ export default function BudgetsPage() {
           </Card>
         ) : (
           <div className="space-y-2">
-            {savingsGoals.map((g) => (
+            {data.savingsGoals.map((g) => (
               <Card key={g.id} className="p-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="min-w-0">
@@ -790,11 +251,11 @@ export default function BudgetsPage() {
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
-                    {editingSavingsId === g.id ? (
+                    {data.editingSavingsId === g.id ? (
                       <>
                         <Input
-                          value={editingSavingsAmount}
-                          onChange={(e) => setEditingSavingsAmount(sanitizeEuroInput(e.target.value))}
+                          value={data.editingSavingsAmount}
+                          onChange={(e) => data.onEditingSavingsAmountChange(e.target.value)}
                           placeholder="0.00"
                           className="w-24 text-right text-sm"
                         />
@@ -802,12 +263,12 @@ export default function BudgetsPage() {
                         <Button
                           size="sm"
                           variant="outline"
-                          onClick={() => void saveSavingsContribution(g.id)}
-                          disabled={savingSavingsGoal}
+                          onClick={() => void data.saveSavingsContribution(g.id)}
+                          disabled={data.savingSavingsGoal}
                         >
                           <Check size={14} />
                         </Button>
-                        <Button size="sm" variant="outline" onClick={() => setEditingSavingsId(null)}>
+                        <Button size="sm" variant="outline" onClick={data.cancelEditSavings}>
                           <X size={14} />
                         </Button>
                       </>
@@ -818,7 +279,7 @@ export default function BudgetsPage() {
                             ? `${formatCentsToEuroDisplay(g.monthlyContributionCents)} / mois`
                             : '—'}
                         </p>
-                        <Button size="sm" variant="outline" onClick={() => startEditSavings(g)}>
+                        <Button size="sm" variant="outline" onClick={() => data.startEditSavings(g)}>
                           <Pencil size={14} />
                         </Button>
                       </>
@@ -829,7 +290,7 @@ export default function BudgetsPage() {
             ))}
             <div className="flex justify-end pt-1">
               <p className="text-sm font-semibold">
-                Total : {formatCentsToEuroDisplay(totalSavingsBudgetCents.toString())} / mois
+                Total : {formatCentsToEuroDisplay(data.totalSavingsBudgetCents.toString())} / mois
               </p>
             </div>
           </div>
@@ -840,25 +301,25 @@ export default function BudgetsPage() {
       <section>
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-lg font-semibold">Charges fixes</h2>
-          <Button size="sm" variant="outline" onClick={() => setCatalogOpen(true)}>
+          <Button size="sm" variant="outline" onClick={sub.openCatalog}>
             <Plus size={14} /> Ajouter
           </Button>
         </div>
-        {loading ? (
+        {data.loading ? (
           <p className="text-sm text-[var(--text-faint)]">Chargement…</p>
-        ) : subscriptions.length === 0 ? (
+        ) : data.subscriptions.length === 0 ? (
           <EmptyState
             title="Aucune charge fixe"
             description="Ajoute tes abonnements et charges récurrentes pour calculer ta capacité d'épargne."
             action={
-              <Button size="sm" onClick={() => setCatalogOpen(true)}>
+              <Button size="sm" onClick={sub.openCatalog}>
                 Ajouter un abonnement
               </Button>
             }
           />
         ) : (
           <div className="space-y-3">
-            {subscriptions.map((s) => {
+            {data.subscriptions.map((s) => {
               const monthly = toMonthlyCents(s.amountCents, s.frequency);
               return (
                 <Card key={s.id} className="p-4" style={s.isActive ? undefined : { opacity: 0.6 }}>
@@ -878,11 +339,11 @@ export default function BudgetsPage() {
                       </p>
                     </div>
                     <div className="flex gap-2">
-                      <Button size="sm" variant="outline" onClick={() => openSubEdit(s)}>Modifier</Button>
-                      <Button size="sm" variant="outline" onClick={() => handleSubToggleActive(s)}>
+                      <Button size="sm" variant="outline" onClick={() => sub.openSubEdit(s)}>Modifier</Button>
+                      <Button size="sm" variant="outline" onClick={() => sub.handleSubToggleActive(s)}>
                         {s.isActive ? 'Désactiver' : 'Activer'}
                       </Button>
-                      <Button size="sm" variant="danger" onClick={() => handleSubDelete(s.id)}>Supprimer</Button>
+                      <Button size="sm" variant="danger" onClick={() => sub.handleSubDelete(s.id)}>Supprimer</Button>
                     </div>
                   </div>
                 </Card>
@@ -901,19 +362,19 @@ export default function BudgetsPage() {
         <p className="text-xs text-[var(--text-faint)] mb-3">
           Analyse automatique de tes transactions des 12 derniers mois. Ajoute-les en charges fixes pour mieux suivre ton budget.
         </p>
-        {recurringLoading ? (
+        {data.recurringLoading ? (
           <p className="text-sm text-[var(--text-faint)]">Analyse en cours…</p>
-        ) : recurring.length === 0 ? (
+        ) : data.recurring.length === 0 ? (
           <p className="text-sm text-[var(--text-faint)]">
             Aucune dépense récurrente détectée pour le moment.
           </p>
         ) : (
           <div className="space-y-3">
-            {recurring.map((r) => {
+            {data.recurring.map((r) => {
               const monthly = toMonthlyCents(r.estimatedAmountCents, r.estimatedFrequency);
               const yearly = toYearlyCents(r.estimatedAmountCents, r.estimatedFrequency);
-              const impactPct = monthExpenseCents > 0n
-                ? Number((monthly * 100n) / monthExpenseCents)
+              const impactPct = data.monthExpenseCents > 0n
+                ? Number((monthly * 100n) / data.monthExpenseCents)
                 : 0;
               return (
                 <Card key={r.label} className="p-4">
@@ -960,22 +421,22 @@ export default function BudgetsPage() {
                       </div>
                     </div>
                     <div className="flex flex-col gap-2 shrink-0">
-                      {budgets.filter((b) => b.category).length > 0 && (
+                      {data.budgets.filter((b) => b.category).length > 0 && (
                         <Select
                           value=""
-                          onChange={(e) => { if (e.target.value) linkRecurringToBudget(r.label, e.target.value); }}
-                          disabled={linkingLabel === r.label}
+                          onChange={(e) => { if (e.target.value) data.linkRecurringToBudget(r.label, e.target.value); }}
+                          disabled={data.linkingLabel === r.label}
                           className="h-8 w-44 rounded-lg text-xs"
                         >
                           <option value="">
-                            {linkingLabel === r.label ? 'Association…' : 'Associer à un budget'}
+                            {data.linkingLabel === r.label ? 'Association…' : 'Associer à un budget'}
                           </option>
-                          {budgets.filter((b) => b.category).map((b) => (
+                          {data.budgets.filter((b) => b.category).map((b) => (
                             <option key={b.id} value={b.id}>{b.name}</option>
                           ))}
                         </Select>
                       )}
-                      <Button size="sm" variant="outline" className="shrink-0" onClick={() => addRecurringAsSub(r)}>
+                      <Button size="sm" variant="outline" className="shrink-0" onClick={() => sub.addRecurringAsSub(r)}>
                         <Plus size={14} /> Charge fixe
                       </Button>
                     </div>
@@ -986,10 +447,10 @@ export default function BudgetsPage() {
 
             {/* Total estimé */}
             {(() => {
-              const totalMonthly = recurring.reduce(
+              const totalMonthly = data.recurring.reduce(
                 (sum, r) => sum + toMonthlyCents(r.estimatedAmountCents, r.estimatedFrequency), 0n,
               );
-              const totalYearly = recurring.reduce(
+              const totalYearly = data.recurring.reduce(
                 (sum, r) => sum + toYearlyCents(r.estimatedAmountCents, r.estimatedFrequency), 0n,
               );
               return (
@@ -1016,30 +477,30 @@ export default function BudgetsPage() {
 
       {/* ══════════ CATALOG PICKER MODAL ══════════ */}
       <Modal
-        open={catalogOpen}
-        onCloseAction={() => { setCatalogOpen(false); setCatalogSearch(''); setSelectedProvider(null); }}
-        title={selectedProvider ? selectedProvider.name : 'Ajouter une charge fixe'}
-        description={selectedProvider ? 'Choisis un abonnement.' : 'Choisis un service ou crée un abonnement personnalisé.'}
+        open={sub.catalogOpen}
+        onCloseAction={() => { sub.closeCatalog(); data.setCatalogSearch(''); }}
+        title={sub.selectedProvider ? sub.selectedProvider.name : 'Ajouter une charge fixe'}
+        description={sub.selectedProvider ? 'Choisis un abonnement.' : 'Choisis un service ou crée un abonnement personnalisé.'}
       >
-        {selectedProvider ? (
+        {sub.selectedProvider ? (
           <div className="space-y-4">
             <button
               type="button"
-              onClick={() => setSelectedProvider(null)}
+              onClick={sub.clearSelectedProvider}
               className="flex items-center gap-1 text-sm text-[var(--text-faint)] hover:text-[var(--text)] transition-colors"
             >
               <ChevronLeft size={16} /> Retour
             </button>
             <div className="flex items-center gap-3 mb-2">
-              <FaviconAvatar name={selectedProvider.name} websiteUrl={selectedProvider.websiteUrl} size={36} />
-              <p className="font-semibold">{selectedProvider.name}</p>
+              <FaviconAvatar name={sub.selectedProvider.name} websiteUrl={sub.selectedProvider.websiteUrl} size={36} />
+              <p className="font-semibold">{sub.selectedProvider.name}</p>
             </div>
             <div className="space-y-2">
-              {selectedProvider.plans.map((plan) => (
+              {sub.selectedProvider.plans.map((plan) => (
                 <button
                   key={plan.label}
                   type="button"
-                  onClick={() => openSubFromPlan(selectedProvider, plan)}
+                  onClick={() => sub.openSubFromPlan(sub.selectedProvider!, plan)}
                   className="flex items-center justify-between w-full rounded-xl border border-[var(--border)] p-4 text-left hover:bg-[var(--surface-hover)] transition-colors"
                 >
                   <p className="text-sm font-semibold">{plan.label}</p>
@@ -1055,22 +516,22 @@ export default function BudgetsPage() {
             <div className="relative">
               <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-faint)]" />
               <Input
-                value={catalogSearch}
-                onChange={(e) => setCatalogSearch(e.target.value)}
+                value={data.catalogSearch}
+                onChange={(e) => data.setCatalogSearch(e.target.value)}
                 placeholder="Rechercher un service…"
                 className="pl-9"
               />
             </div>
             <button
               type="button"
-              onClick={openManualCreate}
+              onClick={sub.openManualCreate}
               className="flex items-center gap-3 w-full rounded-xl border border-dashed border-[var(--border)] p-3 text-sm font-medium hover:bg-[var(--surface-hover)] transition-colors"
             >
               <Plus size={16} className="text-[var(--text-faint)]" />
               Saisie manuelle
             </button>
             <div className="max-h-[50vh] overflow-y-auto space-y-4">
-              {Array.from(catalogGrouped.entries()).map(([cat, providers]) => (
+              {Array.from(data.catalogGrouped.entries()).map(([cat, providers]) => (
                 <div key={cat}>
                   <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-faint)] mb-2">{cat}</p>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -1078,7 +539,7 @@ export default function BudgetsPage() {
                       <button
                         key={provider.name}
                         type="button"
-                        onClick={() => handleProviderClick(provider)}
+                        onClick={() => sub.handleProviderClick(provider)}
                         className="flex items-center gap-3 rounded-xl border border-[var(--border)] p-3 text-left hover:bg-[var(--surface-hover)] transition-colors"
                       >
                         <FaviconAvatar name={provider.name} websiteUrl={provider.websiteUrl} size={28} />
@@ -1093,7 +554,7 @@ export default function BudgetsPage() {
                   </div>
                 </div>
               ))}
-              {catalogGrouped.size === 0 ? (
+              {data.catalogGrouped.size === 0 ? (
                 <p className="text-sm text-[var(--text-faint)] text-center py-4">Aucun résultat</p>
               ) : null}
             </div>
@@ -1103,35 +564,35 @@ export default function BudgetsPage() {
 
       {/* ══════════ SUBSCRIPTION FORM MODAL ══════════ */}
       <Modal
-        open={subModalOpen}
-        onCloseAction={() => setSubModalOpen(false)}
-        title={subEditingId ? 'Modifier la charge fixe' : 'Nouvelle charge fixe'}
+        open={sub.subModalOpen}
+        onCloseAction={sub.closeSubModal}
+        title={sub.subEditingId ? 'Modifier la charge fixe' : 'Nouvelle charge fixe'}
         description="Déclare une charge fixe ou récurrente."
       >
         <div className="space-y-4">
-          {subSaveError ? <p className="text-xs text-[var(--danger)]">{subSaveError}</p> : null}
+          {sub.subSaveError ? <p className="text-xs text-[var(--danger)]">{sub.subSaveError}</p> : null}
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="col-span-2 text-sm">
               <span className="text-xs text-[var(--text-faint)]">Nom du service</span>
               <Input
-                value={subForm.name}
-                onChange={(e) => setSubForm((p) => ({ ...p, name: e.target.value }))}
+                value={sub.subForm.name}
+                onChange={(e) => sub.setSubForm((p) => ({ ...p, name: e.target.value }))}
                 placeholder="Ex: Netflix, Loyer, Assurance"
               />
             </label>
             <label className="text-sm">
               <span className="text-xs text-[var(--text-faint)]">Montant (€)</span>
               <Input
-                value={subForm.amount}
-                onChange={(e) => setSubForm((p) => ({ ...p, amount: sanitizeEuroInput(e.target.value) }))}
+                value={sub.subForm.amount}
+                onChange={(e) => sub.setSubForm((p) => ({ ...p, amount: sanitizeEuroInput(e.target.value) }))}
                 placeholder="15.99"
               />
             </label>
             <label className="text-sm">
               <span className="text-xs text-[var(--text-faint)]">Fréquence</span>
               <Select
-                value={subForm.frequency}
-                onChange={(e) => setSubForm((p) => ({ ...p, frequency: e.target.value as SubFormState['frequency'] }))}
+                value={sub.subForm.frequency}
+                onChange={(e) => sub.setSubForm((p) => ({ ...p, frequency: e.target.value as 'WEEKLY' | 'MONTHLY' | 'QUARTERLY' | 'YEARLY' }))}
               >
                 <option value="WEEKLY">Hebdomadaire</option>
                 <option value="MONTHLY">Mensuel</option>
@@ -1143,26 +604,26 @@ export default function BudgetsPage() {
               <span className="text-xs text-[var(--text-faint)]">Date de début</span>
               <Input
                 type="date"
-                value={subForm.startDate}
-                onChange={(e) => setSubForm((p) => ({ ...p, startDate: e.target.value }))}
+                value={sub.subForm.startDate}
+                onChange={(e) => sub.setSubForm((p) => ({ ...p, startDate: e.target.value }))}
               />
             </label>
             <label className="text-sm">
               <span className="text-xs text-[var(--text-faint)]">Date de fin (optionnel)</span>
               <Input
                 type="date"
-                value={subForm.endDate}
-                onChange={(e) => setSubForm((p) => ({ ...p, endDate: e.target.value }))}
+                value={sub.subForm.endDate}
+                onChange={(e) => sub.setSubForm((p) => ({ ...p, endDate: e.target.value }))}
               />
             </label>
             <label className="col-span-2 text-sm">
               <span className="text-xs text-[var(--text-faint)]">Catégorie (optionnel)</span>
               <Select
-                value={subForm.categoryId}
-                onChange={(e) => setSubForm((p) => ({ ...p, categoryId: e.target.value }))}
+                value={sub.subForm.categoryId}
+                onChange={(e) => sub.setSubForm((p) => ({ ...p, categoryId: e.target.value }))}
               >
                 <option value="">— Aucune catégorie —</option>
-                {categories.map((c) => (
+                {data.categories.map((c) => (
                   <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
               </Select>
@@ -1170,16 +631,16 @@ export default function BudgetsPage() {
             <label className="col-span-2 text-sm">
               <span className="text-xs text-[var(--text-faint)]">Note (optionnel)</span>
               <Input
-                value={subForm.note}
-                onChange={(e) => setSubForm((p) => ({ ...p, note: e.target.value }))}
+                value={sub.subForm.note}
+                onChange={(e) => sub.setSubForm((p) => ({ ...p, note: e.target.value }))}
                 placeholder="Ex: Engagement 12 mois"
               />
             </label>
           </div>
           <div className="flex justify-end gap-2">
-            <Button size="sm" variant="outline" onClick={() => setSubModalOpen(false)}>Annuler</Button>
-            <Button size="sm" onClick={handleSubSave} disabled={subSaving}>
-              {subSaving ? 'Enregistrement…' : subEditingId ? 'Enregistrer' : 'Créer'}
+            <Button size="sm" variant="outline" onClick={sub.closeSubModal}>Annuler</Button>
+            <Button size="sm" onClick={sub.handleSubSave} disabled={sub.subSaving}>
+              {sub.subSaving ? 'Enregistrement…' : sub.subEditingId ? 'Enregistrer' : 'Créer'}
             </Button>
           </div>
         </div>
@@ -1187,29 +648,29 @@ export default function BudgetsPage() {
 
       {/* ══════════ BUDGET FORM MODAL ══════════ */}
       <Modal
-        open={budgetModalOpen}
-        onCloseAction={() => setBudgetModalOpen(false)}
+        open={budget.budgetModalOpen}
+        onCloseAction={budget.closeBudgetModal}
         title={
-          budgetEditingId
+          budget.budgetEditingId
             ? 'Modifier le budget'
-            : budgetPickerStep === 'picker'
+            : budget.budgetPickerStep === 'picker'
               ? 'Nouveau budget'
-              : `Budget : ${budgetForm.name || 'Personnalisé'}`
+              : `Budget : ${budget.budgetForm.name || 'Personnalisé'}`
         }
         description={
-          budgetEditingId
+          budget.budgetEditingId
             ? 'Modifiez votre enveloppe budgétaire.'
-            : budgetPickerStep === 'picker'
+            : budget.budgetPickerStep === 'picker'
               ? 'Choisissez un type de budget ou créez le vôtre.'
               : 'Ajustez le montant et la catégorie liée.'
         }
       >
-        {budgetPickerStep === 'picker' && !budgetEditingId ? (
+        {budget.budgetPickerStep === 'picker' && !budget.budgetEditingId ? (
           <div className="space-y-4">
             {/* Custom budget button */}
             <button
               type="button"
-              onClick={openBudgetCustom}
+              onClick={budget.openBudgetCustom}
               className="flex items-center gap-3 w-full rounded-xl border border-dashed border-[var(--border)] p-3 text-sm font-medium hover:bg-[var(--surface-hover)] transition-colors"
             >
               <Plus size={16} className="text-[var(--text-faint)]" />
@@ -1225,14 +686,14 @@ export default function BudgetsPage() {
                   </p>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     {group.items.map((tpl) => {
-                      const alreadyExists = budgets.some(
+                      const alreadyExists = data.budgets.some(
                         (b) => b.name.toLowerCase() === tpl.name.toLowerCase(),
                       );
                       return (
                         <button
                           key={tpl.name}
                           type="button"
-                          onClick={() => selectBudgetTemplate(tpl)}
+                          onClick={() => budget.selectBudgetTemplate(tpl)}
                           disabled={alreadyExists}
                           className={`flex items-center gap-3 rounded-xl border border-[var(--border)] p-3 text-left transition-colors ${alreadyExists ? 'opacity-40 cursor-not-allowed' : 'hover:bg-[var(--surface-hover)]'}`}
                         >
@@ -1258,38 +719,38 @@ export default function BudgetsPage() {
           </div>
         ) : (
           <div className="space-y-4">
-            {!budgetEditingId && (
+            {!budget.budgetEditingId && (
               <button
                 type="button"
-                onClick={() => setBudgetPickerStep('picker')}
+                onClick={budget.goBackToPicker}
                 className="flex items-center gap-1 text-sm text-[var(--text-faint)] hover:text-[var(--text)] transition-colors"
               >
                 <ChevronLeft size={16} /> Retour aux suggestions
               </button>
             )}
-            {budgetSaveError ? <p className="text-xs text-[var(--danger)]">{budgetSaveError}</p> : null}
+            {budget.budgetSaveError ? <p className="text-xs text-[var(--danger)]">{budget.budgetSaveError}</p> : null}
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="col-span-2 text-sm">
                 <span className="text-xs text-[var(--text-faint)]">Nom du budget</span>
                 <Input
-                  value={budgetForm.name}
-                  onChange={(e) => setBudgetForm((p) => ({ ...p, name: e.target.value }))}
+                  value={budget.budgetForm.name}
+                  onChange={(e) => budget.setBudgetForm((p) => ({ ...p, name: e.target.value }))}
                   placeholder="Ex: Alimentation"
                 />
               </label>
               <label className="text-sm">
                 <span className="text-xs text-[var(--text-faint)]">Montant limite (€)</span>
                 <Input
-                  value={budgetForm.limitAmount}
-                  onChange={(e) => setBudgetForm((p) => ({ ...p, limitAmount: sanitizeEuroInput(e.target.value) }))}
+                  value={budget.budgetForm.limitAmount}
+                  onChange={(e) => budget.setBudgetForm((p) => ({ ...p, limitAmount: sanitizeEuroInput(e.target.value) }))}
                   placeholder="500"
                 />
               </label>
               <label className="text-sm">
                 <span className="text-xs text-[var(--text-faint)]">Période</span>
                 <Select
-                  value={budgetForm.period}
-                  onChange={(e) => setBudgetForm((p) => ({ ...p, period: e.target.value as 'MONTHLY' | 'YEARLY' }))}
+                  value={budget.budgetForm.period}
+                  onChange={(e) => budget.setBudgetForm((p) => ({ ...p, period: e.target.value as 'MONTHLY' | 'YEARLY' }))}
                 >
                   <option value="MONTHLY">Mensuel</option>
                   <option value="YEARLY">Annuel</option>
@@ -1298,20 +759,20 @@ export default function BudgetsPage() {
               <label className="col-span-2 text-sm">
                 <span className="text-xs text-[var(--text-faint)]">Catégorie liée (optionnel)</span>
                 <Select
-                  value={budgetForm.categoryId}
-                  onChange={(e) => setBudgetForm((p) => ({ ...p, categoryId: e.target.value }))}
+                  value={budget.budgetForm.categoryId}
+                  onChange={(e) => budget.setBudgetForm((p) => ({ ...p, categoryId: e.target.value }))}
                 >
                   <option value="">— Aucune catégorie —</option>
-                  {categories.map((c) => (
+                  {data.categories.map((c) => (
                     <option key={c.id} value={c.id}>{c.name}</option>
                   ))}
                 </Select>
               </label>
             </div>
             <div className="flex justify-end gap-2">
-              <Button size="sm" variant="outline" onClick={() => setBudgetModalOpen(false)}>Annuler</Button>
-              <Button size="sm" onClick={handleBudgetSave} disabled={budgetSaving}>
-                {budgetSaving ? 'Enregistrement…' : budgetEditingId ? 'Enregistrer' : 'Créer'}
+              <Button size="sm" variant="outline" onClick={budget.closeBudgetModal}>Annuler</Button>
+              <Button size="sm" onClick={budget.handleBudgetSave} disabled={budget.budgetSaving}>
+                {budget.budgetSaving ? 'Enregistrement…' : budget.budgetEditingId ? 'Enregistrer' : 'Créer'}
               </Button>
             </div>
           </div>

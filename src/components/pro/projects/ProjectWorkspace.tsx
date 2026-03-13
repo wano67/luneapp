@@ -13,6 +13,7 @@ import { useActiveBusiness } from '@/app/app/pro/ActiveBusinessProvider';
 import type { ChecklistItem } from '@/components/pro/projects/ProjectSetupChecklist';
 import { OverviewTab } from '@/components/pro/projects/tabs/OverviewTab';
 import { BillingTab } from '@/components/pro/projects/tabs/BillingTab';
+import { BillingProvider } from '@/components/pro/projects/tabs/BillingContext';
 import {
   getProjectScopeLabelFR,
   getProjectScopeVariant,
@@ -736,91 +737,94 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
       ) : null}
 
       {activeTab === 'billing' ? (
-        <BillingTab
-          billingError={billingError}
-          billingInfo={billingInfo}
-          isAdmin={isAdmin}
-          isBillingEmpty={isBillingEmpty}
-          businessId={businessId}
-          summaryTotals={summaryTotals}
-          depositPercentLabel={depositPercentLabel}
-          depositPaidLabel={depositPaidLabel}
-          canEditDepositPaidDate={canEditDepositPaidDate}
-          alreadyPaidCents={alreadyPaidCents}
-          alreadyInvoicedCents={alreadyInvoicedCents}
-          remainingToInvoiceCents={remainingToInvoiceCents}
-          remainingToCollectCents={remainingToCollectCents}
-          vatEnabled={vatEnabled}
-          billingSettingsPaymentTermsDays={billingSettings?.paymentTermsDays}
-          showSummaryDetails={showSummaryDetails}
-          projectQuoteStatus={project?.quoteStatus}
-          projectDepositStatus={project?.depositStatus}
-          creatingQuote={creatingQuote}
-          prestationsDraft={prestationsDraft}
-          prestationsSaving={prestationsSaving}
-          prestationsDirty={prestationsDirty}
-          prestationsError={prestationsError}
-          services={services}
-          pricingTotals={pricingTotals}
-          missingPriceNames={missingPriceNames}
-          serviceDrafts={serviceDrafts}
-          lineErrors={lineErrors}
-          lineSavingId={lineSavingId}
-          dragOverServiceId={dragOverServiceId}
-          draggingServiceId={draggingServiceId}
-          pricingByServiceId={pricingByServiceId}
-          catalogDurationById={catalogDurationById}
-          tasksByServiceId={tasksByServiceId}
-          openServiceTasks={openServiceTasks}
-          openNotes={openNotes}
-          templatesApplying={templatesApplying}
-          recurringInvoiceActionId={recurringInvoiceActionId}
-          reordering={reordering}
-          members={members}
-          taskUpdating={taskUpdating}
-          setServiceDrafts={setServiceDrafts}
-          setLineErrors={setLineErrors}
-          setOpenNotes={setOpenNotes}
-          setOpenServiceTasks={setOpenServiceTasks}
-          quotes={quotes}
-          quoteActionId={quoteActionId}
-          invoiceActionId={invoiceActionId}
-          invoiceByQuoteId={invoiceByQuoteId}
-          billingReferenceId={billingReferenceId}
-          referenceUpdatingId={referenceUpdatingId}
-          invoices={invoices}
-          legalConfigured={legalConfigured}
-          legalBlocks={legalBlocks}
-          onCreateQuote={handleCreateQuote}
-          onOpenStagedInvoiceModal={openStagedInvoiceModal}
-          onToggleSummaryDetails={() => setShowSummaryDetails((prev) => !prev)}
-          onOpenDepositDateModal={() => { setDateModalError(null); setDepositDateEditorOpen(true); }}
-          onPrestationsDraftChange={setPrestationsDraft}
-          onSavePrestations={handleSavePrestations}
-          onServiceDragStart={handleServiceDragStart}
-          onServiceDragOver={handleServiceDragOver}
-          onServiceDrop={handleServiceDrop}
-          onServiceDragEnd={handleServiceDragEnd}
-          onDeleteService={handleDeleteService}
-          onUpdateService={handleUpdateService}
-          onApplyServiceTemplates={handleApplyServiceTemplates}
-          onGenerateRecurringInvoice={handleGenerateRecurringInvoice}
-          onUpdateTask={updateTask}
-          onOpenQuoteWizard={openQuoteWizard}
-          onOpenAddServicesModal={() => setActiveSetupModal('services')}
-          onOpenQuoteEditor={openQuoteEditor}
-          onOpenQuoteDateModal={openQuoteDateModal}
-          onSetBillingReference={handleSetBillingReference}
-          onQuoteStatus={handleQuoteStatus}
-          onOpenCancelQuoteModal={openCancelQuoteModal}
-          onCreateInvoice={handleCreateInvoice}
-          onDeleteQuote={handleDeleteQuote}
-          onOpenPaymentModal={openPaymentModal}
-          onOpenInvoiceEditor={openInvoiceEditor}
-          onOpenInvoiceDateModal={openInvoiceDateModal}
-          onInvoiceStatus={handleInvoiceStatus}
-          onDeleteInvoice={handleDeleteInvoice}
-        />
+        <BillingProvider value={{
+          billingError,
+          billingInfo,
+          isAdmin,
+          isBillingEmpty,
+          businessId,
+          summaryTotals,
+          depositPercentLabel,
+          depositPaidLabel,
+          canEditDepositPaidDate,
+          alreadyPaidCents,
+          alreadyInvoicedCents,
+          remainingToInvoiceCents,
+          remainingToCollectCents,
+          vatEnabled,
+          billingSettingsPaymentTermsDays: billingSettings?.paymentTermsDays,
+          showSummaryDetails,
+          projectQuoteStatus: project?.quoteStatus,
+          projectDepositStatus: project?.depositStatus,
+          creatingQuote,
+          prestationsDraft,
+          prestationsSaving,
+          prestationsDirty,
+          prestationsError,
+          services,
+          pricingTotals,
+          missingPriceNames,
+          serviceDrafts,
+          lineErrors,
+          lineSavingId,
+          dragOverServiceId,
+          draggingServiceId,
+          pricingByServiceId,
+          catalogDurationById,
+          tasksByServiceId,
+          openServiceTasks,
+          openNotes,
+          templatesApplying,
+          recurringInvoiceActionId,
+          reordering,
+          members,
+          taskUpdating,
+          quotes,
+          quoteActionId,
+          invoiceActionId,
+          invoiceByQuoteId,
+          billingReferenceId,
+          referenceUpdatingId,
+          invoices,
+          legalConfigured,
+          legalBlocks,
+        }}>
+          <BillingTab
+            setServiceDrafts={setServiceDrafts}
+            setLineErrors={setLineErrors}
+            setOpenNotes={setOpenNotes}
+            setOpenServiceTasks={setOpenServiceTasks}
+            onCreateQuote={handleCreateQuote}
+            onOpenStagedInvoiceModal={openStagedInvoiceModal}
+            onToggleSummaryDetails={() => setShowSummaryDetails((prev) => !prev)}
+            onOpenDepositDateModal={() => { setDateModalError(null); setDepositDateEditorOpen(true); }}
+            onPrestationsDraftChange={setPrestationsDraft}
+            onSavePrestations={handleSavePrestations}
+            onServiceDragStart={handleServiceDragStart}
+            onServiceDragOver={handleServiceDragOver}
+            onServiceDrop={handleServiceDrop}
+            onServiceDragEnd={handleServiceDragEnd}
+            onDeleteService={handleDeleteService}
+            onUpdateService={handleUpdateService}
+            onApplyServiceTemplates={handleApplyServiceTemplates}
+            onGenerateRecurringInvoice={handleGenerateRecurringInvoice}
+            onUpdateTask={updateTask}
+            onOpenQuoteWizard={openQuoteWizard}
+            onOpenAddServicesModal={() => setActiveSetupModal('services')}
+            onOpenQuoteEditor={openQuoteEditor}
+            onOpenQuoteDateModal={openQuoteDateModal}
+            onSetBillingReference={handleSetBillingReference}
+            onQuoteStatus={handleQuoteStatus}
+            onOpenCancelQuoteModal={openCancelQuoteModal}
+            onCreateInvoice={handleCreateInvoice}
+            onDeleteQuote={handleDeleteQuote}
+            onOpenPaymentModal={openPaymentModal}
+            onOpenInvoiceEditor={openInvoiceEditor}
+            onOpenInvoiceDateModal={openInvoiceDateModal}
+            onInvoiceStatus={handleInvoiceStatus}
+            onDeleteInvoice={handleDeleteInvoice}
+          />
+        </BillingProvider>
       ) : null}
 
       {activeTab === 'charges' ? (

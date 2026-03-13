@@ -5,6 +5,7 @@ import { X, ArrowLeft, Send, Plus, Users, User, MessageSquare, FolderKanban, Has
 import { useGlobalMessaging } from './hooks/useGlobalMessaging';
 import type { ConversationItem, MessageItem } from './hooks/useGlobalMessaging';
 import { fetchJson } from '@/lib/apiClient';
+import { formatRelativeDate, formatTime } from '@/lib/format';
 
 type Props = {
   businessId: string;
@@ -548,7 +549,7 @@ function ConversationList({
                 </p>
                 {lastMsg && (
                   <span className="text-[10px] shrink-0" style={{ color: 'var(--text-faint)' }}>
-                    {formatRelativeTime(lastMsg.createdAt)}
+                    {formatRelativeDate(lastMsg.createdAt, true)}
                   </span>
                 )}
               </div>
@@ -839,28 +840,3 @@ function NewConversationOverlay({
 
 /* ═══ Helpers ═══ */
 
-function formatRelativeTime(dateStr: string): string {
-  try {
-    const d = new Date(dateStr);
-    const now = new Date();
-    const diffMs = now.getTime() - d.getTime();
-    const diffMin = Math.floor(diffMs / 60000);
-    if (diffMin < 1) return 'maintenant';
-    if (diffMin < 60) return `${diffMin}min`;
-    const diffH = Math.floor(diffMin / 60);
-    if (diffH < 24) return `${diffH}h`;
-    const diffD = Math.floor(diffH / 24);
-    if (diffD < 7) return `${diffD}j`;
-    return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
-  } catch {
-    return '';
-  }
-}
-
-function formatTime(dateStr: string): string {
-  try {
-    return new Date(dateStr).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-  } catch {
-    return '';
-  }
-}

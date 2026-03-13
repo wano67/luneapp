@@ -349,8 +349,7 @@ export default function WalletHomePage() {
                         <span className="text-white/40 text-[10px] shrink-0">{ACCOUNT_TYPE_LABEL[a.type] ?? a.type}</span>
                       </div>
                       <span
-                        className="text-lg font-bold"
-                        style={{ color: BigInt(a.balanceCents) >= 0n ? '#45D195' : '#FF808B' }}
+                        className={`text-lg font-bold ${BigInt(a.balanceCents) >= 0n ? 'text-[var(--success)]' : 'text-[var(--danger)]'}`}
                       >
                         {BigInt(a.balanceCents) > 0n ? '+' : ''}{fmtKpi(a.balanceCents)}
                       </span>
@@ -389,8 +388,7 @@ export default function WalletHomePage() {
                       </p>
                     </div>
                     <span
-                      className="shrink-0 text-sm font-semibold ml-4"
-                      style={{ color: isPositive ? '#45D195' : '#FF808B' }}
+                      className={`shrink-0 text-sm font-semibold ml-4 ${isPositive ? 'text-[var(--success)]' : 'text-[var(--danger)]'}`}
                     >
                       {isPositive ? '+' : ''}{formatCentsToEuroDisplay(t.amountCents)}
                     </span>
@@ -472,7 +470,7 @@ export default function WalletHomePage() {
                         className="h-full rounded-full transition-all"
                         style={{
                           width: `${Math.min(100, pct)}%`,
-                          background: over ? '#FF808B' : 'white',
+                          background: over ? 'var(--danger)' : 'white',
                         }}
                       />
                     </div>
@@ -491,8 +489,7 @@ export default function WalletHomePage() {
             <div className="flex items-center justify-between">
               <span className="text-white/70 text-xs">Capacité d&apos;épargne</span>
               <span
-                className="text-xs font-semibold"
-                style={{ color: kpi?.savingsCapacityPositive ? '#45D195' : '#FF808B' }}
+                className={`text-xs font-semibold ${kpi?.savingsCapacityPositive ? 'text-[var(--success)]' : 'text-[var(--danger)]'}`}
               >
                 {kpi?.savingsCapacity ?? '—'} / mois
               </span>
@@ -581,7 +578,7 @@ function CountBadge({ children }: { children: React.ReactNode }) {
   return (
     <span
       className="inline-flex items-center justify-center rounded-xl px-1.5 py-px text-xs text-white"
-      style={{ background: '#697077', minWidth: 22, lineHeight: '17px' }}
+      style={{ background: 'var(--shell-accent-dark)', minWidth: 22, lineHeight: '17px' }}
     >
       {children}
     </span>

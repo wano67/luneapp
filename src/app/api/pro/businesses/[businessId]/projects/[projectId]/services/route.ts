@@ -168,14 +168,7 @@ export const POST = withBusinessRoute<{ businessId: string; projectId: string }>
       tjmCents: service.tjmCents ?? null,
     });
 
-    if (resolvedPrice.missingPrice) {
-      console.warn('project-service price missing (pricing will default to 0)', {
-        requestId,
-        businessId: businessIdBigInt.toString(),
-        projectId: projectIdBigInt.toString(),
-        serviceId: serviceIdBigInt.toString(),
-      });
-    }
+    // missingPrice warning is returned in the response body (no console.warn in production)
 
     const lastPosition = await prisma.projectService.findFirst({
       where: { projectId: projectIdBigInt },

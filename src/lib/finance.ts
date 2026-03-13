@@ -66,16 +66,6 @@ export function annualYieldCents(balanceCents: bigint, rateBps: number): bigint 
   return (balanceCents * BigInt(rateBps)) / 10_000n;
 }
 
-/**
- * Single quinzaine (15-day period) yield.
- * There are 24 quinzaines per year.
- * Yield = balance × (rate / 24)
- */
-export function quinzaineYieldCents(balanceCents: bigint, rateBps: number): bigint {
-  if (rateBps <= 0) return 0n;
-  return (balanceCents * BigInt(rateBps)) / (10_000n * 24n);
-}
-
 /* ═══ Formatting helpers ═══ */
 
 /**

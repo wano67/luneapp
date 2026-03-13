@@ -166,9 +166,17 @@ export async function GET(
     return { total, done, open, progressPct: Math.round(sum / total) };
   })();
 
-  // Compute per-service progress
+  // Compute per-service progress (pre-index tasks by serviceId to avoid O(n²))
+  const tasksByServiceId = new Map<bigint, typeof taskRows>();
+  for (const t of taskRows) {
+    if (t.projectServiceId) {
+      const arr = tasksByServiceId.get(t.projectServiceId);
+      if (arr) arr.push(t);
+      else tasksByServiceId.set(t.projectServiceId, [t]);
+    }
+  }
   const serviceData = services.map((ps) => {
-    const serviceTasks = taskRows.filter((t) => t.projectServiceId === ps.id);
+    const serviceTasks = tasksByServiceId.get(ps.id) ?? [];
     let sTotal = 0;
     let sDone = 0;
     let sSum = 0;
