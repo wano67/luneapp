@@ -192,7 +192,7 @@ export function FinanceFormModal({
           <div className="mt-3 grid gap-2 md:grid-cols-2">
             <label className="text-sm text-[var(--text-primary)]">
               <span className="text-xs text-[var(--text-secondary)]">Fournisseur</span>
-              <Input name="vendor" value={form.vendor} onChange={onFieldChange} />
+              <Input name="vendor" value={form.vendor} onChange={onFieldChange} maxLength={200} />
             </label>
             <label className="text-sm text-[var(--text-primary)]">
               <span className="text-xs text-[var(--text-secondary)]">Mode de paiement</span>
@@ -210,6 +210,7 @@ export function FinanceFormModal({
                 name="pieceRef"
                 value={form.pieceRef}
                 onChange={onFieldChange}
+                maxLength={100}
                 placeholder="N° facture, reçu…"
               />
             </label>
@@ -285,7 +286,7 @@ export function FinanceFormModal({
             ) : null}
             <label className="text-sm text-[var(--text-primary)] md:col-span-2">
               <span className="text-xs text-[var(--text-secondary)]">Note</span>
-              <Input name="note" value={form.note} onChange={onFieldChange} />
+              <Input name="note" value={form.note} onChange={onFieldChange} maxLength={500} />
             </label>
             <div className="md:col-span-2">
               <SearchSelect

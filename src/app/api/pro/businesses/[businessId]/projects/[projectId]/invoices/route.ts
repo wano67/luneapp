@@ -27,7 +27,7 @@ export const GET = withBusinessRoute<{ businessId: string; projectId: string }>(
       where: { businessId: ctx.businessId, projectId },
       orderBy: { createdAt: 'desc' },
       include: {
-        paymentLinks: { select: { token: true, status: true } },
+        paymentLinks: { select: { status: true }, where: { status: 'ACTIVE' } },
         eInvoices: { select: { id: true, status: true, format: true, transmittedAt: true } },
       },
     });
@@ -94,7 +94,7 @@ export const GET = withBusinessRoute<{ businessId: string; projectId: string }>(
             lastPaidAt: summary?.lastPaidAt ?? null,
             createdAt: inv.createdAt,
             updatedAt: inv.updatedAt,
-            paymentLinkToken: inv.paymentLinks?.find((pl) => pl.status === 'ACTIVE')?.token ?? null,
+            hasPaymentLink: (inv.paymentLinks?.length ?? 0) > 0,
             eInvoice: inv.eInvoices?.[0]
               ? {
                   id: inv.eInvoices[0].id.toString(),

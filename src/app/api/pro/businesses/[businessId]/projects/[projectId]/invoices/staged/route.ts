@@ -6,6 +6,7 @@ import { parseId } from '@/server/http/parsers';
 import { computeProjectBillingSummary } from '@/server/billing/summary';
 import { InvoiceStatus } from '@/generated/prisma';
 import { notifyInvoiceCreated } from '@/server/services/notifications';
+import { generateToken, hashToken } from '@/server/security/tokenHash';
 
 function roundPercent(amount: bigint, percent: number) {
   const p = BigInt(Math.round(percent));
@@ -137,11 +138,13 @@ export const POST = withBusinessRoute<{ businessId: string; projectId: string }>
     }).catch(() => null); // non-blocking
 
     // Auto-create payment link
+    const rawPayToken = generateToken();
     await prisma.paymentLink.create({
       data: {
         businessId: ctx.businessId,
         invoiceId: invoice.id,
         clientId: clientId ?? undefined,
+        token: hashToken(rawPayToken),
         amountCents: Number(BigInt(invoice.totalCents) > BigInt(Number.MAX_SAFE_INTEGER) ? BigInt(Number.MAX_SAFE_INTEGER) : invoice.totalCents),
         currency,
         description: label,

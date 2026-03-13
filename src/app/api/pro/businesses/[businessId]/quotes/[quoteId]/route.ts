@@ -1,4 +1,3 @@
-import { NextResponse } from 'next/server';
 import { prisma } from '@/server/db/client';
 import { BillingUnit, DiscountType, ProjectQuoteStatus, QuoteStatus } from '@/generated/prisma';
 import { withBusinessRoute } from '@/server/http/routeHandler';
@@ -502,25 +501,24 @@ export const DELETE = withBusinessRoute<{ businessId: string; quoteId: string }>
     });
     if (!existing) return notFound('Devis introuvable.');
 
-    const invoiceCount = await prisma.invoice.count({
-      where: { quoteId: existing.id },
-    });
-    if (invoiceCount > 0 || existing.invoice) {
-      return new NextResponse(
-        JSON.stringify({ error: 'Impossible de supprimer: facture liée.' }),
-        {
-          status: 409,
-          headers: { 'Content-Type': 'application/json', 'x-request-id': requestId },
-        }
-      );
-    }
-
     const deletableStatuses: QuoteStatus[] = [QuoteStatus.DRAFT, QuoteStatus.CANCELLED];
     if (!deletableStatuses.includes(existing.status)) {
       return badRequest('Suppression autorisée uniquement pour les devis brouillons/annulés.');
     }
 
-    await prisma.quote.delete({ where: { id: existing.id } });
+    try {
+      await prisma.$transaction(async (tx) => {
+        await tx.$executeRaw`SELECT id FROM "Quote" WHERE id = ${quoteIdBigInt} FOR UPDATE`;
+        const invoiceCount = await tx.invoice.count({ where: { quoteId: quoteIdBigInt } });
+        if (invoiceCount > 0) throw new Error('HAS_INVOICES');
+        await tx.quote.delete({ where: { id: quoteIdBigInt } });
+      });
+    } catch (err) {
+      if (err instanceof Error && err.message === 'HAS_INVOICES') {
+        return badRequest('Impossible de supprimer : facture liée.');
+      }
+      throw err;
+    }
 
     return jsonbNoContent(requestId);
   }

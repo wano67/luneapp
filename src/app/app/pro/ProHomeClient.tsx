@@ -668,7 +668,7 @@ function BusinessCardMenu({ businessId }: { businessId: string }) {
           className="absolute right-0 z-20 mt-2 w-36 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)] shadow-md"
         >
           {menuItems.map((item) => (
-            <a
+            <Link
               key={item.label}
               href={item.href}
               role="menuitem"
@@ -679,7 +679,7 @@ function BusinessCardMenu({ businessId }: { businessId: string }) {
               }}
             >
               {item.label}
-            </a>
+            </Link>
           ))}
         </div>
       ) : null}

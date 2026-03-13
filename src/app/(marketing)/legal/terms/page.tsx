@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { SectionHeader } from '@/components/ui/section-header';
 
 export const metadata: Metadata = {
@@ -88,9 +89,9 @@ export default function TermsPage() {
       <Section title="8. Données personnelles">
         <p>
           Le traitement des données personnelles est régi par notre{' '}
-          <a href="/legal/privacy" className="text-[var(--accent-strong)] hover:underline">
+          <Link href="/legal/privacy" className="text-[var(--accent-strong)] hover:underline">
             politique de confidentialité
-          </a>
+          </Link>
           , qui fait partie intégrante des présentes CGV.
         </p>
       </Section>

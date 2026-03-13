@@ -107,6 +107,7 @@ export default function NewProjectForm({ businessId }: Props) {
                 name="name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
+                maxLength={200}
                 className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none ring-0 focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/30"
                 placeholder="Ex: Refonte site web client"
                 autoFocus

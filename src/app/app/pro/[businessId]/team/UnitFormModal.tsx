@@ -64,6 +64,7 @@ function UnitForm({
         label="Nom du pôle"
         value={name}
         onChange={(e) => setName(e.target.value)}
+        maxLength={120}
         placeholder="Ex : Développement, Marketing…"
         disabled={actionLoading}
         data-autofocus="true"

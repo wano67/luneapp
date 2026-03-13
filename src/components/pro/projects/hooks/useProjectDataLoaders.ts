@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
+import { useRevalidation } from '@/lib/revalidate';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -462,6 +463,12 @@ export function useProjectDataLoaders({
       cancelled = true;
     };
   }, [businessId, projectId, refetchAll]);
+
+  // ─── Cross-page revalidation (e.g. invoice edited on detail page) ────────
+
+  useRevalidation(['pro:billing'], () => {
+    void Promise.all([loadProject(), loadQuotes(), loadInvoices()]);
+  });
 
   return {
     // Data state

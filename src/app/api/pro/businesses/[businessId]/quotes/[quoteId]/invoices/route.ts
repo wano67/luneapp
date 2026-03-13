@@ -5,6 +5,7 @@ import { jsonbCreated } from '@/server/http/json';
 import { badRequest, notFound } from '@/server/http/apiUtils';
 import { parseIdOpt } from '@/server/http/parsers';
 import { buildClientSnapshot, buildIssuerSnapshot } from '@/server/billing/snapshots';
+import { generateToken, hashToken } from '@/server/security/tokenHash';
 
 // POST /api/pro/businesses/{businessId}/quotes/{quoteId}/invoices
 export const POST = withBusinessRoute<{ businessId: string; quoteId: string }>(
@@ -175,11 +176,13 @@ export const POST = withBusinessRoute<{ businessId: string; quoteId: string }>(
     }).catch(() => null); // non-blocking
 
     // Auto-create payment link
+    const rawPayToken = generateToken();
     await prisma.paymentLink.create({
       data: {
         businessId: businessIdBigInt,
         invoiceId: invoice.id,
         clientId: quote.clientId ?? undefined,
+        token: hashToken(rawPayToken),
         amountCents: Number(BigInt(invoice.totalCents) > BigInt(Number.MAX_SAFE_INTEGER) ? BigInt(Number.MAX_SAFE_INTEGER) : invoice.totalCents),
         currency: invoice.currency,
         description: `Facture ${invoice.number ?? ''}`.trim(),
