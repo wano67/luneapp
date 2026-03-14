@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
+import { useTabSync } from '@/lib/hooks/useTabSync';
+import { usePageTitle } from '@/lib/hooks/usePageTitle';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
 import { KpiCard } from '@/components/ui/kpi-card';
@@ -120,8 +122,11 @@ type MemberItem = {
 };
 
 
+type TabKey = 'overview' | 'work' | 'team' | 'billing' | 'charges' | 'vault' | 'interactions' | 'files';
+const TAB_KEYS: readonly TabKey[] = ['overview', 'work', 'team', 'billing', 'charges', 'vault', 'interactions', 'files'];
+
 const tabs = [
-  { key: 'overview', label: "Vue d’ensemble" },
+  { key: 'overview', label: "Vue d'ensemble" },
   { key: 'work', label: 'Tâches' },
   { key: 'team', label: 'Équipe' },
   { key: 'billing', label: 'Facturation' },
@@ -144,7 +149,7 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
   const [billingError, setBillingError] = useState<string | null>(null);
   const [billingInfo, setBillingInfo] = useState<string | null>(null);
 
-  const [activeTab, setActiveTab] = useState<'overview' | 'work' | 'team' | 'billing' | 'charges' | 'vault' | 'interactions' | 'files'>('overview');
+  const [activeTab, setActiveTab] = useTabSync<TabKey>(TAB_KEYS);
   const [pendingTaskId, setPendingTaskId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<'TODO' | 'DONE' | 'all'>('all');
   const [showAllServicesOverview, setShowAllServicesOverview] = useState(false);
@@ -182,6 +187,8 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
     loadQuotes, loadInvoices, loadClients,
     loadCatalogServices, loadServiceTemplates, refetchAll,
   } = useProjectDataLoaders({ businessId, projectId, onBillingError: setBillingError });
+
+  usePageTitle(project?.name);
 
   // ─── Task handlers ──────────────────────────────────────────────────────────
 
@@ -378,15 +385,6 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
       { key: 'docs', label: 'Dossier documents initial', done: hasDocs, ctaLabel: 'Ajouter un document', href: `/app/pro/${businessId}/projects/${projectId}?tab=files` },
     ];
   }, [businessId, project?.clientId, project?.endDate, project?.tagReferences, projectId, services.length, tasks, members.length, documents.length]);
-
-  // ─── Tab sync ───────────────────────────────────────────────────────────────
-
-  useEffect(() => {
-    const tabParam = searchParams?.get('tab');
-    if (tabParam && ['overview', 'work', 'team', 'billing', 'charges', 'vault', 'interactions', 'files'].includes(tabParam)) {
-      setActiveTab(tabParam as typeof activeTab);
-    }
-  }, [searchParams]);
 
   const showSetup = (searchParams?.get('setup') ?? '') === '1';
 

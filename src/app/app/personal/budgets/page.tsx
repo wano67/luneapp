@@ -19,10 +19,12 @@ import Link from 'next/link';
 import { useBudgetData, toMonthlyCents, toYearlyCents, formatLastSeen, FREQUENCY_LABELS, BUDGET_TEMPLATES } from './useBudgetData';
 import { useBudgetForm } from './useBudgetForm';
 import { useSubscriptionForm } from './useSubscriptionForm';
+import { usePageTitle } from '@/lib/hooks/usePageTitle';
 
 /* ═══ Page ═══ */
 
 export default function BudgetsPage() {
+  usePageTitle('Budget');
   const { prefs } = useUserPreferences();
 
   const data = useBudgetData();

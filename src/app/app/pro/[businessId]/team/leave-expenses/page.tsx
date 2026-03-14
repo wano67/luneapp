@@ -11,6 +11,7 @@ import { Table, TableBody, TableCell, TableEmpty, TableHead, TableHeader, TableR
 import { fetchJson } from '@/lib/apiClient';
 import { formatCents } from '@/lib/money';
 import { useActiveBusiness } from '../../../ActiveBusinessProvider';
+import { usePageTitle } from '@/lib/hooks/usePageTitle';
 import {
   CalendarDays, Receipt, Plus, Check, X, Trash2, Send, ArrowLeft,
 } from 'lucide-react';
@@ -84,6 +85,7 @@ function statusVariant(status: string): 'pro' | 'neutral' | 'danger' {
 type Tab = 'leave' | 'expenses';
 
 export default function LeaveExpensesPage() {
+  usePageTitle('Congés et notes de frais');
   const params = useParams();
   const businessId = (params?.businessId ?? '') as string;
 

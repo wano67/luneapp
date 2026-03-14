@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { Card } from '@/components/ui/card';
+import { usePageTitle } from '@/lib/hooks/usePageTitle';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -38,6 +39,7 @@ const TYPE_LABELS: Record<string, string> = {
 const TYPES = Object.entries(TYPE_LABELS);
 
 export default function PatrimoinePage() {
+  usePageTitle('Patrimoine');
   const basePath = '/api/personal/assets';
 
   const [items, setItems] = useState<AssetItem[]>([]);

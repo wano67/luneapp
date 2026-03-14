@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
+import { usePageTitle } from '@/lib/hooks/usePageTitle';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -49,6 +50,7 @@ const STATUS_VARIANT: Record<string, 'neutral' | 'pro' | 'danger'> = {
 };
 
 export default function EInvoicesPage() {
+  usePageTitle('Factures électroniques');
   const params = useParams();
   const businessId = (params?.businessId ?? '') as string;
   const basePath = `/api/pro/businesses/${businessId}/e-invoices`;

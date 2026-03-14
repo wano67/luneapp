@@ -4,6 +4,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
+import { usePageTitle } from '@/lib/hooks/usePageTitle';
 import {
   CheckCircle, AlertTriangle, XCircle, FileText, Download, Pencil, Plus, Trash2, Save, X,
 } from 'lucide-react';
@@ -120,6 +121,7 @@ function toInputDate(iso: string | null | undefined): string {
 }
 
 export default function InvoiceDetailPage() {
+  usePageTitle('Facture');
   const params = useParams();
   const router = useRouter();
   const businessId = (params?.businessId ?? '') as string;

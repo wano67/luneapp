@@ -15,6 +15,7 @@ import { SessionSection } from './sections/SessionSection';
 import { ProBusinessSection } from './sections/ProBusinessSection';
 import { ParrainageSection } from './sections/ParrainageSection';
 import { DangerSection } from './sections/DangerSection';
+import { usePageTitle } from '@/lib/hooks/usePageTitle';
 
 const SECTIONS = [
   { id: 'profil', label: 'Profil' },
@@ -30,6 +31,7 @@ const SECTIONS = [
 ] as const;
 
 export default function AccountPage() {
+  usePageTitle('Mon compte');
   const sections = useMemo(() => [...SECTIONS], []);
 
   return (

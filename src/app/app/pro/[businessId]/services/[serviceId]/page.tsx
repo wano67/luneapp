@@ -3,6 +3,8 @@
 
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
+import { useTabSync } from '@/lib/hooks/useTabSync';
+import { usePageTitle } from '@/lib/hooks/usePageTitle';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -111,7 +113,8 @@ export default function ServiceDetailPage() {
   const [form, setForm] = useState<FormState>(emptyForm);
   const [formError, setFormError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
-  const [tab, setTab] = useState(searchParams?.get('tab') ?? 'overview');
+  const [tab, setTab] = useTabSync<string>(['overview', 'templates']);
+  usePageTitle(service?.name);
   const [templatesModalOpen, setTemplatesModalOpen] = useState(searchParams?.get('openTemplate') === '1');
   const controllerRef = useRef<AbortController | null>(null);
 

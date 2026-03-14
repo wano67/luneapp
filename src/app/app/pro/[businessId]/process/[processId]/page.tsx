@@ -14,6 +14,7 @@ import { useActiveBusiness } from '../../../ActiveBusinessProvider';
 import RoleBanner from '@/components/RoleBanner';
 import { PageContainer } from '@/components/layouts/PageContainer';
 import { PageHeader } from '@/components/layouts/PageHeader';
+import { usePageTitle } from '@/lib/hooks/usePageTitle';
 
 type ProcessStatus = 'ACTIVE' | 'ARCHIVED';
 
@@ -57,6 +58,7 @@ function formatDate(value: string | null) {
 }
 
 export default function ProcessDetailPage() {
+  usePageTitle('Process');
   const params = useParams();
   const router = useRouter();
   const businessId = (params?.businessId ?? '') as string;

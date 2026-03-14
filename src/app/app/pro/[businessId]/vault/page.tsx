@@ -11,6 +11,7 @@ import { useToast } from '@/components/ui/toast';
 import { revalidate, useRevalidationKey } from '@/lib/revalidate';
 import { useActiveBusiness } from '../../ActiveBusinessProvider';
 import { VaultItemModal } from '@/components/pro/vault/VaultItemModal';
+import { usePageTitle } from '@/lib/hooks/usePageTitle';
 
 type VaultItemMeta = {
   id: string;
@@ -108,6 +109,7 @@ function VaultItemRow({
 
 // ─── Main Page ──────────────────────────────────────────────────────────────
 export default function VaultPage() {
+  usePageTitle('Trousseau');
   const active = useActiveBusiness({ optional: true });
   const businessId = active?.activeBusiness?.id;
   const role = active?.activeBusiness?.role ?? null;

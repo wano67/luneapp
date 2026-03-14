@@ -4,6 +4,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
+import { useTabSync } from '@/lib/hooks/useTabSync';
+import { usePageTitle } from '@/lib/hooks/usePageTitle';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -52,6 +54,8 @@ const STATUS_OPTIONS = [
   { value: 'LOST', label: 'Perdu' },
 ];
 
+const TAB_KEYS = ['infos', 'interactions', 'offers'] as const;
+
 const tabs = [
   { key: 'infos', label: 'Infos' },
   { key: 'interactions', label: 'Interactions' },
@@ -71,7 +75,8 @@ export default function ProspectDetailPage() {
   const [interactions, setInteractions] = useState<Interaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'infos' | 'interactions' | 'offers'>('infos');
+  const [activeTab, setActiveTab] = useTabSync<'infos' | 'interactions' | 'offers'>(TAB_KEYS);
+  usePageTitle(prospect?.name);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -336,7 +341,7 @@ export default function ProspectDetailPage() {
       <TabsPills
         items={tabs}
         value={activeTab}
-        onChange={(key) => setActiveTab(key as typeof activeTab)}
+        onChange={(key) => setActiveTab(key as 'infos' | 'interactions' | 'offers')}
         ariaLabel="Sections prospect"
         className="-mx-1 px-1"
       />

@@ -4,6 +4,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import { usePageTitle } from '@/lib/hooks/usePageTitle';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -88,6 +89,8 @@ export default function TaskDetailPage() {
     handleDocUpload,
     handleDocDelete,
   } = useTaskDocuments(businessId, task);
+
+  usePageTitle(task?.title);
 
   // ─── Delete modal (simple toggle, kept in page) ────────────────────
   const [deleteOpen, setDeleteOpen] = useState(false);

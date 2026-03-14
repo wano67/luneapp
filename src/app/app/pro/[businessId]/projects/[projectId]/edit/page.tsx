@@ -16,6 +16,7 @@ import { ProjectStatus } from '@/generated/prisma';
 import { getProjectScopeLabelFR, getProjectStatusLabelFR } from '@/lib/projectStatusUi';
 import { useActiveBusiness } from '../../../../ActiveBusinessProvider';
 import { ReferencePicker } from '../../../references/ReferencePicker';
+import { usePageTitle } from '@/lib/hooks/usePageTitle';
 
 type ProjectItem = {
   id: string;
@@ -68,6 +69,7 @@ function formatDate(value: string | null | undefined) {
 }
 
 export default function ProjectEditPage() {
+  usePageTitle('Modifier le projet');
   const router = useRouter();
   const params = useParams();
   const businessId = (params?.businessId ?? '') as string;

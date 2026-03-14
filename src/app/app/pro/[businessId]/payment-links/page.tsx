@@ -10,6 +10,7 @@ import { Table, TableBody, TableCell, TableEmpty, TableHead, TableHeader, TableR
 import { fetchJson } from '@/lib/apiClient';
 import { formatCents } from '@/lib/money';
 import { useActiveBusiness } from '../../ActiveBusinessProvider';
+import { usePageTitle } from '@/lib/hooks/usePageTitle';
 import {
   Plus, Trash2, Copy, Ban, CreditCard,
 } from 'lucide-react';
@@ -36,6 +37,7 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 export default function PaymentLinksPage() {
+  usePageTitle('Liens de paiement');
   const params = useParams();
   const businessId = (params?.businessId ?? '') as string;
   const basePath = `/api/pro/businesses/${businessId}/payment-links`;

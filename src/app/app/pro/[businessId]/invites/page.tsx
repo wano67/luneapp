@@ -14,6 +14,7 @@ import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import { useToast } from '@/components/ui/toast';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useActiveBusiness } from '../../ActiveBusinessProvider';
+import { usePageTitle } from '@/lib/hooks/usePageTitle';
 
 type Invite = {
   id: string;
@@ -53,6 +54,7 @@ function formatError(message: string | undefined, requestId: string | null, fall
 }
 
 export default function InvitesPage() {
+  usePageTitle('Invitations');
   const params = useParams();
   const businessId = (params?.businessId ?? '') as string;
   const activeCtx = useActiveBusiness({ optional: true });

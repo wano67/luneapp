@@ -2,6 +2,8 @@
 
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { Plus, CalendarPlus, Bell, RefreshCw } from 'lucide-react';
+import { usePageTitle } from '@/lib/hooks/usePageTitle';
+import { useFilterParams } from '@/lib/hooks/useFilterParams';
 import { PageContainer } from '@/components/layouts/PageContainer';
 import { PageHeader } from '@/components/layouts/PageHeader';
 import { CalendarGrid } from '@/components/ui/calendar/CalendarGrid';
@@ -25,10 +27,13 @@ const FILTER_OPTIONS: { value: CalendarEventType | 'all'; label: string }[] = [
 ];
 
 export default function PersonalCalendarPage() {
+  usePageTitle('Calendrier');
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
-  const [filterType, setFilterType] = useState<CalendarEventType | 'all'>('all');
+  const FILTER_DEFAULTS = { filter: 'all' } as const;
+  const [filterState, setFilterParam] = useFilterParams(FILTER_DEFAULTS);
+  const filterType = filterState.filter as CalendarEventType | 'all';
   const [currentMonth, setCurrentMonth] = useState(new Date());
 
   // Create modal
@@ -123,7 +128,7 @@ export default function PersonalCalendarPage() {
         <button
           key={opt.value}
           type="button"
-          onClick={() => setFilterType(opt.value)}
+          onClick={() => setFilterParam('filter', opt.value)}
           className="text-xs font-medium px-2.5 py-1.5 rounded-lg transition-colors"
           style={{
             background: filterType === opt.value ? 'var(--shell-accent)' : 'var(--surface-2)',

@@ -19,6 +19,7 @@ import { useActiveBusiness } from '../../ActiveBusinessProvider';
 import { revalidate, useRevalidationKey } from '@/lib/revalidate';
 import { useRowSelection } from '../../../components/selection/useRowSelection';
 import { BulkActionBar } from '../../../components/selection/BulkActionBar';
+import { usePageTitle } from '@/lib/hooks/usePageTitle';
 
 type Product = {
   id: string;
@@ -46,6 +47,7 @@ type SummaryRow = {
 const UNITS = ['PIECE', 'KG', 'HOUR', 'LITER', 'OTHER'];
 
 export default function StockListPage() {
+  usePageTitle('Stock');
   const [products, setProducts] = useState<Product[]>([]);
   const [summary, setSummary] = useState<Record<string, SummaryRow>>({});
   const [loading, setLoading] = useState(true);

@@ -14,6 +14,7 @@ import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import { formatCentsToEuroDisplay, formatCentsToEuroInput, parseEuroToCents, sanitizeEuroInput } from '@/lib/money';
 import { useActiveBusiness } from '../../../ActiveBusinessProvider';
 import { revalidate } from '@/lib/revalidate';
+import { usePageTitle } from '@/lib/hooks/usePageTitle';
 
 type Product = {
   id: string;
@@ -42,6 +43,7 @@ const UNITS = ['PIECE', 'KG', 'HOUR', 'LITER', 'OTHER'];
 const TYPES = ['IN', 'OUT', 'ADJUST'];
 
 export default function ProductDetailPage() {
+  usePageTitle('Stock produit');
   const params = useParams();
   const router = useRouter();
   const businessId = (params?.businessId ?? '') as string;

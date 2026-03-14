@@ -14,6 +14,7 @@ import { PageHeader } from '@/components/layouts/PageHeader';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
 import { useActiveBusiness } from '../../ActiveBusinessProvider';
 import RoleBanner from '@/components/RoleBanner';
+import { usePageTitle } from '@/lib/hooks/usePageTitle';
 
 type ProcessStatus = 'ACTIVE' | 'ARCHIVED';
 
@@ -46,6 +47,7 @@ const STATUS_LABELS: Record<ProcessStatus, string> = {
 };
 
 export default function ProcessPage() {
+  usePageTitle('Process');
   const params = useParams();
   const businessId = (params?.businessId ?? '') as string;
   const activeCtx = useActiveBusiness({ optional: true });

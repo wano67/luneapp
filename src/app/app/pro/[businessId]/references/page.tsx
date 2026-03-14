@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { usePageTitle } from '@/lib/hooks/usePageTitle';
 
 const referenceLinks = [
   { href: 'categories', title: 'Catégories', desc: 'Classer clients, projets et finances.' },
@@ -13,6 +14,7 @@ const referenceLinks = [
 ];
 
 export default function ReferencesPage() {
+  usePageTitle('Références');
   const params = useParams();
   const businessId = (params?.businessId ?? '') as string;
 

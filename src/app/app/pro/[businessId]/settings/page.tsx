@@ -17,6 +17,7 @@ import { ComptabiliteSection } from './sections/ComptabiliteSection';
 import { IntegrationsSection } from './sections/IntegrationsSection';
 import { NotificationsSection } from './sections/NotificationsSection';
 import { CalendarSyncSection } from './sections/CalendarSyncSection';
+import { usePageTitle } from '@/lib/hooks/usePageTitle';
 
 const SECTION_GROUPS = [
   {
@@ -69,6 +70,7 @@ function GroupHeader({ title, subtitle }: { title: string; subtitle?: string }) 
 }
 
 export default function BusinessSettingsPage() {
+  usePageTitle('Paramètres');
   const params = useParams();
   const searchParams = useSearchParams();
   const businessId = (params?.businessId ?? '') as string;

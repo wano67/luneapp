@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
+import { usePageTitle } from '@/lib/hooks/usePageTitle';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -99,6 +100,7 @@ function formatMonthsHuman(months: number): string {
 /* ═══ Page ═══ */
 
 export default function EpargnePage() {
+  usePageTitle('Épargne');
   const [goals, setGoals] = useState<SavingsGoal[]>([]);
   const [savingsAccounts, setSavingsAccounts] = useState<SavingsAccount[]>([]);
   const [investAccounts, setInvestAccounts] = useState<SavingsAccount[]>([]);

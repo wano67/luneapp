@@ -8,13 +8,13 @@ type BackButtonProps = {
   label?: string;
 };
 
-export function BackButton({ label = 'Retour' }: BackButtonProps) {
+export function BackButton({ href, label = 'Retour' }: BackButtonProps) {
   const router = useRouter();
 
   return (
     <button
       type="button"
-      onClick={() => router.back()}
+      onClick={() => (href ? router.push(href) : router.back())}
       className="inline-flex w-fit items-center gap-1.5 text-sm font-medium text-[var(--text-faint)] transition-colors hover:text-[var(--text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
     >
       <ArrowLeft size={16} aria-hidden />

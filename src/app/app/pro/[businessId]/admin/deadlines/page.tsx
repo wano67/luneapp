@@ -1,9 +1,11 @@
 'use client';
 
 import { useParams } from 'next/navigation';
+import { usePageTitle } from '@/lib/hooks/usePageTitle';
 import { ComingSoon } from '../../../../ComingSoon';
 
 export default function AdminDeadlinesPage() {
+  usePageTitle('Échéances');
   const params = useParams();
   const businessId = (params?.businessId ?? '') as string;
   return (

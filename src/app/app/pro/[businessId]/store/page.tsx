@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
+import { useTabSync } from '@/lib/hooks/useTabSync';
+import { usePageTitle } from '@/lib/hooks/usePageTitle';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -57,7 +59,8 @@ export default function StorePage() {
   const role = activeCtx?.activeBusiness?.role ?? null;
   const isAdmin = role === 'OWNER' || role === 'ADMIN';
 
-  const [tab, setTab] = useState<'products' | 'orders'>('products');
+  const [tab, setTab] = useTabSync<'products' | 'orders'>(['products', 'orders']);
+  usePageTitle('Boutique');
   const [products, setProducts] = useState<StoreProductItem[]>([]);
   const [orders, setOrders] = useState<StoreOrderItem[]>([]);
   const [loading, setLoading] = useState(true);

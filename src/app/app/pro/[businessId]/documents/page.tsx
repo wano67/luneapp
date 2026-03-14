@@ -22,6 +22,8 @@ import { Skeleton, SkeletonKpiCard } from '@/components/ui/skeleton';
 import { ProPageShell } from '@/components/pro/ProPageShell';
 import { fetchJson } from '@/lib/apiClient';
 import { DocumentPreviewModal } from '@/components/pro/projects/DocumentPreviewModal';
+import { usePageTitle } from '@/lib/hooks/usePageTitle';
+import { useFilterParams } from '@/lib/hooks/useFilterParams';
 
 // ─── Types ──────────────────────────────────────────────────────────
 type DocItem = {
@@ -74,13 +76,17 @@ function fmtDateShort(iso: string): string {
 
 // ─── Page ──────────────────────────────────────────────────────────
 export default function DocumentsPage() {
+  usePageTitle('Documents');
   const params = useParams<{ businessId: string }>();
   const businessId = params?.businessId ?? '';
 
   const [data, setData] = useState<DocsPayload | null>(null);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
-  const [groupFilter, setGroupFilter] = useState<GroupFilter>('all');
+  // Filters synced to URL for back-button restore
+  const FILTER_DEFAULTS = { search: '', group: 'all' } as const;
+  const [filters, setFilter] = useFilterParams(FILTER_DEFAULTS);
+  const search = filters.search;
+  const groupFilter = filters.group as GroupFilter;
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
   const [expandedClients, setExpandedClients] = useState<Set<string>>(new Set());
   const [previewDoc, setPreviewDoc] = useState<DocItem | null>(null);
@@ -211,7 +217,7 @@ export default function DocumentsPage() {
           <Input
             placeholder="Rechercher un document..."
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => setFilter('search', e.target.value)}
             className="pl-9"
           />
         </div>
@@ -220,7 +226,7 @@ export default function DocumentsPage() {
             <button
               key={tab.value}
               type="button"
-              onClick={() => setGroupFilter(tab.value)}
+              onClick={() => setFilter('group', tab.value)}
               className="rounded-md px-3 py-1.5 text-xs font-medium transition-all"
               style={{
                 background: groupFilter === tab.value ? 'var(--surface)' : 'transparent',

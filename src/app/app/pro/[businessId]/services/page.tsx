@@ -20,8 +20,10 @@ import dynamic from 'next/dynamic';
 const ServiceImportModal = dynamic(() => import('@/components/pro/services/ServiceImportModal').then(m => m.ServiceImportModal), { ssr: false });
 import { ServiceDeleteConfirmModal } from '@/components/pro/services/ServiceDeleteConfirmModal';
 import type { ServiceItem } from '@/components/pro/services/service-types';
+import { usePageTitle } from '@/lib/hooks/usePageTitle';
 
 export default function ServicesPage() {
+  usePageTitle('Services');
   const params = useParams();
   const businessId = (params?.businessId ?? '') as string;
   const activeCtx = useActiveBusiness({ optional: true });

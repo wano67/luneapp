@@ -13,6 +13,8 @@ import { Modal } from '@/components/ui/modal';
 import { CalendarSyncPanel } from '@/components/ui/calendar/CalendarSyncPanel';
 import { useToast } from '@/components/ui/toast';
 import { fetchJson } from '@/lib/apiClient';
+import { usePageTitle } from '@/lib/hooks/usePageTitle';
+import { useFilterParams } from '@/lib/hooks/useFilterParams';
 import { dayKey, startOfMonth, addMonths, addDays } from '@/lib/date';
 import { EVENT_TYPE_LABELS, type CalendarEvent, type CalendarEventType } from '@/lib/calendar';
 import { revalidate, useRevalidationKey } from '@/lib/revalidate';
@@ -94,13 +96,16 @@ function EventForm({ kind, title, onTitleChange, date, onDateChange, timeStart, 
 // ─── Main page ──────────────────────────────────────────────────────────────
 
 export default function ProCalendarPage() {
+  usePageTitle('Calendrier');
   const params = useParams<{ businessId: string }>();
   const businessId = params?.businessId ?? '';
   const toast = useToast();
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
-  const [filterType, setFilterType] = useState<CalendarEventType | 'all'>('all');
+  const FILTER_DEFAULTS = { filter: 'all' } as const;
+  const [filterState, setFilterParam] = useFilterParams(FILTER_DEFAULTS);
+  const filterType = filterState.filter as CalendarEventType | 'all';
   const [currentMonth, setCurrentMonth] = useState(new Date());
 
   // Create modal
@@ -339,7 +344,7 @@ export default function ProCalendarPage() {
         <button
           key={opt.value}
           type="button"
-          onClick={() => setFilterType(opt.value)}
+          onClick={() => setFilterParam('filter', opt.value)}
           className="text-xs font-medium px-2.5 py-1.5 rounded-lg transition-colors"
           style={{
             background: filterType === opt.value ? 'var(--shell-accent)' : 'var(--surface-2)',

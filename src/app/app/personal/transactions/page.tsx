@@ -14,8 +14,10 @@ import { fmtDate } from '@/lib/format';
 import { dayKey } from '@/lib/date';
 import { revalidate, useRevalidationKey } from '@/lib/revalidate';
 import { useUserPreferences } from '@/lib/hooks/useUserPreferences';
+import { useFilterParams } from '@/lib/hooks/useFilterParams';
 import { TransactionFormModal } from './TransactionFormModal';
 import { TransactionAnalytics, type Analytics } from './TransactionAnalytics';
+import { usePageTitle } from '@/lib/hooks/usePageTitle';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -106,6 +108,7 @@ function periodLabel(from: string, to: string): string {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function PersoTransactionsPage() {
+  usePageTitle('Transactions');
   const router = useRouter();
   const pathname = usePathname();
   const { prefs } = useUserPreferences();
@@ -125,12 +128,10 @@ export default function PersoTransactionsPage() {
   const [loadingAnalytics, setLoadingAnalytics] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Filters
-  const [accountId, setAccountId] = useState('');
-  const [type, setType] = useState('');
-  const [q, setQ] = useState('');
-  const [from, setFrom] = useState('');
-  const [to, setTo] = useState('');
+  // Filters (synced to URL searchParams for back-button restore)
+  const FILTER_DEFAULTS = { accountId: '', type: '', q: '', from: '', to: '' } as const;
+  const [filters, setFilter, resetAllFilters] = useFilterParams(FILTER_DEFAULTS);
+  const { accountId, type, q, from, to } = filters;
   const [filtersOpen, setFiltersOpen] = useState(false);
 
   // Selection
@@ -456,7 +457,7 @@ export default function PersoTransactionsPage() {
     }
   }
 
-  function resetFilters() { setAccountId(''); setType(''); setQ(''); setFrom(''); setTo(''); setFiltersOpen(false); }
+  function resetFilters() { resetAllFilters(); setFiltersOpen(false); }
 
   const activeFilterCount = [accountId, type, from, to].filter(Boolean).length;
 
@@ -518,7 +519,7 @@ export default function PersoTransactionsPage() {
               </svg>
               <input
                 value={q}
-                onChange={(e) => setQ(e.target.value)}
+                onChange={(e) => setFilter('q', e.target.value)}
                 placeholder="Rechercher une transaction…"
                 className="h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] pl-10 pr-4 text-sm text-[var(--text)] outline-none placeholder:text-[var(--text-faint)] focus:border-[var(--focus-ring)]"
               />
@@ -548,14 +549,14 @@ export default function PersoTransactionsPage() {
               <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-5">
                 <div className="lg:col-span-2">
                   <label className="mb-1 block text-xs text-[var(--text-faint)]">Compte</label>
-                  <Select value={accountId} onChange={(e) => setAccountId(e.target.value)} disabled={loadingAccounts}>
+                  <Select value={accountId} onChange={(e) => setFilter('accountId', e.target.value)} disabled={loadingAccounts}>
                     <option value="">Tous les comptes</option>
                     {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
                   </Select>
                 </div>
                 <div>
                   <label className="mb-1 block text-xs text-[var(--text-faint)]">Type</label>
-                  <Select value={type} onChange={(e) => setType(e.target.value)} disabled={loadingAccounts || loadingList}>
+                  <Select value={type} onChange={(e) => setFilter('type', e.target.value)} disabled={loadingAccounts || loadingList}>
                     <option value="">Tous</option>
                     <option value="INCOME">Revenus</option>
                     <option value="EXPENSE">Dépenses</option>
@@ -563,10 +564,10 @@ export default function PersoTransactionsPage() {
                   </Select>
                 </div>
                 <div>
-                  <Input label="Du" type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="h-12 rounded-2xl" disabled={loadingAccounts || loadingList} />
+                  <Input label="Du" type="date" value={from} onChange={(e) => setFilter('from', e.target.value)} className="h-12 rounded-2xl" disabled={loadingAccounts || loadingList} />
                 </div>
                 <div>
-                  <Input label="Au" type="date" value={to} onChange={(e) => setTo(e.target.value)} className="h-12 rounded-2xl" disabled={loadingAccounts || loadingList} />
+                  <Input label="Au" type="date" value={to} onChange={(e) => setFilter('to', e.target.value)} className="h-12 rounded-2xl" disabled={loadingAccounts || loadingList} />
                 </div>
               </div>
             </Card>

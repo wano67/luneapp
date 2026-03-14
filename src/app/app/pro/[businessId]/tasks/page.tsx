@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useMemo, useCallback, useState } from 'react';
-import { useParams, useSearchParams } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import { ListChecks, ChevronRight, Plus, Check, ChevronDown, ChevronUp, AlertTriangle, Filter } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -17,6 +17,8 @@ import { useActiveBusiness } from '../../ActiveBusinessProvider';
 import { fmtDate } from '@/lib/format';
 import { dayKey, startOfWeek, addDays } from '@/lib/date';
 import { revalidate, useRevalidationKey } from '@/lib/revalidate';
+import { usePageTitle } from '@/lib/hooks/usePageTitle';
+import { useFilterParams } from '@/lib/hooks/useFilterParams';
 
 // ─── Types ──────────────────────────────────────────────────────────
 type MyTask = {
@@ -372,8 +374,8 @@ function WeeklyProgressCard({ stats, loading: isLoading }: { stats: WeeklyStats 
 
 // ─── Main page ──────────────────────────────────────────────────────
 export default function MyTasksPage() {
+  usePageTitle('Tâches');
   const params = useParams<{ businessId: string }>();
-  const searchParams = useSearchParams();
   const businessId = params?.businessId ?? '';
   const activeCtx = useActiveBusiness({ optional: true });
   const actorRole = activeCtx?.activeBusiness?.role ?? null;
@@ -385,11 +387,14 @@ export default function MyTasksPage() {
   const [updatingIds, setUpdatingIds] = useState<Record<string, boolean>>({});
   const [fetchVersion, setFetchVersion] = useState(0);
   const tasksRv = useRevalidationKey(['pro:tasks']);
-  const [selectedMemberId, setSelectedMemberId] = useState(searchParams?.get('member') ?? '');
+  // Filters synced to URL for back-button restore
+  const FILTER_DEFAULTS = { member: '', dateRange: 'all', project: '' } as const;
+  const [filters, setFilter] = useFilterParams(FILTER_DEFAULTS);
+  const selectedMemberId = filters.member;
+  const dateRange = filters.dateRange as DateRange;
+  const projectFilter = filters.project;
   const [weeklyStats, setWeeklyStats] = useState<WeeklyStats | null>(null);
   const [weeklyLoading, setWeeklyLoading] = useState(true);
-  const [dateRange, setDateRange] = useState<DateRange>('all');
-  const [projectFilter, setProjectFilter] = useState('');
 
   // Create modal state
   const [createOpen, setCreateOpen] = useState(false);
@@ -534,10 +539,15 @@ export default function MyTasksPage() {
     [members, myUserId],
   );
 
-  // Build the current page path so task detail can return here (preserves selected member)
-  const currentFromPath = selectedMemberId
-    ? `/app/pro/${businessId}/tasks?member=${selectedMemberId}`
-    : `/app/pro/${businessId}/tasks`;
+  // Build the current page path so task detail can return here (preserves all filters)
+  const currentFromPath = useMemo(() => {
+    const params = new URLSearchParams();
+    if (selectedMemberId) params.set('member', selectedMemberId);
+    if (dateRange !== 'all') params.set('dateRange', dateRange);
+    if (projectFilter) params.set('project', projectFilter);
+    const qs = params.toString();
+    return qs ? `/app/pro/${businessId}/tasks?${qs}` : `/app/pro/${businessId}/tasks`;
+  }, [businessId, selectedMemberId, dateRange, projectFilter]);
 
   const filteredCount = groups.overdue.length + groups.today.length + groups.thisWeek.length + groups.later.length + groups.noDate.length + groups.done.length;
   const hasNoTasks = !loading && (data?.items.length ?? 0) === 0;
@@ -555,7 +565,7 @@ export default function MyTasksPage() {
             <Select
               className="w-44"
               value={selectedMemberId}
-              onChange={(e) => setSelectedMemberId(e.target.value)}
+              onChange={(e) => setFilter('member', e.target.value)}
             >
               <option value="">Moi-même</option>
               {otherMembers.map((m) => (
@@ -610,7 +620,7 @@ export default function MyTasksPage() {
               <button
                 key={opt.value}
                 type="button"
-                onClick={() => setDateRange(opt.value)}
+                onClick={() => setFilter('dateRange', opt.value)}
                 className="rounded-md px-3 py-1.5 text-xs font-medium transition-all"
                 style={{
                   background: dateRange === opt.value ? 'var(--surface)' : 'transparent',
@@ -626,7 +636,7 @@ export default function MyTasksPage() {
             <Select
               className="w-40 text-xs"
               value={projectFilter}
-              onChange={(e) => setProjectFilter(e.target.value)}
+              onChange={(e) => setFilter('project', e.target.value)}
             >
               <option value="">Tous les projets</option>
               {(data?.activeProjects ?? []).map((p) => (

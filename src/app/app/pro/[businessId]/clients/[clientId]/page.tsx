@@ -4,6 +4,8 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
+import { useTabSync } from '@/lib/hooks/useTabSync';
+import { usePageTitle } from '@/lib/hooks/usePageTitle';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { fetchJson, getErrorMessage } from '@/lib/apiClient';
@@ -92,6 +94,8 @@ type Interaction = {
 
 type TabKey = 'projects' | 'accounting' | 'interactions' | 'subscriptions' | 'documents' | 'infos';
 
+const TAB_KEYS = ['projects', 'accounting', 'interactions', 'subscriptions', 'documents', 'infos'] as const;
+
 const tabs: { key: TabKey; label: string }[] = [
   { key: 'projects', label: 'Projets' },
   { key: 'accounting', label: 'Facturation' },
@@ -119,7 +123,7 @@ export default function ClientDetailPage() {
     { label: 'Actifs', value: '—' },
     { label: 'Valeur', value: '—' },
   ]);
-  const [activeTab, setActiveTab] = useState<TabKey>('projects');
+  const [activeTab, setActiveTab] = useTabSync<TabKey>(TAB_KEYS);
   const [form, setForm] = useState<{ name: string; email: string; company: string; websiteUrl: string }>({
     name: '',
     email: '',
@@ -129,6 +133,8 @@ export default function ClientDetailPage() {
   const [saving, setSaving] = useState(false);
   const [saveInfo, setSaveInfo] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+
+  usePageTitle(client?.name);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -443,7 +449,7 @@ export default function ClientDetailPage() {
       <TabsPills
         items={tabs}
         value={activeTab}
-        onChange={(key) => setActiveTab(key as typeof activeTab)}
+        onChange={(key) => setActiveTab(key as TabKey)}
         ariaLabel="Sections client"
         className="-mx-1 px-1"
       />

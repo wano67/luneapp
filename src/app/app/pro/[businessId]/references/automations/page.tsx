@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableEmpty, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { fetchJson } from '@/lib/apiClient';
 import { useActiveBusiness } from '../../../ActiveBusinessProvider';
+import { usePageTitle } from '@/lib/hooks/usePageTitle';
 import {
   Plus, Trash2, Pencil, Power, PowerOff, X, Zap,
 } from 'lucide-react';
@@ -52,6 +53,7 @@ const ACTIONS = Object.entries(ACTION_LABELS);
 // ---------------------------------------------------------------------------
 
 export default function AutomationsPage() {
+  usePageTitle('Automatisations');
   const params = useParams();
   const businessId = (params?.businessId ?? '') as string;
   const basePath = `/api/pro/businesses/${businessId}/automations`;

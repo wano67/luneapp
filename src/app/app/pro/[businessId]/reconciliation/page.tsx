@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
+import { usePageTitle } from '@/lib/hooks/usePageTitle';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -49,6 +50,7 @@ type ReconciliationData = {
 // ---------------------------------------------------------------------------
 
 export default function ReconciliationPage() {
+  usePageTitle('Rapprochement');
   const params = useParams();
   const businessId = (params?.businessId ?? '') as string;
   const basePath = `/api/pro/businesses/${businessId}/reconciliation`;

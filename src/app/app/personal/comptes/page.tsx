@@ -20,6 +20,7 @@ import { useFileDropHandler } from '@/components/file-drop/FileDropProvider';
 import { revalidate, useRevalidation } from '@/lib/revalidate';
 import { useToast } from '@/components/ui/toast';
 import { Building2, PenLine, Upload, Plus } from 'lucide-react';
+import { usePageTitle } from '@/lib/hooks/usePageTitle';
 
 async function safeJson(res: Response): Promise<unknown> {
   try {
@@ -68,6 +69,7 @@ const CATEGORY_ICON: Record<CategoryKey, string> = {
 };
 
 export default function ComptesPage() {
+  usePageTitle('Mes comptes');
   const router = useRouter();
   const searchParams = useSearchParams();
   const importAutoOpenedRef = useRef(false);

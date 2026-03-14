@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
+import { usePageTitle } from '@/lib/hooks/usePageTitle';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import Modal from '@/components/ui/modal';
@@ -72,6 +73,8 @@ export default function AccountDetailPage() {
   // Transaction detail modal
   const [detailTxn, setDetailTxn] = useState<Txn | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+
+  usePageTitle(account?.name);
 
   const load = useCallback(async () => {
     setLoading(true);

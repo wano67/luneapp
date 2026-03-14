@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
+import { usePageTitle } from '@/lib/hooks/usePageTitle';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -40,6 +41,7 @@ const STATUS_LABELS: Record<string, string> = {
 // ---------------------------------------------------------------------------
 
 export default function EmailSequencesPage() {
+  usePageTitle('Séquences email');
   const params = useParams();
   const businessId = (params?.businessId ?? '') as string;
   const basePath = `/api/pro/businesses/${businessId}/email-sequences`;

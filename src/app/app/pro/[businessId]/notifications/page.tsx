@@ -2,6 +2,8 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import { useTabSync } from '@/lib/hooks/useTabSync';
+import { usePageTitle } from '@/lib/hooks/usePageTitle';
 import {
   CheckSquare, AlertOctagon, MessageSquare, UserPlus,
   AlertTriangle, Calendar, Users, UserSearch, FileText, Receipt, Bell,
@@ -29,6 +31,8 @@ type NotifItem = {
   createdAt: string;
 };
 
+const FILTER_KEYS = ['all', 'unread', 'tasks', 'clients', 'documents', 'billing'] as const;
+
 const FILTER_TABS = [
   { key: 'all', label: 'Tout' },
   { key: 'unread', label: 'Non lues' },
@@ -42,7 +46,7 @@ const FILTER_TYPE_MAP: Record<string, string> = {
   tasks: 'TASK_ASSIGNED,TASK_STATUS_CHANGED,TASK_DUE_SOON,TASK_BLOCKED,TASK_OVERDUE',
   clients: 'CLIENT_FOLLOWUP,PROSPECT_FOLLOWUP,INTERACTION_ADDED',
   documents: 'DOCUMENT_UPLOADED',
-  billing: 'INVOICE_CREATED,QUOTE_CREATED',
+  billing: 'INVOICE_CREATED,QUOTE_CREATED,PAYMENT_RECEIVED,DEPOSIT_PAID,QUOTE_SIGNED,QUOTE_SENT_TO_CLIENT,INVOICE_SENT_TO_CLIENT,TRANSFER_NOTIFIED,PROJECT_ACTIVATED,PROJECT_COMPLETED',
 };
 
 /* -------------------------------------------------------------------------- */
@@ -104,9 +108,13 @@ function getNotifHref(notif: NotifItem): string | null {
   if (!biz) return null;
   if (notif.type === 'BUSINESS_INVITE') return '/app/pro';
   if (notif.type === 'DOCUMENT_UPLOADED' && notif.projectId) return `/app/pro/${biz}/projects/${notif.projectId}?tab=files`;
-  if ((notif.type === 'INVOICE_CREATED' || notif.type === 'QUOTE_CREATED') && notif.projectId) return `/app/pro/${biz}/projects/${notif.projectId}?tab=billing`;
-  if (notif.type === 'INTERACTION_ADDED' && notif.clientId) return `/app/pro/${biz}/clients/${notif.clientId}`;
-  if (notif.type === 'INTERACTION_ADDED' && notif.prospectId) return `/app/pro/${biz}/prospects/${notif.prospectId}`;
+  if ((notif.type === 'INVOICE_CREATED' || notif.type === 'QUOTE_CREATED' || notif.type === 'PAYMENT_RECEIVED' || notif.type === 'TRANSFER_NOTIFIED' || notif.type === 'DEPOSIT_PAID') && notif.projectId) return `/app/pro/${biz}/projects/${notif.projectId}?tab=billing`;
+  if ((notif.type === 'QUOTE_SENT_TO_CLIENT' || notif.type === 'INVOICE_SENT_TO_CLIENT' || notif.type === 'QUOTE_SIGNED') && notif.projectId) return `/app/pro/${biz}/projects/${notif.projectId}?tab=billing`;
+  if ((notif.type === 'PROJECT_ACTIVATED' || notif.type === 'PROJECT_COMPLETED') && notif.projectId) return `/app/pro/${biz}/projects/${notif.projectId}`;
+  if (notif.type === 'INTERACTION_ADDED' && notif.clientId) return `/app/pro/${biz}/clients/${notif.clientId}?tab=interactions`;
+  if (notif.type === 'INTERACTION_ADDED' && notif.prospectId) return `/app/pro/${biz}/prospects/${notif.prospectId}?tab=interactions`;
+  if (notif.type === 'CLIENT_FOLLOWUP' && notif.clientId) return `/app/pro/${biz}/clients/${notif.clientId}`;
+  if (notif.type === 'PROSPECT_FOLLOWUP' && notif.prospectId) return `/app/pro/${biz}/prospects/${notif.prospectId}`;
   if (notif.conversationId) return `/app/pro/${biz}/tasks`;
   if (notif.clientId) return `/app/pro/${biz}/clients/${notif.clientId}`;
   if (notif.prospectId) return `/app/pro/${biz}/prospects/${notif.prospectId}`;
@@ -126,7 +134,8 @@ export default function NotificationsPage() {
   const router = useRouter();
   const toast = useToast();
 
-  const [filter, setFilter] = useState('all');
+  const [filter, setFilter] = useTabSync<typeof FILTER_KEYS[number]>(FILTER_KEYS);
+  usePageTitle('Notifications');
   const [items, setItems] = useState<NotifItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -217,7 +226,7 @@ export default function NotificationsPage() {
       }
       tabs={FILTER_TABS}
       activeTab={filter}
-      onTabChange={setFilter}
+      onTabChange={setFilter as (key: string) => void}
     >
       {/* Notification list */}
       {loading ? (

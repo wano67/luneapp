@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter, notFound } from 'next/navigation';
+import { usePageTitle } from '@/lib/hooks/usePageTitle';
 import Link from 'next/link';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -87,6 +88,7 @@ export default function AccountTypePage() {
   const router = useRouter();
   const typeKey = params?.typeKey ?? '';
   const config = TYPE_KEY_MAP[typeKey];
+  usePageTitle(config?.label ?? 'Comptes');
 
   const [loading, setLoading] = useState(true);
   const [allAccounts, setAllAccounts] = useState<AccountItem[]>([]);

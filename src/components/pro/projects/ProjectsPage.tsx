@@ -3,12 +3,16 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { Plus, Search } from 'lucide-react';
+import { useTabSync } from '@/lib/hooks/useTabSync';
+import { usePageTitle } from '@/lib/hooks/usePageTitle';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { KpiCard } from '@/components/ui/kpi-card';
 import { ProPageShell } from '@/components/pro/ProPageShell';
 import { ProjectCard } from '@/components/pro/projects/ProjectCard';
 import { useProjects, type ProjectScope } from '@/lib/hooks/useProjects';
+
+const SCOPE_KEYS = ['ACTIVE', 'PLANNED', 'INACTIVE'] as const;
 
 const SCOPES = [
   { key: 'ACTIVE' as const, label: 'Actifs' },
@@ -19,7 +23,8 @@ const SCOPES = [
 type Props = { businessId: string };
 
 export default function ProjectsPage({ businessId }: Props) {
-  const [scope, setScope] = useState<ProjectScope>('ACTIVE');
+  const [scope, setScope] = useTabSync<ProjectScope>(SCOPE_KEYS);
+  usePageTitle('Projets');
   const [search, setSearch] = useState('');
   const { data, counts, isLoading, error, refetch } = useProjects(businessId, {
     scope,

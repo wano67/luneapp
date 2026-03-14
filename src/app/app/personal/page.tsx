@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { usePageTitle } from '@/lib/hooks/usePageTitle';
 import { ChevronRight, ChartNoAxesColumnIncreasing, ChartNoAxesColumnDecreasing, Landmark, ArrowRight, Wallet, BarChart3, PiggyBank } from 'lucide-react';
 import { fetchJson } from '@/lib/apiClient';
 import { useUserPreferences } from '@/lib/hooks/useUserPreferences';
@@ -79,6 +80,7 @@ function absBigInt(v: bigint) {
 /* ═══ Page ═══ */
 
 export default function WalletHomePage() {
+  usePageTitle('Tableau de bord');
   const { prefs } = useUserPreferences();
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<SummaryResponse | null>(null);

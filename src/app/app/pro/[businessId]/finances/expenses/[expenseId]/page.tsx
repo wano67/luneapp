@@ -4,6 +4,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
+import { usePageTitle } from '@/lib/hooks/usePageTitle';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -45,6 +46,7 @@ function formatCents(value: string | null | undefined, currency = 'EUR') {
 }
 
 export default function ExpenseDetailPage() {
+  usePageTitle('Dépense');
   const params = useParams();
   const businessId = (params?.businessId ?? '') as string;
   const expenseId = (params?.expenseId ?? '') as string;

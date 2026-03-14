@@ -1,8 +1,12 @@
+'use client';
+
 import Link from 'next/link';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { usePageTitle } from '@/lib/hooks/usePageTitle';
 
 export default function PersoAdminPage() {
+  usePageTitle('Administration');
   return (
     <div className="space-y-4">
       <Card className="space-y-2 p-5">
