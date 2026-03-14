@@ -1,6 +1,7 @@
 import { PDFDocument } from 'pdf-lib';
 import { buildQuotePdf } from '@/server/pdf/quotePdf';
 import { buildInvoicePdf } from '@/server/pdf/invoicePdf';
+import { buildBalancePdf, buildGrandLivrePdf } from '@/server/pdf/accountingReportPdf';
 
 async function main() {
   const weirdAmount = '2\u202F500,00 €';
@@ -123,6 +124,74 @@ async function main() {
   if (invoiceDoc.getPageCount() < 2) {
     throw new Error('Invoice PDF should be multi-page.');
   }
+
+  const balancePdf = await buildBalancePdf({
+    businessName: 'Studio Lune',
+    from: new Date('2026-01-01').toISOString(),
+    to: new Date('2026-01-31').toISOString(),
+    rows: [
+      {
+        accountCode: '706',
+        accountName: 'Prestations de services',
+        totalDebitCents: 0,
+        totalCreditCents: 250000,
+        soldeDebiteurCents: 0,
+        soldeCrediteurCents: 250000,
+      },
+      {
+        accountCode: '512',
+        accountName: 'Banque',
+        totalDebitCents: 1250000,
+        totalCreditCents: 0,
+        soldeDebiteurCents: 1250000,
+        soldeCrediteurCents: 0,
+      },
+    ],
+    totalDebitCents: 1250000,
+    totalCreditCents: 250000,
+  });
+
+  if (!balancePdf || balancePdf.length < 500) {
+    throw new Error('Balance PDF too small or empty.');
+  }
+  await PDFDocument.load(balancePdf);
+
+  const grandLivrePdf = await buildGrandLivrePdf({
+    businessName: 'Studio Lune',
+    from: new Date('2026-01-01').toISOString(),
+    to: new Date('2026-01-31').toISOString(),
+    accounts: [
+      {
+        accountCode: '512',
+        accountName: 'Banque',
+        totalDebitCents: 1250000,
+        totalCreditCents: 250000,
+        lines: [
+          {
+            date: new Date('2026-01-05').toISOString(),
+            journalCode: 'BQ',
+            pieceRef: 'RELEVE-001',
+            memo: `Operation bancaire ${weirdAmount}`,
+            debitCents: 1250000,
+            creditCents: 0,
+          },
+          {
+            date: new Date('2026-01-12').toISOString(),
+            journalCode: 'VE',
+            pieceRef: 'FAC-2026-001',
+            memo: 'Encaissement client',
+            debitCents: 0,
+            creditCents: 250000,
+          },
+        ],
+      },
+    ],
+  });
+
+  if (!grandLivrePdf || grandLivrePdf.length < 500) {
+    throw new Error('Grand livre PDF too small or empty.');
+  }
+  await PDFDocument.load(grandLivrePdf);
 
   console.log('PDF sanitize test: OK');
 }

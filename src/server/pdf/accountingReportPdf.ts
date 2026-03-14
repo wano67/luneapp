@@ -49,14 +49,14 @@ function fmt(cents: number): string {
   const euros = Math.floor(abs / 100);
   const centsPart = abs % 100;
   const sign = cents < 0 ? '-' : '';
-  return `${sign}${euros.toLocaleString('fr-FR')},${String(centsPart).padStart(2, '0')} EUR`;
+  return sanitizePdfText(`${sign}${euros.toLocaleString('fr-FR')},${String(centsPart).padStart(2, '0')} EUR`);
 }
 
 function fmtDate(iso: string): string {
   try {
-    return new Intl.DateTimeFormat('fr-FR').format(new Date(iso));
+    return sanitizePdfText(new Intl.DateTimeFormat('fr-FR').format(new Date(iso)));
   } catch {
-    return iso;
+    return sanitizePdfText(iso);
   }
 }
 
@@ -89,7 +89,7 @@ export async function buildBalancePdf(payload: BalancePayload): Promise<Uint8Arr
   const page = layout.getPage();
   page.drawText(sanitizePdfText(payload.businessName), { x: M_LEFT, y: layout.getCursorY(), size: 14, font: fontBold, color: black });
   layout.setCursorY(layout.getCursorY() - 20);
-  page.drawText(`Balance Generale - du ${fmtDate(payload.from)} au ${fmtDate(payload.to)}`, { x: M_LEFT, y: layout.getCursorY(), size: 10, font: fontRegular, color: grey });
+  page.drawText(sanitizePdfText(`Balance Generale - du ${fmtDate(payload.from)} au ${fmtDate(payload.to)}`), { x: M_LEFT, y: layout.getCursorY(), size: 10, font: fontRegular, color: grey });
   layout.setCursorY(layout.getCursorY() - 24);
 
   // Column headers
@@ -103,9 +103,8 @@ export async function buildBalancePdf(payload: BalancePayload): Promise<Uint8Arr
   // Rows
   for (const row of payload.rows) {
     if (layout.getAvailableHeight() < ROW_H * 2) {
-      layout.setCursorY(layout.getAvailableHeight()); // force page break
-      const newPage = pdfDoc.addPage([PAGE_W, PAGE_H]);
-      layout.setCursorY(PAGE_H - M_TOP);
+      layout.addPage();
+      const newPage = layout.getPage();
       // Re-draw headers on new page
       headers.forEach((h, i) => {
         newPage.drawText(h, { x: cols[i], y: layout.getCursorY(), size: 8, font: fontBold, color: grey });
@@ -147,7 +146,7 @@ export async function buildGrandLivrePdf(payload: GrandLivrePayload): Promise<Ui
   // Header
   page.drawText(sanitizePdfText(payload.businessName), { x: M_LEFT, y, size: 14, font: fontBold, color: black });
   y -= 20;
-  page.drawText(`Grand Livre - du ${fmtDate(payload.from)} au ${fmtDate(payload.to)}`, { x: M_LEFT, y, size: 10, font: fontRegular, color: grey });
+  page.drawText(sanitizePdfText(`Grand Livre - du ${fmtDate(payload.from)} au ${fmtDate(payload.to)}`), { x: M_LEFT, y, size: 10, font: fontRegular, color: grey });
   y -= 24;
 
   const cols = [M_LEFT, M_LEFT + 80, M_LEFT + 160, M_LEFT + 230, M_LEFT + 500, M_LEFT + 630];
