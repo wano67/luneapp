@@ -1,8 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useParams } from 'next/navigation';
-import { FileText, Download, Upload, CheckCircle, AlertCircle, X, Eye, KeyRound, Copy, Clock } from 'lucide-react';
+import { useParams, useSearchParams } from 'next/navigation';
+import { FileText, Download, Upload, CheckCircle, AlertCircle, X, Eye, KeyRound, Copy, Clock, CreditCard, Banknote } from 'lucide-react';
 import { LogoAvatar } from '@/components/pro/LogoAvatar';
 
 /* ═══ Types ═══ */
@@ -67,6 +67,7 @@ type VaultItemData = {
 type ShareData = {
   allowClientUpload: boolean;
   allowVaultAccess: boolean;
+  stripeEnabled: boolean;
   business: { name: string; websiteUrl: string | null };
   project: {
     name: string;
@@ -134,12 +135,17 @@ function isPreviewable(mimeType: string): boolean {
 
 export default function ShareProjectPage() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const token = params?.token as string;
+  const paymentResult = searchParams?.get('payment');
 
   const [data, setData] = useState<ShareData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<ActiveTab>('project');
+  const [activeTab, setActiveTab] = useState<ActiveTab>(paymentResult ? 'billing' : 'project');
+  const [paymentBanner, setPaymentBanner] = useState<string | null>(
+    paymentResult === 'success' ? 'Paiement effectu\u00e9 avec succ\u00e8s !' : paymentResult === 'cancelled' ? 'Paiement annul\u00e9.' : null
+  );
   const [previewDocId, setPreviewDocId] = useState<string | null>(null);
 
   // Password gate
@@ -268,7 +274,7 @@ export default function ShareProjectPage() {
     );
   }
 
-  const { business, project, services, quotes, invoices, payments, documents, allowClientUpload, allowVaultAccess } = data;
+  const { business, project, services, quotes, invoices, payments, documents, allowClientUpload, allowVaultAccess, stripeEnabled } = data;
   const pct = project.progressPct;
   const previewDoc = previewDocId ? documents.find((d) => d.id === previewDocId) ?? null : null;
   const isCompleted = project.status === 'COMPLETED';
@@ -381,6 +387,23 @@ export default function ShareProjectPage() {
         ))}
       </div>
 
+      {/* Payment result banner */}
+      {paymentBanner && (
+        <div
+          className="flex items-center gap-2 rounded-xl px-4 py-3 text-sm mt-4"
+          style={{
+            background: paymentResult === 'success' ? 'var(--success-bg, #ecfdf5)' : 'var(--surface-hover)',
+            color: paymentResult === 'success' ? 'var(--success, #059669)' : 'var(--text-secondary)',
+          }}
+        >
+          {paymentResult === 'success' ? <CheckCircle size={16} /> : <AlertCircle size={16} />}
+          {paymentBanner}
+          <button onClick={() => setPaymentBanner(null)} className="ml-auto" aria-label="Fermer">
+            <X size={14} />
+          </button>
+        </div>
+      )}
+
       {/* ═══ Tab Content ═══ */}
       <div className="mt-6">
         {activeTab === 'project' && (
@@ -395,6 +418,7 @@ export default function ShareProjectPage() {
             quotes={quotes}
             invoices={invoices}
             payments={payments}
+            stripeEnabled={stripeEnabled}
             onRefresh={fetchData}
           />
         )}
@@ -488,17 +512,27 @@ function FacturationTab({
   quotes,
   invoices,
   payments,
+  stripeEnabled,
   onRefresh,
 }: {
   token: string;
   quotes: QuoteData[];
   invoices: InvoiceData[];
   payments: PaymentData[];
+  stripeEnabled: boolean;
   onRefresh: () => void;
 }) {
   const [signingId, setSigningId] = useState<string | null>(null);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  const [signConsent, setSignConsent] = useState(false);
   const [signFeedback, setSignFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  // Transfer notification
+  const [transferNotifyingId, setTransferNotifyingId] = useState<string | null>(null);
+  const [transferConfirmId, setTransferConfirmId] = useState<string | null>(null);
+
+  // Stripe checkout
+  const [checkoutLoadingId, setCheckoutLoadingId] = useState<string | null>(null);
 
   async function handleSignQuote(quoteId: string) {
     setSigningId(quoteId);
@@ -507,12 +541,13 @@ function FacturationTab({
       const res = await fetch(`/api/share/${token}/actions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'sign_quote', quoteId }),
+        body: JSON.stringify({ action: 'sign_quote', quoteId, consent: true }),
       });
       const data = await res.json();
       if (res.ok) {
-        setSignFeedback({ type: 'success', message: 'Devis signé avec succès !' });
+        setSignFeedback({ type: 'success', message: 'Devis sign\u00e9 avec succ\u00e8s !' });
         setConfirmingId(null);
+        setSignConsent(false);
         onRefresh();
       } else {
         setSignFeedback({ type: 'error', message: data.error ?? 'Erreur lors de la signature.' });
@@ -521,6 +556,49 @@ function FacturationTab({
       setSignFeedback({ type: 'error', message: 'Erreur de connexion.' });
     } finally {
       setSigningId(null);
+    }
+  }
+
+  async function handleNotifyTransfer(invoiceId: string) {
+    setTransferNotifyingId(invoiceId);
+    try {
+      const res = await fetch(`/api/share/${token}/actions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'notify_transfer', invoiceId }),
+      });
+      if (res.ok) {
+        setSignFeedback({ type: 'success', message: 'Notification de virement envoy\u00e9e.' });
+        setTransferConfirmId(null);
+      } else {
+        const data = await res.json();
+        setSignFeedback({ type: 'error', message: data.error ?? 'Erreur.' });
+      }
+    } catch {
+      setSignFeedback({ type: 'error', message: 'Erreur de connexion.' });
+    } finally {
+      setTransferNotifyingId(null);
+    }
+  }
+
+  async function handleStripeCheckout(invoiceId: string) {
+    setCheckoutLoadingId(invoiceId);
+    try {
+      const res = await fetch(`/api/share/${token}/checkout`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ invoiceId }),
+      });
+      const data = await res.json();
+      if (res.ok && data.checkoutUrl) {
+        window.location.href = data.checkoutUrl;
+      } else {
+        setSignFeedback({ type: 'error', message: data.error ?? 'Erreur lors de la cr\u00e9ation du paiement.' });
+        setCheckoutLoadingId(null);
+      }
+    } catch {
+      setSignFeedback({ type: 'error', message: 'Erreur de connexion.' });
+      setCheckoutLoadingId(null);
     }
   }
 
@@ -601,26 +679,41 @@ function FacturationTab({
                       )}
                     </div>
                   </div>
-                  {/* Confirmation step */}
+                  {/* Confirmation step with consent */}
                   {isConfirming && (
                     <div
                       className="mt-2 rounded-lg border p-4"
                       style={{ borderColor: 'var(--border)', background: 'var(--surface)' }}
                     >
                       <p className="text-sm mb-3" style={{ color: 'var(--text-primary)' }}>
-                        Confirmez-vous la signature du devis <strong>{q.number ?? ''}</strong> d&apos;un montant de <strong>{fmtCents(q.totalCents, q.currency)}</strong> ?
+                        Vous vous appr&ecirc;tez &agrave; signer le devis <strong>{q.number ?? ''}</strong> d&apos;un montant de <strong>{fmtCents(q.totalCents, q.currency)}</strong>.
                       </p>
+                      <p className="text-xs mb-3" style={{ color: 'var(--text-secondary)' }}>
+                        En signant ce devis, vous acceptez les termes et conditions d&eacute;crits ci-dessus. Votre adresse IP et votre navigateur seront enregistr&eacute;s pour valider cette signature &eacute;lectronique.
+                      </p>
+                      <label className="flex items-start gap-2 mb-4 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={signConsent}
+                          onChange={(e) => setSignConsent(e.target.checked)}
+                          className="mt-0.5 h-4 w-4 rounded border"
+                          style={{ accentColor: 'var(--text-primary)' }}
+                        />
+                        <span className="text-sm" style={{ color: 'var(--text-primary)' }}>
+                          J&apos;accepte les termes de ce devis et confirme ma signature &eacute;lectronique.
+                        </span>
+                      </label>
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() => handleSignQuote(q.id)}
-                          disabled={isSigning}
+                          disabled={isSigning || !signConsent}
                           className="rounded-lg px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50"
                           style={{ background: 'var(--text-primary)', color: 'var(--surface)' }}
                         >
                           {isSigning ? 'Signature...' : 'Je confirme la signature'}
                         </button>
                         <button
-                          onClick={() => setConfirmingId(null)}
+                          onClick={() => { setConfirmingId(null); setSignConsent(false); }}
                           disabled={isSigning}
                           className="rounded-lg px-4 py-2 text-sm font-medium transition-colors"
                           style={{ color: 'var(--text-secondary)' }}
@@ -642,37 +735,100 @@ function FacturationTab({
         <div className="rounded-xl border p-5" style={{ borderColor: 'var(--border)', background: 'var(--surface)' }}>
           <h2 className="mb-3 text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Factures</h2>
           <div className="flex flex-col gap-2">
-            {invoices.map((inv, i) => (
-              <div
-                key={`i-${i}`}
-                className="flex items-center justify-between rounded-lg px-3 py-2.5"
-                style={{ background: 'var(--surface-hover)' }}
-              >
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                    {inv.number ?? 'Facture'}
-                  </span>
-                  {inv.issuedAt && (
-                    <span className="text-xs" style={{ color: 'var(--text-faint)' }}>{fmtDate(inv.issuedAt)}</span>
+            {invoices.map((inv) => {
+              const canPay = inv.status === 'SENT';
+              const isTransferConfirm = transferConfirmId === inv.id;
+              const isTransferNotifying = transferNotifyingId === inv.id;
+              const isCheckoutLoading = checkoutLoadingId === inv.id;
+              return (
+                <div key={inv.id}>
+                  <div
+                    className="flex items-center justify-between rounded-lg px-3 py-2.5"
+                    style={{ background: 'var(--surface-hover)' }}
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                        {inv.number ?? 'Facture'}
+                      </span>
+                      {inv.issuedAt && (
+                        <span className="text-xs" style={{ color: 'var(--text-faint)' }}>{fmtDate(inv.issuedAt)}</span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <BillingBadge status={inv.status} />
+                      <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+                        {fmtCents(inv.totalCents, inv.currency)}
+                      </span>
+                      <a
+                        href={`/api/share/${token}/invoices/${inv.id}/pdf`}
+                        download
+                        title="T\u00e9l\u00e9charger le PDF"
+                        className="rounded-lg p-1.5 transition-colors hover:opacity-70"
+                        style={{ color: 'var(--text-secondary)' }}
+                      >
+                        <Download size={14} />
+                      </a>
+                      {canPay && (
+                        <>
+                          <button
+                            onClick={() => setTransferConfirmId(isTransferConfirm ? null : inv.id)}
+                            title="J&apos;ai effectu\u00e9 un virement"
+                            className="rounded-lg p-1.5 transition-colors hover:opacity-70"
+                            style={{ color: 'var(--text-secondary)' }}
+                          >
+                            <Banknote size={14} />
+                          </button>
+                          {stripeEnabled && (
+                            <button
+                              onClick={() => handleStripeCheckout(inv.id)}
+                              disabled={isCheckoutLoading}
+                              className="rounded-lg px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50 flex items-center gap-1"
+                              style={{ background: 'var(--text-primary)', color: 'var(--surface)' }}
+                            >
+                              <CreditCard size={12} />
+                              {isCheckoutLoading ? 'Chargement...' : 'Payer en ligne'}
+                            </button>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  {/* Transfer notification confirmation */}
+                  {isTransferConfirm && (
+                    <div
+                      className="mt-2 rounded-lg border p-4"
+                      style={{ borderColor: 'var(--border)', background: 'var(--surface)' }}
+                    >
+                      <p className="text-sm mb-3" style={{ color: 'var(--text-primary)' }}>
+                        Confirmez-vous avoir effectu&eacute; un virement pour la facture <strong>{inv.number ?? ''}</strong> d&apos;un montant de <strong>{fmtCents(inv.totalCents, inv.currency)}</strong> ?
+                      </p>
+                      <p className="text-xs mb-3" style={{ color: 'var(--text-secondary)' }}>
+                        Le prestataire sera notifi&eacute; de votre virement. Le statut de la facture sera mis &agrave; jour apr&egrave;s v&eacute;rification.
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleNotifyTransfer(inv.id)}
+                          disabled={isTransferNotifying}
+                          className="rounded-lg px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                          style={{ background: 'var(--text-primary)', color: 'var(--surface)' }}
+                        >
+                          <Banknote size={14} />
+                          {isTransferNotifying ? 'Envoi...' : 'Confirmer le virement'}
+                        </button>
+                        <button
+                          onClick={() => setTransferConfirmId(null)}
+                          disabled={isTransferNotifying}
+                          className="rounded-lg px-4 py-2 text-sm font-medium transition-colors"
+                          style={{ color: 'var(--text-secondary)' }}
+                        >
+                          Annuler
+                        </button>
+                      </div>
+                    </div>
                   )}
                 </div>
-                <div className="flex items-center gap-3 shrink-0">
-                  <BillingBadge status={inv.status} />
-                  <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
-                    {fmtCents(inv.totalCents, inv.currency)}
-                  </span>
-                  <a
-                    href={`/api/share/${token}/invoices/${inv.id}/pdf`}
-                    download
-                    title="Télécharger le PDF"
-                    className="rounded-lg p-1.5 transition-colors hover:opacity-70"
-                    style={{ color: 'var(--text-secondary)' }}
-                  >
-                    <Download size={14} />
-                  </a>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}

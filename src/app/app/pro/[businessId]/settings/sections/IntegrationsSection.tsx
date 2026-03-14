@@ -8,7 +8,7 @@ import { fetchJson } from '@/lib/apiClient';
 import { useToast } from '@/components/ui/toast';
 import { useActiveBusiness } from '../../../ActiveBusinessProvider';
 
-type Settings = { integrationStripeEnabled: boolean; integrationStripePublicKey: string | null };
+type Settings = { integrationStripeEnabled: boolean; integrationStripePublicKey: string | null; hasStripeSecretKey?: boolean };
 
 export function IntegrationsSection({ businessId }: { businessId: string }) {
   const activeCtx = useActiveBusiness({ optional: true });
@@ -20,6 +20,8 @@ export function IntegrationsSection({ businessId }: { businessId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [stripeEnabled, setStripeEnabled] = useState(false);
   const [stripeKey, setStripeKey] = useState('');
+  const [stripeSecretKey, setStripeSecretKey] = useState('');
+  const [hasStripeSecretKey, setHasStripeSecretKey] = useState(false);
 
   useEffect(() => {
     void (async () => {
@@ -29,6 +31,7 @@ export function IntegrationsSection({ businessId }: { businessId: string }) {
       if (res.ok && res.data?.item) {
         setStripeEnabled(res.data.item.integrationStripeEnabled);
         setStripeKey(res.data.item.integrationStripePublicKey ?? '');
+        setHasStripeSecretKey(!!res.data.item.hasStripeSecretKey);
       }
     })();
   }, [businessId]);
@@ -44,6 +47,7 @@ export function IntegrationsSection({ businessId }: { businessId: string }) {
       body: JSON.stringify({
         integrationStripeEnabled: stripeEnabled,
         integrationStripePublicKey: stripeKey.trim() || null,
+        ...(stripeSecretKey.trim() ? { integrationStripeSecretKey: stripeSecretKey.trim() } : {}),
       }),
     });
 
@@ -52,7 +56,9 @@ export function IntegrationsSection({ businessId }: { businessId: string }) {
     if (res.data?.item) {
       setStripeEnabled(res.data.item.integrationStripeEnabled);
       setStripeKey(res.data.item.integrationStripePublicKey ?? '');
+      setHasStripeSecretKey(!!res.data.item.hasStripeSecretKey);
     }
+    setStripeSecretKey('');
     toast.success('Intégrations enregistrées.');
   }
 
@@ -80,6 +86,19 @@ export function IntegrationsSection({ businessId }: { businessId: string }) {
           placeholder="pk_live_..."
           disabled={disabled}
         />
+        <div>
+          <Input
+            label="Clé secrète Stripe"
+            type="password"
+            value={stripeSecretKey}
+            onChange={(e) => setStripeSecretKey(e.target.value)}
+            placeholder={hasStripeSecretKey ? 'Clé enregistrée — laisser vide pour conserver' : 'sk_live_... ou sk_test_...'}
+            disabled={disabled}
+          />
+          {hasStripeSecretKey && !stripeSecretKey && (
+            <p className="text-xs text-[var(--text-secondary)] mt-1">Clé secrète enregistrée et chiffrée.</p>
+          )}
+        </div>
         <div className="flex flex-wrap gap-2">
           <Button type="submit" disabled={disabled}>{saving ? 'Enregistrement…' : 'Enregistrer'}</Button>
           {!canEdit && <p className="text-xs text-[var(--text-secondary)]">Réservé aux admins/owners.</p>}

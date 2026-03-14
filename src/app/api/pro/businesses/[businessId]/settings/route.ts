@@ -3,6 +3,7 @@ import { withBusinessRoute } from '@/server/http/routeHandler';
 import { jsonb } from '@/server/http/json';
 import { badRequest } from '@/server/http/apiUtils';
 import { withIdNoStore } from '@/server/http/apiUtils';
+import { encrypt } from '@/server/crypto/encryption';
 
 async function getOrCreateSettings(businessId: bigint) {
   return prisma.businessSettings.upsert({
@@ -18,7 +19,13 @@ async function getOrCreateSettings(businessId: bigint) {
 
 export const GET = withBusinessRoute({ minRole: 'VIEWER' }, async (ctx) => {
   const settings = await getOrCreateSettings(ctx.businessId);
-  return jsonb({ item: settings }, ctx.requestId);
+  const { integrationStripeSecretKeyCipher, integrationStripeSecretKeyIv: _iv, integrationStripeSecretKeyTag: _tag, ...rest } = settings;
+  return jsonb({
+    item: {
+      ...rest,
+      hasStripeSecretKey: !!integrationStripeSecretKeyCipher,
+    },
+  }, ctx.requestId);
 });
 
 // ---------------------------------------------------------------------------
@@ -184,6 +191,22 @@ export const PATCH = withBusinessRoute(
       if (stripeKey.length > 200)
         return withIdNoStore(badRequest('integrationStripePublicKey trop long (200 max).'), ctx.requestId);
       data.integrationStripePublicKey = stripeKey || null;
+    }
+
+    const stripeSecretKey = str(b.integrationStripeSecretKey);
+    if (stripeSecretKey !== null) {
+      if (stripeSecretKey.length > 200)
+        return withIdNoStore(badRequest('integrationStripeSecretKey trop long (200 max).'), ctx.requestId);
+      if (stripeSecretKey) {
+        const { ciphertext, iv, tag } = encrypt(stripeSecretKey);
+        data.integrationStripeSecretKeyCipher = ciphertext;
+        data.integrationStripeSecretKeyIv = iv;
+        data.integrationStripeSecretKeyTag = tag;
+      } else {
+        data.integrationStripeSecretKeyCipher = null;
+        data.integrationStripeSecretKeyIv = null;
+        data.integrationStripeSecretKeyTag = null;
+      }
     }
 
     if (Object.keys(data).length === 0) {

@@ -1416,7 +1416,10 @@ model BusinessSettings {
   allowMembersInvite     Boolean  @default(true)
   allowViewerExport      Boolean  @default(false)
   integrationStripeEnabled    Boolean  @default(false)
-  integrationStripePublicKey  String?
+  integrationStripePublicKey        String?
+  integrationStripeSecretKeyCipher  String?
+  integrationStripeSecretKeyIv      String?
+  integrationStripeSecretKeyTag     String?
   accountInventoryCode   String   @default("3700")
   accountCogsCode        String   @default("6000")
   accountCashCode        String   @default("5300")
@@ -1500,7 +1503,10 @@ model Quote {
   issuerSnapshotJson Json?
   clientSnapshotJson Json?
   issuedAt        DateTime?
-  signedAt        DateTime?
+  signedAt             DateTime?
+  signatureIp          String?
+  signatureUserAgent   String?
+  signatureConsent     String?
   expiresAt       DateTime?
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
@@ -2014,6 +2020,7 @@ enum NotificationType {
   PROJECT_COMPLETED
   QUOTE_SENT_TO_CLIENT
   INVOICE_SENT_TO_CLIENT
+  TRANSFER_NOTIFIED
 }
 
 // ────────── Business Regulation Enums ──────────

@@ -36,6 +36,7 @@ export const POST = withBusinessRoute<{ businessId: string; projectId: string }>
     const expiresInDays = typeof body?.expiresInDays === 'number' && body.expiresInDays > 0 ? body.expiresInDays : null;
     const allowClientUpload = body?.allowClientUpload === true;
     const allowVaultAccess = body?.allowVaultAccess === true;
+    const sendEmailFlag = body?.sendEmail === true;
     const rawPassword = typeof body?.password === 'string' ? body.password.trim() || null : null;
 
     const passwordHash = rawPassword ? await bcrypt.hash(rawPassword, 10) : null;
@@ -63,9 +64,10 @@ export const POST = withBusinessRoute<{ businessId: string; projectId: string }>
     const baseUrl = buildBaseUrl(req);
     const shareLink = `${baseUrl}/share/${rawToken}`;
 
-    // Send email if recipient is provided
+    // Only send email if explicitly requested by the user
     const emailTo = clientEmail ?? project.client?.email;
-    if (emailTo) {
+    let emailSent = false;
+    if (sendEmailFlag && emailTo) {
       const business = await prisma.business.findUnique({
         where: { id: ctx.businessId },
         select: { name: true },
@@ -79,6 +81,7 @@ export const POST = withBusinessRoute<{ businessId: string; projectId: string }>
         expiresAt,
         hasPassword: !!passwordHash,
       }).catch(() => {});
+      emailSent = true;
     }
 
     return jsonbCreated(
@@ -86,7 +89,7 @@ export const POST = withBusinessRoute<{ businessId: string; projectId: string }>
         shareLink,
         tokenPreview: rawToken.slice(-6),
         expiresAt: expiresAt?.toISOString() ?? null,
-        emailSentTo: emailTo ?? null,
+        emailSentTo: emailSent ? emailTo : null,
         hasPassword: !!passwordHash,
       },
       ctx.requestId

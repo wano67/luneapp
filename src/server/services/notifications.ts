@@ -615,3 +615,21 @@ export async function notifyQuoteSigned(
     includeSelf: true,
   });
 }
+
+/** Notify project members + admins when a client reports a bank transfer. */
+export async function notifyTransferNotified(
+  businessId: bigint,
+  projectId: bigint,
+  invoiceNumber: string | null,
+  amountLabel: string,
+) {
+  const userIds = await projectRecipients(businessId, projectId);
+  await notify(userIds, 0n, {
+    businessId,
+    type: 'TRANSFER_NOTIFIED',
+    title: `Virement notifié : ${amountLabel}`,
+    body: invoiceNumber ? `Facture ${invoiceNumber}` : undefined,
+    projectId,
+    includeSelf: true,
+  });
+}

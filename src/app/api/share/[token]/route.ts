@@ -36,7 +36,7 @@ export async function GET(
   }
 
   // Fetch project data — non-sensitive fields only
-  const [project, business, taskRows, services, quotes, invoices, payments, documents] = await Promise.all([
+  const [project, business, taskRows, services, quotes, invoices, payments, documents, businessSettings] = await Promise.all([
     prisma.project.findUnique({
       where: { id: shareToken.projectId },
       select: {
@@ -127,6 +127,13 @@ export async function GET(
       },
       orderBy: { createdAt: 'desc' },
     }),
+    prisma.businessSettings.findUnique({
+      where: { businessId: shareToken.businessId },
+      select: {
+        integrationStripeEnabled: true,
+        integrationStripeSecretKeyCipher: true,
+      },
+    }),
   ]);
 
   if (!project || !business) {
@@ -198,9 +205,12 @@ export async function GET(
     return obj;
   };
 
+  const stripeEnabled = !!(businessSettings?.integrationStripeEnabled && businessSettings.integrationStripeSecretKeyCipher);
+
   const response = {
     allowClientUpload: shareToken.allowClientUpload,
     allowVaultAccess: shareToken.allowVaultAccess,
+    stripeEnabled,
     business: { name: business.name, websiteUrl: business.websiteUrl },
     project: {
       name: project.name,

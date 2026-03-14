@@ -162,9 +162,11 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
   const [sharePassword, setSharePassword] = useState('');
   const [shareAllowUpload, setShareAllowUpload] = useState(false);
   const [shareAllowVault, setShareAllowVault] = useState(false);
+  const [shareSendEmail, setShareSendEmail] = useState(false);
   const [shareLoading, setShareLoading] = useState(false);
   const [shareLink, setShareLink] = useState<string | null>(null);
   const [shareHasPassword, setShareHasPassword] = useState(false);
+  const [shareEmailSentTo, setShareEmailSentTo] = useState<string | null>(null);
   const [shareError, setShareError] = useState<string | null>(null);
   const [shareCopied, setShareCopied] = useState(false);
 
@@ -568,6 +570,7 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
     setShareError(null);
     setShareLink(null);
     setShareHasPassword(false);
+    setShareEmailSentTo(null);
     try {
       const body: Record<string, unknown> = {};
       if (shareEmail.trim()) body.clientEmail = shareEmail.trim();
@@ -575,7 +578,8 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
       if (sharePassword.trim()) body.password = sharePassword.trim();
       if (shareAllowUpload) body.allowClientUpload = true;
       if (shareAllowVault) body.allowVaultAccess = true;
-      const res = await fetchJson<{ shareLink: string; hasPassword: boolean }>(`/api/pro/businesses/${businessId}/projects/${projectId}/share`, {
+      if (shareSendEmail && shareEmail.trim()) body.sendEmail = true;
+      const res = await fetchJson<{ shareLink: string; hasPassword: boolean; emailSentTo: string | null }>(`/api/pro/businesses/${businessId}/projects/${projectId}/share`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -583,6 +587,7 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
       if (res.ok && res.data?.shareLink) {
         setShareLink(res.data.shareLink);
         setShareHasPassword(res.data.hasPassword ?? false);
+        setShareEmailSentTo(res.data.emailSentTo ?? null);
       } else {
         setShareError(res.error || 'Erreur lors de la création du lien.');
       }
@@ -1011,8 +1016,10 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
           setSharePassword('');
           setShareAllowUpload(false);
           setShareAllowVault(false);
+          setShareSendEmail(false);
           setShareLink(null);
           setShareHasPassword(false);
+          setShareEmailSentTo(null);
           setShareError(null);
           setShareCopied(false);
         }}
@@ -1072,6 +1079,28 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
                   <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>Accès au trousseau (après livraison)</span>
                 </label>
               </div>
+              {/* Email notification opt-in */}
+              {shareEmail.trim() && (
+                <div
+                  className="rounded-xl border p-3 space-y-2"
+                  style={{ borderColor: shareSendEmail ? 'var(--warning, #f59e0b)' : 'var(--border)', background: 'var(--surface-hover)' }}
+                >
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={shareSendEmail}
+                      onChange={(e) => setShareSendEmail(e.target.checked)}
+                      className="rounded"
+                    />
+                    <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>Notifier le client par email</span>
+                  </label>
+                  {shareSendEmail && (
+                    <p className="text-xs pl-6" style={{ color: 'var(--warning, #b45309)' }}>
+                      Un email contenant le lien de suivi sera envoyé à <strong>{shareEmail.trim()}</strong>.
+                    </p>
+                  )}
+                </div>
+              )}
               {shareError && <p className="text-xs" style={{ color: 'var(--danger)' }}>{shareError}</p>}
               <div className="flex justify-end gap-2">
                 <Button variant="outline" onClick={() => setShareOpen(false)} disabled={shareLoading}>
@@ -1109,9 +1138,9 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
                   </Button>
                 </div>
               </div>
-              {shareEmail.trim() && (
+              {shareEmailSentTo && (
                 <p className="text-xs" style={{ color: 'var(--success)' }}>
-                  Un email a été envoyé à {shareEmail.trim()}.
+                  Un email a été envoyé à {shareEmailSentTo}.
                 </p>
               )}
               {shareHasPassword && (
@@ -1120,7 +1149,7 @@ export function ProjectWorkspace({ businessId, projectId }: { businessId: string
                 </p>
               )}
               <div className="flex justify-end">
-                <Button onClick={() => { setShareOpen(false); setShareLink(null); setShareEmail(''); setSharePassword(''); setShareAllowUpload(false); setShareAllowVault(false); setShareHasPassword(false); setShareCopied(false); }}>
+                <Button onClick={() => { setShareOpen(false); setShareLink(null); setShareEmail(''); setSharePassword(''); setShareAllowUpload(false); setShareAllowVault(false); setShareSendEmail(false); setShareHasPassword(false); setShareEmailSentTo(null); setShareCopied(false); }}>
                   Fermer
                 </Button>
               </div>
