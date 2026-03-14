@@ -186,13 +186,14 @@ type ProjectShareEmailParams = {
   projectName: string;
   shareLink: string;
   expiresAt: Date | null;
+  hasPassword?: boolean;
 };
 
 export async function sendProjectShareEmail(params: ProjectShareEmailParams): Promise<void> {
   const resend = getResend();
   if (!resend) return;
 
-  const { to, businessName, projectName, shareLink, expiresAt } = params;
+  const { to, businessName, projectName, shareLink, expiresAt, hasPassword } = params;
   const fromAddress = process.env.RESEND_FROM_EMAIL?.trim() || 'Pivot <noreply@pivotapp.fr>';
 
   const expiryLine = expiresAt
@@ -217,7 +218,10 @@ export async function sendProjectShareEmail(params: ProjectShareEmailParams): Pr
     </a>
     <p style="color:#888;font-size:12px;margin:24px 0 0;">
       ${expiryLine}
-    </p>
+    </p>${hasPassword ? `
+    <p style="color:#888;font-size:12px;margin:8px 0 0;">
+      Un mot de passe est requis pour acc&eacute;der &agrave; ce lien. Contactez votre prestataire pour l&apos;obtenir.
+    </p>` : ''}
   </div>
 </body>
 </html>`;

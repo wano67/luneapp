@@ -190,44 +190,53 @@ export const GET = withBusinessRoute<{ businessId: string; invoiceId: string }>(
           : null
       );
 
-    const pdf = await buildInvoicePdf({
-      invoiceId: invoice.id.toString(),
-      number: invoice.number,
-      businessName: invoice.business.name,
-      business: issuerSnapshot,
-      client: clientSnapshot,
-      projectName: invoice.project.name,
-      prestationsText: invoice.prestationsSnapshotText ?? invoice.project.prestationsText ?? null,
-      clientName: invoice.client?.name ?? null,
-      clientEmail: invoice.client?.email ?? null,
-      issuedAt: invoice.issuedAt ? invoice.issuedAt.toISOString() : invoice.createdAt.toISOString(),
-      dueAt: invoice.dueAt ? invoice.dueAt.toISOString() : null,
-      paidAt: invoice.paidAt ? invoice.paidAt.toISOString() : null,
-      totalCents: invoice.totalCents.toString(),
-      depositCents: invoice.depositCents.toString(),
-      balanceCents: invoice.balanceCents.toString(),
-      depositPercent: invoice.depositPercent,
-      currency: invoice.currency,
-      vatEnabled: invoice.business.settings?.vatEnabled ?? null,
-      vatRatePercent: invoice.business.settings?.vatRatePercent ?? null,
-      paymentTermsDays: invoice.business.settings?.paymentTermsDays ?? null,
-      note: invoice.note ?? null,
-      projectTotalCents: projectTotal?.toString() ?? null,
-      alreadyInvoicedCents: alreadyInvoicedCents?.toString() ?? null,
-      alreadyPaidCents: alreadyPaidCents?.toString() ?? null,
-      remainingCents: remainingCents?.toString() ?? null,
-      requestId,
-      items: invoice.items.map((item) => ({
-        label: item.label,
-        description: item.description ?? null,
-        quantity: item.quantity,
-        unitPriceCents: item.unitPriceCents.toString(),
-        originalUnitPriceCents: item.originalUnitPriceCents?.toString() ?? null,
-        unitLabel: item.unitLabel ?? null,
-        billingUnit: item.billingUnit ?? null,
-        totalCents: item.totalCents.toString(),
-      })),
-    });
+    let pdf: Uint8Array;
+    try {
+      pdf = await buildInvoicePdf({
+        invoiceId: invoice.id.toString(),
+        number: invoice.number,
+        businessName: invoice.business.name,
+        business: issuerSnapshot,
+        client: clientSnapshot,
+        projectName: invoice.project.name,
+        prestationsText: invoice.prestationsSnapshotText ?? invoice.project.prestationsText ?? null,
+        clientName: invoice.client?.name ?? null,
+        clientEmail: invoice.client?.email ?? null,
+        issuedAt: invoice.issuedAt ? invoice.issuedAt.toISOString() : invoice.createdAt.toISOString(),
+        dueAt: invoice.dueAt ? invoice.dueAt.toISOString() : null,
+        paidAt: invoice.paidAt ? invoice.paidAt.toISOString() : null,
+        totalCents: invoice.totalCents.toString(),
+        depositCents: invoice.depositCents.toString(),
+        balanceCents: invoice.balanceCents.toString(),
+        depositPercent: invoice.depositPercent,
+        currency: invoice.currency,
+        vatEnabled: invoice.business.settings?.vatEnabled ?? null,
+        vatRatePercent: invoice.business.settings?.vatRatePercent ?? null,
+        paymentTermsDays: invoice.business.settings?.paymentTermsDays ?? null,
+        note: invoice.note ?? null,
+        projectTotalCents: projectTotal?.toString() ?? null,
+        alreadyInvoicedCents: alreadyInvoicedCents?.toString() ?? null,
+        alreadyPaidCents: alreadyPaidCents?.toString() ?? null,
+        remainingCents: remainingCents?.toString() ?? null,
+        requestId,
+        items: invoice.items.map((item) => ({
+          label: item.label,
+          description: item.description ?? null,
+          quantity: item.quantity,
+          unitPriceCents: item.unitPriceCents.toString(),
+          originalUnitPriceCents: item.originalUnitPriceCents?.toString() ?? null,
+          unitLabel: item.unitLabel ?? null,
+          billingUnit: item.billingUnit ?? null,
+          totalCents: item.totalCents.toString(),
+        })),
+      });
+    } catch (pdfErr) {
+      console.error('[invoicePdf] PDF generation failed:', pdfErr);
+      return NextResponse.json(
+        { error: 'PDF generation failed', details: pdfErr instanceof Error ? pdfErr.message : String(pdfErr) },
+        { status: 500, headers: { 'x-request-id': requestId } }
+      );
+    }
 
     const res = new NextResponse(Buffer.from(pdf), {
       status: 200,

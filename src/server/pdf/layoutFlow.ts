@@ -30,10 +30,45 @@ type PageMeta = {
   lineCount: number;
 };
 
-const PDF_UNSAFE_SPACE = /[\u00A0\u202F]/g;
+/**
+ * WinAnsi (Windows-1252) character set used by pdf-lib StandardFonts.
+ * Characters outside this set cause "WinAnsi cannot encode" errors.
+ * We replace common Unicode symbols with ASCII equivalents and strip the rest.
+ */
+const UNICODE_REPLACEMENTS: [RegExp, string][] = [
+  [/[\u00A0\u202F\u2007\u200B\u200C\u200D\uFEFF]/g, ' '], // special spaces & zero-width
+  [/[\u2018\u2019\u201A]/g, "'"],  // smart single quotes
+  [/[\u201C\u201D\u201E]/g, '"'],  // smart double quotes
+  [/[\u2013\u2014]/g, '-'],        // en dash, em dash
+  [/\u2026/g, '...'],              // ellipsis
+  [/\u2190/g, '<-'],               // ←
+  [/\u2192/g, '->'],               // →
+  [/\u2194/g, '<->'],              // ↔
+  [/[\u2191\u2193]/g, '|'],        // ↑ ↓
+  [/[\u2022\u2023\u25E6]/g, '-'],  // bullets
+  [/\u20AC/g, 'EUR'],              // € (not in WinAnsi base but ok to be safe)
+  [/[\u2122]/g, 'TM'],             // ™
+  [/[\u00A9]/g, '(c)'],            // ©
+  [/[\u00AE]/g, '(R)'],            // ®
+  [/\u2264/g, '<='],               // ≤
+  [/\u2265/g, '>='],               // ≥
+  [/\u2260/g, '!='],               // ≠
+  [/[\u2713\u2714]/g, 'v'],        // ✓ ✔
+  [/[\u2717\u2718]/g, 'x'],        // ✗ ✘
+  [/[\u2605\u2606]/g, '*'],        // ★ ☆
+];
+
+// WinAnsi supports: 0x20-0x7E (ASCII printable), plus specific 0x80-0xFF code points.
+// Rather than enumerate all 256 valid code points, we strip anything above 0xFF
+// that wasn't already replaced, plus the handful of undefined slots in 0x80-0x9F.
+const NON_WINANSI = /[^\x09\x0A\x0D\x20-\x7E\xA0-\xFF]|[\x80\x81\x8D\x8F\x90\x9D]/g;
 
 export function sanitizePdfText(value: string) {
-  return value.replace(PDF_UNSAFE_SPACE, ' ');
+  let result = value;
+  for (const [pattern, replacement] of UNICODE_REPLACEMENTS) {
+    result = result.replace(pattern, replacement);
+  }
+  return result.replace(NON_WINANSI, '');
 }
 
 export function wrapTextToLines(
@@ -187,6 +222,9 @@ export class FlowLayout {
   }
 
   drawTextLine(text: string, x: number, style: LayoutTextStyle) {
+    if (this.getAvailableHeight() < style.lineHeight) {
+      this.addPage();
+    }
     this.getPage().drawText(sanitizePdfText(text), {
       x,
       y: this.cursorY,
@@ -199,6 +237,9 @@ export class FlowLayout {
   }
 
   drawRightTextLine(text: string, rightX: number, style: LayoutTextStyle) {
+    if (this.getAvailableHeight() < style.lineHeight) {
+      this.addPage();
+    }
     const safe = sanitizePdfText(text);
     const width = style.font.widthOfTextAtSize(safe, style.size);
     this.getPage().drawText(safe, {

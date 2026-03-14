@@ -3,11 +3,7 @@ import { prisma } from '@/server/db/client';
 import { DocumentKind } from '@/generated/prisma';
 import { rateLimit, makeIpKey } from '@/server/security/rateLimit';
 import { saveLocalFile } from '@/server/storage/local';
-import crypto from 'crypto';
-
-function hashToken(raw: string): string {
-  return crypto.createHash('sha256').update(raw).digest('base64url');
-}
+import { requireShareAccess } from '@/server/share/shareSession';
 
 const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
 const ALLOWED_MIME = [
@@ -24,7 +20,7 @@ const ALLOWED_MIME = [
 
 /**
  * POST /api/share/[token]/upload
- * Public file upload by share token — no auth required.
+ * Public file upload by share token.
  * Token must have allowClientUpload enabled.
  */
 export async function POST(
@@ -39,34 +35,11 @@ export async function POST(
   if (limited) return limited;
 
   const { token: rawToken } = await params;
-  if (!rawToken?.trim()) {
-    return NextResponse.json({ error: 'Token requis.' }, { status: 400 });
-  }
 
-  const tokenHash = hashToken(rawToken.trim());
+  const access = await requireShareAccess(request, rawToken);
+  if (!access.ok) return access.response;
 
-  const shareToken = await prisma.projectShareToken.findUnique({
-    where: { token: tokenHash },
-    select: {
-      expiresAt: true,
-      revokedAt: true,
-      projectId: true,
-      businessId: true,
-      allowClientUpload: true,
-    },
-  });
-
-  if (!shareToken) {
-    return NextResponse.json({ error: 'Lien de partage invalide.' }, { status: 404 });
-  }
-
-  if (shareToken.revokedAt) {
-    return NextResponse.json({ error: 'Ce lien a été révoqué.' }, { status: 410 });
-  }
-
-  if (shareToken.expiresAt && shareToken.expiresAt < new Date()) {
-    return NextResponse.json({ error: 'Ce lien a expiré.' }, { status: 410 });
-  }
+  const shareToken = access.token;
 
   if (!shareToken.allowClientUpload) {
     return NextResponse.json({ error: 'L\'envoi de fichiers n\'est pas autorisé pour ce lien.' }, { status: 403 });

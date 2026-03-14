@@ -2,11 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/server/db/client';
 import { rateLimit, makeIpKey } from '@/server/security/rateLimit';
 import { decrypt } from '@/server/crypto/encryption';
-import crypto from 'crypto';
-
-function hashToken(raw: string): string {
-  return crypto.createHash('sha256').update(raw).digest('base64url');
-}
+import { requireShareAccess } from '@/server/share/shareSession';
 
 /**
  * POST /api/share/[token]/vault — Fetch vault items for a shared project.
@@ -25,34 +21,11 @@ export async function POST(
   if (limited) return limited;
 
   const { token: rawToken } = await params;
-  if (!rawToken?.trim()) {
-    return NextResponse.json({ error: 'Token requis.' }, { status: 400 });
-  }
 
-  const tokenHash = hashToken(rawToken.trim());
+  const access = await requireShareAccess(request, rawToken);
+  if (!access.ok) return access.response;
 
-  const shareToken = await prisma.projectShareToken.findUnique({
-    where: { token: tokenHash },
-    select: {
-      expiresAt: true,
-      revokedAt: true,
-      projectId: true,
-      businessId: true,
-      allowVaultAccess: true,
-    },
-  });
-
-  if (!shareToken) {
-    return NextResponse.json({ error: 'Lien de partage invalide.' }, { status: 404 });
-  }
-
-  if (shareToken.revokedAt) {
-    return NextResponse.json({ error: 'Ce lien a été révoqué.' }, { status: 410 });
-  }
-
-  if (shareToken.expiresAt && shareToken.expiresAt < new Date()) {
-    return NextResponse.json({ error: 'Ce lien a expiré.' }, { status: 410 });
-  }
+  const shareToken = access.token;
 
   if (!shareToken.allowVaultAccess) {
     return NextResponse.json({ error: 'Accès au trousseau non autorisé.' }, { status: 403 });

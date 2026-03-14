@@ -142,6 +142,12 @@ export default function ShareProjectPage() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('project');
   const [previewDocId, setPreviewDocId] = useState<string | null>(null);
 
+  // Password gate
+  const [requiresPassword, setRequiresPassword] = useState(false);
+  const [passwordInput, setPasswordInput] = useState('');
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [passwordLoading, setPasswordLoading] = useState(false);
+
   const fetchData = useCallback(() => {
     if (!token) return;
     fetch(`/api/share/${token}`)
@@ -152,6 +158,11 @@ export default function ShareProjectPage() {
           return;
         }
         const json = await res.json();
+        if (json.requiresPassword) {
+          setRequiresPassword(true);
+          return;
+        }
+        setRequiresPassword(false);
         setData(json);
       })
       .catch(() => setError('Erreur de connexion.'))
@@ -161,6 +172,31 @@ export default function ShareProjectPage() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  async function handlePasswordSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setPasswordLoading(true);
+    setPasswordError(null);
+    try {
+      const res = await fetch(`/api/share/${token}/auth`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: passwordInput }),
+      });
+      if (res.ok) {
+        setRequiresPassword(false);
+        setPasswordInput('');
+        fetchData();
+      } else {
+        const body = await res.json().catch(() => null);
+        setPasswordError((body as { error?: string } | null)?.error ?? 'Mot de passe incorrect.');
+      }
+    } catch {
+      setPasswordError('Erreur de connexion.');
+    } finally {
+      setPasswordLoading(false);
+    }
+  }
 
   if (loading) {
     return (
@@ -176,6 +212,44 @@ export default function ShareProjectPage() {
         <div className="h-3 w-full rounded-full bg-[var(--surface-hover)]" />
         <div className="h-10 w-80 rounded-xl bg-[var(--surface-hover)]" />
         <div className="h-48 rounded-xl bg-[var(--surface-hover)]" />
+      </div>
+    );
+  }
+
+  if (requiresPassword) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-6 py-20 animate-fade-in-up">
+        <div className="rounded-full p-4" style={{ background: 'var(--surface-hover)' }}>
+          <KeyRound size={32} style={{ color: 'var(--text-secondary)' }} />
+        </div>
+        <div className="text-center">
+          <h1 className="text-xl font-semibold mb-1" style={{ color: 'var(--text-primary)' }}>Accès protégé</h1>
+          <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+            Ce lien est protégé par un mot de passe.
+          </p>
+        </div>
+        <form onSubmit={handlePasswordSubmit} className="flex flex-col gap-3 w-full max-w-xs">
+          <input
+            type="password"
+            value={passwordInput}
+            onChange={(e) => setPasswordInput(e.target.value)}
+            placeholder="Mot de passe"
+            autoFocus
+            className="w-full rounded-xl border px-4 py-2.5 text-sm"
+            style={{ borderColor: passwordError ? 'var(--danger)' : 'var(--border)', background: 'var(--surface)', color: 'var(--text)' }}
+          />
+          {passwordError && (
+            <p className="text-xs" style={{ color: 'var(--danger)' }}>{passwordError}</p>
+          )}
+          <button
+            type="submit"
+            disabled={passwordLoading || !passwordInput.trim()}
+            className="w-full rounded-xl px-4 py-2.5 text-sm font-medium transition-colors disabled:opacity-50"
+            style={{ background: 'var(--text-primary)', color: 'var(--surface)' }}
+          >
+            {passwordLoading ? 'Vérification…' : 'Accéder'}
+          </button>
+        </form>
       </div>
     );
   }
@@ -507,6 +581,15 @@ function FacturationTab({
                       <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
                         {fmtCents(q.totalCents, q.currency)}
                       </span>
+                      <a
+                        href={`/api/share/${token}/quotes/${q.id}/pdf`}
+                        download
+                        title="Télécharger le PDF"
+                        className="rounded-lg p-1.5 transition-colors hover:opacity-70"
+                        style={{ color: 'var(--text-secondary)' }}
+                      >
+                        <Download size={14} />
+                      </a>
                       {canSign && !isConfirming && (
                         <button
                           onClick={() => setConfirmingId(q.id)}
@@ -578,6 +661,15 @@ function FacturationTab({
                   <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
                     {fmtCents(inv.totalCents, inv.currency)}
                   </span>
+                  <a
+                    href={`/api/share/${token}/invoices/${inv.id}/pdf`}
+                    download
+                    title="Télécharger le PDF"
+                    className="rounded-lg p-1.5 transition-colors hover:opacity-70"
+                    style={{ color: 'var(--text-secondary)' }}
+                  >
+                    <Download size={14} />
+                  </a>
                 </div>
               </div>
             ))}

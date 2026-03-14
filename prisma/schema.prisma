@@ -2229,6 +2229,7 @@ model ProjectShareToken {
   projectId         BigInt
   businessId        BigInt
   token             String    @unique
+  passwordHash      String?
   clientEmail       String?
   allowClientUpload Boolean   @default(false)
   allowVaultAccess  Boolean   @default(false)

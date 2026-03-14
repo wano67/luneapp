@@ -56,6 +56,7 @@ export const POST = withBusinessRoute<{ businessId: string; quoteId: string }>(
             billingLegalText: true,
             settings: {
               select: {
+                paymentTermsDays: true,
                 cgvText: true,
                 paymentTermsText: true,
                 lateFeesText: true,
@@ -98,7 +99,8 @@ export const POST = withBusinessRoute<{ businessId: string; quoteId: string }>(
     }
 
     const dueAt = new Date();
-    dueAt.setDate(dueAt.getDate() + 30);
+    const paymentTermsDays = quote.business.settings?.paymentTermsDays ?? 30;
+    dueAt.setDate(dueAt.getDate() + paymentTermsDays);
 
     const invoice = await prisma.$transaction(async (tx) => {
       const created = await tx.invoice.create({
@@ -173,7 +175,7 @@ export const POST = withBusinessRoute<{ businessId: string; quoteId: string }>(
         status: 'DRAFT',
         siren: quote.business.siret?.replace(/\s/g, '').slice(0, 9) ?? undefined,
       },
-    }).catch(() => null); // non-blocking
+    }).catch((err) => console.error('[eInvoice] auto-create failed:', err));
 
     // Auto-create payment link
     const rawPayToken = generateToken();
@@ -189,7 +191,7 @@ export const POST = withBusinessRoute<{ businessId: string; quoteId: string }>(
         status: 'ACTIVE',
         expiresAt: new Date(Date.now() + 90 * 86_400_000),
       },
-    }).catch(() => null); // non-blocking
+    }).catch((err) => console.error('[paymentLink] auto-create failed:', err));
 
     const basePath = `/api/pro/businesses/${businessIdBigInt}/invoices/${invoice.id}`;
 

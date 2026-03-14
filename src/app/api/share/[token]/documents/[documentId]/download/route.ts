@@ -2,15 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/server/db/client';
 import { rateLimit, makeIpKey } from '@/server/security/rateLimit';
 import { readLocalFile } from '@/server/storage/local';
-import crypto from 'crypto';
-
-function hashToken(raw: string): string {
-  return crypto.createHash('sha256').update(raw).digest('base64url');
-}
+import { requireShareAccess } from '@/server/share/shareSession';
 
 /**
  * GET /api/share/[token]/documents/[documentId]/download
- * Public document download by share token — no auth required.
+ * Public document download by share token.
  */
 export async function GET(
   request: NextRequest,
@@ -24,33 +20,11 @@ export async function GET(
   if (limited) return limited;
 
   const { token: rawToken, documentId: rawDocId } = await params;
-  if (!rawToken?.trim()) {
-    return NextResponse.json({ error: 'Token requis.' }, { status: 400 });
-  }
 
-  const tokenHash = hashToken(rawToken.trim());
+  const access = await requireShareAccess(request, rawToken);
+  if (!access.ok) return access.response;
 
-  const shareToken = await prisma.projectShareToken.findUnique({
-    where: { token: tokenHash },
-    select: {
-      expiresAt: true,
-      revokedAt: true,
-      projectId: true,
-      businessId: true,
-    },
-  });
-
-  if (!shareToken) {
-    return NextResponse.json({ error: 'Lien de partage invalide.' }, { status: 404 });
-  }
-
-  if (shareToken.revokedAt) {
-    return NextResponse.json({ error: 'Ce lien a été révoqué.' }, { status: 410 });
-  }
-
-  if (shareToken.expiresAt && shareToken.expiresAt < new Date()) {
-    return NextResponse.json({ error: 'Ce lien a expiré.' }, { status: 410 });
-  }
+  const shareToken = access.token;
 
   let documentId: bigint;
   try {

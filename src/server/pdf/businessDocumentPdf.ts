@@ -1426,69 +1426,14 @@ export async function buildBusinessDocumentPdf(payload: BuildBusinessDocumentPay
 
       // We don't call overflowLayout.finalizeFooters here; footers handled globally below
     } else {
-      // All items fit on page 1 but content didn't fit fully (edge case — draw totals etc. on page 1)
-      y -= 4;
-      page1.drawLine({
-        start: { x: MARGIN_LEFT, y },
-        end: { x: rightX, y },
-        thickness: 0.8,
-        color: COLORS.line,
-      });
-      y -= 14;
+      // All items fit on page 1 but totals/bank/signature don't.
+      // Check if totals actually fit in remaining space; if not, overflow to new page.
+      const remainingAfterItems = y - MARGIN_BOTTOM - FOOTER_DIVIDER_Y;
+      const trailingNeeded = totalsBlockHeight + bankBlockHeight + signatureBlockHeight + 30;
 
-      // Totals
-      const totalsLabelX = rightX - 220;
-      totalsRows.forEach((row) => {
-        const rowStyle = row.style === 'section' ? styles.section : styles.body;
-        const labelColor = row.emphasize ? COLORS.primary : MUTED_COLOR;
-
-        page1.drawText(sanitizePdfText(row.label), {
-          x: totalsLabelX,
-          y,
-          size: rowStyle.size,
-          font: rowStyle.font,
-          color: labelColor,
-        });
-        drawRightAt(page1, row.value, rightX, y, rowStyle);
-        y -= rowStyle.lineHeight + 2;
-      });
-
-      y -= 6;
-      page1.drawLine({
-        start: { x: MARGIN_LEFT, y },
-        end: { x: rightX, y },
-        thickness: 0.8,
-        color: COLORS.line,
-      });
-      y -= 14;
-
-      // IBAN/BIC
-      if (business?.iban || business?.bic) {
-        const bankParts: string[] = [];
-        if (business.iban) bankParts.push(`IBAN: ${business.iban}`);
-        if (business.bic) bankParts.push(`BIC: ${business.bic}`);
-
-        page1.drawText(sanitizePdfText(bankParts.join('    ')), {
-          x: MARGIN_LEFT,
-          y,
-          size: styles.body.size,
-          font: styles.body.font,
-          color: styles.body.color,
-        });
-        y -= styles.body.lineHeight;
-
-        if (business.accountHolder) {
-          page1.drawText(sanitizePdfText(`Titulaire: ${business.accountHolder}`), {
-            x: MARGIN_LEFT,
-            y,
-            size: styles.body.size,
-            font: styles.body.font,
-            color: styles.body.color,
-          });
-          y -= styles.body.lineHeight;
-        }
-
-        y -= 8;
+      if (trailingNeeded <= remainingAfterItems) {
+        // Enough room on page 1 — draw directly
+        y -= 4;
         page1.drawLine({
           start: { x: MARGIN_LEFT, y },
           end: { x: rightX, y },
@@ -1496,48 +1441,208 @@ export async function buildBusinessDocumentPdf(payload: BuildBusinessDocumentPay
           color: COLORS.line,
         });
         y -= 14;
-      }
 
-      // Signature
-      if (payload.includeSignature) {
-        page1.drawText('Bon pour accord', {
-          x: MARGIN_LEFT,
-          y,
-          size: styles.section.size,
-          font: styles.section.font,
-          color: styles.section.color,
-        });
-        y -= styles.section.lineHeight + 10;
+        const totalsLabelX = rightX - 220;
+        totalsRows.forEach((row) => {
+          const rowStyle = row.style === 'section' ? styles.section : styles.body;
+          const labelColor = row.emphasize ? COLORS.primary : MUTED_COLOR;
 
-        page1.drawText('Signature:', {
-          x: MARGIN_LEFT,
-          y,
-          size: styles.body.size,
-          font: styles.body.font,
-          color: styles.body.color,
+          page1.drawText(sanitizePdfText(row.label), {
+            x: totalsLabelX,
+            y,
+            size: rowStyle.size,
+            font: rowStyle.font,
+            color: labelColor,
+          });
+          drawRightAt(page1, row.value, rightX, y, rowStyle);
+          y -= rowStyle.lineHeight + 2;
         });
+
+        y -= 6;
         page1.drawLine({
-          start: { x: MARGIN_LEFT + 65, y: y + 2 },
-          end: { x: MARGIN_LEFT + 260, y: y + 2 },
+          start: { x: MARGIN_LEFT, y },
+          end: { x: rightX, y },
           thickness: 0.8,
           color: COLORS.line,
         });
-        y -= styles.body.lineHeight + 14;
+        y -= 14;
 
-        page1.drawText('Date:', {
-          x: MARGIN_LEFT,
-          y,
-          size: styles.body.size,
-          font: styles.body.font,
-          color: styles.body.color,
-        });
+        if (business?.iban || business?.bic) {
+          const bankParts: string[] = [];
+          if (business.iban) bankParts.push(`IBAN: ${business.iban}`);
+          if (business.bic) bankParts.push(`BIC: ${business.bic}`);
+
+          page1.drawText(sanitizePdfText(bankParts.join('    ')), {
+            x: MARGIN_LEFT,
+            y,
+            size: styles.body.size,
+            font: styles.body.font,
+            color: styles.body.color,
+          });
+          y -= styles.body.lineHeight;
+
+          if (business.accountHolder) {
+            page1.drawText(sanitizePdfText(`Titulaire: ${business.accountHolder}`), {
+              x: MARGIN_LEFT,
+              y,
+              size: styles.body.size,
+              font: styles.body.font,
+              color: styles.body.color,
+            });
+            y -= styles.body.lineHeight;
+          }
+
+          y -= 8;
+          page1.drawLine({
+            start: { x: MARGIN_LEFT, y },
+            end: { x: rightX, y },
+            thickness: 0.8,
+            color: COLORS.line,
+          });
+          y -= 14;
+        }
+
+        if (payload.includeSignature) {
+          page1.drawText('Bon pour accord', {
+            x: MARGIN_LEFT,
+            y,
+            size: styles.section.size,
+            font: styles.section.font,
+            color: styles.section.color,
+          });
+          y -= styles.section.lineHeight + 10;
+
+          page1.drawText('Signature:', {
+            x: MARGIN_LEFT,
+            y,
+            size: styles.body.size,
+            font: styles.body.font,
+            color: styles.body.color,
+          });
+          page1.drawLine({
+            start: { x: MARGIN_LEFT + 65, y: y + 2 },
+            end: { x: MARGIN_LEFT + 260, y: y + 2 },
+            thickness: 0.8,
+            color: COLORS.line,
+          });
+          y -= styles.body.lineHeight + 14;
+
+          page1.drawText('Date:', {
+            x: MARGIN_LEFT,
+            y,
+            size: styles.body.size,
+            font: styles.body.font,
+            color: styles.body.color,
+          });
+          page1.drawLine({
+            start: { x: MARGIN_LEFT + 38, y: y + 2 },
+            end: { x: MARGIN_LEFT + 200, y: y + 2 },
+            thickness: 0.8,
+            color: COLORS.line,
+          });
+          y -= styles.body.lineHeight + 8;
+        }
+      } else {
+        // Not enough room — overflow totals/bank/signature to a new page
+        y -= 4;
         page1.drawLine({
-          start: { x: MARGIN_LEFT + 38, y: y + 2 },
-          end: { x: MARGIN_LEFT + 200, y: y + 2 },
+          start: { x: MARGIN_LEFT, y },
+          end: { x: rightX, y },
           thickness: 0.8,
           color: COLORS.line,
         });
-        y -= styles.body.lineHeight + 8;
+
+        const trailingLayout = new FlowLayout({
+          pdfDoc,
+          pageWidth: PAGE_WIDTH,
+          pageHeight: PAGE_HEIGHT,
+          marginTop: MARGIN_TOP,
+          marginBottom: MARGIN_BOTTOM,
+          marginLeft: MARGIN_LEFT,
+          marginRight: MARGIN_RIGHT,
+          minLinesOnSplit: 3,
+          minLinesPerPage: 6,
+          onNewPage: drawOverflowPageHeader,
+        });
+
+        // Totals
+        const totalsLabelX = rightX - 220;
+        trailingLayout.ensureHeight(totalsBlockHeight, true);
+        totalsRows.forEach((row) => {
+          const rowStyle = row.style === 'section' ? styles.section : styles.body;
+          const labelColor = row.emphasize ? COLORS.primary : MUTED_COLOR;
+          const rowY = trailingLayout.getCursorY();
+          const tPage = trailingLayout.getPage();
+
+          tPage.drawText(sanitizePdfText(row.label), {
+            x: totalsLabelX,
+            y: rowY,
+            size: rowStyle.size,
+            font: rowStyle.font,
+            color: labelColor,
+          });
+          drawRightAt(tPage, row.value, rightX, rowY, rowStyle);
+          trailingLayout.moveDown(rowStyle.lineHeight + 2);
+        });
+
+        trailingLayout.moveDown(6);
+        trailingLayout.drawHorizontalRule(0.8, COLORS.line, 14);
+
+        if (business?.iban || business?.bic) {
+          trailingLayout.ensureHeight(bankBlockHeight, true);
+          const bankParts: string[] = [];
+          if (business.iban) bankParts.push(`IBAN: ${business.iban}`);
+          if (business.bic) bankParts.push(`BIC: ${business.bic}`);
+
+          trailingLayout.drawTextLine(bankParts.join('    '), MARGIN_LEFT, styles.body);
+          if (business.accountHolder) {
+            trailingLayout.drawTextLine(`Titulaire: ${business.accountHolder}`, MARGIN_LEFT, styles.body);
+          }
+          trailingLayout.moveDown(8);
+          trailingLayout.drawHorizontalRule(0.8, COLORS.line, 14);
+        }
+
+        if (payload.includeSignature) {
+          trailingLayout.ensureHeight(signatureBlockHeight, true);
+          trailingLayout.drawTextLine('Bon pour accord', MARGIN_LEFT, styles.section);
+          trailingLayout.moveDown(10);
+
+          const sigPage = trailingLayout.getPage();
+          const sigY = trailingLayout.getCursorY();
+
+          sigPage.drawText('Signature:', {
+            x: MARGIN_LEFT,
+            y: sigY,
+            size: styles.body.size,
+            font: styles.body.font,
+            color: styles.body.color,
+          });
+          sigPage.drawLine({
+            start: { x: MARGIN_LEFT + 65, y: sigY + 2 },
+            end: { x: MARGIN_LEFT + 260, y: sigY + 2 },
+            thickness: 0.8,
+            color: COLORS.line,
+          });
+
+          trailingLayout.moveDown(styles.body.lineHeight + 14);
+          const dateYOvf = trailingLayout.getCursorY();
+
+          sigPage.drawText('Date:', {
+            x: MARGIN_LEFT,
+            y: dateYOvf,
+            size: styles.body.size,
+            font: styles.body.font,
+            color: styles.body.color,
+          });
+          sigPage.drawLine({
+            start: { x: MARGIN_LEFT + 38, y: dateYOvf + 2 },
+            end: { x: MARGIN_LEFT + 200, y: dateYOvf + 2 },
+            thickness: 0.8,
+            color: COLORS.line,
+          });
+
+          trailingLayout.moveDown(styles.body.lineHeight + 8);
+        }
       }
     }
   }
@@ -1546,27 +1651,57 @@ export async function buildBusinessDocumentPdf(payload: BuildBusinessDocumentPay
   /*  PAGE 2 — Summary / Récapitulatif                                 */
   /* ================================================================ */
 
-  const page2 = pdfDoc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
-  let sy = PAGE_HEIGHT - MARGIN_TOP;
+  // Summary page uses FlowLayout to handle overflow when content is long
+  const summaryLayout = new FlowLayout({
+    pdfDoc,
+    pageWidth: PAGE_WIDTH,
+    pageHeight: PAGE_HEIGHT,
+    marginTop: MARGIN_TOP,
+    marginBottom: MARGIN_BOTTOM,
+    marginLeft: MARGIN_LEFT,
+    marginRight: MARGIN_RIGHT,
+    minLinesOnSplit: 3,
+    minLinesPerPage: 6,
+    onNewPage: (layout) => {
+      const page = layout.getPage();
+      const startY = layout.getCursorY();
 
-  // Page 2 title
-  page2.drawText('R\u00e9capitulatif', {
+      page.drawText(sanitizePdfText(docTitle), {
+        x: MARGIN_LEFT,
+        y: startY,
+        size: styles.section.size,
+        font: styles.section.font,
+        color: styles.section.color,
+      });
+
+      if (payload.number) {
+        drawRightAt(page, `N\u00b0 ${sanitizePdfText(payload.number)}`, rightX, startY, styles.muted);
+      }
+
+      layout.setCursorY(startY - styles.section.lineHeight - 4);
+      layout.drawHorizontalRule(0.8, COLORS.line, 10);
+
+      // Repeat "Récapitulatif" subtitle on overflow pages
+      const subtitleM = measureParagraph('R\u00e9capitulatif (suite)', styles.section, contentWidth);
+      layout.drawMeasuredParagraph(subtitleM, {
+        x: MARGIN_LEFT,
+        style: styles.section,
+        keepTogether: true,
+        spacingAfter: 6,
+      });
+      layout.drawHorizontalRule(0.8, COLORS.line, 10);
+    },
+  });
+
+  // Page title
+  const summaryTitleM = measureParagraph('R\u00e9capitulatif', styles.title, contentWidth);
+  summaryLayout.drawMeasuredParagraph(summaryTitleM, {
     x: MARGIN_LEFT,
-    y: sy,
-    size: styles.title.size,
-    font: styles.title.font,
-    color: styles.title.color,
+    style: styles.title,
+    keepTogether: true,
+    spacingAfter: 6,
   });
-  sy -= styles.title.lineHeight + 6;
-
-  // Separator below title
-  page2.drawLine({
-    start: { x: MARGIN_LEFT, y: sy },
-    end: { x: rightX, y: sy },
-    thickness: 0.8,
-    color: COLORS.line,
-  });
-  sy -= 18;
+  summaryLayout.drawHorizontalRule(0.8, COLORS.line, 18);
 
   // Summary rows: label (left, muted) + value (right, body), separated by lines
   const projectName = limitSingleLine(payload.projectName, 'projectName', PDF_FIELD_LIMITS.clientName, warnings);
@@ -1617,49 +1752,45 @@ export async function buildBusinessDocumentPdf(payload: BuildBusinessDocumentPay
     summaryRows.push({ label: 'Conditions particuli\u00e8res', value: noteText, multiline: true });
   }
 
-  // Draw summary rows
+  // Draw summary rows with overflow protection
   summaryRows.forEach((row) => {
-    // Label
-    page2.drawText(sanitizePdfText(row.label), {
-      x: MARGIN_LEFT,
-      y: sy,
-      size: styles.muted.size,
-      font: styles.muted.font,
-      color: styles.muted.color,
-    });
-
     if (row.multiline) {
-      // Value below label for multiline content
-      sy -= styles.muted.lineHeight + 4;
+      // Keep label + first few lines together
+      const firstLineH = styles.muted.lineHeight + 4 + styles.body.lineHeight * 2;
+      summaryLayout.ensureHeight(firstLineH, true);
+
+      summaryLayout.drawTextLine(row.label, MARGIN_LEFT, styles.muted);
+      summaryLayout.moveDown(4);
+
       const valueLines = row.value.split('\n');
       valueLines.forEach((vLine) => {
         const measured = measureParagraph(vLine, styles.body, contentWidth);
-        measured.lines.forEach((mLine) => {
-          page2.drawText(sanitizePdfText(mLine), {
-            x: MARGIN_LEFT,
-            y: sy,
-            size: styles.body.size,
-            font: styles.body.font,
-            color: styles.body.color,
-          });
-          sy -= styles.body.lineHeight;
+        summaryLayout.drawMeasuredParagraph(measured, {
+          x: MARGIN_LEFT,
+          style: styles.body,
+          keepTogether: measured.lines.length <= 3,
         });
       });
-      sy -= 4;
+      summaryLayout.moveDown(4);
     } else {
-      // Value right-aligned on same line
-      drawRightAt(page2, row.value, rightX, sy, styles.body);
-      sy -= styles.body.lineHeight + 6;
+      // Single-line row: label left, value right — keep together
+      summaryLayout.ensureHeight(styles.body.lineHeight + 6, true);
+      const rowPage = summaryLayout.getPage();
+      const rowY = summaryLayout.getCursorY();
+
+      rowPage.drawText(sanitizePdfText(row.label), {
+        x: MARGIN_LEFT,
+        y: rowY,
+        size: styles.muted.size,
+        font: styles.muted.font,
+        color: styles.muted.color,
+      });
+      drawRightAt(rowPage, row.value, rightX, rowY, styles.body);
+      summaryLayout.moveDown(styles.body.lineHeight + 6);
     }
 
     // Separator
-    page2.drawLine({
-      start: { x: MARGIN_LEFT, y: sy },
-      end: { x: rightX, y: sy },
-      thickness: 0.5,
-      color: COLORS.line,
-    });
-    sy -= 14;
+    summaryLayout.drawHorizontalRule(0.5, COLORS.line, 14);
   });
 
   /* ================================================================ */

@@ -6,6 +6,9 @@ import { InvoiceStatus, PaymentMethod } from '@/generated/prisma';
 import { upsertCashSaleLedgerForInvoicePaid } from '@/server/services/ledger';
 import { upsertFinanceForInvoicePaid } from '@/server/billing/invoiceFinance';
 import { parseIdOpt, parseDateOpt } from '@/server/http/parsers';
+import { evaluateProjectLifecycle } from '@/server/billing/projectLifecycle';
+import { formatCurrencyEUR } from '@/lib/formatCurrency';
+import { notifyPaymentReceived, notifyDepositPaid, notifyProjectActivated, notifyProjectCompleted } from '@/server/services/notifications';
 
 // POST /api/pro/businesses/{businessId}/invoices/{invoiceId}/mark-paid
 export const POST = withBusinessRoute<{ businessId: string; invoiceId: string }>(
@@ -101,6 +104,34 @@ export const POST = withBusinessRoute<{ businessId: string; invoiceId: string }>
         return withIdNoStore(badRequest('Facture déjà soldée.'), requestId);
       }
       throw err;
+    }
+
+    // Lifecycle evaluation + notifications (same as payments/route.ts)
+    if (invoice.projectId) {
+      void notifyPaymentReceived(
+        ctx.userId,
+        businessIdBigInt,
+        invoice.projectId,
+        formatCurrencyEUR(Number(invoice.totalCents), { minimumFractionDigits: 0 }),
+        invoice.number,
+      );
+
+      try {
+        const lifecycle = await prisma.$transaction(async (tx) => {
+          return evaluateProjectLifecycle(tx, invoice.projectId!, businessIdBigInt);
+        });
+        if (lifecycle.depositBecamePaid) {
+          void notifyDepositPaid(ctx.userId, businessIdBigInt, invoice.projectId);
+        }
+        if (lifecycle.projectBecameActive) {
+          void notifyProjectActivated(ctx.userId, businessIdBigInt, invoice.projectId);
+        }
+        if (lifecycle.projectBecameCompleted) {
+          void notifyProjectCompleted(businessIdBigInt, invoice.projectId);
+        }
+      } catch {
+        // Best-effort lifecycle evaluation
+      }
     }
 
     return jsonbCreated({ ok: true }, requestId);

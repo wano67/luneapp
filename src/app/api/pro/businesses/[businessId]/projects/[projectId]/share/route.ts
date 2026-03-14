@@ -6,6 +6,7 @@ import { parseIdOpt } from '@/server/http/parsers';
 import { buildBaseUrl } from '@/server/http/baseUrl';
 import { sendProjectShareEmail } from '@/server/services/email';
 import crypto from 'crypto';
+import bcrypt from 'bcryptjs';
 
 function hashToken(raw: string): string {
   return crypto.createHash('sha256').update(raw).digest('base64url');
@@ -35,6 +36,9 @@ export const POST = withBusinessRoute<{ businessId: string; projectId: string }>
     const expiresInDays = typeof body?.expiresInDays === 'number' && body.expiresInDays > 0 ? body.expiresInDays : null;
     const allowClientUpload = body?.allowClientUpload === true;
     const allowVaultAccess = body?.allowVaultAccess === true;
+    const rawPassword = typeof body?.password === 'string' ? body.password.trim() || null : null;
+
+    const passwordHash = rawPassword ? await bcrypt.hash(rawPassword, 10) : null;
 
     const rawToken = crypto.randomBytes(32).toString('base64url');
     const tokenHash = hashToken(rawToken);
@@ -52,6 +56,7 @@ export const POST = withBusinessRoute<{ businessId: string; projectId: string }>
         expiresAt,
         allowClientUpload,
         allowVaultAccess,
+        passwordHash,
       },
     });
 
@@ -72,6 +77,7 @@ export const POST = withBusinessRoute<{ businessId: string; projectId: string }>
         projectName: project.name,
         shareLink,
         expiresAt,
+        hasPassword: !!passwordHash,
       }).catch(() => {});
     }
 
@@ -81,6 +87,7 @@ export const POST = withBusinessRoute<{ businessId: string; projectId: string }>
         tokenPreview: rawToken.slice(-6),
         expiresAt: expiresAt?.toISOString() ?? null,
         emailSentTo: emailTo ?? null,
+        hasPassword: !!passwordHash,
       },
       ctx.requestId
     );
@@ -107,6 +114,7 @@ export const GET = withBusinessRoute<{ businessId: string; projectId: string }>(
         revokedAt: true,
         allowClientUpload: true,
         allowVaultAccess: true,
+        passwordHash: true,
         createdAt: true,
       },
       orderBy: { createdAt: 'desc' },
@@ -120,6 +128,7 @@ export const GET = withBusinessRoute<{ businessId: string; projectId: string }>(
       revokedAt: t.revokedAt,
       allowClientUpload: t.allowClientUpload,
       allowVaultAccess: t.allowVaultAccess,
+      hasPassword: !!t.passwordHash,
       isActive: !t.revokedAt && (!t.expiresAt || t.expiresAt > new Date()),
       createdAt: t.createdAt,
     }));

@@ -135,7 +135,7 @@ export const POST = withBusinessRoute<{ businessId: string; projectId: string }>
         format: 'FACTUR_X',
         status: 'DRAFT',
       },
-    }).catch(() => null); // non-blocking
+    }).catch((err) => console.error('[eInvoice] auto-create failed:', err));
 
     // Auto-create payment link
     const rawPayToken = generateToken();
@@ -151,7 +151,7 @@ export const POST = withBusinessRoute<{ businessId: string; projectId: string }>
         status: 'ACTIVE',
         expiresAt: new Date(Date.now() + 90 * 86_400_000),
       },
-    }).catch(() => null); // non-blocking
+    }).catch((err) => console.error('[paymentLink] auto-create failed:', err));
 
     const basePath = `/api/pro/businesses/${params.businessId}/invoices/${invoice.id}`;
 

@@ -1,15 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/server/db/client';
 import { rateLimit, makeIpKey } from '@/server/security/rateLimit';
-import crypto from 'crypto';
-
-function hashToken(raw: string): string {
-  return crypto.createHash('sha256').update(raw).digest('base64url');
-}
+import { validateShareToken } from '@/server/share/validateShareToken';
+import { verifyShareSession } from '@/server/share/shareSession';
 
 /**
  * GET /api/share/[token] — Public project data by share token.
- * No authentication required — the token IS the authorization.
+ * If the link is password-protected and no valid session cookie exists,
+ * returns { requiresPassword: true } instead of the full data.
  */
 export async function GET(
   request: NextRequest,
@@ -23,34 +21,18 @@ export async function GET(
   if (limited) return limited;
 
   const { token: rawToken } = await params;
-  if (!rawToken?.trim()) {
-    return NextResponse.json({ error: 'Token requis.' }, { status: 400 });
-  }
 
-  const tokenHash = hashToken(rawToken.trim());
+  const result = await validateShareToken(rawToken);
+  if (!result.ok) return result.response;
 
-  const shareToken = await prisma.projectShareToken.findUnique({
-    where: { token: tokenHash },
-    select: {
-      expiresAt: true,
-      revokedAt: true,
-      projectId: true,
-      businessId: true,
-      allowClientUpload: true,
-      allowVaultAccess: true,
-    },
-  });
+  const shareToken = result.token;
 
-  if (!shareToken) {
-    return NextResponse.json({ error: 'Lien de partage invalide.' }, { status: 404 });
-  }
-
-  if (shareToken.revokedAt) {
-    return NextResponse.json({ error: 'Ce lien a été révoqué.' }, { status: 410 });
-  }
-
-  if (shareToken.expiresAt && shareToken.expiresAt < new Date()) {
-    return NextResponse.json({ error: 'Ce lien a expiré.' }, { status: 410 });
+  // Password gate
+  if (shareToken.passwordHash) {
+    const hasSession = await verifyShareSession(request, rawToken);
+    if (!hasSession) {
+      return NextResponse.json({ requiresPassword: true });
+    }
   }
 
   // Fetch project data — non-sensitive fields only

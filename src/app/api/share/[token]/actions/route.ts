@@ -4,11 +4,7 @@ import { rateLimit, makeIpKey } from '@/server/security/rateLimit';
 import { QuoteStatus, ProjectQuoteStatus } from '@/generated/prisma';
 import { evaluateProjectLifecycle } from '@/server/billing/projectLifecycle';
 import { notifyQuoteSigned, notifyProjectActivated } from '@/server/services/notifications';
-import crypto from 'crypto';
-
-function hashToken(raw: string): string {
-  return crypto.createHash('sha256').update(raw).digest('base64url');
-}
+import { requireShareAccess } from '@/server/share/shareSession';
 
 /**
  * POST /api/share/[token]/actions — Client actions on the share page.
@@ -29,26 +25,11 @@ export async function POST(
   if (limited) return limited;
 
   const { token: rawToken } = await params;
-  if (!rawToken?.trim()) {
-    return NextResponse.json({ error: 'Token requis.' }, { status: 400 });
-  }
 
-  const tokenHash = hashToken(rawToken.trim());
+  const access = await requireShareAccess(request, rawToken);
+  if (!access.ok) return access.response;
 
-  const shareToken = await prisma.projectShareToken.findUnique({
-    where: { token: tokenHash },
-    select: { projectId: true, businessId: true, revokedAt: true, expiresAt: true },
-  });
-
-  if (!shareToken) {
-    return NextResponse.json({ error: 'Lien invalide.' }, { status: 403 });
-  }
-  if (shareToken.revokedAt) {
-    return NextResponse.json({ error: 'Ce lien a été révoqué.' }, { status: 403 });
-  }
-  if (shareToken.expiresAt && shareToken.expiresAt < new Date()) {
-    return NextResponse.json({ error: 'Ce lien a expiré.' }, { status: 403 });
-  }
+  const shareToken = access.token;
 
   const body = await request.json().catch(() => null);
   if (!body || typeof body !== 'object') {
@@ -89,7 +70,7 @@ async function handleSignQuote(
     });
 
     if (!quote) {
-      return { error: 'Devis introuvable ou déjà signé.' } as const;
+      return { error: 'Devis introuvable ou d\u00e9j\u00e0 sign\u00e9.' } as const;
     }
 
     await tx.quote.update({
@@ -125,7 +106,7 @@ async function handleSignQuote(
 
   return NextResponse.json({
     ok: true,
-    message: 'Devis signé avec succès.',
+    message: 'Devis sign\u00e9 avec succ\u00e8s.',
     projectActivated: result.lifecycle.projectBecameActive,
   });
 }
